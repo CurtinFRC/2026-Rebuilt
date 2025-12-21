@@ -3,7 +3,6 @@ package org.curtinfrc.frc2026.drive;
 import static org.curtinfrc.frc2026.util.PhoenixUtil.*;
 
 import com.ctre.phoenix6.BaseStatusSignal;
-import com.ctre.phoenix6.CANBus;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -90,10 +89,9 @@ public class ModuleIOTalonFX implements ModuleIO {
       SwerveModuleConstants<TalonFXConfiguration, TalonFXConfiguration, CANcoderConfiguration>
           constants) {
     this.constants = constants;
-    var canbus = new CANBus(TunerConstants.DrivetrainConstants.CANBusName);
-    driveTalon = new TalonFX(constants.DriveMotorId, canbus);
-    turnTalon = new TalonFX(constants.SteerMotorId, canbus);
-    cancoder = new CANcoder(constants.EncoderId, canbus);
+    driveTalon = new TalonFX(constants.DriveMotorId, TunerConstants.kCANBus);
+    turnTalon = new TalonFX(constants.SteerMotorId, TunerConstants.kCANBus);
+    cancoder = new CANcoder(constants.EncoderId, TunerConstants.kCANBus);
 
     // Configure drive motor
     var driveConfig = constants.DriveMotorInitialConfigs;
