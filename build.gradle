@@ -1,6 +1,8 @@
 plugins {
     id "java"
+    id "cpp"
     id "edu.wpi.first.GradleRIO" version "2026.1.1-beta-1"
+    id "edu.wpi.first.GradleJni" version "1.2.0"
     id "com.peterabeles.gversion" version "1.10"
     id "com.diffplug.spotless" version "6.12.0"
 }
@@ -11,6 +13,42 @@ java {
 }
 
 def ROBOT_MAIN_CLASS = "org.curtinfrc.frc2026.Main"
+
+nativeUtils {
+    exportsConfigs {
+        // Only export explicit symbols from driver library
+        testJNI {
+        }
+    }
+}
+
+model {
+    components {
+        testJNI(JniNativeLibrarySpec) {
+            targetPlatform wpi.platforms.desktop
+            targetPlatform wpi.platforms.roborio
+            enableCheckTask = true
+            javaCompileTasks << compileJava
+            jniCrossCompileOptions << JniCrossCompileOptions(wpi.platforms.desktop)
+            jniCrossCompileOptions << JniCrossCompileOptions(wpi.platforms.roborio)
+
+            sources {
+                cpp {
+                    source {
+                        srcDirs 'src/main/cpp'
+                        include '**/*.cpp'
+                    }
+
+                    exportedHeaders {
+                        srcDir 'src/main/include'
+                    }
+                }
+            }
+
+            nativeUtils.useRequiredLibrary(it, "wpilib_shared")
+        }
+    }
+}
 
 // Define my targets (RoboRIO) and artifacts (deployable files)
 // This is added by GradleRIO's backing project DeployUtils.
@@ -35,12 +73,17 @@ deploy {
                     jvmArgs.add("-XX:MaxGCPauseMillis=50")
 
                     // The options below may improve performance, but should only be enabled on the RIO 2
-                    //
-                    // final MAX_JAVA_HEAP_SIZE_MB = 100;
-                    // jvmArgs.add("-Xmx" + MAX_JAVA_HEAP_SIZE_MB + "M")
-                    // jvmArgs.add("-Xms" + MAX_JAVA_HEAP_SIZE_MB + "M")
-                    // jvmArgs.add("-XX:+AlwaysPreTouch")
+                    final MAX_JAVA_HEAP_SIZE_MB = 100;
+                    jvmArgs.add("-Xmx" + MAX_JAVA_HEAP_SIZE_MB + "M")
+                    jvmArgs.add("-Xms" + MAX_JAVA_HEAP_SIZE_MB + "M")
+                    jvmArgs.add("-XX:+AlwaysPreTouch")
+
+                    jvmArgs.add("-Djava.library.path=/home/lvuser")
                 }
+
+                testJNI(getArtifactTypeClass('FRCJNILibraryArtifact')) {
+                }
+
 
                 // Static files artifact
                 frcStaticFileDeploy(getArtifactTypeClass('FileTreeArtifact')) {
@@ -60,9 +103,6 @@ def deployArtifact = deploy.targets.roborio.artifacts.frcJava
 // Set to true to use debug for all targets including JNI, which will drastically impact
 // performance.
 wpi.java.debugJni = false
-
-// Set this to true to enable desktop support.
-def includeDesktopSupport = true
 
 // Configuration for AdvantageKit
 task(replayWatch, type: JavaExec) {
@@ -110,6 +150,31 @@ test {
 // sim extensions be disabled.
 wpi.sim.addGui().defaultEnabled = !project.hasProperty("replay");
 wpi.sim.addDriverstation()
+
+tasks.register('copyJNILibrarySimRelease', Copy) {
+    from "$buildDir/libs/testJNI/shared/linuxx86-64/release/"
+    into "$buildDir/jni/release/"
+    include "libtestJNI.so"
+
+    eachFile {
+        println "Copying libtestJNI.so"
+        path = name
+    }
+}
+
+simulateJavaRelease.dependsOn copyJNILibrarySimRelease
+
+tasks.register('copyJNILibrarySimDebug', Copy) {
+    from "$buildDir/libs/testJNI/shared/linuxx86-64/debug/"
+    into "$buildDir/jni/debug/"
+    include "libtestJNI.so"
+
+    eachFile {
+        println "Copying libtestJNI.so"
+        path = name
+    }
+}
+simulateJavaDebug.dependsOn copyJNILibrarySimDebug
 
 // Setting up my Jar File. In this case, adding all libraries into the main jar ('fat jar')
 // in order to make them all available at runtime. Also adding the manifest so WPILib

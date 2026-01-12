@@ -149,12 +149,19 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    try {
+      org.curtinfrc.frc2026.jni.TestJNI.load();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /** This function is called periodically during all modes. */
   @Override
   public void robotPeriodic() {
     Threads.setCurrentThreadPriority(true, 99);
+    org.curtinfrc.frc2026.jni.TestJNI.helloWorld();
     PhoenixUtil.refreshAll();
     VirtualSubsystem.periodicAll();
     CommandScheduler.getInstance().run();
