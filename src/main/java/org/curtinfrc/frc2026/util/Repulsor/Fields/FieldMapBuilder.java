@@ -7,15 +7,16 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.units.measure.Distance;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElementModel;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameObject;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameObjectType;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.PrimitiveObject;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 
@@ -33,7 +34,7 @@ public final class FieldMapBuilder {
     final List<PrimitiveObject> primitives = new ArrayList<>();
     Predicate<GameObject> filter = go -> true;
     RepulsorSetpoint related;
-    CategorySpec category;
+    CategorySpec category = CategorySpec.kScore;
   }
 
   private final FieldTracker ft;
@@ -44,77 +45,139 @@ public final class FieldMapBuilder {
     this.ft = Objects.requireNonNull(ft);
   }
 
+  private ElementSpec s() {
+    if (spec == null) throw new IllegalStateException("Call begin() first");
+    return spec;
+  }
+
   public FieldMapBuilder begin() {
     spec = new ElementSpec();
     return this;
   }
 
   public FieldMapBuilder alliance(Alliance a) {
-    spec.alliance = a;
+    s().alliance = a;
     return this;
   }
 
   public FieldMapBuilder capacity(int c) {
-    spec.capacity = c;
+    s().capacity = c;
     return this;
   }
 
   public FieldMapBuilder pose(Pose3d p) {
-    spec.pose = p;
+    s().pose = p;
     return this;
   }
 
   public FieldMapBuilder rotate(double rollRad, double pitchRad, double yawRad) {
-    Pose3d p = spec.pose;
-    spec.pose = new Pose3d(p.getX(), p.getY(), p.getZ(), new Rotation3d(rollRad, pitchRad, yawRad));
+    Pose3d p = s().pose;
+    s().pose = new Pose3d(p.getX(), p.getY(), p.getZ(), new Rotation3d(rollRad, pitchRad, yawRad));
     return this;
   }
 
   public FieldMapBuilder translate(double dx, double dy, double dz) {
-    Pose3d p = spec.pose;
-    spec.pose = new Pose3d(p.getX() + dx, p.getY() + dy, p.getZ() + dz, p.getRotation());
+    Pose3d p = s().pose;
+    s().pose = new Pose3d(p.getX() + dx, p.getY() + dy, p.getZ() + dz, p.getRotation());
+    return this;
+  }
+
+  public FieldMapBuilder category(CategorySpec c) {
+    s().category = c != null ? c : CategorySpec.kScore;
     return this;
   }
 
   public FieldMapBuilder primitivePipe(
       Distance radius, double rollRad, double pitchRad, double yawRad) {
-    Pose3d p = spec.pose;
-    spec.primitives.add(
-        ft
-        .new Pipe(
-            new Pose3d(p.getX(), p.getY(), p.getZ(), new Rotation3d(rollRad, pitchRad, yawRad)),
-            radius,
-            Radians.of(yawRad)));
+    Pose3d p = s().pose;
+    s().primitives
+        .add(
+            ft
+            .new Pipe(
+                new Pose3d(p.getX(), p.getY(), p.getZ(), new Rotation3d(rollRad, pitchRad, yawRad)),
+                radius,
+                Radians.of(yawRad)));
+    return this;
+  }
+
+  public FieldMapBuilder primitiveFloorSquare(
+      double sideMeters, double zMinMeters, double zMaxMeters) {
+    if (sideMeters <= 0) throw new IllegalArgumentException("sideMeters must be > 0");
+    if (zMaxMeters < zMinMeters)
+      throw new IllegalArgumentException("zMaxMeters must be >= zMinMeters");
+    Pose3d p = s().pose;
+    double cx = p.getX();
+    double cy = p.getY();
+    double half = sideMeters * 0.5;
+    s().primitives
+        .add(
+            ft.new PrimitiveObject() {
+              @Override
+              public boolean intersects(Pose3d pos) {
+                double x = pos.getX();
+                double y = pos.getY();
+                double z = pos.getZ();
+                if (z < zMinMeters || z > zMaxMeters) return false;
+                return Math.abs(x - cx) <= half && Math.abs(y - cy) <= half;
+              }
+            });
     return this;
   }
 
   public FieldMapBuilder filter(Predicate<GameObject> f) {
-    spec.filter = f != null ? f : (go -> true);
+    s().filter = f != null ? f : (go -> true);
     return this;
   }
 
-  public FieldMapBuilder filterCoral() {
-    spec.filter = go -> go.getType() == GameObjectType.kCoral;
-    return this;
+  private static String canonType(Object raw) {
+    if (raw == null) return "";
+    String t = String.valueOf(raw).trim();
+    if (t.isEmpty()) return "";
+    t = t.replace(' ', '_').replace('-', '_');
+    if (t.length() >= 2
+        && (t.charAt(0) == 'k' || t.charAt(0) == 'K')
+        && Character.isUpperCase(t.charAt(1))) {
+      t = t.substring(1);
+    }
+    t = t.toLowerCase();
+    if (t.startsWith("k_")) t = t.substring(2);
+    if (t.startsWith("k")) t = t.substring(1);
+    return t;
   }
 
-  public FieldMapBuilder filterAlgae() {
-    spec.filter = go -> go.getType() == GameObjectType.kAlgae;
+  public FieldMapBuilder filterType(String... allowed) {
+    Set<String> set = new HashSet<>();
+    if (allowed != null) {
+      for (String a : allowed) {
+        if (a == null) continue;
+        String c = canonType(a);
+        if (!c.isEmpty()) set.add(c);
+      }
+    }
+    if (set.isEmpty()) {
+      s().filter = go -> true;
+      return this;
+    }
+    s().filter =
+        go -> {
+          if (go == null) return false;
+          String c = canonType(go.getType());
+          return set.contains(c);
+        };
     return this;
   }
 
   public FieldMapBuilder related(RepulsorSetpoint sp) {
-    spec.related = sp;
+    s().related = sp;
     return this;
   }
 
   public FieldMapBuilder add() {
-    PrimitiveObject[] prim = spec.primitives.toArray(new PrimitiveObject[0]);
-    GameElementModel model = ft.new GameElementModel(spec.pose, prim);
+    ElementSpec es = s();
+    PrimitiveObject[] prim = es.primitives.toArray(new PrimitiveObject[0]);
+    GameElementModel model = ft.new GameElementModel(es.pose, prim);
     elements.add(
-        ft
-        .new GameElement(
-            spec.alliance, spec.capacity, model, spec.filter, spec.related, spec.category));
+        ft.new GameElement(es.alliance, es.capacity, model, es.filter, es.related, es.category));
     spec = null;
     return this;
   }
@@ -125,18 +188,20 @@ public final class FieldMapBuilder {
       int capacity,
       Distance radius,
       double yawRad,
-      java.util.function.Predicate<GameObject> filter,
+      Predicate<GameObject> filter,
       List<RepulsorSetpoint> related,
       CategorySpec category) {
-    int n = Math.min(poses.size(), related.size());
-    for (int i = 0; i < n; i++) {
+    int n = poses != null ? poses.size() : 0;
+    int r = related != null ? related.size() : 0;
+    int m = r > 0 ? Math.min(n, r) : n;
+    for (int i = 0; i < m; i++) {
       begin()
           .alliance(alliance)
           .capacity(capacity)
           .pose(poses.get(i))
           .primitivePipe(radius, 0, 0, yawRad)
           .filter(filter)
-          .related(related.get(i))
+          .related(r > 0 ? related.get(i) : null)
           .category(category)
           .add();
     }
@@ -175,11 +240,6 @@ public final class FieldMapBuilder {
       mirrored.add(m);
     }
     elements.addAll(mirrored);
-    return this;
-  }
-
-  public FieldMapBuilder category(CategorySpec c) {
-    spec.category = c;
     return this;
   }
 

@@ -8,6 +8,9 @@ import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -21,7 +24,6 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
-import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,7 +65,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
-import org.curtinfrc.frc2026.util.Repulsor.Repulsor.UsageType;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -147,6 +148,41 @@ public class Robot extends LoggedRobot {
 
   private LoggedNetworkStruct<Translation2d> shootTargetPose =
       new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
+  GateTelemetry telem = new GateTelemetry("/robot/gates");
+
+  VisionSimTest visionSim = new VisionSimTest();
+  RepulsorSetpoint goal = new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.L2);
+
+  private boolean simHasPiece = true;
+
+  Trigger scoreDone;
+  Trigger collectDone;
+
+  void wireRepulsor() {
+    // simHasPiece = true;
+
+    var pg = Triggers.localParallelGate(Tag.SCORING);
+    telem.registerParallel("repulsor_tags", pg);
+
+    repulsor =
+        new Repulsor(drive, Constants.ROBOT_X, Constants.ROBOT_Y, 0.55, 0.22, () -> simHasPiece)
+            .withFallback(new Fallback().new PID(1, 0, 0))
+            .withVision(visionSim)
+            .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING));
+
+    repulsor
+        .within(Meters.of(0.2))
+        .debounce(3)
+        .onTrue(
+            Commands.runOnce(
+                () -> {
+                  simHasPiece = !simHasPiece;
+                  Logger.recordOutput("simHasPiece", simHasPiece);
+                }));
+    // Triggers.flow(pg).when(() -> pg.isOn(Tag.COLLECTING));
+
+    repulsor.setup();
+  }
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -265,6 +301,9 @@ public class Robot extends LoggedRobot {
                   new ModuleIOSim(TunerConstants.FrontRight),
                   new ModuleIOSim(TunerConstants.BackLeft),
                   new ModuleIOSim(TunerConstants.BackRight));
+
+          drive.setPose(new Pose2d(15, 10, new Rotation2d()));
+
           vision =
               new Vision(
                   drive::addVisionMeasurement,
@@ -450,6 +489,10 @@ public class Robot extends LoggedRobot {
     if (this.repulsor != null) {
       repulsor.update();
     }
+
+    VisionSimTest.setSelfPose(drive.getPose());
+
+    telem.poll();
   }
 
   /** This function is called once when the robot is disabled. */
@@ -497,7 +540,13 @@ public class Robot extends LoggedRobot {
 
   /** This function is called periodically whilst in simulation. */
   @Override
-  public void simulationPeriodic() {}
+  public void simulationPeriodic() {
+    if (this.repulsor == null) {
+      return;
+    }
+
+    Logger.recordOutput("Repulsor/trigger", repulsor.within(Meters.of(1)));
+  }
 
   private final Set<Command> runningNonInterrupters = new HashSet<>();
   private final Map<Command, Command> runningInterrupters = new HashMap<>();

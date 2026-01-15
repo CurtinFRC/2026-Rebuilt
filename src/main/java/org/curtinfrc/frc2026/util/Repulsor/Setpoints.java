@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2025/util/Repulsor/Setpoints.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -14,7 +13,14 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
+import org.littletonrobotics.junction.Logger;
 
 public class Setpoints {
 
@@ -292,9 +298,9 @@ public class Setpoints {
 
     public static final DragShotPlanner.Constraints HUB_SHOT_CONSTRAINTS =
         new DragShotPlanner.Constraints(
-            6.0, 28.0, 10.0, 75.0, DragShotPlanner.Constraints.ShotStyle.ARC);
+            6.0, 26.0, 25.0, 80.0, DragShotPlanner.Constraints.ShotStyle.ARC);
 
-    public static final int BLUE_HUB_ANCHOR_TAG_ID = 3;
+    public static final int BLUE_HUB_ANCHOR_TAG_ID = 20;
     public static final int BLUE_OUTPOST_ANCHOR_TAG_ID = 13;
 
     public static final GameSetpoint HUB_SHOOT =
@@ -310,6 +316,250 @@ public class Setpoints {
     public static final GameSetpoint OUTPOST_COLLECT =
         new ApproachFromTagSetpoint(
             "OUTPOST_COLLECT", SetpointType.kHumanPlayer, BLUE_OUTPOST_ANCHOR_TAG_ID, 1.25);
+
+    private static final ConcurrentHashMap<Integer, Translation2d> HUB_AIMPOINT_BLUE_CACHE =
+        new ConcurrentHashMap<>();
+
+    public static Translation2d hubAimpointBlue() {
+      return HUB_AIMPOINT_BLUE_CACHE.computeIfAbsent(
+          BLUE_HUB_ANCHOR_TAG_ID, Rebuilt2026::hubAimpointFromAnchorTagBlue);
+    }
+
+    public static Translation2d hubAimpointForAlliance(Alliance alliance) {
+      Translation2d blue = hubAimpointBlue();
+      return alliance == Alliance.Red ? flipToRed(blue) : blue;
+    }
+
+    public static void onShootArcTick(Pose2d robotPose, Pose2d shootingPose, double progress01) {}
+
+    private record HubShotCacheKey(
+        int targetXmm, int targetYmm, int releaseHmm, int halfLmm, int halfWmm) {}
+
+    private static final ConcurrentHashMap<HubShotCacheKey, HubShotLibraryState> HUB_LIB_CACHE =
+        new ConcurrentHashMap<>();
+
+    private static final ConcurrentHashMap<HubShotCacheKey, DragShotPlanner.OnlineSearchState>
+        HUB_ONLINE_STATE = new ConcurrentHashMap<>();
+
+    private static final ConcurrentHashMap<HubShotCacheKey, HubLastPoseCache> HUB_LAST_POSE =
+        new ConcurrentHashMap<>();
+
+    private static final AtomicBoolean HUB_BG_STARTED = new AtomicBoolean(false);
+    private static ScheduledExecutorService HUB_BG_EXEC;
+
+    private static final class HubLastPoseCache {
+      volatile int robotXmm;
+      volatile int robotYmm;
+      volatile int obsHash;
+      volatile long tNs;
+      volatile Pose2d pose;
+    }
+
+    private static final class HubShotLibraryState {
+      final HubShotCacheKey key;
+      final DragShotPlanner.GamePiecePhysics physics;
+      final Translation2d targetFieldPos;
+      final double releaseH;
+      final double halfL;
+      final double halfW;
+
+      volatile DragShotPlanner.ShotLibrary published;
+      volatile boolean done;
+      final Object lock = new Object();
+      DragShotPlanner.ShotLibraryBuilder builder;
+
+      HubShotLibraryState(
+          HubShotCacheKey key,
+          DragShotPlanner.GamePiecePhysics physics,
+          Translation2d targetFieldPos,
+          double releaseH,
+          double halfL,
+          double halfW) {
+        this.key = key;
+        this.physics = physics;
+        this.targetFieldPos = targetFieldPos;
+        this.releaseH = releaseH;
+        this.halfL = halfL;
+        this.halfW = halfW;
+        this.published = null;
+        this.done = false;
+        this.builder = null;
+      }
+    }
+
+    private static void ensureHubBackground() {
+      if (HUB_BG_STARTED.get()) {
+        return;
+      }
+      if (!HUB_BG_STARTED.compareAndSet(false, true)) {
+        return;
+      }
+      ThreadFactory tf =
+          r -> {
+            Thread t = new Thread(r, "HubShotPrecompute");
+            t.setDaemon(true);
+            t.setPriority(Thread.NORM_PRIORITY - 1);
+            return t;
+          };
+      HUB_BG_EXEC = Executors.newSingleThreadScheduledExecutor(tf);
+      HUB_BG_EXEC.scheduleAtFixedRate(
+          Rebuilt2026::hubBackgroundTick, 0L, 20L, TimeUnit.MILLISECONDS);
+    }
+
+    private static void hubBackgroundTick() {
+      try {
+        long budgetNanos = 2_000_000L;
+        long start = System.nanoTime();
+        for (HubShotLibraryState st : HUB_LIB_CACHE.values()) {
+          if ((System.nanoTime() - start) >= budgetNanos) {
+            break;
+          }
+          if (st.done) {
+            continue;
+          }
+          DragShotPlanner.ShotLibrary publish = null;
+          synchronized (st.lock) {
+            if (st.done) {
+              continue;
+            }
+            if (st.builder == null) {
+              double speedStep =
+                  Math.max(
+                      0.18,
+                      (HUB_SHOT_CONSTRAINTS.maxLaunchSpeedMetersPerSecond()
+                              - HUB_SHOT_CONSTRAINTS.minLaunchSpeedMetersPerSecond())
+                          / 70.0);
+              double angleStep =
+                  Math.max(
+                      0.6,
+                      (HUB_SHOT_CONSTRAINTS.maxLaunchAngleDeg()
+                              - HUB_SHOT_CONSTRAINTS.minLaunchAngleDeg())
+                          / 80.0);
+              double radialStep = 0.30;
+              double bearingStep = 12.0;
+
+              st.builder =
+                  new DragShotPlanner.ShotLibraryBuilder(
+                      st.physics,
+                      st.targetFieldPos,
+                      HUB_OPENING_FRONT_EDGE_HEIGHT_M,
+                      st.releaseH,
+                      st.halfL,
+                      st.halfW,
+                      HUB_SHOT_CONSTRAINTS,
+                      speedStep,
+                      angleStep,
+                      radialStep,
+                      bearingStep);
+            }
+            publish = st.builder.maybeStep(900_000L);
+            if (publish != null) {
+              if (!publish.entries().isEmpty() || publish.complete()) {
+                st.published = publish;
+              }
+              st.done = publish.complete();
+            }
+          }
+        }
+      } catch (Throwable t) {
+        DriverStation.reportError("HubShot background tick crashed: " + t.getMessage(), false);
+      }
+    }
+
+    private static DragShotPlanner.ShotLibrary getOrStartHubLibrary(
+        DragShotPlanner.GamePiecePhysics physics,
+        Translation2d targetFieldPos,
+        double releaseH,
+        double halfL,
+        double halfW) {
+
+      ensureHubBackground();
+
+      HubShotCacheKey key =
+          new HubShotCacheKey(
+              (int) Math.round(targetFieldPos.getX() * 1000.0),
+              (int) Math.round(targetFieldPos.getY() * 1000.0),
+              (int) Math.round(releaseH * 1000.0),
+              (int) Math.round(halfL * 1000.0),
+              (int) Math.round(halfW * 1000.0));
+
+      HubShotLibraryState st =
+          HUB_LIB_CACHE.computeIfAbsent(
+              key,
+              k -> new HubShotLibraryState(k, physics, targetFieldPos, releaseH, halfL, halfW));
+
+      DragShotPlanner.ShotLibrary pub = st.published;
+      if (pub != null) return pub;
+
+      synchronized (st.lock) {
+        if (st.builder == null) {
+          double speedStep =
+              Math.max(
+                  0.18,
+                  (HUB_SHOT_CONSTRAINTS.maxLaunchSpeedMetersPerSecond()
+                          - HUB_SHOT_CONSTRAINTS.minLaunchSpeedMetersPerSecond())
+                      / 70.0);
+          double angleStep =
+              Math.max(
+                  0.6,
+                  (HUB_SHOT_CONSTRAINTS.maxLaunchAngleDeg()
+                          - HUB_SHOT_CONSTRAINTS.minLaunchAngleDeg())
+                      / 80.0);
+          double radialStep = 0.30;
+          double bearingStep = 12.0;
+
+          st.builder =
+              new DragShotPlanner.ShotLibraryBuilder(
+                  st.physics,
+                  st.targetFieldPos,
+                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
+                  st.releaseH,
+                  st.halfL,
+                  st.halfW,
+                  HUB_SHOT_CONSTRAINTS,
+                  speedStep,
+                  angleStep,
+                  radialStep,
+                  bearingStep);
+        }
+
+        DragShotPlanner.ShotLibrary maybe = st.builder.maybeStep(4_000_000L);
+        if (maybe != null) {
+          if (!maybe.entries().isEmpty() || maybe.complete()) {
+            st.published = maybe;
+          }
+          st.done = maybe.complete();
+        }
+        return st.published;
+      }
+    }
+
+    private static DragShotPlanner.OnlineSearchState getOrCreateOnlineState(
+        Translation2d targetFieldPos,
+        double releaseH,
+        double halfL,
+        double halfW,
+        Translation2d seed) {
+      HubShotCacheKey key =
+          new HubShotCacheKey(
+              (int) Math.round(targetFieldPos.getX() * 1000.0),
+              (int) Math.round(targetFieldPos.getY() * 1000.0),
+              (int) Math.round(releaseH * 1000.0),
+              (int) Math.round(halfL * 1000.0),
+              (int) Math.round(halfW * 1000.0));
+      return HUB_ONLINE_STATE.computeIfAbsent(
+          key, k -> new DragShotPlanner.OnlineSearchState(seed, 0.60));
+    }
+
+    private static HubShotCacheKey hubKey(
+        Translation2d targetFieldPos, double releaseH, double halfL, double halfW) {
+      return new HubShotCacheKey(
+          (int) Math.round(targetFieldPos.getX() * 1000.0),
+          (int) Math.round(targetFieldPos.getY() * 1000.0),
+          (int) Math.round(releaseH * 1000.0),
+          (int) Math.round(halfL * 1000.0),
+          (int) Math.round(halfW * 1000.0));
+    }
 
     private static final class StaticPoseSetpoint extends GameSetpoint {
       private final Pose2d bluePose;
@@ -358,20 +608,20 @@ public class Setpoints {
 
       @Override
       public Pose2d bluePose(SetpointContext ctx) {
-        Translation2d target = hubAimpointFromAnchorTagBlue(blueHubAnchorTagId);
+        Translation2d target = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
         return computeShootPose(ctx, target);
       }
 
       @Override
       public Pose2d redPose(SetpointContext ctx) {
-        Translation2d blueTarget = hubAimpointFromAnchorTagBlue(blueHubAnchorTagId);
+        Translation2d blueTarget = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
         Translation2d redTarget = flipToRed(blueTarget);
         return computeShootPose(ctx, redTarget);
       }
 
       @Override
       public Pose2d approximateBluePose() {
-        Translation2d target = hubAimpointFromAnchorTagBlue(blueHubAnchorTagId);
+        Translation2d target = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
         Translation2d shooter = target.minus(new Translation2d(3.0, Rotation2d.kZero));
         Rotation2d yaw = target.minus(shooter).getAngle();
         return new Pose2d(shooter, yaw);
@@ -399,8 +649,71 @@ public class Setpoints {
         double halfL = Math.max(0.0, ctx.robotLengthMeters()) / 2.0;
         double halfW = Math.max(0.0, ctx.robotWidthMeters()) / 2.0;
 
-        Optional<DragShotPlanner.ShotSolution> sol =
-            DragShotPlanner.findBestShotAuto(
+        HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
+
+        int rxmm = (int) Math.round(robotPose.getX() * 1000.0);
+        int rymm = (int) Math.round(robotPose.getY() * 1000.0);
+        int obsHash =
+            System.identityHashCode(ctx.dynamicObstacles()) * 31 + ctx.dynamicObstacles().size();
+        long now = System.nanoTime();
+
+        HubLastPoseCache cached = HUB_LAST_POSE.get(key);
+        if (cached != null) {
+          Pose2d p = cached.pose;
+          if (p != null) {
+            int dx = Math.abs(rxmm - cached.robotXmm);
+            int dy = Math.abs(rymm - cached.robotYmm);
+            long age = now - cached.tNs;
+            if (cached.obsHash == obsHash && dx <= 70 && dy <= 70 && age <= 90_000_000L) {
+              return p;
+            }
+          }
+        }
+
+        DragShotPlanner.ShotLibrary lib =
+            getOrStartHubLibrary(physics, targetFieldPos, releaseH, halfL, halfW);
+
+        Optional<DragShotPlanner.ShotSolution> libSol = Optional.empty();
+        Translation2d seed = robotPose.getTranslation();
+
+        if (lib != null && !lib.entries().isEmpty()) {
+          libSol =
+              DragShotPlanner.findBestShotFromLibrary(
+                  lib,
+                  physics,
+                  targetFieldPos,
+                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
+                  robotPose,
+                  releaseH,
+                  halfL,
+                  halfW,
+                  ctx.dynamicObstacles(),
+                  HUB_SHOT_CONSTRAINTS);
+          if (libSol.isPresent()) {
+            seed = libSol.get().shooterPosition();
+          }
+        }
+
+        DragShotPlanner.OnlineSearchState online =
+            getOrCreateOnlineState(targetFieldPos, releaseH, halfL, halfW, seed);
+
+        if (online.seed() == null) {
+          online.seed(seed);
+        } else {
+          long ageNs = now - online.lastUpdateNs();
+          if (ageNs > 2_000_000_000L) {
+            online.seed(seed);
+            online.stepMeters(0.60);
+          }
+        }
+
+        long refineBudget = 550_000L;
+        if (cached == null || cached.pose == null) {
+          refineBudget = 750_000L;
+        }
+
+        Optional<DragShotPlanner.ShotSolution> refined =
+            DragShotPlanner.findBestShotOnlineRefine(
                 physics,
                 targetFieldPos,
                 HUB_OPENING_FRONT_EDGE_HEIGHT_M,
@@ -409,32 +722,67 @@ public class Setpoints {
                 halfL,
                 halfW,
                 ctx.dynamicObstacles(),
-                HUB_SHOT_CONSTRAINTS);
+                HUB_SHOT_CONSTRAINTS,
+                online,
+                refineBudget);
+
+        Optional<DragShotPlanner.ShotSolution> sol = refined.isPresent() ? refined : libSol;
 
         if (sol.isEmpty()) {
-          Translation2d robotPos = robotPose.getTranslation();
-          Translation2d dir = robotPos.minus(targetFieldPos);
-          if (dir.getNorm() < 1e-6) dir = new Translation2d(1.0, 0.0);
-          Translation2d shooter = targetFieldPos.plus(dir.div(dir.getNorm()).times(3.0));
-          Rotation2d yaw = targetFieldPos.minus(shooter).getAngle();
-          return new Pose2d(shooter, yaw);
+          sol =
+              DragShotPlanner.findBestShotAuto(
+                  physics,
+                  targetFieldPos,
+                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
+                  robotPose,
+                  releaseH,
+                  halfL,
+                  halfW,
+                  ctx.dynamicObstacles(),
+                  HUB_SHOT_CONSTRAINTS);
         }
 
-        Translation2d shooterPos = sol.get().shooterPosition();
-        Rotation2d yaw = targetFieldPos.minus(shooterPos).getAngle();
-        return new Pose2d(shooterPos, yaw);
-      }
+        Logger.recordOutput("shot", sol.isPresent() ? sol.get().shooterPosition() : null);
+        Logger.recordOutput("shot_lib_entries", lib != null ? lib.entries().size() : 0);
+        Logger.recordOutput("shot_lib_complete", lib != null && lib.complete());
+        Logger.recordOutput("shot_lib_null", lib == null);
 
-      private static Translation2d hubAimpointFromAnchorTagBlue(int anchorTagId) {
-        Optional<Pose3d> pose3d = aprilTagLayout.getTagPose(anchorTagId);
-        if (pose3d.isEmpty()) {
-          return new Translation2d(Constants.FIELD_LENGTH / 2.0, Constants.FIELD_WIDTH / 2.0);
+        Pose2d out;
+        if (sol.isEmpty()) {
+          Translation2d fallbackShooter =
+              targetFieldPos.minus(new Translation2d(3.0, Rotation2d.kZero));
+          Rotation2d fallbackYaw = targetFieldPos.minus(fallbackShooter).getAngle();
+          out = new Pose2d(fallbackShooter, fallbackYaw);
+        } else {
+          Translation2d shooterPos = sol.get().shooterPosition();
+          Rotation2d yaw = sol.get().shooterYaw();
+          out = new Pose2d(shooterPos, yaw);
         }
 
-        Pose2d tag2d = pose3d.get().toPose2d();
-        Rotation2d intoHub = tag2d.getRotation().plus(Rotation2d.kPi);
-        return tag2d.getTranslation().plus(new Translation2d(HUB_FACE_TO_AIMPOINT_METERS, intoHub));
+        HubLastPoseCache write = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
+        write.robotXmm = rxmm;
+        write.robotYmm = rymm;
+        write.obsHash = obsHash;
+        write.tNs = now;
+        write.pose = out;
+
+        return out;
       }
+
+      private static Translation2d hubAimpointFromAnchorTagBlueCached(int anchorTagId) {
+        return HUB_AIMPOINT_BLUE_CACHE.computeIfAbsent(
+            anchorTagId, Rebuilt2026::hubAimpointFromAnchorTagBlue);
+      }
+    }
+
+    private static Translation2d hubAimpointFromAnchorTagBlue(int anchorTagId) {
+      Optional<Pose3d> pose3d = aprilTagLayout.getTagPose(anchorTagId);
+      if (pose3d.isEmpty()) {
+        return new Translation2d(Constants.FIELD_LENGTH / 2.0, Constants.FIELD_WIDTH / 2.0);
+      }
+      Pose2d tag2d = pose3d.get().toPose2d();
+      Rotation2d intoHub = tag2d.getRotation().plus(Rotation2d.kPi);
+      return tag2d.getTranslation().plus(new Translation2d(HUB_FACE_TO_AIMPOINT_METERS, intoHub));
     }
   }
 }

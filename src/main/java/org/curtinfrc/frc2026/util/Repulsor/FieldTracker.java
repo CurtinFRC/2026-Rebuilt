@@ -20,30 +20,53 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.curtinfrc.frc2026.util.Repulsor.Fields.Reefscape2025;
+import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 
 public class FieldTracker {
-  private static FieldTracker instance;
+  private static volatile FieldTracker instance;
+
+  private static volatile FieldLayoutProvider defaultProvider = new Rebuilt2026();
 
   public static FieldTracker getInstance() {
-    if (instance == null) {
-      instance = new FieldTracker();
+    FieldTracker local = instance;
+    if (local == null) {
+      synchronized (FieldTracker.class) {
+        local = instance;
+        if (local == null) {
+          local = new FieldTracker(defaultProvider);
+          instance = local;
+        }
+      }
     }
-    return instance;
+    return local;
+  }
+
+  public static void setDefaultProvider(FieldLayoutProvider provider) {
+    if (provider == null) throw new IllegalArgumentException("provider cannot be null");
+    defaultProvider = provider;
+  }
+
+  public static void resetInstance(FieldLayoutProvider provider) {
+    if (provider == null) throw new IllegalArgumentException("provider cannot be null");
+    synchronized (FieldTracker.class) {
+      instance = new FieldTracker(provider);
+    }
   }
 
   public FieldTracker() {
-    this(new Reefscape2025());
+    this(defaultProvider);
   }
 
   public FieldTracker(FieldLayoutProvider provider) {
+    if (provider == null) throw new IllegalArgumentException("provider cannot be null");
     this.field_map = provider.build(this);
-    predictor = new PredictiveFieldState();
+    this.predictor = new PredictiveFieldState();
   }
 
   public abstract class PrimitiveObject {
@@ -99,24 +122,14 @@ public class FieldTracker {
     }
   }
 
-  public enum GameObjectType {
-    kCoral,
-    kAlgae,
-    kUndefined
-  }
-
-  public class GameObject {
+  public static final class GameObject {
     private final String id;
-    private final GameObjectType type;
+    private final String type;
 
-    GameObject(String id) {
-      this(id, GameObjectType.kUndefined);
-    }
-
-    GameObject(String id, GameObjectType type) {
-      if (type == null || type == GameObjectType.kUndefined) {
-        throw new IllegalArgumentException("GameObjectType cannot be null/undefined");
-      }
+    public GameObject(String id, String type) {
+      if (id == null || id.isEmpty()) throw new IllegalArgumentException("id cannot be null/empty");
+      if (type == null || type.isEmpty())
+        throw new IllegalArgumentException("type cannot be null/empty");
       this.id = id;
       this.type = type;
     }
@@ -125,7 +138,7 @@ public class FieldTracker {
       return id;
     }
 
-    public GameObjectType getType() {
+    public String getType() {
       return type;
     }
   }
@@ -166,13 +179,18 @@ public class FieldTracker {
       kRed
     }
 
-    private GameObject[] contained;
-    private Alliance alliance;
+    private final GameObject[] containedStorage;
+    private int containedCount;
     private int maxContained;
+
     private GameElementModel model;
-    private java.util.function.Predicate<GameObject> filter;
+    private Predicate<GameObject> filter;
     private Optional<RepulsorSetpoint> relatedPoint = Optional.empty();
     private CategorySpec category;
+    private Alliance alliance;
+
+    private GameObject[] cachedExact;
+    private boolean dirtyCache;
 
     public GameElement(GameElementModel model) {
       this(Alliance.kBlue, 10, model, g -> true, null, CategorySpec.kScore);
@@ -182,18 +200,21 @@ public class FieldTracker {
         Alliance alliance,
         int maxContained,
         GameElementModel model,
-        java.util.function.Predicate<GameObject> filter,
+        Predicate<GameObject> filter,
         RepulsorSetpoint relatedPoint,
         CategorySpec category) {
       if (alliance == null) throw new IllegalArgumentException("Alliance cannot be null");
       if (maxContained < 0) throw new IllegalArgumentException("Max contained cannot be negative");
-      this.contained = new GameObject[0];
       this.alliance = alliance;
       this.maxContained = maxContained;
       this.model = model;
       this.filter = (filter != null) ? filter : (go -> true);
       if (relatedPoint != null) this.relatedPoint = Optional.ofNullable(relatedPoint);
       this.category = category;
+      this.containedStorage = new GameObject[Math.max(1, maxContained)];
+      this.containedCount = 0;
+      this.cachedExact = new GameObject[0];
+      this.dirtyCache = true;
     }
 
     public boolean filter(GameObject gameObject) {
@@ -210,6 +231,7 @@ public class FieldTracker {
     }
 
     public void setAlliance(Alliance alliance) {
+      if (alliance == null) throw new IllegalArgumentException("Alliance cannot be null");
       this.alliance = alliance;
     }
 
@@ -220,38 +242,57 @@ public class FieldTracker {
     public void setMaxContained(int maxContained) {
       if (maxContained < 0) throw new IllegalArgumentException("Max contained cannot be negative");
       this.maxContained = maxContained;
-      if (contained.length > maxContained) {
-        GameObject[] newContained = new GameObject[maxContained];
-        System.arraycopy(contained, 0, newContained, 0, maxContained);
-        contained = newContained;
+      if (containedCount > maxContained) {
+        containedCount = maxContained;
+        dirtyCache = true;
       }
     }
 
     public GameObject[] getContained() {
-      return contained;
+      if (!dirtyCache && cachedExact.length == containedCount) {
+        return cachedExact;
+      }
+      GameObject[] out = new GameObject[containedCount];
+      if (containedCount > 0) {
+        System.arraycopy(containedStorage, 0, out, 0, containedCount);
+      }
+      cachedExact = out;
+      dirtyCache = false;
+      return out;
     }
 
     public void setContained(GameObject[] contained) {
-      this.contained = contained != null ? contained : new GameObject[0];
+      clearContained();
+      if (contained == null || contained.length == 0) return;
+      int n = Math.min(contained.length, maxContained);
+      for (int i = 0; i < n; i++) {
+        containedStorage[i] = contained[i];
+      }
+      containedCount = n;
+      dirtyCache = true;
     }
 
     public GameObject getContained(int index) {
-      if (index < 0 || index >= contained.length) {
-        throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + contained.length);
+      if (index < 0 || index >= containedCount) {
+        throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + containedCount);
       }
-      return contained[index];
+      return containedStorage[index];
     }
 
     public int getContainedCount() {
-      return contained.length;
+      return containedCount;
     }
 
     public boolean isAtCapacity() {
-      return contained.length >= maxContained;
+      return containedCount >= maxContained;
     }
 
     public GameElementModel getModel() {
       return model;
+    }
+
+    public void setModel(GameElementModel model) {
+      this.model = model;
     }
 
     public Optional<RepulsorSetpoint> getRelatedPoint() {
@@ -261,6 +302,52 @@ public class FieldTracker {
     public void setRelatedPoint(RepulsorSetpoint newPoint) {
       this.relatedPoint = Optional.ofNullable(newPoint);
     }
+
+    public void setFilter(Predicate<GameObject> filter) {
+      this.filter = (filter != null) ? filter : (go -> true);
+    }
+
+    public void setCategory(CategorySpec category) {
+      this.category = category;
+    }
+
+    public void clearContained() {
+      if (containedCount != 0) {
+        for (int i = 0; i < containedCount; i++) {
+          containedStorage[i] = null;
+        }
+        containedCount = 0;
+        dirtyCache = true;
+      }
+    }
+
+    public boolean tryAdd(GameObject obj) {
+      if (obj == null) return false;
+      if (containedCount >= maxContained) return false;
+      containedStorage[containedCount++] = obj;
+      dirtyCache = true;
+      return true;
+    }
+  }
+
+  private final ConcurrentHashMap<String, String> typeAliases = new ConcurrentHashMap<>();
+
+  public void registerTypeAlias(String from, String to) {
+    if (from == null || from.isEmpty())
+      throw new IllegalArgumentException("from cannot be null/empty");
+    if (to == null || to.isEmpty()) throw new IllegalArgumentException("to cannot be null/empty");
+    typeAliases.put(from, to);
+  }
+
+  public String canonicalizeType(String type) {
+    if (type == null || type.isEmpty()) return "unknown";
+    String t = type;
+    for (int i = 0; i < 4; i++) {
+      String next = typeAliases.get(t);
+      if (next == null || next.equals(t)) break;
+      t = next;
+    }
+    return t;
   }
 
   private PredictiveFieldState predictor;
@@ -270,22 +357,37 @@ public class FieldTracker {
   }
 
   public void updatePredictorWorld(Alliance ours) {
-    List<GameElement> list = new ArrayList<>();
-    Collections.addAll(list, field_map);
+    GameElement[] fm = field_map;
+    if (fm == null || fm.length == 0) {
+      predictor.setWorld(List.of(), ours);
+      return;
+    }
+    ArrayList<GameElement> list = new ArrayList<>(fm.length);
+    Collections.addAll(list, fm);
     predictor.setWorld(list, ours);
   }
 
   public GameElement[] field_map;
 
+  public void rebuild(FieldLayoutProvider provider) {
+    if (provider == null) throw new IllegalArgumentException("provider cannot be null");
+    this.field_map = provider.build(this);
+  }
+
   public GameElement[] getFieldMap() {
-    GameElement[] copy = new GameElement[field_map.length];
-    System.arraycopy(field_map, 0, copy, 0, field_map.length);
+    GameElement[] fm = field_map;
+    if (fm == null) return new GameElement[0];
+    GameElement[] copy = new GameElement[fm.length];
+    System.arraycopy(fm, 0, copy, 0, fm.length);
     return copy;
   }
 
   public List<GameElement> getAvailableElements(Predicate<GameElement> pred) {
-    List<GameElement> out = new ArrayList<>();
-    for (GameElement e : field_map) {
+    GameElement[] fm = field_map;
+    if (fm == null || fm.length == 0) return List.of();
+    ArrayList<GameElement> out = new ArrayList<>(fm.length);
+    for (GameElement e : fm) {
+      if (e == null) continue;
       if (!e.isAtCapacity() && (pred == null || pred.test(e))) out.add(e);
     }
     return out;
@@ -293,24 +395,27 @@ public class FieldTracker {
 
   public List<RepulsorSetpoint> getScoringCandidates(
       Alliance alliance, Translation2d from, CategorySpec cat) {
-    if (field_map == null || field_map.length == 0) return List.of();
-    List<RepulsorSetpoint> out = new ArrayList<>();
-    List<GameElement> elems = new ArrayList<>();
-    for (GameElement e : field_map) {
+    GameElement[] fm = field_map;
+    if (fm == null || fm.length == 0) return List.of();
+    ArrayList<GameElement> elems = new ArrayList<>(fm.length);
+    for (GameElement e : fm) {
+      if (e == null) continue;
       if (e.getAlliance() == alliance
           && !e.isAtCapacity()
           && e.getRelatedPoint().isPresent()
-          && e.getCategory() == cat) {
+          && (cat == null || e.getCategory() == cat)) {
         elems.add(e);
       }
     }
-    Collections.sort(
-        elems,
+
+    elems.sort(
         Comparator.comparingDouble(
             e ->
                 from.getDistance(
                     new Translation2d(
                         e.getModel().getPosition().getX(), e.getModel().getPosition().getY()))));
+
+    ArrayList<RepulsorSetpoint> out = new ArrayList<>(elems.size());
     for (GameElement e : elems) {
       e.getRelatedPoint().ifPresent(out::add);
     }
@@ -341,20 +446,19 @@ public class FieldTracker {
       Alliance alliance, Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
     List<PredictiveFieldState.Candidate> c =
         getPredictedCandidates(alliance, ourPos, ourSpeedCap, cat, limit);
-    List<RepulsorSetpoint> out = new ArrayList<>();
+    ArrayList<RepulsorSetpoint> out = new ArrayList<>(c.size());
     for (PredictiveFieldState.Candidate k : c) out.add(k.setpoint);
     return out;
   }
 
   public class FieldVision {
-    private class FieldVisionData {
-      private final Pose3d position;
-      private final GameObjectType type;
+    private static final int MAX_OBJECTS_PER_TICK = 256;
 
-      public FieldVisionData(Pose3d position, GameObjectType type) {
-        if (type == null || type == GameObjectType.kUndefined) {
-          throw new IllegalArgumentException("GameObjectType cannot be null/undefined");
-        }
+    private static final class FieldVisionData {
+      private final Pose3d position;
+      private final String type;
+
+      FieldVisionData(Pose3d position, String type) {
         this.position = position;
         this.type = type;
       }
@@ -363,7 +467,7 @@ public class FieldTracker {
         return position;
       }
 
-      public GameObjectType getType() {
+      public String getType() {
         return type;
       }
     }
@@ -372,7 +476,11 @@ public class FieldTracker {
     private final String host;
     private final NetworkTable table;
 
+    private final HashMap<String, FieldVisionData> objects = new HashMap<>(256);
+
     public FieldVision(String name) {
+      if (name == null || name.isEmpty())
+        throw new IllegalArgumentException("name cannot be null/empty");
       this.name = name;
       this.host = name + "-vision";
       this.table = NetworkTableInstance.getDefault().getTable("FieldVision/" + name);
@@ -387,8 +495,7 @@ public class FieldTracker {
     }
 
     public void update(Pose2d currentPose) {
-      Set<String> keys = table.getKeys();
-      HashMap<String, FieldVisionData> objects = new HashMap<>();
+      if (currentPose == null) return;
 
       Pose3d field_T_robot =
           new Pose3d(
@@ -411,10 +518,16 @@ public class FieldTracker {
           field_T_robot.transformBy(
               new Transform3d(robot_T_camera.getTranslation(), robot_T_camera.getRotation()));
 
+      objects.clear();
+      Set<String> keys = table.getKeys();
+      int seen = 0;
+
       for (String key : keys) {
+        if (seen >= MAX_OBJECTS_PER_TICK) break;
         if (!key.startsWith("object_")) continue;
 
         String objectId = key.substring(7);
+
         String frame = table.getEntry(key + "/frame").getString("field");
 
         double roll = table.getEntry(key + "/roll").getDouble(0.0);
@@ -422,8 +535,8 @@ public class FieldTracker {
         double yaw = table.getEntry(key + "/yaw").getDouble(0.0);
         Rotation3d localRot = new Rotation3d(roll, pitch, yaw);
 
-        GameObjectType type =
-            GameObjectType.valueOf(table.getEntry(key + "/type").getString("kUndefined"));
+        String rawType = table.getEntry(key + "/type").getString("unknown");
+        String type = canonicalizeType(rawType);
 
         Pose3d fieldPose;
 
@@ -445,39 +558,47 @@ public class FieldTracker {
                   new Transform3d(robot_T_object.getTranslation(), robot_T_object.getRotation()));
         } else {
           double x = table.getEntry(key + "/x").getDouble(0.0);
-          double y = table.getEntry(key + "/y").getDouble(0.0);
+          double y2 = table.getEntry(key + "/y").getDouble(0.0);
           double z = table.getEntry(key + "/z").getDouble(0.0);
-          fieldPose = new Pose3d(x, y, z, localRot);
+          fieldPose = new Pose3d(x, y2, z, localRot);
         }
 
         objects.put(objectId, new FieldVisionData(fieldPose, type));
+        seen++;
       }
 
-      for (GameElement element : field_map) {
-        if (element.getContainedCount() > 0) {
-          element.setContained(new GameObject[0]);
-        }
+      GameElement[] fm = field_map;
+      if (fm == null || fm.length == 0) return;
+
+      for (GameElement element : fm) {
+        if (element != null) element.clearContained();
       }
 
-      for (String objectId : objects.keySet()) {
-        FieldVisionData data = objects.get(objectId);
+      for (var entry : objects.entrySet()) {
+        String objectId = entry.getKey();
+        FieldVisionData data = entry.getValue();
         Pose3d position = data.getPosition();
-        GameObjectType type = data.getType();
+        String type = data.getType();
+        GameObject obj = new GameObject(objectId, type);
 
-        for (GameElement element : field_map) {
-          if (element.getContainedCount() < element.getMaxContained()) {
-            for (PrimitiveObject primitive : element.getModel().getComposition()) {
-              if (primitive.intersects(position)) {
-                GameObject gameObject = new GameObject(objectId, type);
-                if (!element.filter(gameObject)) break;
-                GameObject[] contained = element.getContained();
-                GameObject[] newContained = new GameObject[contained.length + 1];
-                System.arraycopy(contained, 0, newContained, 0, contained.length);
-                newContained[contained.length] = gameObject;
-                element.setContained(newContained);
-                break;
-              }
+        for (GameElement element : fm) {
+          if (element == null) continue;
+          if (element.getContainedCount() >= element.getMaxContained()) continue;
+          if (!element.filter(obj)) continue;
+
+          PrimitiveObject[] primitives =
+              element.getModel() != null ? element.getModel().getComposition() : null;
+          if (primitives == null || primitives.length == 0) continue;
+
+          boolean hit = false;
+          for (PrimitiveObject primitive : primitives) {
+            if (primitive != null && primitive.intersects(position)) {
+              hit = true;
+              break;
             }
+          }
+          if (hit) {
+            element.tryAdd(obj);
           }
         }
       }
