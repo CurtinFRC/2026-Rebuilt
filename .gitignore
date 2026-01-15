@@ -189,3 +189,16 @@ src/main/java/org/curtinfrc/frc2026/BuildConstants.java
 # Eclipse generated annotation processor file
 /.factorypath
 /workspace
+
+.venv
+repulsor-profiler
+
+*.pdf
+*.onnx
+*.png
+*.pt
+README_2.md 
+vision/train/data
+
+*.pyc
+**/**/__pycache__/

@@ -58,6 +58,16 @@ import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
+import org.curtinfrc.frc2026.util.Repulsor.Commands.GateTelemetry;
+import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
+import org.curtinfrc.frc2026.util.Repulsor.Fallback;
+import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
+import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
+import org.curtinfrc.frc2026.util.Repulsor.Repulsor.UsageType;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Vision.Test.VisionSimTest;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
@@ -77,6 +87,11 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  * the package after creating this project, you must also update the build.gradle file in the
  * project.
  */
+enum Tag {
+  COLLECTING,
+  SCORING
+}
+
 public class Robot extends LoggedRobot {
   private Drive drive;
   private final AutoFactory autoFactory;
@@ -86,6 +101,7 @@ public class Robot extends LoggedRobot {
   private Intake intake;
   private Mag mag;
   private HoodedShooter hoodedShooter;
+  private Repulsor repulsor;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -430,6 +446,10 @@ public class Robot extends LoggedRobot {
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
     Threads.setCurrentThreadPriority(false, 10);
+
+    if (this.repulsor != null) {
+      repulsor.update();
+    }
   }
 
   /** This function is called once when the robot is disabled. */
@@ -452,7 +472,9 @@ public class Robot extends LoggedRobot {
 
   /** This function is called once when teleop is enabled. */
   @Override
-  public void teleopInit() {}
+  public void teleopInit() {
+    wireRepulsor();
+  }
 
   /** This function is called periodically during operator control. */
   @Override

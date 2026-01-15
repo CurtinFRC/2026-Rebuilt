@@ -10,6 +10,7 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -37,10 +38,11 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.Repulsor.DriveRepulsor;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
-public class Drive extends SubsystemBase {
+public class Drive extends DriveRepulsor {
   private final PIDController xController = new PIDController(10, 0.0, 0.0);
   private final PIDController yController = new PIDController(10, 0.0, 0.0);
   private final PIDController headingController = new PIDController(7.5, 0.0, 0.0);
@@ -91,6 +93,10 @@ public class Drive extends SubsystemBase {
       };
   private SwerveDrivePoseEstimator poseEstimator =
       new SwerveDrivePoseEstimator(kinematics, rawGyroRotation, lastModulePositions, Pose2d.kZero);
+
+  public PIDController getOmegaPID() {
+    return headingController;
+  }
 
   public Drive(
       GyroIO gyroIO,
@@ -198,7 +204,7 @@ public class Drive extends SubsystemBase {
    *
    * @param speeds Speeds in meters/sec
    */
-  private void runVelocity(ChassisSpeeds speeds) {
+  public void runVelocity(ChassisSpeeds speeds) {
     // Calculate module setpoints
     ChassisSpeeds discreteSpeeds = ChassisSpeeds.discretize(speeds, 0.02);
     SwerveModuleState[] setpointStates = kinematics.toSwerveModuleStates(discreteSpeeds);
