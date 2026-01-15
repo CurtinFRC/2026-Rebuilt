@@ -14,6 +14,8 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,6 +43,16 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
+import org.curtinfrc.frc2026.util.Repulsor.Commands.GateTelemetry;
+import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
+import org.curtinfrc.frc2026.util.Repulsor.Fallback;
+import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
+import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
+import org.curtinfrc.frc2026.util.Repulsor.Repulsor.UsageType;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Vision.Test.VisionSimTest;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
@@ -59,15 +71,115 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  * the package after creating this project, you must also update the build.gradle file in the
  * project.
  */
+enum Tag {
+  COLLECTING,
+  SCORING
+}
+
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
   private Intake intake;
   private Mag mag;
   private HoodedShooter hoodedShooter;
+  private Repulsor repulsor;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+
+  GateTelemetry telem = new GateTelemetry("/robot/gates");
+
+  VisionSimTest visionSim = new VisionSimTest();
+  RepulsorSetpoint goal = new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.L2);
+
+  private boolean simHasPiece = false;
+
+  void wireRepulsor() {
+    simHasPiece = false;
+
+    var pg = Triggers.localParallelGate(Tag.COLLECTING);
+    telem.registerParallel("repulsor_tags", pg);
+
+    repulsor =
+        new Repulsor(drive, UsageType.kFullAuto, Constants.ROBOT_X, Constants.ROBOT_Y, 0.55, 0.22)
+            .withFallback(new Fallback().new PID(1, 0, 0))
+            .withVision(visionSim)
+            .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING))
+            .withHasPieceSupplier(() -> simHasPiece);
+
+    java.util.concurrent.atomic.AtomicLong phaseStartMs =
+        new java.util.concurrent.atomic.AtomicLong(
+            (long) (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() * 1000.0));
+
+    Runnable resetPhase =
+        () -> phaseStartMs.set((long) (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() * 1000.0));
+
+    Trigger collectDone =
+        new Trigger(
+            () ->
+                pg.when(Tag.COLLECTING).getAsBoolean()
+                    && ((long) (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() * 1000.0)
+                            - phaseStartMs.get())
+                        >= 3000);
+
+    Trigger scoreDone =
+        new Trigger(
+            () ->
+                pg.when(Tag.SCORING).getAsBoolean()
+                    && ((long) (edu.wpi.first.wpilibj.Timer.getFPGATimestamp() * 1000.0)
+                            - phaseStartMs.get())
+                        >= 3000);
+
+    Triggers.flow(pg)
+        .when(pg.onEnter(Tag.COLLECTING))
+        .add(Tag.COLLECTING)
+        .remove(Tag.SCORING)
+        .commit()
+        .when(collectDone)
+        .add(Tag.SCORING)
+        .remove(Tag.COLLECTING)
+        .commit()
+        .when(pg.onEnter(Tag.SCORING))
+        .add(Tag.SCORING)
+        .remove(Tag.COLLECTING)
+        .commit()
+        .when(scoreDone)
+        .add(Tag.COLLECTING)
+        .remove(Tag.SCORING)
+        .commit()
+        .wire();
+
+    pg.onEnter(Tag.COLLECTING)
+        .onTrue(
+            edu.wpi.first.wpilibj2.command.Commands.runOnce(
+                () -> {
+                  simHasPiece = false;
+                  resetPhase.run();
+                }));
+
+    pg.onEnter(Tag.SCORING)
+        .onTrue(
+            edu.wpi.first.wpilibj2.command.Commands.runOnce(
+                () -> {
+                  simHasPiece = true;
+                  resetPhase.run();
+                }));
+
+    scoreDone.onTrue(edu.wpi.first.wpilibj2.command.Commands.runOnce(() -> simHasPiece = false));
+    collectDone.onTrue(edu.wpi.first.wpilibj2.command.Commands.runOnce(() -> simHasPiece = true));
+
+    RobotModeTriggers.disabled()
+        .onTrue(
+            edu.wpi.first.wpilibj2.command.Commands.runOnce(
+                () -> {
+                  simHasPiece = false;
+                  pg.remove(Tag.COLLECTING, Tag.SCORING);
+                  pg.add(Tag.COLLECTING);
+                  resetPhase.run();
+                }));
+
+    repulsor.setup();
+  }
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -226,6 +338,10 @@ public class Robot extends LoggedRobot {
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
     Threads.setCurrentThreadPriority(false, 10);
+
+    if (this.repulsor != null) {
+      repulsor.update();
+    }
   }
 
   /** This function is called once when the robot is disabled. */
@@ -254,7 +370,9 @@ public class Robot extends LoggedRobot {
 
   /** This function is called once when teleop is enabled. */
   @Override
-  public void teleopInit() {}
+  public void teleopInit() {
+    wireRepulsor();
+  }
 
   /** This function is called periodically during operator control. */
   @Override

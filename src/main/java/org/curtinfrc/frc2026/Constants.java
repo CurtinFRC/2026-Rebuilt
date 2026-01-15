@@ -1,5 +1,7 @@
 package org.curtinfrc.frc2026;
 
+import static org.curtinfrc.frc2026.vision.Vision.aprilTagLayout;
+
 import edu.wpi.first.wpilibj.RobotBase;
 
 public final class Constants {
@@ -8,7 +10,11 @@ public final class Constants {
   public static final int middleMagRollerMotorID = 20;
   public static final int indexerMagRollerMotorID = 15;
 
-  public static final RobotType robotType = RobotType.DEV;
+  public static final RobotType robotType = RobotType.SIM;
+  public static final double ROBOT_X = 0.705;
+  public static final double ROBOT_Y = 0.730;
+  public static final double FIELD_LENGTH = aprilTagLayout.getFieldLength();
+  public static final double FIELD_WIDTH = aprilTagLayout.getFieldWidth();
 
   public static final Mode getMode() {
     return switch (robotType) {
