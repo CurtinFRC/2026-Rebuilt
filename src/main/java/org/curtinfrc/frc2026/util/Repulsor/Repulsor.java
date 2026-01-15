@@ -37,6 +37,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
+import org.littletonrobotics.junction.Logger;
 
 public class Repulsor {
 
@@ -72,6 +73,13 @@ public class Repulsor {
 
   private BehaviourManager m_behaviourManager;
   private FlagManager<BehaviourFlag> m_behaviourFlags;
+
+  public boolean atSetpoint() {
+    Optional<Distance> err = m_planner.getErr();
+    if (err.isEmpty()) return false;
+    Logger.recordOutput("Repulsor/err", err.get());
+    return err.isPresent() && err.get().lt(Meters.of(0.1));
+  }
 
   public Repulsor withHasPieceSupplier(Supplier<Boolean> hasPiece) {
     this.m_hasPiece = hasPiece;
@@ -119,13 +127,15 @@ public class Repulsor {
       double robot_x,
       double robot_y,
       double coral_offset,
-      double algae_offset) {
+      double algae_offset,
+      Supplier<Boolean> hasPiece) {
     this.m_drive = drive;
     this.m_usageType = usageType;
     this.robot_x = robot_x;
     this.robot_y = robot_y;
     this.coral_offset = coral_offset;
     this.algae_offset = algae_offset;
+    this.m_hasPiece = hasPiece;
 
     m_planner = new FieldPlanner(new Rebuilt2026());
 
@@ -164,8 +174,9 @@ public class Repulsor {
       double robot_x,
       double robot_y,
       double coral_offset,
-      double algae_offset) {
-    this(drive, UsageType.kAutoDrive, robot_x, robot_y, coral_offset, algae_offset);
+      double algae_offset,
+      Supplier<Boolean> hasPiece) {
+    this(drive, UsageType.kFullAuto, robot_x, robot_y, coral_offset, algae_offset, hasPiece);
   }
 
   public Repulsor withInitialNext(RepulsorSetpoint setpoint) {

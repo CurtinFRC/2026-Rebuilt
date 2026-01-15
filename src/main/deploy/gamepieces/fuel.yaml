@@ -1,0 +1,28 @@
+name: fuel
+mass_kg: 3.934484817985834
+drag_coefficient: 0.47
+cross_section_area_m2: 0.017665851737347082
+air_density_kg_per_m3: 1.225
+metadata:
+  source_mesh: GE-26900- Fuel (277).stl
+  mesh_units: m
+  scale: 1.0
+  volume_m3: 0.001765744477897629
+  bounds_extents_m:
+  - 0.15000000596046448
+  - 0.15000000596046448
+  - 0.15000000596046448
+  flight_axis: x
+  density_kg_per_m3: 2228.23
+  mass_kg_override: null
+  area_method: projected
+  auto_shape_hint: sphere-ish
+  auto_drag_coefficient_hint: 0.47
+  material: foam_high
+  estimated_terminal_velocity_mps: 87.11825634121864
+  alt_cross_section_estimates_m2:
+    projected: 0.017665851737347082
+    bbox_ellipse: 0.01767146008084397
+    bbox_rect: 0.02250000178813938
+  warnings:
+  - Very high estimated terminal velocity (87.12 m/s) - check mass/area/cd

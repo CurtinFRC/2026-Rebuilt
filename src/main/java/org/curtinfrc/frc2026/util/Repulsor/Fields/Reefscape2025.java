@@ -91,7 +91,7 @@ public final class Reefscape2025 implements FieldDefinition {
         1,
         FieldMapBuilder.small(),
         0,
-        go -> go.getType().name().equals("kCoral"),
+        go -> true,
         reefSP,
         CategorySpec.kScore);
 
@@ -100,7 +100,7 @@ public final class Reefscape2025 implements FieldDefinition {
         .capacity(6)
         .pose(new Pose3d(2.50, 3.00, 0, null))
         .primitivePipe(FieldMapBuilder.medium(), 0, 0, 0)
-        .filterCoral()
+        .filterType("coral")
         .related(
             new RepulsorSetpoint(Setpoints.Reefscape2025.LEFT_HP, HeightSetpoint.CORAL_STATION))
         .category(CategorySpec.kCollect)
@@ -111,7 +111,7 @@ public final class Reefscape2025 implements FieldDefinition {
         .capacity(6)
         .pose(new Pose3d(2.50, -3.00, 0, null))
         .primitivePipe(FieldMapBuilder.medium(), 0, 0, 0)
-        .filterCoral()
+        .filterType("coral")
         .related(
             new RepulsorSetpoint(Setpoints.Reefscape2025.RIGHT_HP, HeightSetpoint.CORAL_STATION))
         .category(CategorySpec.kCollect)
@@ -146,7 +146,7 @@ public final class Reefscape2025 implements FieldDefinition {
         1,
         FieldMapBuilder.small(),
         0,
-        go -> go.getType().name().equals("kCoral"),
+        go -> true,
         reefSP,
         CategorySpec.kScore);
 
@@ -155,7 +155,7 @@ public final class Reefscape2025 implements FieldDefinition {
         .capacity(6)
         .pose(new Pose3d(11.50, 3.00, 0, null))
         .primitivePipe(FieldMapBuilder.medium(), 0, 0, 0)
-        .filterCoral()
+        .filterType("coral")
         .related(
             new RepulsorSetpoint(Setpoints.Reefscape2025.LEFT_HP, HeightSetpoint.CORAL_STATION))
         .category(CategorySpec.kCollect)
@@ -166,7 +166,7 @@ public final class Reefscape2025 implements FieldDefinition {
         .capacity(6)
         .pose(new Pose3d(11.50, -3.00, 0, null))
         .primitivePipe(FieldMapBuilder.medium(), 0, 0, 0)
-        .filterCoral()
+        .filterType("coral")
         .related(
             new RepulsorSetpoint(Setpoints.Reefscape2025.RIGHT_HP, HeightSetpoint.CORAL_STATION))
         .category(CategorySpec.kCollect)
