@@ -173,7 +173,7 @@ public final class PredictiveFieldState {
   private static final double DEPLETED_MARK_NEAR_M = 0.65;
   private static final double DEPLETED_MARK_EMPTY_UNITS = 0.05;
 
-    private static final double RESOURCE_HARD_MAX_AGE_S = 0.95;
+  private static final double RESOURCE_HARD_MAX_AGE_S = 0.95;
 
   private double[] scratchLogits = new double[0];
   private double[] scratchLogits2 = new double[0];
@@ -594,7 +594,7 @@ public final class PredictiveFieldState {
         bestFineScore);
   }
 
-    public PointCandidate rankCollectPoints(
+  public PointCandidate rankCollectPoints(
       Translation2d ourPos, double ourSpeedCap, Translation2d[] points, int goalUnits, int limit) {
     if (ourPos == null) return null;
 
@@ -695,7 +695,6 @@ public final class PredictiveFieldState {
 
     return new PointCandidate(chosen, bestEta, bestVal, bestEP, bestAC, bestEI, bestAI, bestScore);
   }
-
 
   private Translation2d[] buildCollectCandidates(Translation2d[] gridPoints, SpatialDyn dyn) {
     Translation2d[] clusters =
@@ -1082,7 +1081,7 @@ public final class PredictiveFieldState {
     private final double cell;
     private final double invCell;
 
-        SpatialDyn(List<DynamicObject> dyn, HashMap<String, ResourceSpec> specs) {
+    SpatialDyn(List<DynamicObject> dyn, HashMap<String, ResourceSpec> specs) {
       this.specs = specs != null ? specs : new HashMap<>();
       double c = 0.45;
       for (ResourceSpec s : this.specs.values()) {

@@ -64,6 +64,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Commands.GateTelemetry;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
+import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
@@ -497,7 +498,11 @@ public class Robot extends LoggedRobot {
 
   /** This function is called once when the robot is disabled. */
   @Override
-  public void disabledInit() {}
+  public void disabledInit() {
+    // Profiler.shutdown();
+    System.out.println("Profiler shut down.");
+    // Profiler.dumpNow("disabled_init");
+  }
 
   /** This function is called periodically when disabled. */
   @Override
@@ -534,13 +539,33 @@ public class Robot extends LoggedRobot {
   @Override
   public void testPeriodic() {}
 
+  @Override
+  public void endCompetition() {
+    Profiler.shutdown();
+    System.out.println("Profiler shut down.");
+    super.endCompetition();
+  }
+
   /** This function is called once when the robot is first started up. */
   @Override
-  public void simulationInit() {}
+  public void simulationInit() {
+    Profiler.ensureInit();
+    Profiler.dumpNow("sim_init");
+    Logger.recordOutput("Profiler/outputPath", Profiler.outputPathOrEmpty());
+    System.out.println("Profiler log: " + Profiler.outputPathOrEmpty());
+    // Runtime.getRuntime()
+    //     .addShutdownHook(
+    //         new Thread(
+    //             () -> {
+    //               Profiler.shutdown();
+    //               System.out.println("Profiler shut down.");
+    //             }));
+  }
 
   /** This function is called periodically whilst in simulation. */
   @Override
   public void simulationPeriodic() {
+
     if (this.repulsor == null) {
       return;
     }

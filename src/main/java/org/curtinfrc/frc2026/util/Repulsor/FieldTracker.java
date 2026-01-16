@@ -37,30 +37,30 @@ public class FieldTracker {
   private static final int COLLECT_COARSE_TOPK = 4;
   private static final int COLLECT_REFINE_GRID = 3;
 
-private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.18;
-private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.65;
+  private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.18;
+  private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.65;
 
-private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 0.55;
-private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 1.60;
+  private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 0.55;
+  private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 1.60;
 
-private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.18;
-private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 0.70;
+  private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.18;
+  private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 0.70;
 
-private static final double COLLECT_STICKY_REACHED_M = 0.65;
-private static final double COLLECT_STICKY_SAME_M = 0.10;
+  private static final double COLLECT_STICKY_REACHED_M = 0.65;
+  private static final double COLLECT_STICKY_SAME_M = 0.10;
 
-private static final double COLLECT_STICKY_NEAR_DIST_M = 1.10;
-private static final double COLLECT_STICKY_FAR_DIST_M = 3.80;
+  private static final double COLLECT_STICKY_NEAR_DIST_M = 1.10;
+  private static final double COLLECT_STICKY_FAR_DIST_M = 3.80;
 
-private static double lerp(double a, double b, double t) {
-  return a + (b - a) * t;
-}
+  private static double lerp(double a, double b, double t) {
+    return a + (b - a) * t;
+  }
 
-private static double clamp01(double x) {
-  if (x < 0.0) return 0.0;
-  if (x > 1.0) return 1.0;
-  return x;
-}
+  private static double clamp01(double x) {
+    if (x < 0.0) return 0.0;
+    if (x > 1.0) return 1.0;
+    return x;
+  }
 
   private volatile Translation2d collectStickyPoint = null;
   private volatile double collectStickyScore = -1e18;
@@ -632,118 +632,119 @@ private static double clamp01(double x) {
 
   // Replace nextObjectiveGoalBlue() with this version:
 
-public Pose2d nextObjectiveGoalBlue(
-    Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
-  if (robotPoseBlue == null) return Pose2d.kZero;
-  double cap = Math.max(0.2, ourSpeedCap);
+  public Pose2d nextObjectiveGoalBlue(
+      Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
+    if (robotPoseBlue == null) return Pose2d.kZero;
+    double cap = Math.max(0.2, ourSpeedCap);
 
-  ObjectiveCache cache = cat == CategorySpec.kCollect ? collectCache : collectCache;
-  Translation2d[] pts = cache.points;
+    ObjectiveCache cache = cat == CategorySpec.kCollect ? collectCache : collectCache;
+    Translation2d[] pts = cache.points;
 
-  if (pts == null || pts.length == 0) {
-    return new Pose2d(
-        Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
-  }
+    if (pts == null || pts.length == 0) {
+      return new Pose2d(
+          Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+    }
 
-  predictor.setDynamicObjects(snapshotDynamics());
+    predictor.setDynamicObjects(snapshotDynamics());
 
-  PredictiveFieldState.PointCandidate best =
-      predictor.rankCollectHierarchical(
-          robotPoseBlue.getTranslation(),
-          cap,
-          pts,
-          COLLECT_CELL_M,
-          goalUnits,
-          COLLECT_COARSE_TOPK,
-          COLLECT_REFINE_GRID);
+    PredictiveFieldState.PointCandidate best =
+        predictor.rankCollectHierarchical(
+            robotPoseBlue.getTranslation(),
+            cap,
+            pts,
+            COLLECT_CELL_M,
+            goalUnits,
+            COLLECT_COARSE_TOPK,
+            COLLECT_REFINE_GRID);
 
-  long nowNs = System.nanoTime();
-  Translation2d proposed = best != null ? best.point : null;
-  double proposedScore = best != null ? best.score : -1e18;
+    long nowNs = System.nanoTime();
+    Translation2d proposed = best != null ? best.point : null;
+    double proposedScore = best != null ? best.score : -1e18;
 
-  Translation2d sticky = collectStickyPoint;
-  double stickyScore = collectStickyScore;
-  long stickyTs = collectStickyTsNs;
+    Translation2d sticky = collectStickyPoint;
+    double stickyScore = collectStickyScore;
+    long stickyTs = collectStickyTsNs;
 
-  Translation2d chosen = proposed != null ? proposed : (sticky != null ? sticky : pts[0]);
-  double chosenScore = proposed != null ? proposedScore : (sticky != null ? stickyScore : -1e18);
+    Translation2d chosen = proposed != null ? proposed : (sticky != null ? sticky : pts[0]);
+    double chosenScore = proposed != null ? proposedScore : (sticky != null ? stickyScore : -1e18);
 
-  if (sticky != null) {
-    double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
+    if (sticky != null) {
+      double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
 
-    double t =
-        clamp01(
-            (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
-                / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
+      double t =
+          clamp01(
+              (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
+                  / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
 
-    double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
-    double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
-    double switchMargin = lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
+      double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
+      double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
+      double switchMargin =
+          lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
 
-    double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
-    boolean reached = distToSticky <= COLLECT_STICKY_REACHED_M;
+      double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
+      boolean reached = distToSticky <= COLLECT_STICKY_REACHED_M;
 
-    if (!reached) {
-      boolean minHold = holdS < minHoldS;
-      boolean maxHold = holdS > maxHoldS;
+      if (!reached) {
+        boolean minHold = holdS < minHoldS;
+        boolean maxHold = holdS > maxHoldS;
 
-      if (proposed == null) {
-        chosen = sticky;
-        chosenScore = stickyScore;
-      } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
-        chosen = sticky;
-        chosenScore = Math.max(stickyScore, proposedScore);
-      } else if (minHold) {
-        if (proposedScore < stickyScore + switchMargin) {
+        if (proposed == null) {
           chosen = sticky;
           chosenScore = stickyScore;
-        }
-      } else if (!maxHold) {
-        if (proposedScore < stickyScore + switchMargin) {
+        } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
           chosen = sticky;
-          chosenScore = stickyScore;
+          chosenScore = Math.max(stickyScore, proposedScore);
+        } else if (minHold) {
+          if (proposedScore < stickyScore + switchMargin) {
+            chosen = sticky;
+            chosenScore = stickyScore;
+          }
+        } else if (!maxHold) {
+          if (proposedScore < stickyScore + switchMargin) {
+            chosen = sticky;
+            chosenScore = stickyScore;
+          }
         }
+      }
+
+      if (reached) {
+        collectStickyPoint = null;
+        collectStickyScore = -1e18;
+        collectStickyTsNs = 0L;
+        sticky = null;
       }
     }
 
-    if (reached) {
-      collectStickyPoint = null;
-      collectStickyScore = -1e18;
-      collectStickyTsNs = 0L;
-      sticky = null;
+    if (chosen != null) {
+      Translation2d curSticky = collectStickyPoint;
+      if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
+        collectStickyPoint = chosen;
+        collectStickyScore = chosenScore;
+        collectStickyTsNs = nowNs;
+      } else {
+        collectStickyScore = Math.max(collectStickyScore, chosenScore);
+      }
     }
-  }
 
-  if (chosen != null) {
-    Translation2d curSticky = collectStickyPoint;
-    if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
-      collectStickyPoint = chosen;
-      collectStickyScore = chosenScore;
-      collectStickyTsNs = nowNs;
-    } else {
-      collectStickyScore = Math.max(collectStickyScore, chosenScore);
+    Logger.recordOutput("collect_target_xy", chosen);
+    Logger.recordOutput("collect_points_n", pts.length);
+    Logger.recordOutput("collect_sticky_active", collectStickyPoint != null);
+    Logger.recordOutput(
+        "collect_sticky_age_s", collectStickyTsNs != 0L ? (nowNs - collectStickyTsNs) / 1e9 : 0.0);
+
+    if (best != null) {
+      Logger.recordOutput("collect_score", best.score);
+      Logger.recordOutput("collect_value", best.value);
+      Logger.recordOutput("collect_our_eta", best.ourEtaS);
+      Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
+      Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
+      Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
+      Logger.recordOutput("collect_intent_ally", best.allyIntent);
     }
+
+    Translation2d target = chosen != null ? chosen : pts[0];
+    return new Pose2d(target, robotPoseBlue.getRotation());
   }
-
-  Logger.recordOutput("collect_target_xy", chosen);
-  Logger.recordOutput("collect_points_n", pts.length);
-  Logger.recordOutput("collect_sticky_active", collectStickyPoint != null);
-  Logger.recordOutput(
-      "collect_sticky_age_s", collectStickyTsNs != 0L ? (nowNs - collectStickyTsNs) / 1e9 : 0.0);
-
-  if (best != null) {
-    Logger.recordOutput("collect_score", best.score);
-    Logger.recordOutput("collect_value", best.value);
-    Logger.recordOutput("collect_our_eta", best.ourEtaS);
-    Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
-    Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
-    Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
-    Logger.recordOutput("collect_intent_ally", best.allyIntent);
-  }
-
-  Translation2d target = chosen != null ? chosen : pts[0];
-  return new Pose2d(target, robotPoseBlue.getRotation());
-}
 
   public Pose2d nextCollectionGoalBlue(Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {
     return nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, CategorySpec.kCollect);

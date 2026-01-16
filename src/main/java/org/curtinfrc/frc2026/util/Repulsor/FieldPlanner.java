@@ -1309,7 +1309,6 @@ public class FieldPlanner {
     this.goal = goal;
     lastChosenSetpoint = Optional.empty();
     Logger.recordOutput("Repulsor/Setpoint", goal);
-
   }
 
   public Optional<Distance> getErr() {

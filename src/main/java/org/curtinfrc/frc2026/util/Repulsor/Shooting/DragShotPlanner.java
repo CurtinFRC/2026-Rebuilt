@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
@@ -322,6 +323,12 @@ public final class DragShotPlanner {
       this.bearingDeg = 0.0;
       this.done = false;
       this.publishCounter = 0;
+
+      Profiler.ensureInit();
+      if (Profiler.enabled()) {
+        Profiler.gaugeSet(
+            "DragShotPlanner.profiler_file_hint_hash", Profiler.outputPathOrEmpty().hashCode());
+      }
     }
 
     public boolean done() {
@@ -333,78 +340,114 @@ public final class DragShotPlanner {
     }
 
     public ShotLibrary snapshot(boolean completeFlag) {
-      return new ShotLibrary(
-          targetFieldPosition,
-          targetHeightMeters,
-          shooterReleaseHeightMeters,
-          robotHalfLengthMeters,
-          robotHalfWidthMeters,
-          constraints,
-          List.copyOf(entries),
-          completeFlag);
+      AutoCloseable _p = Profiler.section("DragShotPlanner.ShotLibraryBuilder.snapshot");
+      try {
+        return new ShotLibrary(
+            targetFieldPosition,
+            targetHeightMeters,
+            shooterReleaseHeightMeters,
+            robotHalfLengthMeters,
+            robotHalfWidthMeters,
+            constraints,
+            List.copyOf(entries),
+            completeFlag);
+      } finally {
+        closeQuietly(_p);
+      }
     }
 
     public ShotLibrary maybeStep(long budgetNanos) {
-      if (done) {
-        return null;
-      }
-      long start = System.nanoTime();
-      ShotLibrary publish = null;
+      AutoCloseable _p = Profiler.section("DragShotPlanner.ShotLibraryBuilder.maybeStep");
+      try {
+        if (done) {
+          return null;
+        }
+        long start = System.nanoTime();
+        ShotLibrary publish = null;
 
-      while (!done && (System.nanoTime() - start) < budgetNanos) {
-        Translation2d shooterPos =
-            targetFieldPosition.minus(new Translation2d(range, Rotation2d.fromDegrees(bearingDeg)));
+        while (!done && (System.nanoTime() - start) < budgetNanos) {
+          Translation2d shooterPos =
+              targetFieldPosition.minus(
+                  new Translation2d(range, Rotation2d.fromDegrees(bearingDeg)));
 
-        if (isShooterPoseValid(
-            shooterPos, targetFieldPosition, robotHalfLengthMeters, robotHalfWidthMeters, null)) {
+          boolean ok;
+          AutoCloseable _p1 = Profiler.section("DragShotPlanner.isShooterPoseValid.library");
+          try {
+            ok =
+                isShooterPoseValid(
+                    shooterPos,
+                    targetFieldPosition,
+                    robotHalfLengthMeters,
+                    robotHalfWidthMeters,
+                    null);
+          } finally {
+            closeQuietly(_p1);
+          }
 
-          ShotSolution bestAtPos =
-              solveBestAtShooterPosition(
-                  gamePiece,
-                  shooterPos,
-                  targetFieldPosition,
-                  targetHeightMeters,
-                  shooterReleaseHeightMeters,
-                  minSpeed,
-                  maxSpeed,
-                  minAngleDeg,
-                  maxAngleDeg,
-                  fixedAngle,
-                  ACCEPTABLE_VERTICAL_ERROR_METERS,
-                  constraints.shotStyle(),
-                  speedStep,
-                  angleStepDeg);
+          if (ok) {
+            ShotSolution bestAtPos;
+            AutoCloseable _p2 =
+                Profiler.section("DragShotPlanner.solveBestAtShooterPosition.library");
+            try {
+              bestAtPos =
+                  solveBestAtShooterPosition(
+                      gamePiece,
+                      shooterPos,
+                      targetFieldPosition,
+                      targetHeightMeters,
+                      shooterReleaseHeightMeters,
+                      minSpeed,
+                      maxSpeed,
+                      minAngleDeg,
+                      maxAngleDeg,
+                      fixedAngle,
+                      ACCEPTABLE_VERTICAL_ERROR_METERS,
+                      constraints.shotStyle(),
+                      speedStep,
+                      angleStepDeg);
+            } finally {
+              closeQuietly(_p2);
+            }
 
-          if (bestAtPos != null) {
-            entries.add(
-                new ShotLibraryEntry(
-                    bestAtPos.shooterPosition(),
-                    bestAtPos.shooterYaw().getRadians(),
-                    bestAtPos.launchSpeedMetersPerSecond(),
-                    bestAtPos.launchAngle().getRadians(),
-                    bestAtPos.timeToPlaneSeconds(),
-                    bestAtPos.verticalErrorMeters()));
-            publishCounter++;
-            if (publishCounter >= 8) {
-              publishCounter = 0;
-              publish = snapshot(false);
+            if (bestAtPos != null) {
+              entries.add(
+                  new ShotLibraryEntry(
+                      bestAtPos.shooterPosition(),
+                      bestAtPos.shooterYaw().getRadians(),
+                      bestAtPos.launchSpeedMetersPerSecond(),
+                      bestAtPos.launchAngle().getRadians(),
+                      bestAtPos.timeToPlaneSeconds(),
+                      bestAtPos.verticalErrorMeters()));
+              Profiler.counterAdd("DragShotPlanner.library.entries_added", 1);
+              publishCounter++;
+              if (publishCounter >= 8) {
+                publishCounter = 0;
+                publish = snapshot(false);
+              }
+            } else {
+              Profiler.counterAdd("DragShotPlanner.library.no_solution", 1);
+            }
+          } else {
+            Profiler.counterAdd("DragShotPlanner.library.pose_invalid", 1);
+          }
+
+          bearingDeg += bearingStepDeg;
+          if (bearingDeg >= 360.0 - 1e-9) {
+            bearingDeg = 0.0;
+            range += radialStep;
+            if (range > MAX_RANGE_METERS + 1e-6) {
+              done = true;
+              publish = snapshot(true);
+              break;
             }
           }
         }
 
-        bearingDeg += bearingStepDeg;
-        if (bearingDeg >= 360.0 - 1e-9) {
-          bearingDeg = 0.0;
-          range += radialStep;
-          if (range > MAX_RANGE_METERS + 1e-6) {
-            done = true;
-            publish = snapshot(true);
-            break;
-          }
-        }
+        Profiler.gaugeSet("DragShotPlanner.library.entries_size", entries.size());
+        return publish;
+      } finally {
+        closeQuietly(_p);
       }
-
-      return publish;
     }
   }
 
@@ -417,6 +460,7 @@ public final class DragShotPlanner {
       this.seed = seed;
       this.stepMeters = stepMeters;
       this.lastUpdateNs = System.nanoTime();
+      Profiler.ensureInit();
     }
 
     public Translation2d seed() {
@@ -589,73 +633,97 @@ public final class DragShotPlanner {
 
   private DragShotPlanner() {}
 
+  private static void closeQuietly(AutoCloseable c) {
+    if (c == null) return;
+    try {
+      c.close();
+    } catch (Exception ignored) {
+    }
+  }
+
   private static List<FieldPlanner.Obstacle> staticObstacles() {
-    List<FieldPlanner.Obstacle> v = STATIC_OBSTACLES;
-    if (v != null) {
-      return v;
-    }
-    ArrayList<FieldPlanner.Obstacle> out = new ArrayList<>(64);
+    AutoCloseable _p = Profiler.section("DragShotPlanner.staticObstacles");
     try {
-      out.addAll(Constants.FIELD.walls());
-    } catch (Throwable ignored) {
+      List<FieldPlanner.Obstacle> v = STATIC_OBSTACLES;
+      if (v != null) {
+        return v;
+      }
+      ArrayList<FieldPlanner.Obstacle> out = new ArrayList<>(64);
+      try {
+        out.addAll(Constants.FIELD.walls());
+      } catch (Throwable ignored) {
+      }
+      try {
+        out.addAll(Constants.FIELD.fieldObstacles());
+      } catch (Throwable ignored) {
+      }
+      STATIC_OBSTACLES = List.copyOf(out);
+      Profiler.gaugeSet("DragShotPlanner.staticObstacles.size", STATIC_OBSTACLES.size());
+      return STATIC_OBSTACLES;
+    } finally {
+      closeQuietly(_p);
     }
-    try {
-      out.addAll(Constants.FIELD.fieldObstacles());
-    } catch (Throwable ignored) {
-    }
-    STATIC_OBSTACLES = List.copyOf(out);
-    return STATIC_OBSTACLES;
   }
 
   public static GamePiecePhysics loadGamePieceFromDeployYaml(String id) {
-    if (id == null || id.isEmpty()) {
-      throw new IllegalArgumentException("id must be non-empty");
+    AutoCloseable _p = Profiler.section("DragShotPlanner.loadGamePieceFromDeployYaml");
+    try {
+      if (id == null || id.isEmpty()) {
+        throw new IllegalArgumentException("id must be non-empty");
+      }
+      return GAME_PIECE_CACHE.computeIfAbsent(
+          id, DragShotPlanner::loadGamePieceFromDeployYamlInternal);
+    } finally {
+      closeQuietly(_p);
     }
-    return GAME_PIECE_CACHE.computeIfAbsent(
-        id, DragShotPlanner::loadGamePieceFromDeployYamlInternal);
   }
 
   private static GamePiecePhysics loadGamePieceFromDeployYamlInternal(String id) {
-    Path deployDir = Filesystem.getDeployDirectory().toPath();
-    Path gamePiecesDir = deployDir.resolve("gamepieces");
-    String fileName = id.endsWith(".yml") || id.endsWith(".yaml") ? id : id + ".yaml";
-    Path path = gamePiecesDir.resolve(fileName);
-    if (!Files.exists(path)) {
-      DriverStation.reportError("Game piece YAML not found: " + path.toString(), false);
-      throw new IllegalStateException("Missing game piece YAML: " + path.toString());
-    }
-    Yaml yaml = new Yaml(new Constructor(GamePiecePhysicsConfig.class, new LoaderOptions()));
-    try (InputStream in = Files.newInputStream(path)) {
-      GamePiecePhysicsConfig cfg = yaml.load(in);
-      if (cfg == null) {
-        DriverStation.reportError("Game piece YAML empty: " + path.toString(), false);
-        throw new IllegalStateException("Game piece YAML empty: " + path.toString());
+    AutoCloseable _p = Profiler.section("DragShotPlanner.loadGamePieceFromDeployYamlInternal");
+    try {
+      Path deployDir = Filesystem.getDeployDirectory().toPath();
+      Path gamePiecesDir = deployDir.resolve("gamepieces");
+      String fileName = id.endsWith(".yml") || id.endsWith(".yaml") ? id : id + ".yaml";
+      Path path = gamePiecesDir.resolve(fileName);
+      if (!Files.exists(path)) {
+        DriverStation.reportError("Game piece YAML not found: " + path.toString(), false);
+        throw new IllegalStateException("Missing game piece YAML: " + path.toString());
       }
-      double mass =
-          (cfg.metadata != null
-                  && cfg.metadata.mass_kg_override != null
-                  && cfg.metadata.mass_kg_override > 0.0)
-              ? cfg.metadata.mass_kg_override
-              : cfg.mass_kg;
-      double area = cfg.cross_section_area_m2;
-      double cd = cfg.drag_coefficient;
-      double air =
-          cfg.air_density_kg_per_m3 != null && cfg.air_density_kg_per_m3 > 0.0
-              ? cfg.air_density_kg_per_m3
-              : 1.225;
+      Yaml yaml = new Yaml(new Constructor(GamePiecePhysicsConfig.class, new LoaderOptions()));
+      try (InputStream in = Files.newInputStream(path)) {
+        GamePiecePhysicsConfig cfg = yaml.load(in);
+        if (cfg == null) {
+          DriverStation.reportError("Game piece YAML empty: " + path.toString(), false);
+          throw new IllegalStateException("Game piece YAML empty: " + path.toString());
+        }
+        double mass =
+            (cfg.metadata != null
+                    && cfg.metadata.mass_kg_override != null
+                    && cfg.metadata.mass_kg_override > 0.0)
+                ? cfg.metadata.mass_kg_override
+                : cfg.mass_kg;
+        double area = cfg.cross_section_area_m2;
+        double cd = cfg.drag_coefficient;
+        double air =
+            cfg.air_density_kg_per_m3 != null && cfg.air_density_kg_per_m3 > 0.0
+                ? cfg.air_density_kg_per_m3
+                : 1.225;
 
-      if (mass <= 0.0 || area <= 0.0 || cd <= 0.0 || air <= 0.0) {
-        DriverStation.reportError("Invalid game piece YAML values: " + path.toString(), false);
-        throw new IllegalStateException("Invalid game piece YAML: " + path.toString());
+        if (mass <= 0.0 || area <= 0.0 || cd <= 0.0 || air <= 0.0) {
+          DriverStation.reportError("Invalid game piece YAML values: " + path.toString(), false);
+          throw new IllegalStateException("Invalid game piece YAML: " + path.toString());
+        }
+        String name = cfg.name != null && !cfg.name.isEmpty() ? cfg.name : id;
+        return new YamlGamePiecePhysics(name, mass, area, cd, air);
+      } catch (IOException ex) {
+        DriverStation.reportError("Failed to read game piece YAML: " + path.toString(), false);
+        throw new IllegalStateException("Failed to read game piece YAML: " + path.toString(), ex);
+      } catch (RuntimeException ex) {
+        DriverStation.reportError("Failed to parse game piece YAML: " + path.toString(), false);
+        throw ex;
       }
-      String name = cfg.name != null && !cfg.name.isEmpty() ? cfg.name : id;
-      return new YamlGamePiecePhysics(name, mass, area, cd, air);
-    } catch (IOException ex) {
-      DriverStation.reportError("Failed to read game piece YAML: " + path.toString(), false);
-      throw new IllegalStateException("Failed to read game piece YAML: " + path.toString(), ex);
-    } catch (RuntimeException ex) {
-      DriverStation.reportError("Failed to parse game piece YAML: " + path.toString(), false);
-      throw ex;
+    } finally {
+      closeQuietly(_p);
     }
   }
 
@@ -665,12 +733,17 @@ public final class DragShotPlanner {
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
       List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
-    return isShooterPoseValidInternal(
-        shooterPos,
-        targetFieldPosition,
-        robotHalfLengthMeters,
-        robotHalfWidthMeters,
-        dynamicObstacles);
+    AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValid");
+    try {
+      return isShooterPoseValidInternal(
+          shooterPos,
+          targetFieldPosition,
+          robotHalfLengthMeters,
+          robotHalfWidthMeters,
+          dynamicObstacles);
+    } finally {
+      closeQuietly(_p);
+    }
   }
 
   public static Optional<ShotSolution> findBestShotFromLibrary(
@@ -685,86 +758,129 @@ public final class DragShotPlanner {
       List<? extends FieldPlanner.Obstacle> dynamicObstacles,
       Constraints constraints) {
 
-    if (library == null || library.entries().isEmpty()) {
-      return Optional.empty();
-    }
+    AutoCloseable _p = Profiler.section("DragShotPlanner.findBestShotFromLibrary");
+    try {
+      Profiler.ensureInit();
 
-    Translation2d robotCurrentPosition = robotPose.getTranslation();
-    Candidate best = null;
-
-    boolean needDynamicCheck = dynamicObstacles != null && !dynamicObstacles.isEmpty();
-
-    double rx = robotCurrentPosition.getX();
-    double ry = robotCurrentPosition.getY();
-
-    for (ShotLibraryEntry e : library.entries()) {
-      Translation2d shooterPos = e.shooterPosition();
-
-      double dx = rx - shooterPos.getX();
-      double dy = ry - shooterPos.getY();
-      double robotDistanceSq = dx * dx + dy * dy;
-      if (robotDistanceSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
-        continue;
+      if (library == null || library.entries().isEmpty()) {
+        Profiler.counterAdd("DragShotPlanner.library.empty", 1);
+        return Optional.empty();
       }
 
-      if (needDynamicCheck
-          && !isShooterPoseValidInternal(
-              shooterPos,
+      Profiler.gaugeSet("DragShotPlanner.library.entries", library.entries().size());
+
+      Translation2d robotCurrentPosition = robotPose.getTranslation();
+      Candidate best = null;
+
+      boolean needDynamicCheck = dynamicObstacles != null && !dynamicObstacles.isEmpty();
+      if (needDynamicCheck) {
+        Profiler.gaugeSet("DragShotPlanner.dynamicObstacles.count", dynamicObstacles.size());
+      }
+
+      double rx = robotCurrentPosition.getX();
+      double ry = robotCurrentPosition.getY();
+
+      int iter = 0;
+      int rejectedTravel = 0;
+      int rejectedDyn = 0;
+      int accepted = 0;
+
+      for (ShotLibraryEntry e : library.entries()) {
+        iter++;
+        Translation2d shooterPos = e.shooterPosition();
+
+        double dx = rx - shooterPos.getX();
+        double dy = ry - shooterPos.getY();
+        double robotDistanceSq = dx * dx + dy * dy;
+        if (robotDistanceSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
+          rejectedTravel++;
+          continue;
+        }
+
+        if (needDynamicCheck) {
+          boolean okDyn;
+          AutoCloseable _p1 = Profiler.section("DragShotPlanner.isShooterPoseValid.dynamic");
+          try {
+            okDyn =
+                isShooterPoseValidInternal(
+                    shooterPos,
+                    targetFieldPosition,
+                    robotHalfLengthMeters,
+                    robotHalfWidthMeters,
+                    dynamicObstacles);
+          } finally {
+            closeQuietly(_p1);
+          }
+          if (!okDyn) {
+            rejectedDyn++;
+            continue;
+          }
+        }
+
+        Candidate next =
+            new Candidate(
+                shooterPos,
+                e.shooterYawRad(),
+                e.launchSpeedMetersPerSecond(),
+                e.launchAngleRad(),
+                e.timeToPlaneSeconds(),
+                Math.abs(e.verticalErrorMeters()),
+                robotDistanceSq);
+
+        if (isBetterCandidate(best, next, constraints.shotStyle())) {
+          best = next;
+        }
+        accepted++;
+      }
+
+      Profiler.counterAdd("DragShotPlanner.library.loop_iter", iter);
+      Profiler.counterAdd("DragShotPlanner.library.rejected_travel", rejectedTravel);
+      Profiler.counterAdd("DragShotPlanner.library.rejected_dynamic", rejectedDyn);
+      Profiler.counterAdd("DragShotPlanner.library.accepted", accepted);
+
+      if (best == null) {
+        Profiler.counterAdd("DragShotPlanner.library.no_best", 1);
+        return Optional.empty();
+      }
+
+      ShotSolution refined;
+      AutoCloseable _p2 = Profiler.section("DragShotPlanner.refineShotAtPosition.library");
+      try {
+        refined =
+            refineShotAtPosition(
+                gamePiece,
+                best.shooterPosition,
+                targetFieldPosition,
+                targetHeightMeters,
+                shooterReleaseHeightMeters,
+                constraints.minLaunchSpeedMetersPerSecond(),
+                constraints.maxLaunchSpeedMetersPerSecond(),
+                constraints.minLaunchAngleDeg(),
+                constraints.maxLaunchAngleDeg(),
+                Math.abs(constraints.maxLaunchAngleDeg() - constraints.minLaunchAngleDeg()) < 1e-6,
+                ACCEPTABLE_VERTICAL_ERROR_METERS,
+                best.speed,
+                best.angleRad);
+      } finally {
+        closeQuietly(_p2);
+      }
+
+      if (refined != null) {
+        return Optional.of(refined);
+      }
+
+      return Optional.of(
+          new ShotSolution(
+              best.shooterPosition,
+              Rotation2d.fromRadians(best.shooterYawRad),
+              best.speed,
+              Rotation2d.fromRadians(best.angleRad),
+              best.timeToPlane,
               targetFieldPosition,
-              robotHalfLengthMeters,
-              robotHalfWidthMeters,
-              dynamicObstacles)) {
-        continue;
-      }
-
-      Candidate next =
-          new Candidate(
-              shooterPos,
-              e.shooterYawRad(),
-              e.launchSpeedMetersPerSecond(),
-              e.launchAngleRad(),
-              e.timeToPlaneSeconds(),
-              Math.abs(e.verticalErrorMeters()),
-              robotDistanceSq);
-
-      if (isBetterCandidate(best, next, constraints.shotStyle())) {
-        best = next;
-      }
+              best.verticalError));
+    } finally {
+      closeQuietly(_p);
     }
-
-    if (best == null) {
-      return Optional.empty();
-    }
-
-    ShotSolution refined =
-        refineShotAtPosition(
-            gamePiece,
-            best.shooterPosition,
-            targetFieldPosition,
-            targetHeightMeters,
-            shooterReleaseHeightMeters,
-            constraints.minLaunchSpeedMetersPerSecond(),
-            constraints.maxLaunchSpeedMetersPerSecond(),
-            constraints.minLaunchAngleDeg(),
-            constraints.maxLaunchAngleDeg(),
-            Math.abs(constraints.maxLaunchAngleDeg() - constraints.minLaunchAngleDeg()) < 1e-6,
-            ACCEPTABLE_VERTICAL_ERROR_METERS,
-            best.speed,
-            best.angleRad);
-
-    if (refined != null) {
-      return Optional.of(refined);
-    }
-
-    return Optional.of(
-        new ShotSolution(
-            best.shooterPosition,
-            Rotation2d.fromRadians(best.shooterYawRad),
-            best.speed,
-            Rotation2d.fromRadians(best.angleRad),
-            best.timeToPlane,
-            targetFieldPosition,
-            best.verticalError));
   }
 
   public static Optional<ShotSolution> findBestShotAuto(
@@ -778,63 +894,86 @@ public final class DragShotPlanner {
       List<? extends FieldPlanner.Obstacle> dynamicObstacles,
       Constraints constraints) {
 
-    double minSpeed = constraints.minLaunchSpeedMetersPerSecond();
-    double maxSpeed = constraints.maxLaunchSpeedMetersPerSecond();
-    double minAngleDeg = constraints.minLaunchAngleDeg();
-    double maxAngleDeg = constraints.maxLaunchAngleDeg();
+    AutoCloseable _p = Profiler.section("DragShotPlanner.findBestShotAuto");
+    try {
+      Profiler.ensureInit();
 
-    if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
-      return Optional.empty();
+      double minSpeed = constraints.minLaunchSpeedMetersPerSecond();
+      double maxSpeed = constraints.maxLaunchSpeedMetersPerSecond();
+      double minAngleDeg = constraints.minLaunchAngleDeg();
+      double maxAngleDeg = constraints.maxLaunchAngleDeg();
+
+      if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
+        Profiler.counterAdd("DragShotPlanner.auto.bad_speed_range", 1);
+        return Optional.empty();
+      }
+      if (!(Math.abs(maxAngleDeg - minAngleDeg) < 1e-6) && maxAngleDeg <= minAngleDeg) {
+        Profiler.counterAdd("DragShotPlanner.auto.bad_angle_range", 1);
+        return Optional.empty();
+      }
+
+      Translation2d robotCurrentPosition = robotPose.getTranslation();
+      boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
+
+      Candidate coarse;
+      AutoCloseable _p1 = Profiler.section("DragShotPlanner.coarseSearch");
+      try {
+        coarse =
+            coarseSearch(
+                gamePiece,
+                targetFieldPosition,
+                targetHeightMeters,
+                robotCurrentPosition,
+                shooterReleaseHeightMeters,
+                robotHalfLengthMeters,
+                robotHalfWidthMeters,
+                dynamicObstacles,
+                minSpeed,
+                maxSpeed,
+                minAngleDeg,
+                maxAngleDeg,
+                fixedAngle,
+                constraints.shotStyle());
+      } finally {
+        closeQuietly(_p1);
+      }
+
+      if (coarse == null) {
+        Profiler.counterAdd("DragShotPlanner.auto.coarse_none", 1);
+        return Optional.empty();
+      }
+
+      ShotSolution refined;
+      AutoCloseable _p2 = Profiler.section("DragShotPlanner.refineShotAtPosition.auto");
+      try {
+        refined =
+            refineShotAtPosition(
+                gamePiece,
+                coarse.shooterPosition,
+                targetFieldPosition,
+                targetHeightMeters,
+                shooterReleaseHeightMeters,
+                minSpeed,
+                maxSpeed,
+                minAngleDeg,
+                maxAngleDeg,
+                fixedAngle,
+                ACCEPTABLE_VERTICAL_ERROR_METERS,
+                coarse.speed,
+                coarse.angleRad);
+      } finally {
+        closeQuietly(_p2);
+      }
+
+      if (refined == null) {
+        Profiler.counterAdd("DragShotPlanner.auto.refine_none", 1);
+        return Optional.empty();
+      }
+
+      return Optional.of(refined);
+    } finally {
+      closeQuietly(_p);
     }
-    if (!(Math.abs(maxAngleDeg - minAngleDeg) < 1e-6) && maxAngleDeg <= minAngleDeg) {
-      return Optional.empty();
-    }
-
-    Translation2d robotCurrentPosition = robotPose.getTranslation();
-    boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
-
-    Candidate coarse =
-        coarseSearch(
-            gamePiece,
-            targetFieldPosition,
-            targetHeightMeters,
-            robotCurrentPosition,
-            shooterReleaseHeightMeters,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles,
-            minSpeed,
-            maxSpeed,
-            minAngleDeg,
-            maxAngleDeg,
-            fixedAngle,
-            constraints.shotStyle());
-
-    if (coarse == null) {
-      return Optional.empty();
-    }
-
-    ShotSolution refined =
-        refineShotAtPosition(
-            gamePiece,
-            coarse.shooterPosition,
-            targetFieldPosition,
-            targetHeightMeters,
-            shooterReleaseHeightMeters,
-            minSpeed,
-            maxSpeed,
-            minAngleDeg,
-            maxAngleDeg,
-            fixedAngle,
-            ACCEPTABLE_VERTICAL_ERROR_METERS,
-            coarse.speed,
-            coarse.angleRad);
-
-    if (refined == null) {
-      return Optional.empty();
-    }
-
-    return Optional.of(refined);
   }
 
   public static Optional<ShotSolution> findBestShotOnlineRefine(
@@ -850,116 +989,56 @@ public final class DragShotPlanner {
       OnlineSearchState state,
       long budgetNanos) {
 
-    if (gamePiece == null
-        || targetFieldPosition == null
-        || robotPose == null
-        || constraints == null
-        || state == null) {
-      return Optional.empty();
-    }
+    AutoCloseable _p = Profiler.section("DragShotPlanner.findBestShotOnlineRefine");
+    try {
+      Profiler.ensureInit();
 
-    double minSpeed = constraints.minLaunchSpeedMetersPerSecond();
-    double maxSpeed = constraints.maxLaunchSpeedMetersPerSecond();
-    double minAngleDeg = constraints.minLaunchAngleDeg();
-    double maxAngleDeg = constraints.maxLaunchAngleDeg();
-    boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
-
-    if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
-      return Optional.empty();
-    }
-    if (!fixedAngle && maxAngleDeg <= minAngleDeg) {
-      return Optional.empty();
-    }
-
-    Translation2d robotPos = robotPose.getTranslation();
-    double robotX = robotPos.getX();
-    double robotY = robotPos.getY();
-
-    Translation2d seed = state.seed();
-    if (seed == null) {
-      seed = projectToValidRing(robotPos, targetFieldPosition);
-      state.seed(seed);
-    }
-
-    double speedStep = Math.max(0.22, (maxSpeed - minSpeed) / 70.0);
-    double angleStep = fixedAngle ? 1.0 : Math.max(0.40, (maxAngleDeg - minAngleDeg) / 70.0);
-
-    Candidate best = null;
-
-    ShotSolution seedSol =
-        solveBestAtShooterPosition(
-            gamePiece,
-            seed,
-            targetFieldPosition,
-            targetHeightMeters,
-            shooterReleaseHeightMeters,
-            minSpeed,
-            maxSpeed,
-            minAngleDeg,
-            maxAngleDeg,
-            fixedAngle,
-            ACCEPTABLE_VERTICAL_ERROR_METERS,
-            constraints.shotStyle(),
-            speedStep,
-            angleStep);
-
-    if (seedSol != null
-        && isShooterPoseValidInternal(
-            seed,
-            targetFieldPosition,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles)) {
-      double dx = robotX - seedSol.shooterPosition().getX();
-      double dy = robotY - seedSol.shooterPosition().getY();
-      double distSq = dx * dx + dy * dy;
-      if (distSq <= MAX_ROBOT_TRAVEL_METERS_SQ + 1e-6) {
-        best =
-            new Candidate(
-                seedSol.shooterPosition(),
-                seedSol.shooterYaw().getRadians(),
-                seedSol.launchSpeedMetersPerSecond(),
-                seedSol.launchAngle().getRadians(),
-                seedSol.timeToPlaneSeconds(),
-                Math.abs(seedSol.verticalErrorMeters()),
-                distSq);
+      if (gamePiece == null
+          || targetFieldPosition == null
+          || robotPose == null
+          || constraints == null
+          || state == null) {
+        Profiler.counterAdd("DragShotPlanner.online.bad_inputs", 1);
+        return Optional.empty();
       }
-    }
 
-    long start = System.nanoTime();
-    double step = Math.max(0.11, Math.min(0.95, state.stepMeters()));
-    Translation2d current = seed;
+      double minSpeed = constraints.minLaunchSpeedMetersPerSecond();
+      double maxSpeed = constraints.maxLaunchSpeedMetersPerSecond();
+      double minAngleDeg = constraints.minLaunchAngleDeg();
+      double maxAngleDeg = constraints.maxLaunchAngleDeg();
+      boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
 
-    while ((System.nanoTime() - start) < budgetNanos) {
-      boolean improved = false;
+      if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
+        Profiler.counterAdd("DragShotPlanner.online.bad_speed_range", 1);
+        return Optional.empty();
+      }
+      if (!fixedAngle && maxAngleDeg <= minAngleDeg) {
+        Profiler.counterAdd("DragShotPlanner.online.bad_angle_range", 1);
+        return Optional.empty();
+      }
 
-      double cx = current.getX();
-      double cy = current.getY();
+      Translation2d robotPos = robotPose.getTranslation();
+      double robotX = robotPos.getX();
+      double robotY = robotPos.getY();
 
-      for (double[] o : ONLINE_OFFS) {
-        Translation2d p = new Translation2d(cx + o[0] * step, cy + o[1] * step);
-        Translation2d clipped = clipToRingAndField(p, targetFieldPosition);
+      Translation2d seed = state.seed();
+      if (seed == null) {
+        seed = projectToValidRing(robotPos, targetFieldPosition);
+        state.seed(seed);
+      }
 
-        double dxr = robotX - clipped.getX();
-        double dyr = robotY - clipped.getY();
-        double distSq = dxr * dxr + dyr * dyr;
-        if (distSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
-          continue;
-        }
+      double speedStep = Math.max(0.22, (maxSpeed - minSpeed) / 70.0);
+      double angleStep = fixedAngle ? 1.0 : Math.max(0.40, (maxAngleDeg - minAngleDeg) / 70.0);
 
-        if (!isShooterPoseValidInternal(
-            clipped,
-            targetFieldPosition,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles)) {
-          continue;
-        }
+      Candidate best = null;
 
-        ShotSolution sol =
+      ShotSolution seedSol;
+      AutoCloseable _p1 = Profiler.section("DragShotPlanner.solveBestAtShooterPosition.seed");
+      try {
+        seedSol =
             solveBestAtShooterPosition(
                 gamePiece,
-                clipped,
+                seed,
                 targetFieldPosition,
                 targetHeightMeters,
                 shooterReleaseHeightMeters,
@@ -972,142 +1051,284 @@ public final class DragShotPlanner {
                 constraints.shotStyle(),
                 speedStep,
                 angleStep);
+      } finally {
+        closeQuietly(_p1);
+      }
 
-        if (sol == null) {
-          continue;
+      if (seedSol != null) {
+        boolean ok;
+        AutoCloseable _p2 = Profiler.section("DragShotPlanner.isShooterPoseValid.seed");
+        try {
+          ok =
+              isShooterPoseValidInternal(
+                  seed,
+                  targetFieldPosition,
+                  robotHalfLengthMeters,
+                  robotHalfWidthMeters,
+                  dynamicObstacles);
+        } finally {
+          closeQuietly(_p2);
         }
-
-        double dx2 = robotX - sol.shooterPosition().getX();
-        double dy2 = robotY - sol.shooterPosition().getY();
-        double distSq2 = dx2 * dx2 + dy2 * dy2;
-
-        Candidate cand =
-            new Candidate(
-                sol.shooterPosition(),
-                sol.shooterYaw().getRadians(),
-                sol.launchSpeedMetersPerSecond(),
-                sol.launchAngle().getRadians(),
-                sol.timeToPlaneSeconds(),
-                Math.abs(sol.verticalErrorMeters()),
-                distSq2);
-
-        if (isBetterCandidate(best, cand, constraints.shotStyle())) {
-          best = cand;
-          current = sol.shooterPosition();
-          improved = true;
+        if (ok) {
+          double dx = robotX - seedSol.shooterPosition().getX();
+          double dy = robotY - seedSol.shooterPosition().getY();
+          double distSq = dx * dx + dy * dy;
+          if (distSq <= MAX_ROBOT_TRAVEL_METERS_SQ + 1e-6) {
+            best =
+                new Candidate(
+                    seedSol.shooterPosition(),
+                    seedSol.shooterYaw().getRadians(),
+                    seedSol.launchSpeedMetersPerSecond(),
+                    seedSol.launchAngle().getRadians(),
+                    seedSol.timeToPlaneSeconds(),
+                    Math.abs(seedSol.verticalErrorMeters()),
+                    distSq);
+          }
         }
       }
 
-      if (!improved) {
-        step *= 0.58;
-        if (step < 0.075) {
-          break;
+      long start = System.nanoTime();
+      double step = Math.max(0.11, Math.min(0.95, state.stepMeters()));
+      Translation2d current = seed;
+
+      int outer = 0;
+      int inner = 0;
+      int rejectedTravel = 0;
+      int rejectedPose = 0;
+      int rejectedNoSol = 0;
+      int improvedCount = 0;
+
+      while ((System.nanoTime() - start) < budgetNanos) {
+        outer++;
+        boolean improved = false;
+
+        double cx = current.getX();
+        double cy = current.getY();
+
+        for (double[] o : ONLINE_OFFS) {
+          inner++;
+          Translation2d p = new Translation2d(cx + o[0] * step, cy + o[1] * step);
+          Translation2d clipped = clipToRingAndField(p, targetFieldPosition);
+
+          double dxr = robotX - clipped.getX();
+          double dyr = robotY - clipped.getY();
+          double distSq = dxr * dxr + dyr * dyr;
+          if (distSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
+            rejectedTravel++;
+            continue;
+          }
+
+          boolean ok;
+          AutoCloseable _p3 = Profiler.section("DragShotPlanner.isShooterPoseValid.online");
+          try {
+            ok =
+                isShooterPoseValidInternal(
+                    clipped,
+                    targetFieldPosition,
+                    robotHalfLengthMeters,
+                    robotHalfWidthMeters,
+                    dynamicObstacles);
+          } finally {
+            closeQuietly(_p3);
+          }
+          if (!ok) {
+            rejectedPose++;
+            continue;
+          }
+
+          ShotSolution sol;
+          AutoCloseable _p4 = Profiler.section("DragShotPlanner.solveBestAtShooterPosition.online");
+          try {
+            sol =
+                solveBestAtShooterPosition(
+                    gamePiece,
+                    clipped,
+                    targetFieldPosition,
+                    targetHeightMeters,
+                    shooterReleaseHeightMeters,
+                    minSpeed,
+                    maxSpeed,
+                    minAngleDeg,
+                    maxAngleDeg,
+                    fixedAngle,
+                    ACCEPTABLE_VERTICAL_ERROR_METERS,
+                    constraints.shotStyle(),
+                    speedStep,
+                    angleStep);
+          } finally {
+            closeQuietly(_p4);
+          }
+
+          if (sol == null) {
+            rejectedNoSol++;
+            continue;
+          }
+
+          double dx2 = robotX - sol.shooterPosition().getX();
+          double dy2 = robotY - sol.shooterPosition().getY();
+          double distSq2 = dx2 * dx2 + dy2 * dy2;
+
+          Candidate cand =
+              new Candidate(
+                  sol.shooterPosition(),
+                  sol.shooterYaw().getRadians(),
+                  sol.launchSpeedMetersPerSecond(),
+                  sol.launchAngle().getRadians(),
+                  sol.timeToPlaneSeconds(),
+                  Math.abs(sol.verticalErrorMeters()),
+                  distSq2);
+
+          if (isBetterCandidate(best, cand, constraints.shotStyle())) {
+            best = cand;
+            current = sol.shooterPosition();
+            improved = true;
+            improvedCount++;
+          }
+        }
+
+        if (!improved) {
+          step *= 0.58;
+          if (step < 0.075) {
+            break;
+          }
         }
       }
+
+      Profiler.counterAdd("DragShotPlanner.online.outer", outer);
+      Profiler.counterAdd("DragShotPlanner.online.inner", inner);
+      Profiler.counterAdd("DragShotPlanner.online.rejected_travel", rejectedTravel);
+      Profiler.counterAdd("DragShotPlanner.online.rejected_pose", rejectedPose);
+      Profiler.counterAdd("DragShotPlanner.online.rejected_no_solution", rejectedNoSol);
+      Profiler.counterAdd("DragShotPlanner.online.improved", improvedCount);
+      Profiler.gaugeSet("DragShotPlanner.online.final_step_mm", (long) (step * 1000.0));
+
+      if (best == null) {
+        Profiler.counterAdd("DragShotPlanner.online.no_best", 1);
+        return Optional.empty();
+      }
+
+      state.seed(best.shooterPosition);
+      state.stepMeters(Math.max(0.10, Math.min(0.80, step)));
+      state.touch();
+
+      ShotSolution refined;
+      AutoCloseable _p5 = Profiler.section("DragShotPlanner.refineShotAtPosition.online");
+      try {
+        refined =
+            refineShotAtPosition(
+                gamePiece,
+                best.shooterPosition,
+                targetFieldPosition,
+                targetHeightMeters,
+                shooterReleaseHeightMeters,
+                minSpeed,
+                maxSpeed,
+                minAngleDeg,
+                maxAngleDeg,
+                fixedAngle,
+                ACCEPTABLE_VERTICAL_ERROR_METERS,
+                best.speed,
+                best.angleRad);
+      } finally {
+        closeQuietly(_p5);
+      }
+
+      if (refined != null) {
+        return Optional.of(refined);
+      }
+
+      return Optional.of(
+          new ShotSolution(
+              best.shooterPosition,
+              Rotation2d.fromRadians(best.shooterYawRad),
+              best.speed,
+              Rotation2d.fromRadians(best.angleRad),
+              best.timeToPlane,
+              targetFieldPosition,
+              best.verticalError));
+    } finally {
+      closeQuietly(_p);
     }
-
-    if (best == null) {
-      return Optional.empty();
-    }
-
-    state.seed(best.shooterPosition);
-    state.stepMeters(Math.max(0.10, Math.min(0.80, step)));
-    state.touch();
-
-    ShotSolution refined =
-        refineShotAtPosition(
-            gamePiece,
-            best.shooterPosition,
-            targetFieldPosition,
-            targetHeightMeters,
-            shooterReleaseHeightMeters,
-            minSpeed,
-            maxSpeed,
-            minAngleDeg,
-            maxAngleDeg,
-            fixedAngle,
-            ACCEPTABLE_VERTICAL_ERROR_METERS,
-            best.speed,
-            best.angleRad);
-
-    if (refined != null) {
-      return Optional.of(refined);
-    }
-
-    return Optional.of(
-        new ShotSolution(
-            best.shooterPosition,
-            Rotation2d.fromRadians(best.shooterYawRad),
-            best.speed,
-            Rotation2d.fromRadians(best.angleRad),
-            best.timeToPlane,
-            targetFieldPosition,
-            best.verticalError));
   }
 
   private static Translation2d projectToValidRing(Translation2d point, Translation2d target) {
-    Translation2d delta = point.minus(target);
-    double r = delta.getNorm();
-    if (r < 1e-6) {
-      return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+    AutoCloseable _p = Profiler.section("DragShotPlanner.projectToValidRing");
+    try {
+      Translation2d delta = point.minus(target);
+      double r = delta.getNorm();
+      if (r < 1e-6) {
+        return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+      }
+      double clamped = Math.max(MIN_RANGE_METERS, Math.min(MAX_RANGE_METERS, r));
+      Translation2d unit = delta.div(r);
+      return target.plus(unit.times(clamped));
+    } finally {
+      closeQuietly(_p);
     }
-    double clamped = Math.max(MIN_RANGE_METERS, Math.min(MAX_RANGE_METERS, r));
-    Translation2d unit = delta.div(r);
-    return target.plus(unit.times(clamped));
   }
 
   private static Translation2d clipToRingAndField(Translation2d p, Translation2d target) {
-    Translation2d ring = projectToValidRing(p, target);
-    double x = ring.getX();
-    double y = ring.getY();
-    if (!Double.isFinite(x) || !Double.isFinite(y)) {
-      return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+    AutoCloseable _p = Profiler.section("DragShotPlanner.clipToRingAndField");
+    try {
+      Translation2d ring = projectToValidRing(p, target);
+      double x = ring.getX();
+      double y = ring.getY();
+      if (!Double.isFinite(x) || !Double.isFinite(y)) {
+        return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+      }
+      return new Translation2d(x, y);
+    } finally {
+      closeQuietly(_p);
     }
-    return new Translation2d(x, y);
   }
 
   private static boolean isBetterCandidate(
       Candidate best, Candidate next, Constraints.ShotStyle style) {
-    if (best == null) {
-      return true;
-    }
+    AutoCloseable _p = Profiler.section("DragShotPlanner.isBetterCandidate");
+    try {
+      if (best == null) {
+        return true;
+      }
 
-    if (next.robotDistanceSq < best.robotDistanceSq - 1e-9) {
-      return true;
-    }
-    if (best.robotDistanceSq < next.robotDistanceSq - 1e-9) {
-      return false;
-    }
+      if (next.robotDistanceSq < best.robotDistanceSq - 1e-9) {
+        return true;
+      }
+      if (best.robotDistanceSq < next.robotDistanceSq - 1e-9) {
+        return false;
+      }
 
-    if (style == Constraints.ShotStyle.DIRECT || style == Constraints.ShotStyle.ARC) {
-      double angleBest = Math.abs(best.angleRad);
-      double angleNext = Math.abs(next.angleRad);
-      double angleEps = 1e-3;
-      if (style == Constraints.ShotStyle.DIRECT) {
-        if (angleNext < angleBest - angleEps) {
-          return true;
-        }
-        if (angleBest < angleNext - angleEps) {
-          return false;
-        }
-      } else {
-        if (angleNext > angleBest + angleEps) {
-          return true;
-        }
-        if (angleBest > angleNext + angleEps) {
-          return false;
+      if (style == Constraints.ShotStyle.DIRECT || style == Constraints.ShotStyle.ARC) {
+        double angleBest = Math.abs(best.angleRad);
+        double angleNext = Math.abs(next.angleRad);
+        double angleEps = 1e-3;
+        if (style == Constraints.ShotStyle.DIRECT) {
+          if (angleNext < angleBest - angleEps) {
+            return true;
+          }
+          if (angleBest < angleNext - angleEps) {
+            return false;
+          }
+        } else {
+          if (angleNext > angleBest + angleEps) {
+            return true;
+          }
+          if (angleBest > angleNext + angleEps) {
+            return false;
+          }
         }
       }
-    }
 
-    if (next.speed < best.speed - EPS) {
-      return true;
-    }
-    if (best.speed < next.speed - EPS) {
-      return false;
-    }
+      if (next.speed < best.speed - EPS) {
+        return true;
+      }
+      if (best.speed < next.speed - EPS) {
+        return false;
+      }
 
-    return next.verticalError < best.verticalError - EPS;
+      return next.verticalError < best.verticalError - EPS;
+    } finally {
+      closeQuietly(_p);
+    }
   }
 
   private static Candidate coarseSearch(
@@ -1126,112 +1347,154 @@ public final class DragShotPlanner {
       boolean fixedAngle,
       Constraints.ShotStyle shotStyle) {
 
-    double speedRange = maxSpeed - minSpeed;
-    double angleRange = maxAngleDeg - minAngleDeg;
+    AutoCloseable _p = Profiler.section("DragShotPlanner.coarseSearch.body");
+    try {
+      double speedRange = maxSpeed - minSpeed;
+      double angleRange = maxAngleDeg - minAngleDeg;
 
-    double speedStepCoarse = Math.max(0.6, speedRange / 9.0);
-    double angleStepCoarse = fixedAngle ? 1.0 : Math.max(2.4, angleRange / 9.0);
-    double radialStepCoarse = 0.55;
-    double bearingStepDegCoarse = 22.0;
-    double coarseTolerance = ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
+      double speedStepCoarse = Math.max(0.6, speedRange / 9.0);
+      double angleStepCoarse = fixedAngle ? 1.0 : Math.max(2.4, angleRange / 9.0);
+      double radialStepCoarse = 0.55;
+      double bearingStepDegCoarse = 22.0;
+      double coarseTolerance = ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
 
-    Candidate bestCoarse = null;
+      Candidate bestCoarse = null;
 
-    double rx = robotCurrentPosition.getX();
-    double ry = robotCurrentPosition.getY();
+      double rx = robotCurrentPosition.getX();
+      double ry = robotCurrentPosition.getY();
 
-    for (double range = MIN_RANGE_METERS;
-        range <= MAX_RANGE_METERS + 1e-6;
-        range += radialStepCoarse) {
-      for (double bearingDeg = 0.0; bearingDeg < 360.0; bearingDeg += bearingStepDegCoarse) {
-        Rotation2d bearing = Rotation2d.fromDegrees(bearingDeg);
-        Translation2d shooterPos = targetFieldPosition.minus(new Translation2d(range, bearing));
+      int ranges = 0;
+      int bearings = 0;
+      int posesChecked = 0;
+      int posesRejected = 0;
+      int sims = 0;
+      int simsHit = 0;
+      int simsAccepted = 0;
 
-        double dx = rx - shooterPos.getX();
-        double dy = ry - shooterPos.getY();
-        double robotDistanceSq = dx * dx + dy * dy;
-        if (robotDistanceSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
-          continue;
-        }
+      for (double range = MIN_RANGE_METERS;
+          range <= MAX_RANGE_METERS + 1e-6;
+          range += radialStepCoarse) {
+        ranges++;
+        for (double bearingDeg = 0.0; bearingDeg < 360.0; bearingDeg += bearingStepDegCoarse) {
+          bearings++;
+          Rotation2d bearing = Rotation2d.fromDegrees(bearingDeg);
+          Translation2d shooterPos = targetFieldPosition.minus(new Translation2d(range, bearing));
 
-        if (!isShooterPoseValidInternal(
-            shooterPos,
-            targetFieldPosition,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles)) {
-          continue;
-        }
-
-        double horizontalDistance = shooterPos.getDistance(targetFieldPosition);
-        if (horizontalDistance < 1e-3) {
-          continue;
-        }
-
-        Rotation2d shooterYaw = targetFieldPosition.minus(shooterPos).getAngle();
-
-        double angleStartDeg;
-        double angleEndDeg;
-        double angleStepDeg;
-
-        if (fixedAngle) {
-          angleStartDeg = minAngleDeg;
-          angleEndDeg = maxAngleDeg;
-          angleStepDeg = 1.0;
-        } else {
-          angleStartDeg = minAngleDeg;
-          angleEndDeg = maxAngleDeg;
-          angleStepDeg = angleStepCoarse;
-        }
-
-        for (double angleDeg = angleStartDeg;
-            angleDeg <= angleEndDeg + 1e-6;
-            angleDeg += angleStepDeg) {
-
-          double angleRad = Math.toRadians(angleDeg);
-          double cos = Math.cos(angleRad);
-          if (cos <= 0.0) {
+          double dx = rx - shooterPos.getX();
+          double dy = ry - shooterPos.getY();
+          double robotDistanceSq = dx * dx + dy * dy;
+          if (robotDistanceSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
             continue;
           }
 
-          for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStepCoarse) {
-            SimulationResult sim =
-                simulateToTargetPlane(
-                    gamePiece,
-                    speed,
-                    angleRad,
-                    shooterReleaseHeightMeters,
-                    horizontalDistance,
-                    targetHeightMeters);
-
-            if (!sim.hitPlane) {
-              continue;
-            }
-
-            double error = Math.abs(sim.verticalErrorMeters);
-            if (error > coarseTolerance) {
-              continue;
-            }
-
-            Candidate next =
-                new Candidate(
+          posesChecked++;
+          boolean ok;
+          AutoCloseable _p1 = Profiler.section("DragShotPlanner.isShooterPoseValid.coarse");
+          try {
+            ok =
+                isShooterPoseValidInternal(
                     shooterPos,
-                    shooterYaw.getRadians(),
-                    speed,
-                    angleRad,
-                    sim.timeAtPlaneSeconds,
-                    error,
-                    robotDistanceSq);
+                    targetFieldPosition,
+                    robotHalfLengthMeters,
+                    robotHalfWidthMeters,
+                    dynamicObstacles);
+          } finally {
+            closeQuietly(_p1);
+          }
+          if (!ok) {
+            posesRejected++;
+            continue;
+          }
 
-            if (isBetterCandidate(bestCoarse, next, shotStyle)) {
-              bestCoarse = next;
+          double horizontalDistance = shooterPos.getDistance(targetFieldPosition);
+          if (horizontalDistance < 1e-3) {
+            continue;
+          }
+
+          Rotation2d shooterYaw = targetFieldPosition.minus(shooterPos).getAngle();
+
+          double angleStartDeg;
+          double angleEndDeg;
+          double angleStepDeg;
+
+          if (fixedAngle) {
+            angleStartDeg = minAngleDeg;
+            angleEndDeg = maxAngleDeg;
+            angleStepDeg = 1.0;
+          } else {
+            angleStartDeg = minAngleDeg;
+            angleEndDeg = maxAngleDeg;
+            angleStepDeg = angleStepCoarse;
+          }
+
+          for (double angleDeg = angleStartDeg;
+              angleDeg <= angleEndDeg + 1e-6;
+              angleDeg += angleStepDeg) {
+
+            double angleRad = Math.toRadians(angleDeg);
+            double cos = Math.cos(angleRad);
+            if (cos <= 0.0) {
+              continue;
+            }
+
+            for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStepCoarse) {
+              sims++;
+              SimulationResult sim;
+              AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
+              try {
+                sim =
+                    simulateToTargetPlane(
+                        gamePiece,
+                        speed,
+                        angleRad,
+                        shooterReleaseHeightMeters,
+                        horizontalDistance,
+                        targetHeightMeters);
+              } finally {
+                closeQuietly(_p2);
+              }
+
+              if (!sim.hitPlane) {
+                continue;
+              }
+              simsHit++;
+
+              double error = Math.abs(sim.verticalErrorMeters);
+              if (error > coarseTolerance) {
+                continue;
+              }
+              simsAccepted++;
+
+              Candidate next =
+                  new Candidate(
+                      shooterPos,
+                      shooterYaw.getRadians(),
+                      speed,
+                      angleRad,
+                      sim.timeAtPlaneSeconds,
+                      error,
+                      robotDistanceSq);
+
+              if (isBetterCandidate(bestCoarse, next, shotStyle)) {
+                bestCoarse = next;
+              }
             }
           }
         }
       }
-    }
 
-    return bestCoarse;
+      Profiler.counterAdd("DragShotPlanner.coarse.ranges", ranges);
+      Profiler.counterAdd("DragShotPlanner.coarse.bearings", bearings);
+      Profiler.counterAdd("DragShotPlanner.coarse.poses_checked", posesChecked);
+      Profiler.counterAdd("DragShotPlanner.coarse.poses_rejected", posesRejected);
+      Profiler.counterAdd("DragShotPlanner.coarse.sims", sims);
+      Profiler.counterAdd("DragShotPlanner.coarse.sims_hitplane", simsHit);
+      Profiler.counterAdd("DragShotPlanner.coarse.sims_accepted", simsAccepted);
+
+      return bestCoarse;
+    } finally {
+      closeQuietly(_p);
+    }
   }
 
   private static ShotSolution solveBestAtShooterPosition(
@@ -1250,117 +1513,139 @@ public final class DragShotPlanner {
       double speedStep,
       double angleStepDeg) {
 
-    double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
-    if (horizontalDistance < 1e-3) {
-      return null;
-    }
-
-    double invD = 1.0 / horizontalDistance;
-    Translation2d directionUnit =
-        new Translation2d(
-            (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
-            (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
-
-    Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
-
-    double angleStep = fixedAngle ? 1.0 : Math.max(0.12, angleStepDeg);
-
-    double bestErrorAbs = Double.POSITIVE_INFINITY;
-    double bestAngleRad = 0.0;
-    double bestSpeed = 0.0;
-    double bestTime = 0.0;
-    double bestSignedErr = 0.0;
-    boolean found = false;
-
-    for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
-      double angleRad = Math.toRadians(angleDeg);
-      double cos = Math.cos(angleRad);
-      if (cos <= 0.0) {
-        continue;
+    AutoCloseable _p = Profiler.section("DragShotPlanner.solveBestAtShooterPosition.body");
+    try {
+      double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
+      if (horizontalDistance < 1e-3) {
+        return null;
       }
 
-      for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStep) {
-        SimulationResult sim =
-            simulateToTargetPlane(
-                gamePiece,
-                speed,
-                angleRad,
-                shooterReleaseHeightMeters,
-                horizontalDistance,
-                targetHeightMeters);
+      double invD = 1.0 / horizontalDistance;
+      Translation2d directionUnit =
+          new Translation2d(
+              (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
+              (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
 
-        if (!sim.hitPlane) {
+      Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
+
+      double angleStep = fixedAngle ? 1.0 : Math.max(0.12, angleStepDeg);
+
+      double bestErrorAbs = Double.POSITIVE_INFINITY;
+      double bestAngleRad = 0.0;
+      double bestSpeed = 0.0;
+      double bestTime = 0.0;
+      double bestSignedErr = 0.0;
+      boolean found = false;
+
+      int sims = 0;
+      int simsHit = 0;
+      int simsWithin = 0;
+
+      for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
+        double angleRad = Math.toRadians(angleDeg);
+        double cos = Math.cos(angleRad);
+        if (cos <= 0.0) {
           continue;
         }
 
-        double errAbs = Math.abs(sim.verticalErrorMeters);
-        if (errAbs > acceptableVerticalErrorMeters) {
-          continue;
-        }
+        for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStep) {
+          sims++;
+          SimulationResult sim;
+          AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+          try {
+            sim =
+                simulateToTargetPlane(
+                    gamePiece,
+                    speed,
+                    angleRad,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+          } finally {
+            closeQuietly(_p1);
+          }
 
-        boolean take;
-        if (!found) {
-          take = true;
-        } else {
-          double errEps = 1e-6;
-          if (errAbs < bestErrorAbs - errEps) {
+          if (!sim.hitPlane) {
+            continue;
+          }
+          simsHit++;
+
+          double errAbs = Math.abs(sim.verticalErrorMeters);
+          if (errAbs > acceptableVerticalErrorMeters) {
+            continue;
+          }
+          simsWithin++;
+
+          boolean take;
+          if (!found) {
             take = true;
-          } else if (Math.abs(errAbs - bestErrorAbs) <= errEps) {
-            if (shotStyle == Constraints.ShotStyle.DIRECT
-                || shotStyle == Constraints.ShotStyle.ARC) {
-              double aBest = Math.abs(bestAngleRad);
-              double aNext = Math.abs(angleRad);
-              double aEps = 1e-3;
-              if (shotStyle == Constraints.ShotStyle.DIRECT) {
-                if (aNext < aBest - aEps) {
-                  take = true;
-                } else if (aBest < aNext - aEps) {
-                  take = false;
+          } else {
+            double errEps = 1e-6;
+            if (errAbs < bestErrorAbs - errEps) {
+              take = true;
+            } else if (Math.abs(errAbs - bestErrorAbs) <= errEps) {
+              if (shotStyle == Constraints.ShotStyle.DIRECT
+                  || shotStyle == Constraints.ShotStyle.ARC) {
+                double aBest = Math.abs(bestAngleRad);
+                double aNext = Math.abs(angleRad);
+                double aEps = 1e-3;
+                if (shotStyle == Constraints.ShotStyle.DIRECT) {
+                  if (aNext < aBest - aEps) {
+                    take = true;
+                  } else if (aBest < aNext - aEps) {
+                    take = false;
+                  } else {
+                    take = speed < bestSpeed - EPS;
+                  }
                 } else {
-                  take = speed < bestSpeed - EPS;
+                  if (aNext > aBest + aEps) {
+                    take = true;
+                  } else if (aBest > aNext + aEps) {
+                    take = false;
+                  } else {
+                    take = speed < bestSpeed - EPS;
+                  }
                 }
               } else {
-                if (aNext > aBest + aEps) {
-                  take = true;
-                } else if (aBest > aNext + aEps) {
-                  take = false;
-                } else {
-                  take = speed < bestSpeed - EPS;
-                }
+                take = speed < bestSpeed - EPS;
               }
             } else {
-              take = speed < bestSpeed - EPS;
+              take = false;
             }
-          } else {
-            take = false;
+          }
+
+          if (take) {
+            found = true;
+            bestErrorAbs = errAbs;
+            bestAngleRad = angleRad;
+            bestSpeed = speed;
+            bestTime = sim.timeAtPlaneSeconds;
+            bestSignedErr = sim.verticalErrorMeters;
           }
         }
-
-        if (take) {
-          found = true;
-          bestErrorAbs = errAbs;
-          bestAngleRad = angleRad;
-          bestSpeed = speed;
-          bestTime = sim.timeAtPlaneSeconds;
-          bestSignedErr = sim.verticalErrorMeters;
-        }
       }
+
+      Profiler.counterAdd("DragShotPlanner.solveAtPos.sims", sims);
+      Profiler.counterAdd("DragShotPlanner.solveAtPos.sims_hitplane", simsHit);
+      Profiler.counterAdd("DragShotPlanner.solveAtPos.sims_within", simsWithin);
+
+      if (!found) {
+        return null;
+      }
+
+      Translation2d impactPos = shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
+
+      return new ShotSolution(
+          shooterFieldPosition,
+          shooterYaw,
+          bestSpeed,
+          Rotation2d.fromRadians(bestAngleRad),
+          bestTime,
+          impactPos,
+          bestSignedErr);
+    } finally {
+      closeQuietly(_p);
     }
-
-    if (!found) {
-      return null;
-    }
-
-    Translation2d impactPos = shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
-
-    return new ShotSolution(
-        shooterFieldPosition,
-        shooterYaw,
-        bestSpeed,
-        Rotation2d.fromRadians(bestAngleRad),
-        bestTime,
-        impactPos,
-        bestSignedErr);
   }
 
   private static ShotSolution refineShotAtPosition(
@@ -1378,94 +1663,115 @@ public final class DragShotPlanner {
       double coarseSpeed,
       double coarseAngleRad) {
 
-    double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
-    if (horizontalDistance < 1e-3) {
-      return null;
-    }
-
-    double invD = 1.0 / horizontalDistance;
-    Translation2d directionUnit =
-        new Translation2d(
-            (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
-            (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
-
-    Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
-
-    double speedWindow = Math.max(1.5, (maxSpeed - minSpeed) / 8.0);
-    double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
-    double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
-    double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
-
-    double angleStartDeg;
-    double angleEndDeg;
-    double angleStepFineDeg;
-    double coarseAngleDeg = Math.toDegrees(coarseAngleRad);
-
-    if (fixedAngle) {
-      angleStartDeg = minAngleDeg;
-      angleEndDeg = maxAngleDeg;
-      angleStepFineDeg = 1.0;
-    } else {
-      double angleWindow = Math.max(3.5, (maxAngleDeg - minAngleDeg) / 9.0);
-      angleStartDeg = Math.max(minAngleDeg, coarseAngleDeg - angleWindow);
-      angleEndDeg = Math.min(maxAngleDeg, coarseAngleDeg + angleWindow);
-      angleStepFineDeg = Math.max(0.22, (angleEndDeg - angleStartDeg) / 22.0);
-    }
-
-    ShotSolution best = null;
-    double bestError = Double.POSITIVE_INFINITY;
-
-    for (double angleDeg = angleStartDeg;
-        angleDeg <= angleEndDeg + 1e-6;
-        angleDeg += angleStepFineDeg) {
-
-      double angleRad = Math.toRadians(angleDeg);
-      double cos = Math.cos(angleRad);
-      if (cos <= 0.0) {
-        continue;
+    AutoCloseable _p = Profiler.section("DragShotPlanner.refineShotAtPosition.body");
+    try {
+      double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
+      if (horizontalDistance < 1e-3) {
+        return null;
       }
 
-      for (double speed = speedMin; speed <= speedMax + 1e-6; speed += speedStepFine) {
+      double invD = 1.0 / horizontalDistance;
+      Translation2d directionUnit =
+          new Translation2d(
+              (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
+              (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
 
-        SimulationResult sim =
-            simulateToTargetPlane(
-                gamePiece,
-                speed,
-                angleRad,
-                shooterReleaseHeightMeters,
-                horizontalDistance,
-                targetHeightMeters);
+      Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
 
-        if (!sim.hitPlane) {
+      double speedWindow = Math.max(1.5, (maxSpeed - minSpeed) / 8.0);
+      double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
+      double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
+      double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
+
+      double angleStartDeg;
+      double angleEndDeg;
+      double angleStepFineDeg;
+      double coarseAngleDeg = Math.toDegrees(coarseAngleRad);
+
+      if (fixedAngle) {
+        angleStartDeg = minAngleDeg;
+        angleEndDeg = maxAngleDeg;
+        angleStepFineDeg = 1.0;
+      } else {
+        double angleWindow = Math.max(3.5, (maxAngleDeg - minAngleDeg) / 9.0);
+        angleStartDeg = Math.max(minAngleDeg, coarseAngleDeg - angleWindow);
+        angleEndDeg = Math.min(maxAngleDeg, coarseAngleDeg + angleWindow);
+        angleStepFineDeg = Math.max(0.22, (angleEndDeg - angleStartDeg) / 22.0);
+      }
+
+      ShotSolution best = null;
+      double bestError = Double.POSITIVE_INFINITY;
+
+      int sims = 0;
+      int simsHit = 0;
+      int simsWithin = 0;
+
+      for (double angleDeg = angleStartDeg;
+          angleDeg <= angleEndDeg + 1e-6;
+          angleDeg += angleStepFineDeg) {
+
+        double angleRad = Math.toRadians(angleDeg);
+        double cos = Math.cos(angleRad);
+        if (cos <= 0.0) {
           continue;
         }
 
-        double error = Math.abs(sim.verticalErrorMeters);
-        if (error > acceptableVerticalErrorMeters) {
-          continue;
-        }
+        for (double speed = speedMin; speed <= speedMax + 1e-6; speed += speedStepFine) {
+          sims++;
+          SimulationResult sim;
+          AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.refine");
+          try {
+            sim =
+                simulateToTargetPlane(
+                    gamePiece,
+                    speed,
+                    angleRad,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+          } finally {
+            closeQuietly(_p1);
+          }
 
-        if (best == null
-            || error < bestError - EPS
-            || (Math.abs(error - bestError) <= EPS
-                && speed < best.launchSpeedMetersPerSecond() - EPS)) {
-          Translation2d impactPos =
-              shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
-          bestError = error;
-          best =
-              new ShotSolution(
-                  shooterFieldPosition,
-                  shooterYaw,
-                  speed,
-                  Rotation2d.fromRadians(angleRad),
-                  sim.timeAtPlaneSeconds,
-                  impactPos,
-                  sim.verticalErrorMeters);
+          if (!sim.hitPlane) {
+            continue;
+          }
+          simsHit++;
+
+          double error = Math.abs(sim.verticalErrorMeters);
+          if (error > acceptableVerticalErrorMeters) {
+            continue;
+          }
+          simsWithin++;
+
+          if (best == null
+              || error < bestError - EPS
+              || (Math.abs(error - bestError) <= EPS
+                  && speed < best.launchSpeedMetersPerSecond() - EPS)) {
+            Translation2d impactPos =
+                shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
+            bestError = error;
+            best =
+                new ShotSolution(
+                    shooterFieldPosition,
+                    shooterYaw,
+                    speed,
+                    Rotation2d.fromRadians(angleRad),
+                    sim.timeAtPlaneSeconds,
+                    impactPos,
+                    sim.verticalErrorMeters);
+          }
         }
       }
-    }
 
-    return best;
+      Profiler.counterAdd("DragShotPlanner.refine.sims", sims);
+      Profiler.counterAdd("DragShotPlanner.refine.sims_hitplane", simsHit);
+      Profiler.counterAdd("DragShotPlanner.refine.sims_within", simsWithin);
+
+      return best;
+    } finally {
+      closeQuietly(_p);
+    }
   }
 
   private static SimulationResult simulateToTargetPlane(
@@ -1476,67 +1782,77 @@ public final class DragShotPlanner {
       double targetHorizontalDistanceMeters,
       double targetHeightMeters) {
 
-    double g = 9.81;
+    AutoCloseable _p = Profiler.section("DragShotPlanner.simulateToTargetPlane.body");
+    try {
+      double g = 9.81;
 
-    double cos = Math.cos(launchAngleRad);
-    double horizontalSpeed = launchSpeedMetersPerSecond * cos;
-    if (horizontalSpeed < 1e-6) {
-      return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
-    }
-
-    double minHorizontalSpeed = Math.max(0.5, horizontalSpeed);
-    double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
-    double maxTimeSeconds = Math.min(5.0, Math.max(0.5, timeNoDrag * 1.55));
-
-    double m = gamePiece.massKg();
-    double A = gamePiece.crossSectionAreaM2();
-    double Cd = gamePiece.dragCoefficient();
-    double rho = gamePiece.airDensityKgPerM3();
-    double kOverM = 0.5 * rho * Cd * A / m;
-
-    double x = 0.0;
-    double y = shooterReleaseHeightMeters;
-    double vx = launchSpeedMetersPerSecond * cos;
-    double vy = launchSpeedMetersPerSecond * Math.sin(launchAngleRad);
-    double t = 0.0;
-
-    double xPrev = x;
-    double yPrev = y;
-    double tPrev = t;
-
-    double dxStep = 0.025;
-
-    while (t < maxTimeSeconds && y >= -0.25 && x <= targetHorizontalDistanceMeters + 1.0) {
-      xPrev = x;
-      yPrev = y;
-      tPrev = t;
-
-      double v = Math.hypot(vx, vy);
-      double ax = -kOverM * v * vx;
-      double ay = -g - kOverM * v * vy;
-
-      double dt = dxStep / Math.max(0.25, Math.abs(vx));
-
-      vx += ax * dt;
-      vy += ay * dt;
-      x += vx * dt;
-      y += vy * dt;
-      t += dt;
-
-      if (xPrev <= targetHorizontalDistanceMeters && x >= targetHorizontalDistanceMeters) {
-        double denom = (x - xPrev);
-        double frac =
-            Math.abs(denom) > 1e-12 ? (targetHorizontalDistanceMeters - xPrev) / denom : 1.0;
-        if (frac < 0.0) frac = 0.0;
-        if (frac > 1.0) frac = 1.0;
-        double yCross = yPrev + frac * (y - yPrev);
-        double tCross = tPrev + frac * (t - tPrev);
-        double verticalError = yCross - targetHeightMeters;
-        return new SimulationResult(true, tCross, verticalError);
+      double cos = Math.cos(launchAngleRad);
+      double horizontalSpeed = launchSpeedMetersPerSecond * cos;
+      if (horizontalSpeed < 1e-6) {
+        return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
       }
-    }
 
-    return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
+      double minHorizontalSpeed = Math.max(0.5, horizontalSpeed);
+      double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
+      double maxTimeSeconds = Math.min(5.0, Math.max(0.5, timeNoDrag * 1.55));
+
+      double m = gamePiece.massKg();
+      double A = gamePiece.crossSectionAreaM2();
+      double Cd = gamePiece.dragCoefficient();
+      double rho = gamePiece.airDensityKgPerM3();
+      double kOverM = 0.5 * rho * Cd * A / m;
+
+      double x = 0.0;
+      double y = shooterReleaseHeightMeters;
+      double vx = launchSpeedMetersPerSecond * cos;
+      double vy = launchSpeedMetersPerSecond * Math.sin(launchAngleRad);
+      double t = 0.0;
+
+      double xPrev = x;
+      double yPrev = y;
+      double tPrev = t;
+
+      double dxStep = 0.025;
+
+      int steps = 0;
+
+      while (t < maxTimeSeconds && y >= -0.25 && x <= targetHorizontalDistanceMeters + 1.0) {
+        steps++;
+        xPrev = x;
+        yPrev = y;
+        tPrev = t;
+
+        double v = Math.hypot(vx, vy);
+        double ax = -kOverM * v * vx;
+        double ay = -g - kOverM * v * vy;
+
+        double dt = dxStep / Math.max(0.25, Math.abs(vx));
+
+        vx += ax * dt;
+        vy += ay * dt;
+        x += vx * dt;
+        y += vy * dt;
+        t += dt;
+
+        if (xPrev <= targetHorizontalDistanceMeters && x >= targetHorizontalDistanceMeters) {
+          double denom = (x - xPrev);
+          double frac =
+              Math.abs(denom) > 1e-12 ? (targetHorizontalDistanceMeters - xPrev) / denom : 1.0;
+          if (frac < 0.0) frac = 0.0;
+          if (frac > 1.0) frac = 1.0;
+          double yCross = yPrev + frac * (y - yPrev);
+          double tCross = tPrev + frac * (t - tPrev);
+          double verticalError = yCross - targetHeightMeters;
+          Profiler.counterAdd("DragShotPlanner.sim.steps", steps);
+          return new SimulationResult(true, tCross, verticalError);
+        }
+      }
+
+      Profiler.counterAdd("DragShotPlanner.sim.steps", steps);
+      return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
+    } finally {
+      closeQuietly(_p);
+    }
   }
 
   private static boolean isShooterPoseValidInternal(
@@ -1546,44 +1862,49 @@ public final class DragShotPlanner {
       double robotHalfWidthMeters,
       List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
 
-    double x = shooterPos.getX();
-    double y = shooterPos.getY();
-    if (!Double.isFinite(x) || !Double.isFinite(y)) {
-      return false;
-    }
-
-    final double SHOOT_X_END_BAND_M = 13.49;
-    double minBand = SHOOT_X_END_BAND_M;
-    double maxBand = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
-    if (x < minBand && x > maxBand) {
-      return false;
-    }
-
-    Rotation2d yaw = targetFieldPosition.minus(shooterPos).getAngle();
-    Translation2d[] rect =
-        FieldPlanner.robotRect(shooterPos, yaw, robotHalfLengthMeters, robotHalfWidthMeters);
-
-    for (FieldPlanner.Obstacle s : staticObstacles()) {
-      if (s.intersectsRectangle(rect)) {
+    AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValidInternal.body");
+    try {
+      double x = shooterPos.getX();
+      double y = shooterPos.getY();
+      if (!Double.isFinite(x) || !Double.isFinite(y)) {
         return false;
       }
-    }
 
-    if (dynamicObstacles != null && !dynamicObstacles.isEmpty()) {
-      for (FieldPlanner.Obstacle d : dynamicObstacles) {
-        if (d.intersectsRectangle(rect)) {
+      final double SHOOT_X_END_BAND_M = 13.49;
+      double minBand = SHOOT_X_END_BAND_M;
+      double maxBand = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
+      if (x < minBand && x > maxBand) {
+        return false;
+      }
+
+      Rotation2d yaw = targetFieldPosition.minus(shooterPos).getAngle();
+      Translation2d[] rect =
+          FieldPlanner.robotRect(shooterPos, yaw, robotHalfLengthMeters, robotHalfWidthMeters);
+
+      for (FieldPlanner.Obstacle sObs : staticObstacles()) {
+        if (sObs.intersectsRectangle(rect)) {
           return false;
         }
       }
-    }
 
-    if (shooterPos.getX() < 0.0 || shooterPos.getX() > Constants.FIELD_LENGTH) {
-      return false;
-    }
-    if (shooterPos.getY() < 0.0 || shooterPos.getY() > Constants.FIELD_WIDTH) {
-      return false;
-    }
+      if (dynamicObstacles != null && !dynamicObstacles.isEmpty()) {
+        for (FieldPlanner.Obstacle d : dynamicObstacles) {
+          if (d.intersectsRectangle(rect)) {
+            return false;
+          }
+        }
+      }
 
-    return true;
+      if (shooterPos.getX() < 0.0 || shooterPos.getX() > Constants.FIELD_LENGTH) {
+        return false;
+      }
+      if (shooterPos.getY() < 0.0 || shooterPos.getY() > Constants.FIELD_WIDTH) {
+        return false;
+      }
+
+      return true;
+    } finally {
+      closeQuietly(_p);
+    }
   }
 }

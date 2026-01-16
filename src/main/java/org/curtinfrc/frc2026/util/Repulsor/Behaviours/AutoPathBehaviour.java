@@ -220,14 +220,13 @@ public class AutoPathBehaviour extends Behaviour {
                     chooseCollect(
                         ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
 
-                              Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
+                Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
 
                 desired = (hp != null) ? hp : collectRoute;
               }
 
               RepulsorSetpoint sp = (plannerOverride != null) ? plannerOverride : desired;
               lastActive.set(sp);
-
 
               if (sp == null) {
                 ctx.drive.runVelocity(new ChassisSpeeds());
@@ -246,7 +245,6 @@ public class AutoPathBehaviour extends Behaviour {
 
               ctx.repulsor.setCurrentGoal(sp);
               ctx.planner.setGoal(goalPose);
-
 
               double distToGoal = robotPose.getTranslation().getDistance(goalPose.getTranslation());
               long nowNs = System.nanoTime();
@@ -286,7 +284,8 @@ public class AutoPathBehaviour extends Behaviour {
                 timingStartNs.set(0);
                 timingStation.set(null);
               }
-              // Logger.recordOutput("Repulsor/Goal1", new Pose2d(ctx.planner.getGoal(), new Rotation2d()));
+              // Logger.recordOutput("Repulsor/Goal1", new Pose2d(ctx.planner.getGoal(), new
+              // Rotation2d()));
 
               RepulsorSample sample =
                   ctx.planner.calculate(
@@ -402,7 +401,7 @@ public class AutoPathBehaviour extends Behaviour {
     Pose2d nextBlue =
         FieldTracker.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
 
-        Logger.recordOutput("Repulsor/Goal2", new Pose2d(nextBlue.getTranslation(), new Rotation2d()));
+    Logger.recordOutput("Repulsor/Goal2", new Pose2d(nextBlue.getTranslation(), new Rotation2d()));
 
     if (nextBlue == null) {
       nextBlue =
