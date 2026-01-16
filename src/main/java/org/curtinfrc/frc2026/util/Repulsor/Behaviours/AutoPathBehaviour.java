@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
@@ -27,10 +28,13 @@ import org.curtinfrc.frc2026.util.Repulsor.Metrics.HPStationMetrics;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.MetricRecorder;
 import org.curtinfrc.frc2026.util.Repulsor.PredictiveFieldState;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.MutablePoseSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.littletonrobotics.junction.Logger;
 
 public class AutoPathBehaviour extends Behaviour {
@@ -123,8 +127,7 @@ public class AutoPathBehaviour extends Behaviour {
   }
 
   private static double shortestAngleRad(double from, double to) {
-    double d = MathUtil.angleModulus(to - from);
-    return d;
+    return MathUtil.angleModulus(to - from);
   }
 
   private static double closestTOnBezier(
@@ -243,6 +246,8 @@ public class AutoPathBehaviour extends Behaviour {
     final double STUCK_DIST_MIN_METERS = 0.5;
     final double SUCCESS_NEAR_DIST_METERS = 0.40;
 
+    final int COLLECT_GOAL_UNITS = 3;
+
     AtomicLong episodeStartNs = new AtomicLong(0L);
     AtomicReference<Double> episodeBestDist = new AtomicReference<>(null);
     AtomicLong lastProgressNs = new AtomicLong(0L);
@@ -256,6 +261,17 @@ public class AutoPathBehaviour extends Behaviour {
     ArcFollowState arc = new ArcFollowState();
 
     ReactiveBypass byp = ctx.planner.bypass;
+
+    AtomicReference<Pose2d> collectBluePoseRef = new AtomicReference<>(Pose2d.kZero);
+    RepulsorSetpoint collectRoute =
+        new RepulsorSetpoint(
+            new MutablePoseSetpoint("COLLECT_ROUTE", SetpointType.kOther, collectBluePoseRef),
+            HeightSetpoint.NONE);
+
+    final RepulsorSetpoint scoreGoal =
+        new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
+    final RepulsorSetpoint centerCollectGoal =
+        new RepulsorSetpoint(Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
 
     Consumer<Boolean> finalizeEpisode =
         forceSuccess -> {
@@ -300,13 +316,8 @@ public class AutoPathBehaviour extends Behaviour {
 
                   SetpointContext spCtx = makeCtx(ctx, robotPose);
 
-                  RepulsorSetpoint shootSp =
-                      new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
-                  arc.shootPose = shootSp.get(spCtx);
-
-                  RepulsorSetpoint centerSp =
-                      new RepulsorSetpoint(Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
-                  arc.centerPose = centerSp.get(spCtx);
+                  arc.shootPose = scoreGoal.get(spCtx);
+                  arc.centerPose = centerCollectGoal.get(spCtx);
 
                   edu.wpi.first.wpilibj.DriverStation.Alliance wpilibAlliance =
                       DriverStation.getAlliance()
@@ -386,8 +397,14 @@ public class AutoPathBehaviour extends Behaviour {
               if (!init.get()) {
                 active.set(
                     cat == CategorySpec.kScore
-                        ? new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET)
-                        : chooseHP());
+                        ? scoreGoal
+                        : chooseCollect(
+                            ctx,
+                            robotPose,
+                            cap,
+                            COLLECT_GOAL_UNITS,
+                            collectBluePoseRef,
+                            collectRoute));
                 lastCat.set(cat);
                 init.set(true);
               }
@@ -398,8 +415,14 @@ public class AutoPathBehaviour extends Behaviour {
                 }
                 active.set(
                     cat == CategorySpec.kScore
-                        ? new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET)
-                        : chooseHP());
+                        ? scoreGoal
+                        : chooseCollect(
+                            ctx,
+                            robotPose,
+                            cap,
+                            COLLECT_GOAL_UNITS,
+                            collectBluePoseRef,
+                            collectRoute));
                 ctx.planner.clearCommitted();
                 lastCat.set(cat);
                 timingStartNs.set(0);
@@ -407,11 +430,11 @@ public class AutoPathBehaviour extends Behaviour {
               }
 
               if (cat == CategorySpec.kScore) {
-                RepulsorSetpoint pred =
-                    new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
-                active.set(pred);
+                active.set(scoreGoal);
               } else {
-                RepulsorSetpoint hp = chooseHP();
+                RepulsorSetpoint hp =
+                    chooseCollect(
+                        ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
                 if (hp != null) active.set(hp);
               }
 
@@ -572,7 +595,34 @@ public class AutoPathBehaviour extends Behaviour {
     return ranked.get(0).setpoint;
   }
 
-  private RepulsorSetpoint chooseHP() {
-    return new RepulsorSetpoint(Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
+  private RepulsorSetpoint chooseCollect(
+      BehaviourContext ctx,
+      Pose2d robotPose,
+      double cap,
+      int goalUnits,
+      AtomicReference<Pose2d> collectBluePoseRef,
+      RepulsorSetpoint collectRoute) {
+
+    edu.wpi.first.wpilibj.DriverStation.Alliance wpA =
+        DriverStation.getAlliance().orElse(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue);
+
+    Pose2d robotPoseBlue =
+        wpA == edu.wpi.first.wpilibj.DriverStation.Alliance.Red
+            ? Setpoints.flipToRed(robotPose)
+            : robotPose;
+
+    Pose2d nextBlue =
+        FieldTracker.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
+
+    if (nextBlue == null) {
+      nextBlue =
+          new Pose2d(
+              Constants.FIELD_LENGTH * 0.5,
+              Constants.FIELD_WIDTH * 0.5,
+              robotPoseBlue.getRotation());
+    }
+
+    collectBluePoseRef.set(nextBlue);
+    return collectRoute;
   }
 }

@@ -202,3 +202,6 @@ vision/train/data
 
 *.pyc
 **/**/__pycache__/
+# exclude all .venv folders anywhere in project
+**/.venv/
+**/__pycache__/

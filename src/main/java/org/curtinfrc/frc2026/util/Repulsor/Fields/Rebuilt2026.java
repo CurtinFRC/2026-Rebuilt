@@ -87,8 +87,18 @@ public final class Rebuilt2026 implements FieldDefinition {
       double x = x0 + ix * GRID_CELL_M + GRID_CELL_M * 0.5;
       for (int iy = 0; iy <= ny; iy++) {
         double y = y0 + iy * GRID_CELL_M + GRID_CELL_M * 0.5;
+
         b.begin()
             .alliance(Alliance.kBlue)
+            .capacity(999)
+            .pose(new Pose3d(x, y, 0, null))
+            .primitiveFloorSquare(GRID_CELL_M, GRID_Z_MIN_M, GRID_Z_MAX_M)
+            .filterType("fuel")
+            .category(CategorySpec.kCollect)
+            .add();
+
+        b.begin()
+            .alliance(Alliance.kRed)
             .capacity(999)
             .pose(new Pose3d(x, y, 0, null))
             .primitiveFloorSquare(GRID_CELL_M, GRID_Z_MIN_M, GRID_Z_MAX_M)
