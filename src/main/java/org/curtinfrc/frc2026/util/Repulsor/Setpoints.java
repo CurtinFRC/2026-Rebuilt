@@ -19,6 +19,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.littletonrobotics.junction.Logger;
 
@@ -100,6 +101,22 @@ public class Setpoints {
 
     public Pose2d approximateRedPose() {
       return redPose(SetpointContext.EMPTY);
+    }
+  }
+
+  public static final class MutablePoseSetpoint extends GameSetpoint {
+    private final AtomicReference<Pose2d> bluePoseRef;
+
+    public MutablePoseSetpoint(
+        String name, SetpointType type, AtomicReference<Pose2d> bluePoseRef) {
+      super(name, type == null ? SetpointType.kOther : type);
+      this.bluePoseRef = bluePoseRef == null ? new AtomicReference<>(Pose2d.kZero) : bluePoseRef;
+    }
+
+    @Override
+    public Pose2d bluePose(SetpointContext ctx) {
+      Pose2d p = bluePoseRef.get();
+      return p != null ? p : Pose2d.kZero;
     }
   }
 
@@ -249,21 +266,16 @@ public class Setpoints {
         double xOffset = offset * Math.sin(yaw);
         double yOffset = offset * Math.cos(yaw);
 
-        Pose2d result;
         if (isLeft) {
-          result =
-              new Pose2d(
-                  mappedPose.getX() + xOffset,
-                  mappedPose.getY() - yOffset,
-                  mappedPose.getRotation().plus(Rotation2d.kPi));
-        } else {
-          result =
-              new Pose2d(
-                  mappedPose.getX() - xOffset,
-                  mappedPose.getY() + yOffset,
-                  mappedPose.getRotation().plus(Rotation2d.kPi));
+          return new Pose2d(
+              mappedPose.getX() + xOffset,
+              mappedPose.getY() - yOffset,
+              mappedPose.getRotation().plus(Rotation2d.kPi));
         }
-        return result;
+        return new Pose2d(
+            mappedPose.getX() - xOffset,
+            mappedPose.getY() + yOffset,
+            mappedPose.getRotation().plus(Rotation2d.kPi));
       }
 
       @Override
@@ -337,10 +349,8 @@ public class Setpoints {
 
     private static final ConcurrentHashMap<HubShotCacheKey, HubShotLibraryState> HUB_LIB_CACHE =
         new ConcurrentHashMap<>();
-
     private static final ConcurrentHashMap<HubShotCacheKey, DragShotPlanner.OnlineSearchState>
         HUB_ONLINE_STATE = new ConcurrentHashMap<>();
-
     private static final ConcurrentHashMap<HubShotCacheKey, HubLastPoseCache> HUB_LAST_POSE =
         new ConcurrentHashMap<>();
 
@@ -490,48 +500,7 @@ public class Setpoints {
 
       DragShotPlanner.ShotLibrary pub = st.published;
       if (pub != null) return pub;
-
-      synchronized (st.lock) {
-        if (st.builder == null) {
-          double speedStep =
-              Math.max(
-                  0.18,
-                  (HUB_SHOT_CONSTRAINTS.maxLaunchSpeedMetersPerSecond()
-                          - HUB_SHOT_CONSTRAINTS.minLaunchSpeedMetersPerSecond())
-                      / 70.0);
-          double angleStep =
-              Math.max(
-                  0.6,
-                  (HUB_SHOT_CONSTRAINTS.maxLaunchAngleDeg()
-                          - HUB_SHOT_CONSTRAINTS.minLaunchAngleDeg())
-                      / 80.0);
-          double radialStep = 0.30;
-          double bearingStep = 12.0;
-
-          st.builder =
-              new DragShotPlanner.ShotLibraryBuilder(
-                  st.physics,
-                  st.targetFieldPos,
-                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
-                  st.releaseH,
-                  st.halfL,
-                  st.halfW,
-                  HUB_SHOT_CONSTRAINTS,
-                  speedStep,
-                  angleStep,
-                  radialStep,
-                  bearingStep);
-        }
-
-        DragShotPlanner.ShotLibrary maybe = st.builder.maybeStep(4_000_000L);
-        if (maybe != null) {
-          if (!maybe.entries().isEmpty() || maybe.complete()) {
-            st.published = maybe;
-          }
-          st.done = maybe.complete();
-        }
-        return st.published;
-      }
+      return null;
     }
 
     private static DragShotPlanner.OnlineSearchState getOrCreateOnlineState(
@@ -559,6 +528,17 @@ public class Setpoints {
           (int) Math.round(releaseH * 1000.0),
           (int) Math.round(halfL * 1000.0),
           (int) Math.round(halfW * 1000.0));
+    }
+
+    private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
+      if (obs == null || obs.isEmpty()) return 0;
+      int h = 1;
+      for (int i = 0; i < obs.size(); i++) {
+        Object o = obs.get(i);
+        h = h * 31 + System.identityHashCode(o);
+      }
+      h = h * 31 + obs.size();
+      return h;
     }
 
     private static final class StaticPoseSetpoint extends GameSetpoint {
@@ -653,8 +633,8 @@ public class Setpoints {
 
         int rxmm = (int) Math.round(robotPose.getX() * 1000.0);
         int rymm = (int) Math.round(robotPose.getY() * 1000.0);
-        int obsHash =
-            System.identityHashCode(ctx.dynamicObstacles()) * 31 + ctx.dynamicObstacles().size();
+
+        int obsHash = obstaclesStableHash(ctx.dynamicObstacles());
         long now = System.nanoTime();
 
         HubLastPoseCache cached = HUB_LAST_POSE.get(key);
@@ -664,7 +644,7 @@ public class Setpoints {
             int dx = Math.abs(rxmm - cached.robotXmm);
             int dy = Math.abs(rymm - cached.robotYmm);
             long age = now - cached.tNs;
-            if (cached.obsHash == obsHash && dx <= 70 && dy <= 70 && age <= 90_000_000L) {
+            if (cached.obsHash == obsHash && dx <= 90 && dy <= 90 && age <= 140_000_000L) {
               return p;
             }
           }
@@ -707,10 +687,7 @@ public class Setpoints {
           }
         }
 
-        long refineBudget = 550_000L;
-        if (cached == null || cached.pose == null) {
-          refineBudget = 750_000L;
-        }
+        long refineBudget = cached != null && cached.pose != null ? 280_000L : 420_000L;
 
         Optional<DragShotPlanner.ShotSolution> refined =
             DragShotPlanner.findBestShotOnlineRefine(
@@ -727,20 +704,6 @@ public class Setpoints {
                 refineBudget);
 
         Optional<DragShotPlanner.ShotSolution> sol = refined.isPresent() ? refined : libSol;
-
-        if (sol.isEmpty()) {
-          sol =
-              DragShotPlanner.findBestShotAuto(
-                  physics,
-                  targetFieldPos,
-                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
-                  robotPose,
-                  releaseH,
-                  halfL,
-                  halfW,
-                  ctx.dynamicObstacles(),
-                  HUB_SHOT_CONSTRAINTS);
-        }
 
         Logger.recordOutput("shot", sol.isPresent() ? sol.get().shooterPosition() : null);
         Logger.recordOutput("shot_lib_entries", lib != null ? lib.entries().size() : 0);

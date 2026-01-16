@@ -35,7 +35,7 @@ def load_config() -> Config:
     fuel_z_m = float(os.getenv("FUEL_Z_M", "0.10"))
 
     max_objects = int(os.getenv("MAX_OBJECTS", "300"))
-    max_obstacles = int(os.getenv("MAX_OBSTACLES", "24"))
+    max_obstacles = int(os.getenv("MAX_OBSTACLES", "5"))
 
     return Config(
         nt_server=nt_server,

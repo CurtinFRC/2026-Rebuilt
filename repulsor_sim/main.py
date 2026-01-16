@@ -7,6 +7,7 @@ from repulsor_sim.providers import make_provider
 from repulsor_sim.publishers.fieldvision import publish_fieldvision
 from repulsor_sim.publishers.repulsorvision import publish_repulsorvision
 
+
 def main():
     cfg = load_config()
     nt = NTClient(cfg.nt_server)
@@ -22,10 +23,11 @@ def main():
     while True:
         t0 = time.time()
         frame = provider.step(t0)
-        publish_fieldvision(fv, frame.objects, frame.extrinsics_xyzrpy)
+        publish_fieldvision(fv, frame.objects, nt.pose())
         publish_repulsorvision(rv, frame.obstacles)
         nt.flush()
         NTClient.sleep_dt(dt - (time.time() - t0))
+
 
 if __name__ == "__main__":
     main()

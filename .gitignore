@@ -192,3 +192,6 @@ src/main/java/org/curtinfrc/frc2026/BuildConstants.java
 
 .venv
 repulsor-profiler
+# exclude all .venv folders anywhere in project
+**/.venv/
+**/__pycache__/
