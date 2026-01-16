@@ -167,6 +167,10 @@ public class Repulsor {
                     () -> 3.5));
 
     m_behaviourFlags = new BehaviourFlagManager();
+
+    FieldTracker ft = FieldTracker.getInstance();
+    FieldVision front = ft.new FieldVision("main");
+    m_fieldVisions.add(front);
   }
 
   public Repulsor(

@@ -1,3 +1,4 @@
+// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Behaviours/AutoPathBehaviour.java
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -5,7 +6,6 @@ import static edu.wpi.first.units.Units.Meters;
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -48,6 +48,8 @@ public class AutoPathBehaviour extends Behaviour {
   private final Function<RepulsorSetpoint, String> stationKeyFn;
   private final Supplier<Double> ourSpeedCap;
 
+  private Pose2d lastCollectBluePose = null;
+
   public AutoPathBehaviour(
       int priority,
       Supplier<Boolean> inScoring,
@@ -85,121 +87,8 @@ public class AutoPathBehaviour extends Behaviour {
         && !flags.contains(BehaviourFlag.SHOOTING_TEST);
   }
 
-  private static final class ArcFollowState {
-    boolean active;
-    boolean returning;
-    Pose2d startPose;
-    Pose2d shootPose;
-    Pose2d centerPose;
-    Translation2d control;
-    Translation2d targetPoint;
-    double lookaheadT;
-    long startNs;
-
-    ArcFollowState() {
-      reset();
-    }
-
-    void reset() {
-      active = false;
-      returning = false;
-      startPose = Pose2d.kZero;
-      shootPose = Pose2d.kZero;
-      centerPose = Pose2d.kZero;
-      control = new Translation2d();
-      targetPoint = new Translation2d();
-      lookaheadT = 0.12;
-      startNs = 0L;
-    }
-  }
-
-  private static Translation2d bezier2(
-      Translation2d a, Translation2d b, Translation2d c, double t) {
-    double u = 1.0 - t;
-    Translation2d p0 = a.times(u * u);
-    Translation2d p1 = b.times(2.0 * u * t);
-    Translation2d p2 = c.times(t * t);
-    return p0.plus(p1).plus(p2);
-  }
-
-  private static double clamp01(double v) {
-    return MathUtil.clamp(v, 0.0, 1.0);
-  }
-
   private static double shortestAngleRad(double from, double to) {
     return MathUtil.angleModulus(to - from);
-  }
-
-  private static double closestTOnBezier(
-      Translation2d a, Translation2d b, Translation2d c, Translation2d p) {
-    double bestT = 0.0;
-    double bestD2 = Double.POSITIVE_INFINITY;
-    for (int i = 0; i <= 40; i++) {
-      double t = i / 40.0;
-      Translation2d q = bezier2(a, b, c, t);
-      double dx = q.getX() - p.getX();
-      double dy = q.getY() - p.getY();
-      double d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestT = t;
-      }
-    }
-    for (int i = 0; i < 6; i++) {
-      double t0 = Math.max(0.0, bestT - 0.03);
-      double t1 = Math.min(1.0, bestT + 0.03);
-      double m0 = (t0 + bestT) * 0.5;
-      double m1 = (bestT + t1) * 0.5;
-      double d0 = bezier2(a, b, c, t0).getDistance(p);
-      double dm0 = bezier2(a, b, c, m0).getDistance(p);
-      double dm1 = bezier2(a, b, c, m1).getDistance(p);
-      double d1 = bezier2(a, b, c, t1).getDistance(p);
-      double min = d0;
-      bestT = t0;
-      if (dm0 < min) {
-        min = dm0;
-        bestT = m0;
-      }
-      if (dm1 < min) {
-        min = dm1;
-        bestT = m1;
-      }
-      if (d1 < min) {
-        min = d1;
-        bestT = t1;
-      }
-    }
-    return bestT;
-  }
-
-  private static Translation2d computeControlPoint(
-      Translation2d a, Translation2d c, double curvatureMeters) {
-    Translation2d mid = new Translation2d((a.getX() + c.getX()) * 0.5, (a.getY() + c.getY()) * 0.5);
-    Translation2d d = c.minus(a);
-    double norm = d.getNorm();
-    if (norm < 1e-6) return mid;
-    Translation2d perp = new Translation2d(-d.getY() / norm, d.getX() / norm);
-    return mid.plus(perp.times(curvatureMeters));
-  }
-
-  private static ChassisSpeeds driveToPoint(
-      Pose2d robotPose,
-      Translation2d point,
-      Rotation2d desiredHeading,
-      double maxSpeed,
-      double maxOmega,
-      double kPxy,
-      double kPomega) {
-
-    Translation2d err = point.minus(robotPose.getTranslation());
-    double vx = MathUtil.clamp(err.getX() * kPxy, -maxSpeed, maxSpeed);
-    double vy = MathUtil.clamp(err.getY() * kPxy, -maxSpeed, maxSpeed);
-
-    double eTheta =
-        shortestAngleRad(robotPose.getRotation().getRadians(), desiredHeading.getRadians());
-    double omega = MathUtil.clamp(eTheta * kPomega, -maxOmega, maxOmega);
-
-    return ChassisSpeeds.fromFieldRelativeSpeeds(vx, vy, omega, robotPose.getRotation());
   }
 
   private static boolean nearPose(Pose2d a, Pose2d b, double posTol, double degTol) {
@@ -230,11 +119,12 @@ public class AutoPathBehaviour extends Behaviour {
 
   @Override
   public Command build(BehaviourContext ctx) {
-    AtomicReference<RepulsorSetpoint> active = new AtomicReference<>();
-    AtomicBoolean init = new AtomicBoolean(false);
+    AtomicReference<RepulsorSetpoint> lastActive = new AtomicReference<>(null);
     AtomicReference<CategorySpec> lastCat = new AtomicReference<>(null);
+
     AtomicReference<String> timingStation = new AtomicReference<>(null);
     AtomicLong timingStartNs = new AtomicLong(0);
+
     AtomicReference<RepulsorSetpoint> lastEpisodeGoal = new AtomicReference<>(null);
     AtomicLong lastEpisodeFinalizeNs = new AtomicLong(0L);
 
@@ -258,8 +148,6 @@ public class AutoPathBehaviour extends Behaviour {
     AtomicReference<Double> pinnedBestDist = new AtomicReference<>(null);
     AtomicBoolean pinnedFailedThisLatch = new AtomicBoolean(false);
 
-    ArcFollowState arc = new ArcFollowState();
-
     ReactiveBypass byp = ctx.planner.bypass;
 
     AtomicReference<Pose2d> collectBluePoseRef = new AtomicReference<>(Pose2d.kZero);
@@ -268,10 +156,8 @@ public class AutoPathBehaviour extends Behaviour {
             new MutablePoseSetpoint("COLLECT_ROUTE", SetpointType.kOther, collectBluePoseRef),
             HeightSetpoint.NONE);
 
-    final RepulsorSetpoint scoreGoal =
+    final RepulsorSetpoint scoreFallback =
         new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
-    final RepulsorSetpoint centerCollectGoal =
-        new RepulsorSetpoint(Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
 
     Consumer<Boolean> finalizeEpisode =
         forceSuccess -> {
@@ -302,145 +188,47 @@ public class AutoPathBehaviour extends Behaviour {
     return Commands.run(
             () -> {
               Pose2d robotPose = ctx.robotPose.get();
-
-              boolean scoringNow = inScoring != null && Boolean.TRUE.equals(inScoring.get());
               boolean piece = hasPiece.get();
-
               double cap = ourSpeedCap != null ? Math.max(0.25, ourSpeedCap.get()) : 3.5;
-
-              if (scoringNow && piece) {
-                if (!arc.active) {
-                  arc.active = true;
-                  arc.returning = false;
-                  arc.startPose = robotPose;
-
-                  SetpointContext spCtx = makeCtx(ctx, robotPose);
-
-                  arc.shootPose = scoreGoal.get(spCtx);
-                  arc.centerPose = centerCollectGoal.get(spCtx);
-
-                  edu.wpi.first.wpilibj.DriverStation.Alliance wpilibAlliance =
-                      DriverStation.getAlliance()
-                          .orElse(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue);
-                  arc.targetPoint = Rebuilt2026.hubAimpointForAlliance(wpilibAlliance);
-
-                  double chord =
-                      arc.startPose.getTranslation().getDistance(arc.shootPose.getTranslation());
-                  double curvature = MathUtil.clamp(0.35 * chord, 0.6, 1.6);
-                  arc.control =
-                      computeControlPoint(
-                          arc.startPose.getTranslation(),
-                          arc.shootPose.getTranslation(),
-                          curvature);
-
-                  arc.lookaheadT = 0.14;
-                  arc.startNs = System.nanoTime();
-
-                  ctx.planner.clearCommitted();
-                }
-
-                if (!arc.returning) {
-                  Translation2d a = arc.startPose.getTranslation();
-                  Translation2d b = arc.control;
-                  Translation2d c = arc.shootPose.getTranslation();
-
-                  double tClose = closestTOnBezier(a, b, c, robotPose.getTranslation());
-                  double tLook = clamp01(tClose + arc.lookaheadT);
-                  Translation2d aimPoint = bezier2(a, b, c, tLook);
-
-                  Rotation2d desiredYaw =
-                      arc.targetPoint.minus(robotPose.getTranslation()).getAngle();
-
-                  Rebuilt2026.onShootArcTick(robotPose, arc.shootPose, tClose);
-
-                  ChassisSpeeds speeds =
-                      driveToPoint(robotPose, aimPoint, desiredYaw, cap, 7.0, 2.2, 6.0);
-
-                  ctx.drive.runVelocity(speeds);
-
-                  Logger.recordOutput("shoot_arc_active", true);
-                  Logger.recordOutput("shoot_arc_returning", false);
-                  Logger.recordOutput("shoot_arc_t", tClose);
-
-                  if (nearPose(robotPose, arc.shootPose, 0.22, 10.0) || tClose >= 0.985) {
-                    arc.returning = true;
-                  }
-                  return;
-                } else {
-                  Translation2d goal = arc.centerPose.getTranslation();
-                  Rotation2d desiredYaw = arc.centerPose.getRotation();
-
-                  ChassisSpeeds speeds =
-                      driveToPoint(robotPose, goal, desiredYaw, cap, 7.0, 2.0, 5.0);
-
-                  ctx.drive.runVelocity(speeds);
-
-                  Logger.recordOutput("shoot_arc_active", true);
-                  Logger.recordOutput("shoot_arc_returning", true);
-
-                  if (nearPose(robotPose, arc.centerPose, 0.28, 12.0)) {
-                    arc.reset();
-                    ctx.drive.runVelocity(new ChassisSpeeds());
-                  }
-                  return;
-                }
-              } else {
-                if (arc.active) {
-                  arc.reset();
-                }
-              }
-
-              Logger.recordOutput("shoot_arc_active", false);
-
               CategorySpec cat = piece ? CategorySpec.kScore : CategorySpec.kCollect;
 
-              if (!init.get()) {
-                active.set(
-                    cat == CategorySpec.kScore
-                        ? scoreGoal
-                        : chooseCollect(
-                            ctx,
-                            robotPose,
-                            cap,
-                            COLLECT_GOAL_UNITS,
-                            collectBluePoseRef,
-                            collectRoute));
-                lastCat.set(cat);
-                init.set(true);
-              }
-
-              if (lastCat.get() != cat) {
-                if (lastCat.get() != null && lastEpisodeGoal.get() != null) {
+              CategorySpec prevCat = lastCat.get();
+              if (prevCat != null && prevCat != cat) {
+                if (lastEpisodeGoal.get() != null) {
                   finalizeEpisode.accept(false);
                 }
-                active.set(
-                    cat == CategorySpec.kScore
-                        ? scoreGoal
-                        : chooseCollect(
-                            ctx,
-                            robotPose,
-                            cap,
-                            COLLECT_GOAL_UNITS,
-                            collectBluePoseRef,
-                            collectRoute));
                 ctx.planner.clearCommitted();
-                lastCat.set(cat);
+                lastActive.set(null);
                 timingStartNs.set(0);
                 timingStation.set(null);
               }
+              lastCat.set(cat);
 
+              RepulsorSetpoint plannerOverride = ctx.planner.pollChosenSetpoint().orElse(null);
+
+              RepulsorSetpoint desired;
               if (cat == CategorySpec.kScore) {
-                active.set(scoreGoal);
+                RepulsorSetpoint fromNT = nextScore != null ? nextScore.get() : null;
+                if (fromNT != null) {
+                  desired = fromNT;
+                } else {
+                  RepulsorSetpoint pred = pickPredicted(ctx);
+                  desired = (pred != null) ? pred : scoreFallback;
+                }
               } else {
                 RepulsorSetpoint hp =
                     chooseCollect(
                         ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
-                if (hp != null) active.set(hp);
+
+                              Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
+
+                desired = (hp != null) ? hp : collectRoute;
               }
 
-              ctx.planner.pollChosenSetpoint().ifPresent(active::set);
+              RepulsorSetpoint sp = (plannerOverride != null) ? plannerOverride : desired;
+              lastActive.set(sp);
 
-              RepulsorSetpoint sp = active.get();
+
               if (sp == null) {
                 ctx.drive.runVelocity(new ChassisSpeeds());
                 return;
@@ -458,6 +246,7 @@ public class AutoPathBehaviour extends Behaviour {
 
               ctx.repulsor.setCurrentGoal(sp);
               ctx.planner.setGoal(goalPose);
+
 
               double distToGoal = robotPose.getTranslation().getDistance(goalPose.getTranslation());
               long nowNs = System.nanoTime();
@@ -497,6 +286,7 @@ public class AutoPathBehaviour extends Behaviour {
                 timingStartNs.set(0);
                 timingStation.set(null);
               }
+              // Logger.recordOutput("Repulsor/Goal1", new Pose2d(ctx.planner.getGoal(), new Rotation2d()));
 
               RepulsorSample sample =
                   ctx.planner.calculate(
@@ -558,6 +348,11 @@ public class AutoPathBehaviour extends Behaviour {
                 }
               }
 
+              Logger.recordOutput("autopath_goal_x", goalPose.getX());
+              Logger.recordOutput("autopath_goal_y", goalPose.getY());
+              Logger.recordOutput("autopath_goal_theta", goalPose.getRotation().getRadians());
+              Logger.recordOutput("autopath_dist_to_goal", distToGoal);
+
               ctx.drive.runVelocity(
                   sample.asChassisSpeeds(
                       ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation()));
@@ -570,13 +365,6 @@ public class AutoPathBehaviour extends Behaviour {
               }
               ctx.drive.runVelocity(new ChassisSpeeds());
             });
-  }
-
-  private RepulsorSetpoint initialScore(BehaviourContext ctx) {
-    RepulsorSetpoint fromNT = nextScore.get();
-    if (fromNT != null) return fromNT;
-    RepulsorSetpoint pred = pickPredicted(ctx);
-    return pred != null ? pred : fromNT;
   }
 
   private RepulsorSetpoint pickPredicted(BehaviourContext ctx) {
@@ -614,6 +402,8 @@ public class AutoPathBehaviour extends Behaviour {
     Pose2d nextBlue =
         FieldTracker.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
 
+        Logger.recordOutput("Repulsor/Goal2", new Pose2d(nextBlue.getTranslation(), new Rotation2d()));
+
     if (nextBlue == null) {
       nextBlue =
           new Pose2d(
@@ -622,7 +412,15 @@ public class AutoPathBehaviour extends Behaviour {
               robotPoseBlue.getRotation());
     }
 
+    Rotation2d locked =
+        (lastCollectBluePose != null)
+            ? lastCollectBluePose.getRotation()
+            : robotPoseBlue.getRotation();
+    nextBlue = new Pose2d(nextBlue.getTranslation(), locked);
+
+    lastCollectBluePose = nextBlue;
     collectBluePoseRef.set(nextBlue);
+
     return collectRoute;
   }
 }

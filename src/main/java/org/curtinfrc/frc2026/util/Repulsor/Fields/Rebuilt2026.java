@@ -1,3 +1,4 @@
+// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Fields/Rebuilt2026.java
 package org.curtinfrc.frc2026.util.Repulsor.Fields;
 
 import static org.curtinfrc.frc2026.util.Repulsor.Constants.FIELD_LENGTH;
@@ -23,12 +24,12 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 public final class Rebuilt2026 implements FieldDefinition {
   private static final double CORNER_CHAMFER = 0;
 
-  private static final double GRID_CELL_M = 0.25;
   private static final double GRID_Z_MIN_M = -0.05;
   private static final double GRID_Z_MAX_M = 0.35;
 
-  private static final double GRID_REGION_HALF_X_M = 4.0;
-  private static final double GRID_REGION_HALF_Y_M = 2.0;
+  private static final double GRID_CELL_M = 0.75; // ~250-ish per alliance over full field
+  private static final double GRID_REGION_HALF_X_M = Constants.FIELD_LENGTH * 0.5;
+  private static final double GRID_REGION_HALF_Y_M = Constants.FIELD_WIDTH * 0.5;
 
   @Override
   public GameElement[] build(FieldTracker ft) {
@@ -124,8 +125,8 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> fieldObstacles() {
     double maxRangeY = 0.9;
-    double maxRangeX = 1.2;
-    double strength = 1;
+    double maxRangeX = 1.5;
+    double strength = 0.8;
     return List.of(
         new SquareObstacle(new Translation2d(4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 2, 3),
         new SquareObstacle(
