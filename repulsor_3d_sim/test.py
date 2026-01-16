@@ -93,9 +93,7 @@ def probe(server: str):
     inst = connect(server)
     print(f"\n=== SERVER {server} connected={inst.isConnected()} ===")
 
-    # ---- SUBSCRIBE TO ALL TOPICS (NT4 discovery) ----
     ms = MultiSubscriber(inst, ["/AdvantageKit/RealOutputs/Odometry/Robot"])
-    # Give NT a moment to receive announcements
     time.sleep(0.35)
 
     try:

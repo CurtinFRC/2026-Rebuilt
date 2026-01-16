@@ -1,9 +1,9 @@
+// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Setpoints.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
 import static org.curtinfrc.frc2026.util.Repulsor.Constants.aprilTagLayout;
 
-import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -19,6 +19,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.littletonrobotics.junction.Logger;
@@ -29,12 +30,35 @@ public class Setpoints {
     return DriverStation.getAlliance().orElse(Alliance.Blue);
   }
 
+  private static Pose2d flipAcrossField(Pose2d p) {
+    if (p == null) return Pose2d.kZero;
+    double x = p.getX();
+    double y = p.getY();
+    double r = p.getRotation().getRadians();
+    double fx = Constants.FIELD_LENGTH - x;
+    double fr = Math.PI - r;
+    return new Pose2d(fx, y, Rotation2d.fromRadians(fr));
+  }
+
+  private static Translation2d flipAcrossField(Translation2d t) {
+    if (t == null) return new Translation2d(0.0, 0.0);
+    return new Translation2d(Constants.FIELD_LENGTH - t.getX(), t.getY());
+  }
+
   public static Pose2d flipToRed(Pose2d bluePose) {
-    return ChoreoAllianceFlipUtil.flip(bluePose);
+    return flipAcrossField(bluePose);
   }
 
   public static Translation2d flipToRed(Translation2d blue) {
-    return ChoreoAllianceFlipUtil.flip(new Pose2d(blue, Rotation2d.kZero)).getTranslation();
+    return flipAcrossField(blue);
+  }
+
+  public static Pose2d flipToBlue(Pose2d redPose) {
+    return flipAcrossField(redPose);
+  }
+
+  public static Translation2d flipToBlue(Translation2d red) {
+    return flipAcrossField(red);
   }
 
   public enum SetpointType {
@@ -67,10 +91,18 @@ public class Setpoints {
   public abstract static class GameSetpoint {
     private final String name;
     private final SetpointType type;
+    private final boolean canFlip;
 
     protected GameSetpoint(String name, SetpointType type) {
       this.name = name;
       this.type = type;
+      this.canFlip = true;
+    }
+
+    protected GameSetpoint(String name, SetpointType type, boolean canFlip) {
+      this.name = name;
+      this.type = type;
+      this.canFlip = canFlip;
     }
 
     public final String name() {
@@ -84,7 +116,7 @@ public class Setpoints {
     public abstract Pose2d bluePose(SetpointContext ctx);
 
     public Pose2d redPose(SetpointContext ctx) {
-      return flipToRed(bluePose(ctx));
+      return canFlip ? flipToRed(bluePose(ctx)) : bluePose(ctx);
     }
 
     public final Pose2d poseForAlliance(Alliance alliance, SetpointContext ctx) {
@@ -109,7 +141,7 @@ public class Setpoints {
 
     public MutablePoseSetpoint(
         String name, SetpointType type, AtomicReference<Pose2d> bluePoseRef) {
-      super(name, type == null ? SetpointType.kOther : type);
+      super(name, type == null ? SetpointType.kOther : type, false);
       this.bluePoseRef = bluePoseRef == null ? new AtomicReference<>(Pose2d.kZero) : bluePoseRef;
     }
 
@@ -308,6 +340,174 @@ public class Setpoints {
     public static final double HUB_FACE_TO_AIMPOINT_METERS = 0.60;
     public static final String GAME_PIECE_ID_FUEL = "fuel";
 
+    private static final long HUB_SOLVE_PERIOD_NS = 120_000_000L;
+    private static final long HUB_CACHE_MAX_AGE_NS = 280_000_000L;
+    private static final int HUB_REUSE_POS_MM = 160;
+    private static final double HUB_SIMPLE_FAR_DIST_M = 4.35;
+    private static final double HUB_SIMPLE_RADIUS_M = 3.0;
+    private static final double HUB_OBS_ENABLE_DIST_M = 2.15;
+
+    private static final DragShotPlanner.GamePiecePhysics HUB_PHYSICS = loadHubPhysicsOnce();
+
+    private static DragShotPlanner.GamePiecePhysics loadHubPhysicsOnce() {
+      try {
+        return DragShotPlanner.loadGamePieceFromDeployYaml(GAME_PIECE_ID_FUEL);
+      } catch (Throwable t) {
+        return new DragShotPlanner.GamePiecePhysics() {
+          @Override
+          public double massKg() {
+            return 0.27;
+          }
+
+          @Override
+          public double crossSectionAreaM2() {
+            return 0.014;
+          }
+
+          @Override
+          public double dragCoefficient() {
+            return 0.95;
+          }
+        };
+      }
+    }
+
+    private static final class HubLastPoseCache {
+      volatile int robotXmm;
+      volatile int robotYmm;
+      volatile int obsHash;
+      volatile long tNs;
+      volatile Pose2d pose;
+
+      volatile long lastSolveNs;
+      volatile int lastSolveRobotXmm;
+      volatile int lastSolveRobotYmm;
+      volatile int lastSolveObsHash;
+    }
+
+    private static final double[][] SIMPLE_OFFS =
+        new double[][] {
+          {0.0, 0.0},
+          {0.12, 0.0},
+          {-0.12, 0.0},
+          {0.0, 0.12},
+          {0.0, -0.12},
+          {0.18, 0.18},
+          {0.18, -0.18},
+          {-0.18, 0.18},
+          {-0.18, -0.18},
+          {0.26, 0.0},
+          {-0.26, 0.0},
+          {0.34, 0.0},
+          {-0.34, 0.0}
+        };
+
+    private static final double[] RING_RADII =
+        new double[] {2.4, 2.7, 3.0, 3.3, 3.6, 4.0, 4.4, 4.9, 5.4, 6.0};
+
+    private static final double[] BEARING_OFFS_DEG =
+        new double[] {
+          0.0, 10.0, -10.0, 20.0, -20.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0, 75.0, -75.0, 90.0,
+          -90.0, 120.0, -120.0, 150.0, -150.0, 180.0
+        };
+
+    private static final Translation2d[] SAFE_FALLBACKS =
+        new Translation2d[] {
+          new Translation2d(1.20, 1.20),
+          new Translation2d(1.20, Constants.FIELD_WIDTH * 0.50),
+          new Translation2d(1.20, Constants.FIELD_WIDTH - 1.20),
+          new Translation2d(Constants.FIELD_LENGTH - 1.20, 1.20),
+          new Translation2d(Constants.FIELD_LENGTH - 1.20, Constants.FIELD_WIDTH * 0.50),
+          new Translation2d(Constants.FIELD_LENGTH - 1.20, Constants.FIELD_WIDTH - 1.20)
+        };
+
+    private static Pose2d toPoseFacing(Translation2d pos, Translation2d target) {
+      Rotation2d yaw = target.minus(pos).getAngle();
+      return new Pose2d(pos, yaw);
+    }
+
+    private static boolean validShootPose(
+        Translation2d shooterPos,
+        Translation2d targetFieldPos,
+        double halfL,
+        double halfW,
+        List<? extends FieldPlanner.Obstacle> obs) {
+      return DragShotPlanner.isShooterPoseValid(shooterPos, targetFieldPos, halfL, halfW, obs);
+    }
+
+    private static Pose2d safeValidFallback(
+        Translation2d target,
+        double halfL,
+        double halfW,
+        List<? extends FieldPlanner.Obstacle> obs) {
+      for (Translation2d p : SAFE_FALLBACKS) {
+        if (validShootPose(p, target, halfL, halfW, obs)) {
+          return toPoseFacing(p, target);
+        }
+      }
+      Translation2d p = SAFE_FALLBACKS[0];
+      return toPoseFacing(p, target);
+    }
+
+    private static Pose2d findValidAround(
+        Pose2d robotPose,
+        Translation2d target,
+        double halfL,
+        double halfW,
+        List<? extends FieldPlanner.Obstacle> obs,
+        double baseRadius) {
+
+      Translation2d r = robotPose.getTranslation();
+      Translation2d fromTarget = r.minus(target);
+      double baseBearingDeg;
+      if (fromTarget.getNorm() < 1e-6) {
+        baseBearingDeg = 0.0;
+      } else {
+        baseBearingDeg = fromTarget.getAngle().getDegrees();
+      }
+
+      for (int rr = 0; rr < RING_RADII.length; rr++) {
+        double rad = RING_RADII[rr];
+        double radius = rr == 0 ? Math.max(0.8, Math.min(6.8, baseRadius)) : rad;
+        for (int bi = 0; bi < BEARING_OFFS_DEG.length; bi++) {
+          double b = baseBearingDeg + BEARING_OFFS_DEG[bi];
+          Rotation2d ang = Rotation2d.fromDegrees(b);
+          Translation2d p = target.plus(new Translation2d(radius, ang));
+          if (validShootPose(p, target, halfL, halfW, obs)) {
+            return toPoseFacing(p, target);
+          }
+          for (int oi = 0; oi < SIMPLE_OFFS.length; oi++) {
+            Translation2d pp =
+                new Translation2d(p.getX() + SIMPLE_OFFS[oi][0], p.getY() + SIMPLE_OFFS[oi][1]);
+            if (validShootPose(pp, target, halfL, halfW, obs)) {
+              return toPoseFacing(pp, target);
+            }
+          }
+        }
+      }
+      return safeValidFallback(target, halfL, halfW, obs);
+    }
+
+    private static Pose2d findFastValidPose(
+        Pose2d robotPose,
+        Translation2d targetFieldPos,
+        double halfL,
+        double halfW,
+        List<? extends FieldPlanner.Obstacle> obs,
+        double baseRadius) {
+
+      Pose2d candidate = findValidAround(robotPose, targetFieldPos, halfL, halfW, obs, baseRadius);
+      Translation2d p = candidate.getTranslation();
+      if (validShootPose(p, targetFieldPos, halfL, halfW, obs)) {
+        return candidate;
+      }
+      return safeValidFallback(targetFieldPos, halfL, halfW, obs);
+    }
+
+    private static boolean shouldLogThrottled(long nowNs, long lastNs, long periodNs) {
+      return lastNs == 0L || (nowNs - lastNs) >= periodNs;
+    }
+
     public static final DragShotPlanner.Constraints HUB_SHOT_CONSTRAINTS =
         new DragShotPlanner.Constraints(
             6.0, 26.0, 25.0, 80.0, DragShotPlanner.Constraints.ShotStyle.ARC);
@@ -342,8 +542,6 @@ public class Setpoints {
       return alliance == Alliance.Red ? flipToRed(blue) : blue;
     }
 
-    public static void onShootArcTick(Pose2d robotPose, Pose2d shootingPose, double progress01) {}
-
     private record HubShotCacheKey(
         int targetXmm, int targetYmm, int releaseHmm, int halfLmm, int halfWmm) {}
 
@@ -357,13 +555,7 @@ public class Setpoints {
     private static final AtomicBoolean HUB_BG_STARTED = new AtomicBoolean(false);
     private static ScheduledExecutorService HUB_BG_EXEC;
 
-    private static final class HubLastPoseCache {
-      volatile int robotXmm;
-      volatile int robotYmm;
-      volatile int obsHash;
-      volatile long tNs;
-      volatile Pose2d pose;
-    }
+    private static final AtomicLong HUB_LAST_LOG_NS = new AtomicLong(0L);
 
     private static final class HubShotLibraryState {
       final HubShotCacheKey key;
@@ -427,7 +619,6 @@ public class Setpoints {
           if (st.done) {
             continue;
           }
-          DragShotPlanner.ShotLibrary publish = null;
           synchronized (st.lock) {
             if (st.done) {
               continue;
@@ -435,16 +626,16 @@ public class Setpoints {
             if (st.builder == null) {
               double speedStep =
                   Math.max(
-                      0.18,
+                      0.20,
                       (HUB_SHOT_CONSTRAINTS.maxLaunchSpeedMetersPerSecond()
                               - HUB_SHOT_CONSTRAINTS.minLaunchSpeedMetersPerSecond())
-                          / 70.0);
+                          / 72.0);
               double angleStep =
                   Math.max(
-                      0.6,
+                      0.55,
                       (HUB_SHOT_CONSTRAINTS.maxLaunchAngleDeg()
                               - HUB_SHOT_CONSTRAINTS.minLaunchAngleDeg())
-                          / 80.0);
+                          / 84.0);
               double radialStep = 0.30;
               double bearingStep = 12.0;
 
@@ -462,7 +653,7 @@ public class Setpoints {
                       radialStep,
                       bearingStep);
             }
-            publish = st.builder.maybeStep(900_000L);
+            DragShotPlanner.ShotLibrary publish = st.builder.maybeStep(900_000L);
             if (publish != null) {
               if (!publish.entries().isEmpty() || publish.complete()) {
                 st.published = publish;
@@ -517,7 +708,7 @@ public class Setpoints {
               (int) Math.round(halfL * 1000.0),
               (int) Math.round(halfW * 1000.0));
       return HUB_ONLINE_STATE.computeIfAbsent(
-          key, k -> new DragShotPlanner.OnlineSearchState(seed, 0.60));
+          key, k -> new DragShotPlanner.OnlineSearchState(seed, 0.58));
     }
 
     private static HubShotCacheKey hubKey(
@@ -533,11 +724,12 @@ public class Setpoints {
     private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
       if (obs == null || obs.isEmpty()) return 0;
       int h = 1;
-      for (int i = 0; i < obs.size(); i++) {
+      int n = obs.size();
+      for (int i = 0; i < n; i++) {
         Object o = obs.get(i);
         h = h * 31 + System.identityHashCode(o);
       }
-      h = h * 31 + obs.size();
+      h = h * 31 + n;
       return h;
     }
 
@@ -602,40 +794,50 @@ public class Setpoints {
       @Override
       public Pose2d approximateBluePose() {
         Translation2d target = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
-        Translation2d shooter = target.minus(new Translation2d(3.0, Rotation2d.kZero));
-        Rotation2d yaw = target.minus(shooter).getAngle();
-        return new Pose2d(shooter, yaw);
+        Pose2d fakeRobot =
+            new Pose2d(target.plus(new Translation2d(3.0, Rotation2d.kZero)), Rotation2d.kZero);
+        return findValidAround(fakeRobot, target, 0.0, 0.0, List.of(), HUB_SIMPLE_RADIUS_M);
       }
 
       private static Pose2d computeShootPose(SetpointContext ctx, Translation2d targetFieldPos) {
         if (ctx == null || ctx.robotPose().isEmpty()) {
-          Translation2d shooter = targetFieldPos.minus(new Translation2d(3.0, Rotation2d.kZero));
-          Rotation2d yaw = targetFieldPos.minus(shooter).getAngle();
-          return new Pose2d(shooter, yaw);
+          Pose2d fakeRobot =
+              new Pose2d(
+                  targetFieldPos.plus(new Translation2d(3.0, Rotation2d.kZero)), Rotation2d.kZero);
+          return findValidAround(
+              fakeRobot, targetFieldPos, 0.0, 0.0, List.of(), HUB_SIMPLE_RADIUS_M);
         }
 
         Pose2d robotPose = ctx.robotPose().get();
-
-        final DragShotPlanner.GamePiecePhysics physics;
-        try {
-          physics = DragShotPlanner.loadGamePieceFromDeployYaml(GAME_PIECE_ID_FUEL);
-        } catch (Exception ex) {
-          Translation2d shooter = targetFieldPos.minus(new Translation2d(3.0, Rotation2d.kZero));
-          Rotation2d yaw = targetFieldPos.minus(shooter).getAngle();
-          return new Pose2d(shooter, yaw);
-        }
+        long now = System.nanoTime();
 
         double releaseH = Math.max(0.0, ctx.shooterReleaseHeightMeters());
         double halfL = Math.max(0.0, ctx.robotLengthMeters()) / 2.0;
         double halfW = Math.max(0.0, ctx.robotWidthMeters()) / 2.0;
 
-        HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
+        double distToTarget = robotPose.getTranslation().getDistance(targetFieldPos);
 
+        boolean useObs = distToTarget <= HUB_OBS_ENABLE_DIST_M;
+        List<? extends FieldPlanner.Obstacle> obs = useObs ? ctx.dynamicObstacles() : List.of();
+        int obsHash = useObs ? obstaclesStableHash(obs) : 0;
+
+        Pose2d simple =
+            findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
+
+        if (distToTarget >= HUB_SIMPLE_FAR_DIST_M) {
+          HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
+          HubLastPoseCache w = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
+          w.robotXmm = (int) Math.round(robotPose.getX() * 1000.0);
+          w.robotYmm = (int) Math.round(robotPose.getY() * 1000.0);
+          w.obsHash = obsHash;
+          w.tNs = now;
+          w.pose = simple;
+          return simple;
+        }
+
+        HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
         int rxmm = (int) Math.round(robotPose.getX() * 1000.0);
         int rymm = (int) Math.round(robotPose.getY() * 1000.0);
-
-        int obsHash = obstaclesStableHash(ctx.dynamicObstacles());
-        long now = System.nanoTime();
 
         HubLastPoseCache cached = HUB_LAST_POSE.get(key);
         if (cached != null) {
@@ -644,82 +846,94 @@ public class Setpoints {
             int dx = Math.abs(rxmm - cached.robotXmm);
             int dy = Math.abs(rymm - cached.robotYmm);
             long age = now - cached.tNs;
-            if (cached.obsHash == obsHash && dx <= 90 && dy <= 90 && age <= 140_000_000L) {
-              return p;
+            if (dx <= HUB_REUSE_POS_MM && dy <= HUB_REUSE_POS_MM && age <= HUB_CACHE_MAX_AGE_NS) {
+              if (validShootPose(p.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
+                return p;
+              }
             }
           }
         }
 
+        Translation2d seed = simple.getTranslation();
+
         DragShotPlanner.ShotLibrary lib =
-            getOrStartHubLibrary(physics, targetFieldPos, releaseH, halfL, halfW);
+            getOrStartHubLibrary(HUB_PHYSICS, targetFieldPos, releaseH, halfL, halfW);
 
-        Optional<DragShotPlanner.ShotSolution> libSol = Optional.empty();
-        Translation2d seed = robotPose.getTranslation();
-
+        DragShotPlanner.ShotSolution libSol = null;
         if (lib != null && !lib.entries().isEmpty()) {
-          libSol =
+          Optional<DragShotPlanner.ShotSolution> opt =
               DragShotPlanner.findBestShotFromLibrary(
                   lib,
-                  physics,
+                  HUB_PHYSICS,
                   targetFieldPos,
                   HUB_OPENING_FRONT_EDGE_HEIGHT_M,
                   robotPose,
                   releaseH,
                   halfL,
                   halfW,
-                  ctx.dynamicObstacles(),
+                  obs,
                   HUB_SHOT_CONSTRAINTS);
-          if (libSol.isPresent()) {
-            seed = libSol.get().shooterPosition();
+          if (opt.isPresent()) {
+            libSol = opt.get();
+            seed = libSol.shooterPosition();
           }
         }
 
         DragShotPlanner.OnlineSearchState online =
             getOrCreateOnlineState(targetFieldPos, releaseH, halfL, halfW, seed);
 
-        if (online.seed() == null) {
-          online.seed(seed);
-        } else {
-          long ageNs = now - online.lastUpdateNs();
-          if (ageNs > 2_000_000_000L) {
+        if (cached != null) {
+          int mdx = Math.abs(rxmm - cached.lastSolveRobotXmm);
+          int mdy = Math.abs(rymm - cached.lastSolveRobotYmm);
+          if (mdx > 520 || mdy > 520) {
             online.seed(seed);
-            online.stepMeters(0.60);
+            online.stepMeters(0.58);
           }
         }
 
-        long refineBudget = cached != null && cached.pose != null ? 280_000L : 420_000L;
+        long refineBudgetNs = useObs ? 210_000L : 145_000L;
 
+        DragShotPlanner.ShotSolution refinedSol = null;
         Optional<DragShotPlanner.ShotSolution> refined =
             DragShotPlanner.findBestShotOnlineRefine(
-                physics,
+                HUB_PHYSICS,
                 targetFieldPos,
                 HUB_OPENING_FRONT_EDGE_HEIGHT_M,
                 robotPose,
                 releaseH,
                 halfL,
                 halfW,
-                ctx.dynamicObstacles(),
+                obs,
                 HUB_SHOT_CONSTRAINTS,
                 online,
-                refineBudget);
+                refineBudgetNs);
+        if (refined.isPresent()) {
+          refinedSol = refined.get();
+        }
 
-        Optional<DragShotPlanner.ShotSolution> sol = refined.isPresent() ? refined : libSol;
-
-        Logger.recordOutput("shot", sol.isPresent() ? sol.get().shooterPosition() : null);
-        Logger.recordOutput("shot_lib_entries", lib != null ? lib.entries().size() : 0);
-        Logger.recordOutput("shot_lib_complete", lib != null && lib.complete());
-        Logger.recordOutput("shot_lib_null", lib == null);
+        DragShotPlanner.ShotSolution sol = refinedSol != null ? refinedSol : libSol;
 
         Pose2d out;
-        if (sol.isEmpty()) {
-          Translation2d fallbackShooter =
-              targetFieldPos.minus(new Translation2d(3.0, Rotation2d.kZero));
-          Rotation2d fallbackYaw = targetFieldPos.minus(fallbackShooter).getAngle();
-          out = new Pose2d(fallbackShooter, fallbackYaw);
+        boolean solvedNow = false;
+
+        if (sol == null) {
+          out = simple;
         } else {
-          Translation2d shooterPos = sol.get().shooterPosition();
-          Rotation2d yaw = sol.get().shooterYaw();
-          out = new Pose2d(shooterPos, yaw);
+          Translation2d shooterPos = sol.shooterPosition();
+          if (!validShootPose(shooterPos, targetFieldPos, halfL, halfW, obs)) {
+            out = simple;
+          } else {
+            out = new Pose2d(shooterPos, sol.shooterYaw());
+            solvedNow = refinedSol != null;
+          }
+        }
+
+        if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
+          out =
+              findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
+        }
+        if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
+          out = safeValidFallback(targetFieldPos, halfL, halfW, obs);
         }
 
         HubLastPoseCache write = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
@@ -728,6 +942,32 @@ public class Setpoints {
         write.obsHash = obsHash;
         write.tNs = now;
         write.pose = out;
+
+        if (solvedNow) {
+          write.lastSolveNs = now;
+          write.lastSolveRobotXmm = rxmm;
+          write.lastSolveRobotYmm = rymm;
+          write.lastSolveObsHash = obsHash;
+        } else if (write.lastSolveNs == 0L) {
+          write.lastSolveNs = now;
+          write.lastSolveRobotXmm = rxmm;
+          write.lastSolveRobotYmm = rymm;
+          write.lastSolveObsHash = obsHash;
+        }
+
+        long lastNs = HUB_LAST_LOG_NS.get();
+        if (shouldLogThrottled(now, lastNs, 220_000_000L)
+            && HUB_LAST_LOG_NS.compareAndSet(lastNs, now)) {
+          Logger.recordOutput("hubshot/distToTarget", distToTarget);
+          Logger.recordOutput("hubshot/useObs", useObs);
+          Logger.recordOutput("hubshot/lib_entries", lib != null ? lib.entries().size() : 0);
+          Logger.recordOutput("hubshot/lib_complete", lib != null && lib.complete());
+          Logger.recordOutput("hubshot/solved", sol != null);
+          Logger.recordOutput("hubshot/used_refine", refinedSol != null);
+          Logger.recordOutput(
+              "hubshot/pose_valid",
+              validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs));
+        }
 
         return out;
       }

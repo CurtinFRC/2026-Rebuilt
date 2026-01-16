@@ -1,4 +1,3 @@
-# repulsor_3d_sim/viewer.py
 from __future__ import annotations
 
 import threading
@@ -20,9 +19,7 @@ class _SnapshotWorker:
         self.reader = reader
         self.period_s = 1.0 / max(1.0, float(hz))
         self._stop = threading.Event()
-        self._lock = threading.Lock()
-        self._latest: Optional[WorldSnapshot] = None
-        self._connected: bool = False
+        self._latest_pair: Tuple[Optional[WorldSnapshot], bool] = (None, False)
         self._t = threading.Thread(target=self._run, name="nt4-snapshot-worker", daemon=True)
 
     def start(self):
@@ -33,25 +30,24 @@ class _SnapshotWorker:
         self._t.join(timeout=0.5)
 
     def latest(self) -> Tuple[Optional[WorldSnapshot], bool]:
-        with self._lock:
-            return self._latest, self._connected
+        return self._latest_pair
 
     def _run(self):
-        next_t = time.time()
+        next_t = time.perf_counter()
+        wait = self._stop.wait
+        perf = time.perf_counter
+        period = self.period_s
+        reader = self.reader
+
         while not self._stop.is_set():
-            now = time.time()
-            if now < next_t:
-                self._stop.wait(timeout=next_t - now)
+            now = perf()
+            dt = next_t - now
+            if dt > 0:
+                wait(timeout=dt)
                 continue
 
-            snap = self.reader.snapshot()
-            conn = self.reader.is_connected()
-
-            with self._lock:
-                self._latest = snap
-                self._connected = conn
-
-            next_t = max(next_t + self.period_s, time.time() + 0.0005)
+            self._latest_pair = (reader.snapshot(), reader.is_connected())
+            next_t = max(next_t + period, perf() + 0.0005)
 
 
 class ViewerApp:
@@ -67,11 +63,13 @@ class ViewerApp:
         )
         self.window.push_handlers(self)
 
+        self._field_target = (float(cfg.field_length_m) * 0.5, float(cfg.field_width_m) * 0.5, 0.0)
+
         self.camera = OrbitCamera(
             distance=cfg.camera_distance_m,
             yaw_deg=cfg.camera_yaw_deg,
             pitch_deg=cfg.camera_pitch_deg,
-            target=(cfg.field_length_m * 0.5, cfg.field_width_m * 0.5, 0.0),
+            target=self._field_target,
         )
 
         self.renderer = SceneRenderer(cfg)
@@ -89,7 +87,8 @@ class ViewerApp:
         self.last_snapshot: Optional[WorldSnapshot] = None
         self._last_connected: bool = False
 
-        pyglet.clock.schedule_interval(self._tick, 1.0 / float(cfg.fps))
+        self._fps_inv = 1.0 / float(cfg.fps)
+        pyglet.clock.schedule_interval(self._tick, self._fps_inv)
 
     def run(self):
         try:
@@ -102,10 +101,10 @@ class ViewerApp:
         self.last_snapshot = snap
         self._last_connected = conn
 
-        if self.cfg.follow_robot and snap is not None and snap.pose is not None:
-            px = float(snap.pose.x)
-            py = float(snap.pose.y)
-            self.camera.target = (px, py, 0.0)
+        if self.cfg.follow_robot and snap is not None:
+            pose = snap.pose
+            if pose is not None:
+                self.camera.target = (float(pose.x), float(pose.y), 0.0)
 
         self.window.invalid = True
 
@@ -130,15 +129,25 @@ class ViewerApp:
         if not self._dragging:
             return
         self.camera.yaw_deg = (self.camera.yaw_deg + float(dx) * 0.35) % 360.0
-        self.camera.pitch_deg = max(-89.0, min(89.0, self.camera.pitch_deg + float(dy) * 0.35))
+        p = self.camera.pitch_deg + float(dy) * 0.35
+        if p < -89.0:
+            p = -89.0
+        elif p > 89.0:
+            p = 89.0
+        self.camera.pitch_deg = p
 
     def on_mouse_scroll(self, x: int, y: int, scroll_x: int, scroll_y: int):
         s = 1.0 - float(scroll_y) * 0.08
-        self.camera.distance = max(1.5, min(80.0, self.camera.distance * s))
+        d = self.camera.distance * s
+        if d < 1.5:
+            d = 1.5
+        elif d > 80.0:
+            d = 80.0
+        self.camera.distance = d
 
     def on_key_press(self, symbol: int, modifiers: int):
         if symbol == key.R:
-            self.camera.target = (self.cfg.field_length_m * 0.5, self.cfg.field_width_m * 0.5, 0.0)
+            self.camera.target = self._field_target
             self.camera.distance = self.cfg.camera_distance_m
             self.camera.pitch_deg = self.cfg.camera_pitch_deg
             self.camera.yaw_deg = self.cfg.camera_yaw_deg

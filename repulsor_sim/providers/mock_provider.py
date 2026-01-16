@@ -55,10 +55,11 @@ class MockProvider(RepulsorProvider):
         self.y1 = 0.0
         self.nx = 0
         self.ny = 0
+        self._frozen = False
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.rng = random.Random(cfg.seed)
+        self.rng = random.Random()
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -73,6 +74,7 @@ class MockProvider(RepulsorProvider):
         self.cluster_centers = self._make_cluster_centers()
         self._regen_fuel()
         self._init_robots()
+        self._frozen = True
 
     def _make_cluster_centers(self) -> List[Tuple[float, float, float]]:
         assert self.rng is not None
@@ -173,37 +175,8 @@ class MockProvider(RepulsorProvider):
             oid = f"robot_{'b' if class_id == CLASS_ROBOT_BLUE else 'r'}_{i}"
             self.robots.append(_RobotObj(oid=oid, class_id=class_id, x=x, y=y, sx=sx, sy=sy))
 
-    def _drift(self) -> None:
-        assert self.cfg is not None
-        assert self.rng is not None
-
-        nfuel: Dict[str, _FuelObj] = {}
-        for oid, fo in self.fuel.items():
-            jx = (self.rng.random() - 0.5) * 0.01
-            jy = (self.rng.random() - 0.5) * 0.01
-            nx = _clamp(fo.x + jx, self.x0, self.x1)
-            ny = _clamp(fo.y + jy, self.y0, self.y1)
-            nfuel[oid] = _FuelObj(oid=fo.oid, x=nx, y=ny, z=fo.z)
-        self.fuel = nfuel
-
-        moved: List[_RobotObj] = []
-        for o in self.robots:
-            dx = (self.rng.random() - 0.5) * 0.03
-            dy = (self.rng.random() - 0.5) * 0.03
-            x = _clamp(o.x + dx, 0.2, self.cfg.field_length_m - 0.2)
-            y = _clamp(o.y + dy, 0.2, self.cfg.field_width_m - 0.2)
-            moved.append(_RobotObj(oid=o.oid, class_id=o.class_id, x=x, y=y, sx=o.sx, sy=o.sy))
-        self.robots = moved
-
     def step(self, now_s: float) -> ProviderFrame:
         assert self.cfg is not None
-        assert self.rng is not None
-
-        if self.rng.random() < 0.01:
-            self.cluster_centers = self._make_cluster_centers()
-            self._regen_fuel()
-
-        self._drift()
 
         objs: List[WorldObject] = []
         for fo in self.fuel.values():
@@ -214,7 +187,6 @@ class MockProvider(RepulsorProvider):
 
         obstacles: List[VisionObstacle] = []
         for ro in self.robots[: self.cfg.max_obstacles]:
-            kind = "robot"
-            obstacles.append(VisionObstacle(oid=ro.oid, kind=kind, x=ro.x, y=ro.y, sx=ro.sx, sy=ro.sy))
+            obstacles.append(VisionObstacle(oid=ro.oid, kind="robot", x=ro.x, y=ro.y, sx=ro.sx, sy=ro.sy))
 
         return ProviderFrame(objects=objs, obstacles=obstacles, extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))

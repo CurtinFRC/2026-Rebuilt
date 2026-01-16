@@ -1,4 +1,4 @@
-// File: src/main/java/org/curtinfrc/frc2025/util/Repulsor/FieldPlanner.java
+// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/FieldPlanner.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.*;
@@ -32,12 +32,30 @@ import org.littletonrobotics.junction.Logger;
 
 public class FieldPlanner {
   private static final double EPS = 1e-9;
-  private static final double COMMIT_ON_DIST = 1.20;
-  private static final long SWAP_COOLDOWN_MS = 800;
   private static final double FORCE_THROUGH_GOAL_DIST = 2.0;
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   private static final double CORNER_CHAMFER = 0;
   public static final double GOAL_STRENGTH = 1.2;
+
+  private static final class ClearMemo {
+    Boolean toGoalDyn;
+    Boolean toGoalNoDyn;
+
+    boolean toGoalDyn(
+        Translation2d a, Translation2d b, List<? extends Obstacle> dyn, double rx, double ry) {
+      if (toGoalDyn != null) return toGoalDyn.booleanValue();
+      toGoalDyn = ExtraPathing.isClearPath("Repulsor/IsClear", a, b, dyn, rx, ry, true);
+      return toGoalDyn.booleanValue();
+    }
+
+    boolean toGoalNoDyn(Translation2d a, Translation2d b, double rx, double ry) {
+      if (toGoalNoDyn != null) return toGoalNoDyn.booleanValue();
+      toGoalNoDyn =
+          ExtraPathing.isClearPath(
+              "Repulsor/ForceThrough/NoDyn", a, b, Collections.emptyList(), rx, ry, false);
+      return toGoalNoDyn.booleanValue();
+    }
+  }
 
   public interface ObstacleProvider {
     List<Obstacle> fieldObstacles();
@@ -57,8 +75,6 @@ public class FieldPlanner {
     }
   }
 
-  private Pose2d committedGoal = null;
-  private long lastSwapMs = 0;
   private Optional<RepulsorSetpoint> lastChosenSetpoint = Optional.empty();
 
   private final TurnTuning turnTuning;
@@ -264,7 +280,6 @@ public class FieldPlanner {
         }
 
         awayLocal = new Translation2d(nx, ny);
-
         effectiveDist = -Math.max(EPS, min);
       }
 
@@ -322,8 +337,33 @@ public class FieldPlanner {
       }
 
       Translation2d sum = primary.plus(escape);
-      if (sum.getNorm() < EPS) return new Force();
-      return new Force(sum.getNorm(), sum.getAngle());
+
+      double sumN = sum.getNorm();
+      Translation2d g = target.minus(position);
+      double gN = g.getNorm();
+      if (gN > EPS) {
+        Translation2d gU = g.div(gN);
+        double engageR2 = Math.max(1.15, maxRange + halfSize + 1.35);
+        if (position.getDistance(center) <= engageR2) {
+          if (sumN > EPS) {
+            double align = dot(sum.div(sumN), gU);
+            if (align < 0.18) {
+              double d = Math.max(0.18, position.getDistance(center) - halfSize);
+              double pushThroughMag = (strength * 2.3) / (0.70 + d * d);
+              sum = sum.plus(gU.times(pushThroughMag * (0.18 - align)));
+              sumN = sum.getNorm();
+            }
+          } else {
+            double d = Math.max(0.18, position.getDistance(center) - halfSize);
+            double pushThroughMag = (strength * 2.3) / (0.70 + d * d);
+            sum = sum.plus(gU.times(pushThroughMag));
+            sumN = sum.getNorm();
+          }
+        }
+      }
+
+      if (sumN < EPS) return new Force();
+      return new Force(sumN, sum.getAngle());
     }
 
     private static Translation2d chooseTangent(
@@ -500,44 +540,41 @@ public class FieldPlanner {
       double px = pLocal.getX();
       double py = pLocal.getY();
 
-      double cx = Math.max(-halfX, Math.min(px, halfX));
-      double cy = Math.max(-halfY, Math.min(py, halfY));
+      double clx = Math.max(-halfX, Math.min(px, halfX));
+      double cly = Math.max(-halfY, Math.min(py, halfY));
 
-      double dx = px - cx;
-      double dy = py - cy;
+      double dx = px - clx;
+      double dy = py - cly;
 
       boolean inside = (px >= -halfX && px <= halfX && py >= -halfY && py <= halfY);
 
-      double ax = inside ? 0.0 : Math.max(0.0, Math.abs(dx));
-      double ay = inside ? 0.0 : Math.max(0.0, Math.abs(dy));
+      double ax = inside ? 0.0 : Math.abs(dx);
+      double ay = inside ? 0.0 : Math.abs(dy);
 
       Translation2d[] poly = corners();
       boolean occludes = segmentIntersectsPolygon(position, target, poly);
 
       if (!inside && (ax > maxRangeX || ay > maxRangeY) && !occludes) return new Force();
 
+      double diag = Math.hypot(halfX, halfY);
+      double falloffMeters = Math.max(EPS, Math.max(maxRangeX, maxRangeY) + diag + 0.35);
+
       Translation2d awayLocal;
-      double effectiveDist;
+      double effectiveDistMeters;
 
       if (!inside) {
-        if (ax < EPS && ay < EPS) return new Force();
-
         awayLocal = new Translation2d(dx, dy);
-        if (awayLocal.getNorm() < EPS) return new Force();
-
+        double n = awayLocal.getNorm();
+        if (n < EPS) return new Force();
         if (Math.abs(dx) > Math.abs(dy)) {
           double sign = Math.signum(target.getY() - position.getY());
           if (sign == 0.0) sign = 1.0;
           Rotation2d biasedAngle =
               awayLocal.getAngle().rotateBy(Rotation2d.fromRadians(sign * X_AXIS_ANGLE_BIAS_RAD));
-          double norm = awayLocal.getNorm();
-          awayLocal = new Translation2d(norm, biasedAngle);
+          awayLocal = new Translation2d(n, biasedAngle);
         }
-
-        double sx = (maxRangeX > EPS) ? (ax / maxRangeX) : 0.0;
-        double sy = (maxRangeY > EPS) ? (ay / maxRangeY) : 0.0;
-        double s = Math.hypot(sx, sy);
-        effectiveDist = Math.max(EPS, s);
+        effectiveDistMeters = Math.hypot(ax, ay);
+        if (effectiveDistMeters < EPS) effectiveDistMeters = EPS;
       } else {
         double dL = px + halfX;
         double dR = halfX - px;
@@ -564,12 +601,10 @@ public class FieldPlanner {
         }
 
         awayLocal = new Translation2d(nx, ny);
-
-        effectiveDist = -Math.max(EPS, min);
+        effectiveDistMeters = -Math.max(EPS, min);
       }
 
-      double falloff = Math.max(EPS, Math.hypot(1.0, 1.0));
-      double mag = distToForceMag(effectiveDist, falloff);
+      double mag = distToForceMag(effectiveDistMeters, falloffMeters);
 
       Translation2d primaryWorld = Translation2d.kZero;
       if (Math.abs(mag) >= EPS && awayLocal.getNorm() >= EPS) {
@@ -579,50 +614,86 @@ public class FieldPlanner {
 
       Translation2d escapeWorld = Translation2d.kZero;
 
-      if (occludes) {
-        double diag = Math.hypot(halfX, halfY);
-        double engageR = Math.max(0.9, Math.max(maxRangeX, maxRangeY) + diag + 1.1);
+      double engageR = Math.max(0.9, falloffMeters + 0.65);
+      double distC = position.getDistance(center);
 
-        if (position.getDistance(center) <= engageR) {
-          Translation2d outwardW = position.minus(center);
-          if (outwardW.getNorm() < EPS) outwardW = new Translation2d(1.0, 0.0);
-          Translation2d outwardWU = outwardW.div(Math.max(EPS, outwardW.getNorm()));
+      if (distC <= engageR) {
+        Translation2d outwardW = position.minus(center);
+        double outN = outwardW.getNorm();
+        if (outN < EPS) outwardW = new Translation2d(1.0, 0.0);
+        outN = Math.max(EPS, outwardW.getNorm());
+        Translation2d outwardWU = outwardW.div(outN);
 
-          Translation2d toC = center.minus(position);
-          if (toC.getNorm() < EPS) toC = new Translation2d(1.0, 0.0);
-          Translation2d tCCW =
-              new Translation2d(-toC.getY(), toC.getX()).div(Math.max(EPS, toC.getNorm()));
-          Translation2d tCW =
-              new Translation2d(toC.getY(), -toC.getX()).div(Math.max(EPS, toC.getNorm()));
+        Translation2d toGoal = target.minus(position);
+        double gN = Math.max(EPS, toGoal.getNorm());
+        Translation2d toGoalU = toGoal.div(gN);
 
-          double pad = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
-          Translation2d[] polyExp = expandedCorners(pad);
+        Translation2d tCCW = new Translation2d(-outwardWU.getY(), outwardWU.getX());
+        Translation2d tCW = new Translation2d(outwardWU.getY(), -outwardWU.getX());
 
-          Translation2d chosenT =
-              chooseTangentPoly(position, target, outwardWU, tCW, tCCW, polyExp);
+        double pad = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
+        Translation2d[] polyExp = expandedCorners(pad);
 
-          double d = Math.max(0.15, position.getDistance(center) - diag);
-          double followMag = (strength * 8.0) / (0.35 + d * d);
-          double pushOutMag = (strength * 2.2) / (0.45 + d * d);
+        Translation2d chosenT =
+            chooseTangentPolyWithWalls(position, target, outwardWU, tCW, tCCW, polyExp);
 
-          Translation2d follow = chosenT.times(followMag);
-          Translation2d pushOut = outwardWU.times(pushOutMag);
+        double d = Math.max(0.12, distC - diag);
+        double w = clamp01(1.0 - (d / engageR));
+        w = w * w * (3.0 - 2.0 * w);
 
-          Translation2d g = target.minus(position);
-          if (g.getNorm() > EPS) {
-            double along = dot(chosenT, g.div(g.getNorm()));
-            if (along < 0.10) {
-              follow = follow.times(1.35);
-            }
-          }
+        double swirlMag = (strength * 5.8) / (0.30 + d * d);
+        double slideMag = (strength * 3.2) / (0.35 + d * d);
+        double pushOutMag = (strength * 1.9) / (0.55 + d * d);
 
-          escapeWorld = escapeWorld.plus(follow).plus(pushOut);
+        double along = dot(chosenT, toGoalU);
+        double boost = (along < 0.12) ? 1.35 : 1.0;
+
+        Translation2d swirl = chosenT.times(swirlMag * w * boost);
+        Translation2d slide = chosenT.times(slideMag * w);
+        Translation2d pushOut = outwardWU.times(pushOutMag * w);
+
+        Translation2d add = swirl.plus(slide).plus(pushOut);
+
+        if (occludes) {
+          escapeWorld = escapeWorld.plus(add);
+        } else {
+          Translation2d sumTry = primaryWorld.plus(add);
+          if (sumTry.getNorm() < 1e-6 || along < 0.02) escapeWorld = escapeWorld.plus(add);
         }
       }
 
       Translation2d sum = primaryWorld.plus(escapeWorld);
-      if (sum.getNorm() < EPS) return new Force();
-      return new Force(sum.getNorm(), sum.getAngle());
+
+      double sumN = sum.getNorm();
+      Translation2d g = target.minus(position);
+      double gN = g.getNorm();
+      if (gN > EPS) {
+        Translation2d gU = g.div(gN);
+        double engageR2 = Math.max(1.25, falloffMeters + 0.95);
+        if (distC <= engageR2) {
+          if (sumN > EPS) {
+            double align = dot(sum.div(sumN), gU);
+            if (align < 0.20) {
+              double d = Math.max(0.18, distC - diag);
+              double pushThroughMag = (strength * 2.1) / (0.85 + d * d);
+              sum = sum.plus(gU.times(pushThroughMag * (0.20 - align)));
+              sumN = sum.getNorm();
+            }
+          } else {
+            double d = Math.max(0.18, distC - diag);
+            double pushThroughMag = (strength * 2.1) / (0.85 + d * d);
+            sum = sum.plus(gU.times(pushThroughMag));
+            sumN = sum.getNorm();
+          }
+        }
+      }
+
+      if (sumN < EPS) return new Force();
+      return new Force(sumN, sum.getAngle());
+    }
+
+    private static double clamp01(double x) {
+      return Math.max(0.0, Math.min(1.0, x));
     }
 
     private Translation2d[] corners() {
@@ -650,7 +721,7 @@ public class FieldPlanner {
       return out;
     }
 
-    private static Translation2d chooseTangentPoly(
+    private static Translation2d chooseTangentPolyWithWalls(
         Translation2d pos,
         Translation2d goal,
         Translation2d outwardU,
@@ -658,21 +729,21 @@ public class FieldPlanner {
         Translation2d tCCW,
         Translation2d[] polyExp) {
 
-      double stepT = 0.55;
-      double stepO = 0.22;
+      double stepT = 0.62;
+      double stepO = 0.24;
 
       Translation2d pCW = pos.plus(tCW.times(stepT)).plus(outwardU.times(stepO));
       Translation2d pCCW = pos.plus(tCCW.times(stepT)).plus(outwardU.times(stepO));
 
       double base = pos.getDistance(goal);
 
-      double sCW = scoreCandidatePoly(pos, goal, pCW, base, polyExp);
-      double sCCW = scoreCandidatePoly(pos, goal, pCCW, base, polyExp);
+      double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, base, polyExp);
+      double sCCW = scoreCandidatePolyWithWalls(pos, goal, pCCW, base, polyExp);
 
       return (sCW <= sCCW) ? tCW : tCCW;
     }
 
-    private static double scoreCandidatePoly(
+    private static double scoreCandidatePolyWithWalls(
         Translation2d pos,
         Translation2d goal,
         Translation2d cand,
@@ -682,11 +753,18 @@ public class FieldPlanner {
       double d = cand.getDistance(goal);
 
       boolean stillOccluding = segmentIntersectsPolygon(cand, goal, polyExp);
-      double occPenalty = stillOccluding ? 0.65 : 0.0;
+      double occPenalty = stillOccluding ? 0.85 : 0.0;
 
       double progressPenalty = (d >= baseDist - 0.01) ? 0.35 : 0.0;
 
-      return d + occPenalty + progressPenalty;
+      double x = cand.getX();
+      double y = cand.getY();
+      double dxW = Math.min(x, Constants.FIELD_LENGTH - x);
+      double dyW = Math.min(y, Constants.FIELD_WIDTH - y);
+      double wall = Math.min(dxW, dyW);
+      double wallPenalty = (wall < 0.55) ? (0.70 * (0.55 - wall) / 0.55) : 0.0;
+
+      return d + occPenalty + progressPenalty + wallPenalty;
     }
 
     private static boolean segmentIntersectsPolygon(
@@ -1229,16 +1307,16 @@ public class FieldPlanner {
 
   public void setGoal(Pose2d goal) {
     this.goal = goal;
+    lastChosenSetpoint = Optional.empty();
     Logger.recordOutput("Repulsor/Setpoint", goal);
+
   }
 
   public Optional<Distance> getErr() {
     return currentErr;
   }
 
-  public void clearCommitted() {
-    committedGoal = null;
-  }
+  public void clearCommitted() {}
 
   public RepulsorSample calculateAndClear(
       Pose2d pose,
@@ -1249,7 +1327,6 @@ public class FieldPlanner {
       double algae_offset,
       CategorySpec cat,
       double shooterReleaseHeightMeters) {
-    clearCommitted();
     return calculate(
         pose,
         dynamicObstacles,
@@ -1273,10 +1350,10 @@ public class FieldPlanner {
       boolean suppressFallback,
       double shooterReleaseHeightMeters) {
 
-    long now = System.currentTimeMillis();
-
     Translation2d curTrans = pose.getTranslation();
     double distToGoal = curTrans.getDistance(goal.getTranslation());
+
+    ClearMemo memo = new ClearMemo();
 
     boolean forceThrough = bypass.isPinnedMode();
     List<? extends Obstacle> effectiveDynamics =
@@ -1294,14 +1371,7 @@ public class FieldPlanner {
               false);
 
       boolean blockedWithoutDynamics =
-          !ExtraPathing.isClearPath(
-              "Repulsor/ForceThrough/NoDyn",
-              curTrans,
-              goal.getTranslation(),
-              Collections.emptyList(),
-              robot_x,
-              robot_y,
-              false);
+          !memo.toGoalNoDyn(curTrans, goal.getTranslation(), robot_x, robot_y);
 
       double dxWall = Math.min(curTrans.getX(), Constants.FIELD_LENGTH - curTrans.getX());
       double dyWall = Math.min(curTrans.getY(), Constants.FIELD_WIDTH - curTrans.getY());
@@ -1325,56 +1395,10 @@ public class FieldPlanner {
         Logger.recordOutput("Repulsor/Encapsulated", false);
       }
 
-      if (committedGoal != null) {
-        boolean stillClear =
-            ExtraPathing.isClearPath(
-                "Repulsor/IsClear/Committed",
-                curTrans,
-                committedGoal.getTranslation(),
-                effectiveDynamics,
-                robot_x,
-                robot_y,
-                false);
-        if (stillClear || (now - lastSwapMs) < SWAP_COOLDOWN_MS) {
-          goal = committedGoal;
-          Logger.recordOutput("Repulsor/Setpoint", goal);
-        } else {
-          Logger.recordOutput("Repulsor/Commit/Abort", committedGoal);
-          committedGoal = null;
-        }
-      }
-
-      if (committedGoal == null) {
-        if (distToGoal <= COMMIT_ON_DIST) {
-          boolean clear =
-              ExtraPathing.isClearPath(
-                  "Repulsor/IsClear/ToCommit",
-                  curTrans,
-                  goal.getTranslation(),
-                  effectiveDynamics,
-                  robot_x,
-                  robot_y,
-                  false);
-          if (clear) {
-            committedGoal = goal;
-            lastChosenSetpoint = Optional.empty();
-            lastSwapMs = now;
-            Logger.recordOutput("Repulsor/Commit/Set", committedGoal);
-          }
-        }
-      }
-
       boolean pathBlocked = false;
       if (!suppressIsClearPath) {
         pathBlocked =
-            !ExtraPathing.isClearPath(
-                "Repulsor/IsClear",
-                curTrans,
-                goal.getTranslation(),
-                effectiveDynamics,
-                robot_x,
-                robot_y,
-                true);
+            !memo.toGoalDyn(curTrans, goal.getTranslation(), effectiveDynamics, robot_x, robot_y);
       }
 
       if (pathBlocked && !suppressFallback) {
@@ -1401,9 +1425,6 @@ public class FieldPlanner {
           Pose2d altGoal = sp.get(spCtx);
 
           if (altGoal.getTranslation().getDistance(goal.getTranslation()) < 1e-3) continue;
-          if (committedGoal != null
-              && altGoal.getTranslation().getDistance(committedGoal.getTranslation()) < 1e-3)
-            continue;
 
           boolean clear =
               ExtraPathing.isClearPath(
@@ -1417,9 +1438,7 @@ public class FieldPlanner {
 
           if (clear) {
             setGoal(altGoal);
-            committedGoal = altGoal;
             lastChosenSetpoint = Optional.of(sp);
-            lastSwapMs = now;
             Logger.recordOutput("Repulsor/Reroute/Chosen", altGoal);
             pathBlocked = false;
             break;
@@ -1502,7 +1521,8 @@ public class FieldPlanner {
       return new RepulsorSample(curTrans, 0, 0, Radians.of(pose.getRotation().getRadians()));
     }
 
-    Rotation2d desiredHeadingRaw = netForce.getAngle();
+    Rotation2d desiredHeadingRaw =
+        (cat == CategorySpec.kCollect) ? effectiveGoal.getRotation() : netForce.getAngle();
     Rotation2d desiredHeading =
         headingGate.filter(pose.getRotation(), desiredHeadingRaw, driveTuning.dtSeconds());
 

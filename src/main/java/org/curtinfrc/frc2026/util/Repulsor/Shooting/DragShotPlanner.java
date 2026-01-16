@@ -464,7 +464,6 @@ public final class DragShotPlanner {
     final double timeToPlane;
     final double verticalError;
     final double robotDistanceSq;
-    final double robotDistance;
 
     Candidate(
         Translation2d shooterPosition,
@@ -481,7 +480,6 @@ public final class DragShotPlanner {
       this.timeToPlane = timeToPlane;
       this.verticalError = verticalError;
       this.robotDistanceSq = robotDistanceSq;
-      this.robotDistance = Math.sqrt(Math.max(0.0, robotDistanceSq));
     }
   }
 
@@ -576,6 +574,19 @@ public final class DragShotPlanner {
 
   private static volatile List<FieldPlanner.Obstacle> STATIC_OBSTACLES;
 
+  private static final double[][] ONLINE_OFFS =
+      new double[][] {
+        {0.0, 0.0},
+        {1.0, 0.0},
+        {-1.0, 0.0},
+        {0.0, 1.0},
+        {0.0, -1.0},
+        {0.7071067811865476, 0.7071067811865476},
+        {0.7071067811865476, -0.7071067811865476},
+        {-0.7071067811865476, 0.7071067811865476},
+        {-0.7071067811865476, -0.7071067811865476}
+      };
+
   private DragShotPlanner() {}
 
   private static List<FieldPlanner.Obstacle> staticObstacles() {
@@ -648,6 +659,20 @@ public final class DragShotPlanner {
     }
   }
 
+  public static boolean isShooterPoseValid(
+      Translation2d shooterPos,
+      Translation2d targetFieldPosition,
+      double robotHalfLengthMeters,
+      double robotHalfWidthMeters,
+      List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
+    return isShooterPoseValidInternal(
+        shooterPos,
+        targetFieldPosition,
+        robotHalfLengthMeters,
+        robotHalfWidthMeters,
+        dynamicObstacles);
+  }
+
   public static Optional<ShotSolution> findBestShotFromLibrary(
       ShotLibrary library,
       GamePiecePhysics gamePiece,
@@ -667,22 +692,28 @@ public final class DragShotPlanner {
     Translation2d robotCurrentPosition = robotPose.getTranslation();
     Candidate best = null;
 
+    boolean needDynamicCheck = dynamicObstacles != null && !dynamicObstacles.isEmpty();
+
+    double rx = robotCurrentPosition.getX();
+    double ry = robotCurrentPosition.getY();
+
     for (ShotLibraryEntry e : library.entries()) {
       Translation2d shooterPos = e.shooterPosition();
 
-      double dx = robotCurrentPosition.getX() - shooterPos.getX();
-      double dy = robotCurrentPosition.getY() - shooterPos.getY();
+      double dx = rx - shooterPos.getX();
+      double dy = ry - shooterPos.getY();
       double robotDistanceSq = dx * dx + dy * dy;
       if (robotDistanceSq > MAX_ROBOT_TRAVEL_METERS_SQ) {
         continue;
       }
 
-      if (!isShooterPoseValid(
-          shooterPos,
-          targetFieldPosition,
-          robotHalfLengthMeters,
-          robotHalfWidthMeters,
-          dynamicObstacles)) {
+      if (needDynamicCheck
+          && !isShooterPoseValidInternal(
+              shooterPos,
+              targetFieldPosition,
+              robotHalfLengthMeters,
+              robotHalfWidthMeters,
+              dynamicObstacles)) {
         continue;
       }
 
@@ -755,7 +786,7 @@ public final class DragShotPlanner {
     if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
       return Optional.empty();
     }
-    if (maxAngleDeg <= minAngleDeg) {
+    if (!(Math.abs(maxAngleDeg - minAngleDeg) < 1e-6) && maxAngleDeg <= minAngleDeg) {
       return Optional.empty();
     }
 
@@ -850,6 +881,9 @@ public final class DragShotPlanner {
       state.seed(seed);
     }
 
+    double speedStep = Math.max(0.22, (maxSpeed - minSpeed) / 70.0);
+    double angleStep = fixedAngle ? 1.0 : Math.max(0.40, (maxAngleDeg - minAngleDeg) / 70.0);
+
     Candidate best = null;
 
     ShotSolution seedSol =
@@ -866,11 +900,11 @@ public final class DragShotPlanner {
             fixedAngle,
             ACCEPTABLE_VERTICAL_ERROR_METERS,
             constraints.shotStyle(),
-            Math.max(0.20, (maxSpeed - minSpeed) / 60.0),
-            Math.max(0.35, (maxAngleDeg - minAngleDeg) / 60.0));
+            speedStep,
+            angleStep);
 
     if (seedSol != null
-        && isShooterPoseValid(
+        && isShooterPoseValidInternal(
             seed,
             targetFieldPosition,
             robotHalfLengthMeters,
@@ -893,21 +927,8 @@ public final class DragShotPlanner {
     }
 
     long start = System.nanoTime();
-    double step = Math.max(0.12, Math.min(1.0, state.stepMeters()));
+    double step = Math.max(0.11, Math.min(0.95, state.stepMeters()));
     Translation2d current = seed;
-
-    final double[][] OFFS =
-        new double[][] {
-          {0.0, 0.0},
-          {1.0, 0.0},
-          {-1.0, 0.0},
-          {0.0, 1.0},
-          {0.0, -1.0},
-          {0.7071, 0.7071},
-          {0.7071, -0.7071},
-          {-0.7071, 0.7071},
-          {-0.7071, -0.7071}
-        };
 
     while ((System.nanoTime() - start) < budgetNanos) {
       boolean improved = false;
@@ -915,7 +936,7 @@ public final class DragShotPlanner {
       double cx = current.getX();
       double cy = current.getY();
 
-      for (double[] o : OFFS) {
+      for (double[] o : ONLINE_OFFS) {
         Translation2d p = new Translation2d(cx + o[0] * step, cy + o[1] * step);
         Translation2d clipped = clipToRingAndField(p, targetFieldPosition);
 
@@ -926,7 +947,7 @@ public final class DragShotPlanner {
           continue;
         }
 
-        if (!isShooterPoseValid(
+        if (!isShooterPoseValidInternal(
             clipped,
             targetFieldPosition,
             robotHalfLengthMeters,
@@ -949,8 +970,8 @@ public final class DragShotPlanner {
                 fixedAngle,
                 ACCEPTABLE_VERTICAL_ERROR_METERS,
                 constraints.shotStyle(),
-                Math.max(0.20, (maxSpeed - minSpeed) / 60.0),
-                Math.max(0.35, (maxAngleDeg - minAngleDeg) / 60.0));
+                speedStep,
+                angleStep);
 
         if (sol == null) {
           continue;
@@ -978,8 +999,8 @@ public final class DragShotPlanner {
       }
 
       if (!improved) {
-        step *= 0.6;
-        if (step < 0.08) {
+        step *= 0.58;
+        if (step < 0.075) {
           break;
         }
       }
@@ -1108,10 +1129,10 @@ public final class DragShotPlanner {
     double speedRange = maxSpeed - minSpeed;
     double angleRange = maxAngleDeg - minAngleDeg;
 
-    double speedStepCoarse = Math.max(0.5, speedRange / 10.0);
-    double angleStepCoarse = fixedAngle ? 1.0 : Math.max(2.0, angleRange / 10.0);
-    double radialStepCoarse = 0.5;
-    double bearingStepDegCoarse = 20.0;
+    double speedStepCoarse = Math.max(0.6, speedRange / 9.0);
+    double angleStepCoarse = fixedAngle ? 1.0 : Math.max(2.4, angleRange / 9.0);
+    double radialStepCoarse = 0.55;
+    double bearingStepDegCoarse = 22.0;
     double coarseTolerance = ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
 
     Candidate bestCoarse = null;
@@ -1133,7 +1154,7 @@ public final class DragShotPlanner {
           continue;
         }
 
-        if (!isShooterPoseValid(
+        if (!isShooterPoseValidInternal(
             shooterPos,
             targetFieldPosition,
             robotHalfLengthMeters,
@@ -1234,24 +1255,24 @@ public final class DragShotPlanner {
       return null;
     }
 
+    double invD = 1.0 / horizontalDistance;
     Translation2d directionUnit =
         new Translation2d(
-            (targetFieldPosition.getX() - shooterFieldPosition.getX()) / horizontalDistance,
-            (targetFieldPosition.getY() - shooterFieldPosition.getY()) / horizontalDistance);
+            (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
+            (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
 
     Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
 
-    double angleStartDeg = minAngleDeg;
-    double angleEndDeg = maxAngleDeg;
-    double angleStep = fixedAngle ? 1.0 : Math.max(0.1, angleStepDeg);
+    double angleStep = fixedAngle ? 1.0 : Math.max(0.12, angleStepDeg);
 
-    Double bestErrorAbs = null;
-    Double bestAngleRad = null;
-    Double bestSpeed = null;
-    Double bestTime = null;
-    Double bestSignedErr = null;
+    double bestErrorAbs = Double.POSITIVE_INFINITY;
+    double bestAngleRad = 0.0;
+    double bestSpeed = 0.0;
+    double bestTime = 0.0;
+    double bestSignedErr = 0.0;
+    boolean found = false;
 
-    for (double angleDeg = angleStartDeg; angleDeg <= angleEndDeg + 1e-6; angleDeg += angleStep) {
+    for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
       double angleRad = Math.toRadians(angleDeg);
       double cos = Math.cos(angleRad);
       if (cos <= 0.0) {
@@ -1278,7 +1299,7 @@ public final class DragShotPlanner {
         }
 
         boolean take;
-        if (bestErrorAbs == null) {
+        if (!found) {
           take = true;
         } else {
           double errEps = 1e-6;
@@ -1316,6 +1337,7 @@ public final class DragShotPlanner {
         }
 
         if (take) {
+          found = true;
           bestErrorAbs = errAbs;
           bestAngleRad = angleRad;
           bestSpeed = speed;
@@ -1325,7 +1347,7 @@ public final class DragShotPlanner {
       }
     }
 
-    if (bestErrorAbs == null) {
+    if (!found) {
       return null;
     }
 
@@ -1361,17 +1383,18 @@ public final class DragShotPlanner {
       return null;
     }
 
+    double invD = 1.0 / horizontalDistance;
     Translation2d directionUnit =
         new Translation2d(
-            (targetFieldPosition.getX() - shooterFieldPosition.getX()) / horizontalDistance,
-            (targetFieldPosition.getY() - shooterFieldPosition.getY()) / horizontalDistance);
+            (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
+            (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
 
     Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
 
     double speedWindow = Math.max(1.5, (maxSpeed - minSpeed) / 8.0);
     double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
     double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
-    double speedStepFine = Math.max(0.1, (speedMax - speedMin) / 20.0);
+    double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
 
     double angleStartDeg;
     double angleEndDeg;
@@ -1383,10 +1406,10 @@ public final class DragShotPlanner {
       angleEndDeg = maxAngleDeg;
       angleStepFineDeg = 1.0;
     } else {
-      double angleWindow = Math.max(4.0, (maxAngleDeg - minAngleDeg) / 8.0);
+      double angleWindow = Math.max(3.5, (maxAngleDeg - minAngleDeg) / 9.0);
       angleStartDeg = Math.max(minAngleDeg, coarseAngleDeg - angleWindow);
       angleEndDeg = Math.min(maxAngleDeg, coarseAngleDeg + angleWindow);
-      angleStepFineDeg = Math.max(0.25, (angleEndDeg - angleStartDeg) / 24.0);
+      angleStepFineDeg = Math.max(0.22, (angleEndDeg - angleStartDeg) / 22.0);
     }
 
     ShotSolution best = null;
@@ -1454,17 +1477,16 @@ public final class DragShotPlanner {
       double targetHeightMeters) {
 
     double g = 9.81;
-    double baseDt = 0.002;
 
     double cos = Math.cos(launchAngleRad);
-    double horizontalSpeed = launchSpeedMetersPerSecond * Math.abs(cos);
+    double horizontalSpeed = launchSpeedMetersPerSecond * cos;
     if (horizontalSpeed < 1e-6) {
       return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
     }
 
     double minHorizontalSpeed = Math.max(0.5, horizontalSpeed);
     double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
-    double maxTimeSeconds = Math.min(5.0, Math.max(0.5, timeNoDrag * 1.5));
+    double maxTimeSeconds = Math.min(5.0, Math.max(0.5, timeNoDrag * 1.55));
 
     double m = gamePiece.massKg();
     double A = gamePiece.crossSectionAreaM2();
@@ -1476,13 +1498,15 @@ public final class DragShotPlanner {
     double y = shooterReleaseHeightMeters;
     double vx = launchSpeedMetersPerSecond * cos;
     double vy = launchSpeedMetersPerSecond * Math.sin(launchAngleRad);
-
     double t = 0.0;
+
     double xPrev = x;
     double yPrev = y;
     double tPrev = t;
 
-    while (t < maxTimeSeconds && y >= 0.0 && x <= targetHorizontalDistanceMeters + 1.0) {
+    double dxStep = 0.025;
+
+    while (t < maxTimeSeconds && y >= -0.25 && x <= targetHorizontalDistanceMeters + 1.0) {
       xPrev = x;
       yPrev = y;
       tPrev = t;
@@ -1491,16 +1515,22 @@ public final class DragShotPlanner {
       double ax = -kOverM * v * vx;
       double ay = -g - kOverM * v * vy;
 
-      vx += ax * baseDt;
-      vy += ay * baseDt;
-      x += vx * baseDt;
-      y += vy * baseDt;
-      t += baseDt;
+      double dt = dxStep / Math.max(0.25, Math.abs(vx));
+
+      vx += ax * dt;
+      vy += ay * dt;
+      x += vx * dt;
+      y += vy * dt;
+      t += dt;
 
       if (xPrev <= targetHorizontalDistanceMeters && x >= targetHorizontalDistanceMeters) {
-        double frac = (targetHorizontalDistanceMeters - xPrev) / (x - xPrev);
+        double denom = (x - xPrev);
+        double frac =
+            Math.abs(denom) > 1e-12 ? (targetHorizontalDistanceMeters - xPrev) / denom : 1.0;
+        if (frac < 0.0) frac = 0.0;
+        if (frac > 1.0) frac = 1.0;
         double yCross = yPrev + frac * (y - yPrev);
-        double tCross = tPrev + frac * baseDt;
+        double tCross = tPrev + frac * (t - tPrev);
         double verticalError = yCross - targetHeightMeters;
         return new SimulationResult(true, tCross, verticalError);
       }
@@ -1509,7 +1539,7 @@ public final class DragShotPlanner {
     return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
   }
 
-  private static boolean isShooterPoseValid(
+  private static boolean isShooterPoseValidInternal(
       Translation2d shooterPos,
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
@@ -1525,7 +1555,7 @@ public final class DragShotPlanner {
     final double SHOOT_X_END_BAND_M = 13.49;
     double minBand = SHOOT_X_END_BAND_M;
     double maxBand = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
-    if (!(x >= minBand || x <= maxBand)) {
+    if (x < minBand && x > maxBand) {
       return false;
     }
 
@@ -1539,12 +1569,19 @@ public final class DragShotPlanner {
       }
     }
 
-    if (dynamicObstacles != null) {
+    if (dynamicObstacles != null && !dynamicObstacles.isEmpty()) {
       for (FieldPlanner.Obstacle d : dynamicObstacles) {
         if (d.intersectsRectangle(rect)) {
           return false;
         }
       }
+    }
+
+    if (shooterPos.getX() < 0.0 || shooterPos.getX() > Constants.FIELD_LENGTH) {
+      return false;
+    }
+    if (shooterPos.getY() < 0.0 || shooterPos.getY() > Constants.FIELD_WIDTH) {
+      return false;
     }
 
     return true;

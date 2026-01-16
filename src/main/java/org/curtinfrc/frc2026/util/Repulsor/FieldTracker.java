@@ -1,3 +1,4 @@
+// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/FieldTracker.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -22,7 +23,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
@@ -31,8 +31,40 @@ import org.littletonrobotics.junction.Logger;
 
 public class FieldTracker {
   private static volatile FieldTracker instance;
-
   private static volatile FieldLayoutProvider defaultProvider = new Rebuilt2026();
+
+  private static final double COLLECT_CELL_M = 0.45;
+  private static final int COLLECT_COARSE_TOPK = 4;
+  private static final int COLLECT_REFINE_GRID = 3;
+
+private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.18;
+private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.65;
+
+private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 0.55;
+private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 1.60;
+
+private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.18;
+private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 0.70;
+
+private static final double COLLECT_STICKY_REACHED_M = 0.65;
+private static final double COLLECT_STICKY_SAME_M = 0.10;
+
+private static final double COLLECT_STICKY_NEAR_DIST_M = 1.10;
+private static final double COLLECT_STICKY_FAR_DIST_M = 3.80;
+
+private static double lerp(double a, double b, double t) {
+  return a + (b - a) * t;
+}
+
+private static double clamp01(double x) {
+  if (x < 0.0) return 0.0;
+  if (x > 1.0) return 1.0;
+  return x;
+}
+
+  private volatile Translation2d collectStickyPoint = null;
+  private volatile double collectStickyScore = -1e18;
+  private volatile long collectStickyTsNs = 0L;
 
   public static FieldTracker getInstance() {
     FieldTracker local = instance;
@@ -68,6 +100,9 @@ public class FieldTracker {
     if (provider == null) throw new IllegalArgumentException("provider cannot be null");
     this.field_map = provider.build(this);
     this.predictor = new PredictiveFieldState();
+    this.collectCache = new ObjectiveCache();
+    rebuildObjectiveCaches();
+    predictor.registerResourceSpec("fuel", new PredictiveFieldState.ResourceSpec(0.38, 1.0, 0.95));
   }
 
   public abstract class PrimitiveObject {
@@ -367,15 +402,17 @@ public class FieldTracker {
     return predictor;
   }
 
-  public void updatePredictorWorld(Alliance ours) {
+  public void updatePredictorWorld(GameElement.Alliance ours) {
     GameElement[] fm = field_map;
     if (fm == null || fm.length == 0) {
       predictor.setWorld(List.of(), ours);
+      predictor.setDynamicObjects(List.of());
       return;
     }
     ArrayList<GameElement> list = new ArrayList<>(fm.length);
     Collections.addAll(list, fm);
     predictor.setWorld(list, ours);
+    predictor.setDynamicObjects(snapshotDynamics());
   }
 
   public GameElement[] field_map;
@@ -383,6 +420,7 @@ public class FieldTracker {
   public void rebuild(FieldLayoutProvider provider) {
     if (provider == null) throw new IllegalArgumentException("provider cannot be null");
     this.field_map = provider.build(this);
+    rebuildObjectiveCaches();
   }
 
   public GameElement[] getFieldMap() {
@@ -405,7 +443,7 @@ public class FieldTracker {
   }
 
   public List<RepulsorSetpoint> getScoringCandidates(
-      Alliance alliance, Translation2d from, CategorySpec cat) {
+      GameElement.Alliance alliance, Translation2d from, CategorySpec cat) {
     GameElement[] fm = field_map;
     if (fm == null || fm.length == 0) return List.of();
     ArrayList<GameElement> elems = new ArrayList<>(fm.length);
@@ -448,13 +486,21 @@ public class FieldTracker {
   }
 
   public List<PredictiveFieldState.Candidate> getPredictedCandidates(
-      Alliance alliance, Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
+      GameElement.Alliance alliance,
+      Translation2d ourPos,
+      double ourSpeedCap,
+      CategorySpec cat,
+      int limit) {
     updatePredictorWorld(alliance);
     return predictor.rank(ourPos, ourSpeedCap, cat, limit);
   }
 
   public List<RepulsorSetpoint> getPredictedSetpoints(
-      Alliance alliance, Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
+      GameElement.Alliance alliance,
+      Translation2d ourPos,
+      double ourSpeedCap,
+      CategorySpec cat,
+      int limit) {
     List<PredictiveFieldState.Candidate> c =
         getPredictedCandidates(alliance, ourPos, ourSpeedCap, cat, limit);
     ArrayList<RepulsorSetpoint> out = new ArrayList<>(c.size());
@@ -506,235 +552,201 @@ public class FieldTracker {
     }
   }
 
-  public Pose2d nextCollectionGoalBlue(Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {
-    if (robotPoseBlue == null) return Pose2d.kZero;
-    double cap = Math.max(0.2, ourSpeedCap);
+  private static final class ObjectiveCache {
+    volatile Translation2d[] points = new Translation2d[0];
+    volatile int lastHash = 0;
+  }
 
-    Translation2d our = robotPoseBlue.getTranslation();
-    long now = System.nanoTime();
+  private final ObjectiveCache collectCache;
 
-    final double etaW = 1.0;
-    final double concW = 1.55;
-    final double actRealW = 1.25;
-    final double actIntentW = 1.05;
+  private static int mixHash(int h, double x, double y) {
+    long a = Double.doubleToLongBits(x);
+    long b = Double.doubleToLongBits(y);
+    h ^= (int) (a ^ (a >>> 32));
+    h = (h * 16777619) ^ (int) (b ^ (b >>> 32));
+    return h;
+  }
 
-    final double fuelRadius = 0.35;
-    final double actRadius = 1.25;
-    final double intentHorizonS = 1.0;
+  private void rebuildObjectiveCaches() {
+    rebuildObjectiveCacheForCategory(collectCache, CategorySpec.kCollect);
+    collectStickyPoint = null;
+    collectStickyScore = -1e18;
+    collectStickyTsNs = 0L;
+  }
 
-    final double refineStep = 0.085;
-    final double refineFuelRadius = 0.25;
-
-    class Cand {
-      final Translation2d center;
-      final double eta;
-      final double conc;
-      final double actReal;
-      final double actIntent;
-      final double score;
-
-      Cand(
-          Translation2d center,
-          double eta,
-          double conc,
-          double actReal,
-          double actIntent,
-          double score) {
-        this.center = center;
-        this.eta = eta;
-        this.conc = conc;
-        this.actReal = actReal;
-        this.actIntent = actIntent;
-        this.score = score;
-      }
-    }
-
-    List<Translation2d> squareCenters = new ArrayList<>(512);
+  private void rebuildObjectiveCacheForCategory(ObjectiveCache cache, CategorySpec cat) {
     GameElement[] fm = field_map;
-    if (fm != null) {
-      for (GameElement e : fm) {
-        if (e == null) continue;
-        if (e.getCategory() != CategorySpec.kCollect) continue;
-        Pose3d pos3 = e.getModel() != null ? e.getModel().getPosition() : null;
-        if (pos3 == null) continue;
-        squareCenters.add(new Translation2d(pos3.getX(), pos3.getY()));
-      }
+    if (fm == null || fm.length == 0) {
+      cache.points = new Translation2d[0];
+      cache.lastHash = 0;
+      return;
     }
-
-    if (squareCenters.isEmpty()) {
-      return new Pose2d(
-          Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+    ArrayList<Translation2d> pts = new ArrayList<>(256);
+    int h = 146959810;
+    for (GameElement e : fm) {
+      if (e == null) continue;
+      if (e.getCategory() != cat) continue;
+      GameElementModel m = e.getModel();
+      if (m == null) continue;
+      Pose3d p = m.getPosition();
+      if (p == null) continue;
+      double x = p.getX();
+      double y = p.getY();
+      pts.add(new Translation2d(x, y));
+      h = mixHash(h, x, y);
     }
+    Translation2d[] arr = pts.toArray(new Translation2d[0]);
+    cache.points = arr;
+    cache.lastHash = h;
+  }
 
-    ArrayList<TrackedObj> robots = new ArrayList<>(64);
-    ArrayList<TrackedObj> fuels = new ArrayList<>(512);
+  private static final double DYN_STALE_S = 0.3;
+
+  private List<PredictiveFieldState.DynamicObject> snapshotDynamics() {
+    long nowNs = System.nanoTime();
+    ArrayList<PredictiveFieldState.DynamicObject> out = new ArrayList<>(tracked.size());
     for (TrackedObj o : tracked.values()) {
       if (o == null) continue;
       Pose3d p = o.pos;
       if (p == null) continue;
-      String t = o.type;
-      if (t == null) continue;
-      if ("fuel".equalsIgnoreCase(t)) {
-        fuels.add(o);
-      } else if ("robot".equalsIgnoreCase(t)
-          || "ally".equalsIgnoreCase(t)
-          || "enemy".equalsIgnoreCase(t)) {
-        robots.add(o);
-      }
+      long t = o.tNs;
+      if (t == 0L) continue;
+      double ageS = (nowNs - t) / 1e9;
+      if (ageS < 0.0 || ageS > DYN_STALE_S) continue;
+      String ty = o.type != null ? o.type : "unknown";
+      out.add(
+          new PredictiveFieldState.DynamicObject(
+              o.id,
+              ty,
+              new Translation2d(p.getX(), p.getY()),
+              new Translation2d(o.vx, o.vy),
+              ageS));
     }
-
-    ArrayList<Cand> cands = new ArrayList<>(squareCenters.size());
-    for (Translation2d c : squareCenters) {
-      double dist = c.getDistance(our);
-      double eta = dist / cap;
-
-      double conc = 0.0;
-      for (TrackedObj f : fuels) {
-        Pose3d fp = f.pos;
-        if (fp == null) continue;
-        double dx = fp.getX() - c.getX();
-        double dy = fp.getY() - c.getY();
-        if ((dx * dx + dy * dy) <= (fuelRadius * fuelRadius)) {
-          conc += 1.0;
-        }
-      }
-
-      double actReal = 0.0;
-      double actIntent = 0.0;
-
-      for (TrackedObj r : robots) {
-        Pose3d rp = r.pos;
-        if (rp == null) continue;
-
-        double dx = rp.getX() - c.getX();
-        double dy = rp.getY() - c.getY();
-        double d2 = dx * dx + dy * dy;
-        if (d2 <= actRadius * actRadius) {
-          double d = Math.sqrt(d2);
-          actReal += 1.0 / (0.25 + d);
-        }
-
-        double ix = rp.getX() + r.vx * intentHorizonS;
-        double iy = rp.getY() + r.vy * intentHorizonS;
-        double idx = ix - c.getX();
-        double idy = iy - c.getY();
-        double id2 = idx * idx + idy * idy;
-        if (id2 <= actRadius * actRadius) {
-          double d = Math.sqrt(id2);
-          actIntent += 1.0 / (0.25 + d);
-        }
-      }
-
-      double score = concW * conc - etaW * eta - actRealW * actReal - actIntentW * actIntent;
-      cands.add(new Cand(c, eta, conc, actReal, actIntent, score));
-    }
-
-    cands.sort((a, b) -> Double.compare(b.score, a.score));
-
-    double goal = Math.max(1.0, goalUnits);
-    double acc = 0.0;
-    int take = 0;
-    for (int i = 0; i < cands.size(); i++) {
-      Cand k = cands.get(i);
-      double expected = Math.max(0.15, k.conc);
-      acc += expected;
-      take++;
-      if (acc >= goal) break;
-      if (take >= 12) break;
-    }
-    take = Math.max(1, take);
-
-    ArrayList<Translation2d> refined = new ArrayList<>(take);
-    for (int i = 0; i < take; i++) {
-      Cand base = cands.get(i);
-      Translation2d bestP = base.center;
-      double bestS = base.score;
-
-      for (int gx = -1; gx <= 1; gx++) {
-        for (int gy = -1; gy <= 1; gy++) {
-          Translation2d p = base.center.plus(new Translation2d(gx * refineStep, gy * refineStep));
-          double dist = p.getDistance(our);
-          double eta = dist / cap;
-
-          double conc = 0.0;
-          for (TrackedObj f : fuels) {
-            Pose3d fp = f.pos;
-            if (fp == null) continue;
-            double dx = fp.getX() - p.getX();
-            double dy = fp.getY() - p.getY();
-            if ((dx * dx + dy * dy) <= (refineFuelRadius * refineFuelRadius)) {
-              conc += 1.0;
-            }
-          }
-
-          double actReal = 0.0;
-          double actIntent = 0.0;
-          for (TrackedObj r : robots) {
-            Pose3d rp = r.pos;
-            if (rp == null) continue;
-
-            double dx = rp.getX() - p.getX();
-            double dy = rp.getY() - p.getY();
-            double d2 = dx * dx + dy * dy;
-            if (d2 <= actRadius * actRadius) {
-              double d = Math.sqrt(d2);
-              actReal += 1.0 / (0.25 + d);
-            }
-
-            double ix = rp.getX() + r.vx * intentHorizonS;
-            double iy = rp.getY() + r.vy * intentHorizonS;
-            double idx = ix - p.getX();
-            double idy = iy - p.getY();
-            double id2 = idx * idx + idy * idy;
-            if (id2 <= actRadius * actRadius) {
-              double d = Math.sqrt(id2);
-              actIntent += 1.0 / (0.25 + d);
-            }
-          }
-
-          double sc = concW * conc - etaW * eta - actRealW * actReal - actIntentW * actIntent;
-          if (sc > bestS) {
-            bestS = sc;
-            bestP = p;
-          }
-        }
-      }
-
-      refined.add(bestP);
-    }
-
-    ArrayList<Translation2d> route = new ArrayList<>(refined.size());
-    Translation2d cur = our;
-    boolean[] used = new boolean[refined.size()];
-
-    for (int step = 0; step < refined.size(); step++) {
-      double bestD = Double.POSITIVE_INFINITY;
-      int bestI = -1;
-      for (int i = 0; i < refined.size(); i++) {
-        if (used[i]) continue;
-        double d = refined.get(i).getDistance(cur);
-        if (d < bestD) {
-          bestD = d;
-          bestI = i;
-        }
-      }
-      if (bestI < 0) break;
-      used[bestI] = true;
-      Translation2d p = refined.get(bestI);
-      route.add(p);
-      cur = p;
-    }
-
-    Translation2d target = route.isEmpty() ? cands.get(0).center : route.get(0);
-    Pose2d out = new Pose2d(target, robotPoseBlue.getRotation());
-
-    Logger.recordOutput("collect_route_target", target);
-    Logger.recordOutput("collect_route_score", cands.get(0).score);
-    Logger.recordOutput("collect_route_take", take);
-    Logger.recordOutput("collect_fuel_seen", fuels.size());
-    Logger.recordOutput("collect_robots_seen", robots.size());
-
     return out;
+  }
+
+  private static boolean samePoint(Translation2d a, Translation2d b, double tol) {
+    if (a == null || b == null) return false;
+    return a.getDistance(b) <= tol;
+  }
+
+  // Replace nextObjectiveGoalBlue() with this version:
+
+public Pose2d nextObjectiveGoalBlue(
+    Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
+  if (robotPoseBlue == null) return Pose2d.kZero;
+  double cap = Math.max(0.2, ourSpeedCap);
+
+  ObjectiveCache cache = cat == CategorySpec.kCollect ? collectCache : collectCache;
+  Translation2d[] pts = cache.points;
+
+  if (pts == null || pts.length == 0) {
+    return new Pose2d(
+        Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+  }
+
+  predictor.setDynamicObjects(snapshotDynamics());
+
+  PredictiveFieldState.PointCandidate best =
+      predictor.rankCollectHierarchical(
+          robotPoseBlue.getTranslation(),
+          cap,
+          pts,
+          COLLECT_CELL_M,
+          goalUnits,
+          COLLECT_COARSE_TOPK,
+          COLLECT_REFINE_GRID);
+
+  long nowNs = System.nanoTime();
+  Translation2d proposed = best != null ? best.point : null;
+  double proposedScore = best != null ? best.score : -1e18;
+
+  Translation2d sticky = collectStickyPoint;
+  double stickyScore = collectStickyScore;
+  long stickyTs = collectStickyTsNs;
+
+  Translation2d chosen = proposed != null ? proposed : (sticky != null ? sticky : pts[0]);
+  double chosenScore = proposed != null ? proposedScore : (sticky != null ? stickyScore : -1e18);
+
+  if (sticky != null) {
+    double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
+
+    double t =
+        clamp01(
+            (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
+                / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
+
+    double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
+    double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
+    double switchMargin = lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
+
+    double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
+    boolean reached = distToSticky <= COLLECT_STICKY_REACHED_M;
+
+    if (!reached) {
+      boolean minHold = holdS < minHoldS;
+      boolean maxHold = holdS > maxHoldS;
+
+      if (proposed == null) {
+        chosen = sticky;
+        chosenScore = stickyScore;
+      } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
+        chosen = sticky;
+        chosenScore = Math.max(stickyScore, proposedScore);
+      } else if (minHold) {
+        if (proposedScore < stickyScore + switchMargin) {
+          chosen = sticky;
+          chosenScore = stickyScore;
+        }
+      } else if (!maxHold) {
+        if (proposedScore < stickyScore + switchMargin) {
+          chosen = sticky;
+          chosenScore = stickyScore;
+        }
+      }
+    }
+
+    if (reached) {
+      collectStickyPoint = null;
+      collectStickyScore = -1e18;
+      collectStickyTsNs = 0L;
+      sticky = null;
+    }
+  }
+
+  if (chosen != null) {
+    Translation2d curSticky = collectStickyPoint;
+    if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
+      collectStickyPoint = chosen;
+      collectStickyScore = chosenScore;
+      collectStickyTsNs = nowNs;
+    } else {
+      collectStickyScore = Math.max(collectStickyScore, chosenScore);
+    }
+  }
+
+  Logger.recordOutput("collect_target_xy", chosen);
+  Logger.recordOutput("collect_points_n", pts.length);
+  Logger.recordOutput("collect_sticky_active", collectStickyPoint != null);
+  Logger.recordOutput(
+      "collect_sticky_age_s", collectStickyTsNs != 0L ? (nowNs - collectStickyTsNs) / 1e9 : 0.0);
+
+  if (best != null) {
+    Logger.recordOutput("collect_score", best.score);
+    Logger.recordOutput("collect_value", best.value);
+    Logger.recordOutput("collect_our_eta", best.ourEtaS);
+    Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
+    Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
+    Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
+    Logger.recordOutput("collect_intent_ally", best.allyIntent);
+  }
+
+  Translation2d target = chosen != null ? chosen : pts[0];
+  return new Pose2d(target, robotPoseBlue.getRotation());
+}
+
+  public Pose2d nextCollectionGoalBlue(Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {
+    return nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, CategorySpec.kCollect);
   }
 
   public class FieldVision {
