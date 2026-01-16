@@ -205,3 +205,4 @@ vision/train/data
 # exclude all .venv folders anywhere in project
 **/.venv/
 **/__pycache__/
+*.ndjson
