@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Setpoints.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -340,7 +339,6 @@ public class Setpoints {
     public static final double HUB_FACE_TO_AIMPOINT_METERS = 0.60;
     public static final String GAME_PIECE_ID_FUEL = "fuel";
 
-    private static final long HUB_SOLVE_PERIOD_NS = 120_000_000L;
     private static final long HUB_CACHE_MAX_AGE_NS = 280_000_000L;
     private static final int HUB_REUSE_POS_MM = 160;
     private static final double HUB_SIMPLE_FAR_DIST_M = 4.35;
@@ -383,6 +381,9 @@ public class Setpoints {
       volatile int lastSolveRobotXmm;
       volatile int lastSolveRobotYmm;
       volatile int lastSolveObsHash;
+
+      volatile long lastRefineNs;
+      volatile DragShotPlanner.ShotSolution lastSolution;
     }
 
     private static final double[][] SIMPLE_OFFS =
@@ -502,10 +503,6 @@ public class Setpoints {
         return candidate;
       }
       return safeValidFallback(targetFieldPos, halfL, halfW, obs);
-    }
-
-    private static boolean shouldLogThrottled(long nowNs, long lastNs, long periodNs) {
-      return lastNs == 0L || (nowNs - lastNs) >= periodNs;
     }
 
     public static final DragShotPlanner.Constraints HUB_SHOT_CONSTRAINTS =
@@ -695,18 +692,7 @@ public class Setpoints {
     }
 
     private static DragShotPlanner.OnlineSearchState getOrCreateOnlineState(
-        Translation2d targetFieldPos,
-        double releaseH,
-        double halfL,
-        double halfW,
-        Translation2d seed) {
-      HubShotCacheKey key =
-          new HubShotCacheKey(
-              (int) Math.round(targetFieldPos.getX() * 1000.0),
-              (int) Math.round(targetFieldPos.getY() * 1000.0),
-              (int) Math.round(releaseH * 1000.0),
-              (int) Math.round(halfL * 1000.0),
-              (int) Math.round(halfW * 1000.0));
+        HubShotCacheKey key, Translation2d seed) {
       return HUB_ONLINE_STATE.computeIfAbsent(
           key, k -> new DragShotPlanner.OnlineSearchState(seed, 0.58));
     }
@@ -723,14 +709,7 @@ public class Setpoints {
 
     private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
       if (obs == null || obs.isEmpty()) return 0;
-      int h = 1;
-      int n = obs.size();
-      for (int i = 0; i < n; i++) {
-        Object o = obs.get(i);
-        h = h * 31 + System.identityHashCode(o);
-      }
-      h = h * 31 + n;
-      return h;
+      return (System.identityHashCode(obs) * 31) ^ obs.size();
     }
 
     private static final class StaticPoseSetpoint extends GameSetpoint {
@@ -821,20 +800,6 @@ public class Setpoints {
         List<? extends FieldPlanner.Obstacle> obs = useObs ? ctx.dynamicObstacles() : List.of();
         int obsHash = useObs ? obstaclesStableHash(obs) : 0;
 
-        Pose2d simple =
-            findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
-
-        if (distToTarget >= HUB_SIMPLE_FAR_DIST_M) {
-          HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
-          HubLastPoseCache w = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
-          w.robotXmm = (int) Math.round(robotPose.getX() * 1000.0);
-          w.robotYmm = (int) Math.round(robotPose.getY() * 1000.0);
-          w.obsHash = obsHash;
-          w.tNs = now;
-          w.pose = simple;
-          return simple;
-        }
-
         HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
         int rxmm = (int) Math.round(robotPose.getX() * 1000.0);
         int rymm = (int) Math.round(robotPose.getY() * 1000.0);
@@ -846,10 +811,49 @@ public class Setpoints {
             int dx = Math.abs(rxmm - cached.robotXmm);
             int dy = Math.abs(rymm - cached.robotYmm);
             long age = now - cached.tNs;
-            if (dx <= HUB_REUSE_POS_MM && dy <= HUB_REUSE_POS_MM && age <= HUB_CACHE_MAX_AGE_NS) {
+            if (cached.obsHash == obsHash
+                && dx <= HUB_REUSE_POS_MM
+                && dy <= HUB_REUSE_POS_MM
+                && age <= HUB_CACHE_MAX_AGE_NS) {
               if (validShootPose(p.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
                 return p;
               }
+            }
+          }
+        }
+
+        Pose2d simple =
+            findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
+
+        if (distToTarget >= HUB_SIMPLE_FAR_DIST_M) {
+          HubLastPoseCache w = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
+          w.robotXmm = rxmm;
+          w.robotYmm = rymm;
+          w.obsHash = obsHash;
+          w.tNs = now;
+          w.pose = simple;
+          return simple;
+        }
+
+        HubLastPoseCache state = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
+
+        if (state.lastSolution != null) {
+          Translation2d sp = state.lastSolution.shooterPosition();
+          if (validShootPose(sp, targetFieldPos, halfL, halfW, obs)) {
+            int dx = Math.abs(rxmm - state.lastSolveRobotXmm);
+            int dy = Math.abs(rymm - state.lastSolveRobotYmm);
+            long sinceSolve = now - state.lastSolveNs;
+            if (state.lastSolveObsHash == obsHash
+                && dx <= 140
+                && dy <= 140
+                && sinceSolve <= 90_000_000L) {
+              Pose2d out = new Pose2d(sp, state.lastSolution.shooterYaw());
+              state.robotXmm = rxmm;
+              state.robotYmm = rymm;
+              state.obsHash = obsHash;
+              state.tNs = now;
+              state.pose = out;
+              return out;
             }
           }
         }
@@ -879,43 +883,58 @@ public class Setpoints {
           }
         }
 
-        DragShotPlanner.OnlineSearchState online =
-            getOrCreateOnlineState(targetFieldPos, releaseH, halfL, halfW, seed);
+        DragShotPlanner.OnlineSearchState online = getOrCreateOnlineState(key, seed);
 
-        if (cached != null) {
-          int mdx = Math.abs(rxmm - cached.lastSolveRobotXmm);
-          int mdy = Math.abs(rymm - cached.lastSolveRobotYmm);
-          if (mdx > 520 || mdy > 520) {
-            online.seed(seed);
-            online.stepMeters(0.58);
+        int mdx = Math.abs(rxmm - state.lastSolveRobotXmm);
+        int mdy = Math.abs(rymm - state.lastSolveRobotYmm);
+        boolean movedFar = mdx > 220 || mdy > 220;
+        boolean obsChanged = state.lastSolveObsHash != obsHash;
+
+        if (obsChanged || movedFar) {
+          online.seed(seed);
+          online.stepMeters(0.58);
+        }
+
+        long sinceRefine = now - state.lastRefineNs;
+
+        boolean haveRecentSol = false;
+        if (state.lastSolution != null) {
+          Translation2d sp = state.lastSolution.shooterPosition();
+          if (validShootPose(sp, targetFieldPos, halfL, halfW, obs)) {
+            long sinceSolve = now - state.lastSolveNs;
+            haveRecentSol = sinceSolve <= 180_000_000L;
           }
         }
 
-        long refineBudgetNs = useObs ? 210_000L : 145_000L;
+        boolean allowRefine = !haveRecentSol && sinceRefine >= 120_000_000L;
 
         DragShotPlanner.ShotSolution refinedSol = null;
-        Optional<DragShotPlanner.ShotSolution> refined =
-            DragShotPlanner.findBestShotOnlineRefine(
-                HUB_PHYSICS,
-                targetFieldPos,
-                HUB_OPENING_FRONT_EDGE_HEIGHT_M,
-                robotPose,
-                releaseH,
-                halfL,
-                halfW,
-                obs,
-                HUB_SHOT_CONSTRAINTS,
-                online,
-                refineBudgetNs);
-        if (refined.isPresent()) {
-          refinedSol = refined.get();
+        if (allowRefine) {
+          long refineBudgetNs = useObs ? 160_000L : 120_000L;
+          Optional<DragShotPlanner.ShotSolution> refined =
+              DragShotPlanner.findBestShotOnlineRefine(
+                  HUB_PHYSICS,
+                  targetFieldPos,
+                  HUB_OPENING_FRONT_EDGE_HEIGHT_M,
+                  robotPose,
+                  releaseH,
+                  halfL,
+                  halfW,
+                  obs,
+                  HUB_SHOT_CONSTRAINTS,
+                  online,
+                  refineBudgetNs);
+          if (refined.isPresent()) {
+            refinedSol = refined.get();
+            state.lastRefineNs = now;
+          } else {
+            state.lastRefineNs = now;
+          }
         }
 
         DragShotPlanner.ShotSolution sol = refinedSol != null ? refinedSol : libSol;
 
         Pose2d out;
-        boolean solvedNow = false;
-
         if (sol == null) {
           out = simple;
         } else {
@@ -924,7 +943,11 @@ public class Setpoints {
             out = simple;
           } else {
             out = new Pose2d(shooterPos, sol.shooterYaw());
-            solvedNow = refinedSol != null;
+            state.lastSolution = sol;
+            state.lastSolveNs = now;
+            state.lastSolveRobotXmm = rxmm;
+            state.lastSolveRobotYmm = rymm;
+            state.lastSolveObsHash = obsHash;
           }
         }
 
@@ -936,27 +959,14 @@ public class Setpoints {
           out = safeValidFallback(targetFieldPos, halfL, halfW, obs);
         }
 
-        HubLastPoseCache write = HUB_LAST_POSE.computeIfAbsent(key, k -> new HubLastPoseCache());
-        write.robotXmm = rxmm;
-        write.robotYmm = rymm;
-        write.obsHash = obsHash;
-        write.tNs = now;
-        write.pose = out;
-
-        if (solvedNow) {
-          write.lastSolveNs = now;
-          write.lastSolveRobotXmm = rxmm;
-          write.lastSolveRobotYmm = rymm;
-          write.lastSolveObsHash = obsHash;
-        } else if (write.lastSolveNs == 0L) {
-          write.lastSolveNs = now;
-          write.lastSolveRobotXmm = rxmm;
-          write.lastSolveRobotYmm = rymm;
-          write.lastSolveObsHash = obsHash;
-        }
+        state.robotXmm = rxmm;
+        state.robotYmm = rymm;
+        state.obsHash = obsHash;
+        state.tNs = now;
+        state.pose = out;
 
         long lastNs = HUB_LAST_LOG_NS.get();
-        if (shouldLogThrottled(now, lastNs, 220_000_000L)
+        if ((lastNs == 0L || (now - lastNs) >= 220_000_000L)
             && HUB_LAST_LOG_NS.compareAndSet(lastNs, now)) {
           Logger.recordOutput("hubshot/distToTarget", distToTarget);
           Logger.recordOutput("hubshot/useObs", useObs);

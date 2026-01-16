@@ -488,18 +488,6 @@ public final class DragShotPlanner {
     }
   }
 
-  private static final class SimulationResult {
-    final boolean hitPlane;
-    final double timeAtPlaneSeconds;
-    final double verticalErrorMeters;
-
-    SimulationResult(boolean hitPlane, double timeAtPlaneSeconds, double verticalErrorMeters) {
-      this.hitPlane = hitPlane;
-      this.timeAtPlaneSeconds = timeAtPlaneSeconds;
-      this.verticalErrorMeters = verticalErrorMeters;
-    }
-  }
-
   private static final class Candidate {
     final Translation2d shooterPosition;
     final double shooterYawRad;
@@ -605,6 +593,34 @@ public final class DragShotPlanner {
     }
   }
 
+  private static final class SimParams {
+    final double kOverM;
+
+    SimParams(double kOverM) {
+      this.kOverM = kOverM;
+    }
+  }
+
+  private static final class SimOut {
+    boolean hitPlane;
+    double timeAtPlaneSeconds;
+    double verticalErrorMeters;
+
+    void set(boolean hitPlane, double timeAtPlaneSeconds, double verticalErrorMeters) {
+      this.hitPlane = hitPlane;
+      this.timeAtPlaneSeconds = timeAtPlaneSeconds;
+      this.verticalErrorMeters = verticalErrorMeters;
+    }
+  }
+
+  private static final ThreadLocal<SimOut> SIM_OUT_TL =
+      ThreadLocal.withInitial(
+          () -> {
+            SimOut o = new SimOut();
+            o.set(false, 0.0, Double.POSITIVE_INFINITY);
+            return o;
+          });
+
   private static final double EPS = 1e-6;
   private static final double MIN_RANGE_METERS = 0.5;
   private static final double MAX_RANGE_METERS = 7.0;
@@ -615,6 +631,92 @@ public final class DragShotPlanner {
 
   private static final ConcurrentHashMap<String, GamePiecePhysics> GAME_PIECE_CACHE =
       new ConcurrentHashMap<>();
+
+  private static final ConcurrentHashMap<GamePiecePhysics, SimParams> SIM_PARAMS_CACHE =
+      new ConcurrentHashMap<>();
+
+  private static final int SOLVE_Q_MM = 20;
+  private static final int SOLVE_Q_DEG_TENTH = 5;
+
+  private static final int SOLVE_CACHE_BITS = 14;
+  private static final int SOLVE_CACHE_SIZE = 1 << SOLVE_CACHE_BITS;
+  private static final long[] SOLVE_CACHE_KEYS = new long[SOLVE_CACHE_SIZE];
+  private static final ShotSolution[] SOLVE_CACHE_VALS = new ShotSolution[SOLVE_CACHE_SIZE];
+  private static final int SOLVE_CACHE_LOCK_BITS = 6;
+  private static final int SOLVE_CACHE_LOCKS = 1 << SOLVE_CACHE_LOCK_BITS;
+  private static final Object[] SOLVE_CACHE_GUARDS = new Object[SOLVE_CACHE_LOCKS];
+
+  static {
+    for (int i = 0; i < SOLVE_CACHE_GUARDS.length; i++) SOLVE_CACHE_GUARDS[i] = new Object();
+  }
+
+  private static long mix64(long z) {
+    z ^= (z >>> 33);
+    z *= 0xff51afd7ed558ccdL;
+    z ^= (z >>> 33);
+    z *= 0xc4ceb9fe1a85ec53L;
+    z ^= (z >>> 33);
+    return z;
+  }
+
+  private static ShotSolution solveCacheGet(long key) {
+    int idx = (int) mix64(key) & (SOLVE_CACHE_SIZE - 1);
+    if (SOLVE_CACHE_KEYS[idx] == key) {
+      return SOLVE_CACHE_VALS[idx];
+    }
+    return null;
+  }
+
+  private static void solveCachePut(long key, ShotSolution val) {
+    int idx = (int) mix64(key) & (SOLVE_CACHE_SIZE - 1);
+    Object g = SOLVE_CACHE_GUARDS[idx & (SOLVE_CACHE_LOCKS - 1)];
+    synchronized (g) {
+      SOLVE_CACHE_KEYS[idx] = key;
+      SOLVE_CACHE_VALS[idx] = val;
+    }
+  }
+
+  private static long solveKey(
+      Translation2d shooterPos,
+      Translation2d target,
+      double targetH,
+      double releaseH,
+      double minSpeed,
+      double maxSpeed,
+      double minAngDeg,
+      double maxAngDeg,
+      Constraints.ShotStyle style) {
+
+    int sx = (int) Math.round(shooterPos.getX() * 1000.0 / SOLVE_Q_MM);
+    int sy = (int) Math.round(shooterPos.getY() * 1000.0 / SOLVE_Q_MM);
+    int tx = (int) Math.round(target.getX() * 1000.0 / SOLVE_Q_MM);
+    int ty = (int) Math.round(target.getY() * 1000.0 / SOLVE_Q_MM);
+
+    int th = (int) Math.round(targetH * 1000.0 / 20.0);
+    int rh = (int) Math.round(releaseH * 1000.0 / 20.0);
+
+    int ms = (int) Math.round(minSpeed * 10.0);
+    int xs = (int) Math.round(maxSpeed * 10.0);
+
+    int a0 = (int) Math.round(minAngDeg * 10.0 / SOLVE_Q_DEG_TENTH);
+    int a1 = (int) Math.round(maxAngDeg * 10.0 / SOLVE_Q_DEG_TENTH);
+
+    int st = style == null ? 0 : style.ordinal();
+
+    long k = 1469598103934665603L;
+    k = (k ^ sx) * 1099511628211L;
+    k = (k ^ sy) * 1099511628211L;
+    k = (k ^ tx) * 1099511628211L;
+    k = (k ^ ty) * 1099511628211L;
+    k = (k ^ th) * 1099511628211L;
+    k = (k ^ rh) * 1099511628211L;
+    k = (k ^ ms) * 1099511628211L;
+    k = (k ^ xs) * 1099511628211L;
+    k = (k ^ a0) * 1099511628211L;
+    k = (k ^ a1) * 1099511628211L;
+    k = (k ^ st) * 1099511628211L;
+    return k;
+  }
 
   private static volatile List<FieldPlanner.Obstacle> STATIC_OBSTACLES;
 
@@ -639,6 +741,19 @@ public final class DragShotPlanner {
       c.close();
     } catch (Exception ignored) {
     }
+  }
+
+  private static SimParams simParams(GamePiecePhysics gp) {
+    return SIM_PARAMS_CACHE.computeIfAbsent(
+        gp,
+        k -> {
+          double m = gp.massKg();
+          double A = gp.crossSectionAreaM2();
+          double Cd = gp.dragCoefficient();
+          double rho = gp.airDensityKgPerM3();
+          double kOverM = 0.5 * rho * Cd * A / m;
+          return new SimParams(kOverM);
+        });
   }
 
   private static List<FieldPlanner.Obstacle> staticObstacles() {
@@ -1268,7 +1383,7 @@ public final class DragShotPlanner {
   }
 
   private static Translation2d clipToRingAndField(Translation2d p, Translation2d target) {
-    AutoCloseable _p = Profiler.section("DragShotPlanner.clipToRingAndField");
+    AutoCloseable _p0 = Profiler.section("DragShotPlanner.clipToRingAndField");
     try {
       Translation2d ring = projectToValidRing(p, target);
       double x = ring.getX();
@@ -1278,7 +1393,7 @@ public final class DragShotPlanner {
       }
       return new Translation2d(x, y);
     } finally {
-      closeQuietly(_p);
+      closeQuietly(_p0);
     }
   }
 
@@ -1371,6 +1486,8 @@ public final class DragShotPlanner {
       int simsHit = 0;
       int simsAccepted = 0;
 
+      SimOut sim = SIM_OUT_TL.get();
+
       for (double range = MIN_RANGE_METERS;
           range <= MAX_RANGE_METERS + 1e-6;
           range += radialStepCoarse) {
@@ -1436,20 +1553,20 @@ public final class DragShotPlanner {
             if (cos <= 0.0) {
               continue;
             }
+            double sin = Math.sin(angleRad);
 
             for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStepCoarse) {
               sims++;
-              SimulationResult sim;
               AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
               try {
-                sim =
-                    simulateToTargetPlane(
-                        gamePiece,
-                        speed,
-                        angleRad,
-                        shooterReleaseHeightMeters,
-                        horizontalDistance,
-                        targetHeightMeters);
+                simulateToTargetPlaneInto(
+                    sim,
+                    gamePiece,
+                    speed * cos,
+                    speed * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
               } finally {
                 closeQuietly(_p2);
               }
@@ -1515,20 +1632,42 @@ public final class DragShotPlanner {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.solveBestAtShooterPosition.body");
     try {
-      double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
+      long ck =
+          solveKey(
+              shooterFieldPosition,
+              targetFieldPosition,
+              targetHeightMeters,
+              shooterReleaseHeightMeters,
+              minSpeed,
+              maxSpeed,
+              minAngleDeg,
+              maxAngleDeg,
+              shotStyle);
+
+      ShotSolution cached = solveCacheGet(ck);
+      if (cached != null) {
+        return cached;
+      }
+
+      double sx = shooterFieldPosition.getX();
+      double sy = shooterFieldPosition.getY();
+      double tx = targetFieldPosition.getX();
+      double ty = targetFieldPosition.getY();
+
+      double dxT = tx - sx;
+      double dyT = ty - sy;
+      double horizontalDistance = Math.sqrt(dxT * dxT + dyT * dyT);
       if (horizontalDistance < 1e-3) {
         return null;
       }
 
       double invD = 1.0 / horizontalDistance;
-      Translation2d directionUnit =
-          new Translation2d(
-              (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
-              (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
+      double dirUx = dxT * invD;
+      double dirUy = dyT * invD;
 
-      Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
+      Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
-      double angleStep = fixedAngle ? 1.0 : Math.max(0.12, angleStepDeg);
+      double angleStep = fixedAngle ? 1.0 : Math.max(0.18, angleStepDeg);
 
       double bestErrorAbs = Double.POSITIVE_INFINITY;
       double bestAngleRad = 0.0;
@@ -1541,87 +1680,188 @@ public final class DragShotPlanner {
       int simsHit = 0;
       int simsWithin = 0;
 
+      SimOut sim = SIM_OUT_TL.get();
+
+      double speedRange = maxSpeed - minSpeed;
+      double coarseStep = Math.max(Math.max(0.9, speedStep * 3.0), speedRange / 10.0);
+
       for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
         double angleRad = Math.toRadians(angleDeg);
         double cos = Math.cos(angleRad);
-        if (cos <= 0.0) {
-          continue;
-        }
+        if (cos <= 0.0) continue;
+        double sin = Math.sin(angleRad);
 
-        for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStep) {
+        double localBestSpeed = 0.0;
+        double localBestErrAbs = Double.POSITIVE_INFINITY;
+        double localBestTime = 0.0;
+        double localBestSigned = 0.0;
+        boolean localFound = false;
+
+        for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += coarseStep) {
           sims++;
-          SimulationResult sim;
           AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
           try {
-            sim =
-                simulateToTargetPlane(
-                    gamePiece,
-                    speed,
-                    angleRad,
-                    shooterReleaseHeightMeters,
-                    horizontalDistance,
-                    targetHeightMeters);
+            simulateToTargetPlaneInto(
+                sim,
+                gamePiece,
+                speed * cos,
+                speed * sin,
+                shooterReleaseHeightMeters,
+                horizontalDistance,
+                targetHeightMeters);
           } finally {
             closeQuietly(_p1);
           }
 
-          if (!sim.hitPlane) {
-            continue;
-          }
+          if (!sim.hitPlane) continue;
           simsHit++;
 
           double errAbs = Math.abs(sim.verticalErrorMeters);
-          if (errAbs > acceptableVerticalErrorMeters) {
-            continue;
-          }
-          simsWithin++;
+          if (errAbs <= acceptableVerticalErrorMeters) simsWithin++;
 
-          boolean take;
-          if (!found) {
-            take = true;
+          if (!localFound || errAbs < localBestErrAbs - 1e-9) {
+            localFound = true;
+            localBestSpeed = speed;
+            localBestErrAbs = errAbs;
+            localBestTime = sim.timeAtPlaneSeconds;
+            localBestSigned = sim.verticalErrorMeters;
+            if (localBestErrAbs <= acceptableVerticalErrorMeters * 0.35) break;
+          }
+        }
+
+        if (!localFound) continue;
+
+        double lo = localBestSpeed - coarseStep;
+        double hi = localBestSpeed + coarseStep;
+        if (lo < minSpeed) lo = minSpeed;
+        if (hi > maxSpeed) hi = maxSpeed;
+
+        double refineBestSpeed = localBestSpeed;
+        double refineBestErrAbs = localBestErrAbs;
+        double refineBestTime = localBestTime;
+        double refineBestSigned = localBestSigned;
+
+        for (int it = 0; it < 9; it++) {
+          double m1 = lo + (hi - lo) * (1.0 / 3.0);
+          double m2 = hi - (hi - lo) * (1.0 / 3.0);
+
+          double e1Abs;
+          double t1;
+          double s1;
+          sims++;
+          AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+          try {
+            simulateToTargetPlaneInto(
+                sim,
+                gamePiece,
+                m1 * cos,
+                m1 * sin,
+                shooterReleaseHeightMeters,
+                horizontalDistance,
+                targetHeightMeters);
+          } finally {
+            closeQuietly(_p2);
+          }
+          if (sim.hitPlane) {
+            simsHit++;
+            e1Abs = Math.abs(sim.verticalErrorMeters);
+            t1 = sim.timeAtPlaneSeconds;
+            s1 = sim.verticalErrorMeters;
+            if (e1Abs <= acceptableVerticalErrorMeters) simsWithin++;
           } else {
-            double errEps = 1e-6;
-            if (errAbs < bestErrorAbs - errEps) {
-              take = true;
-            } else if (Math.abs(errAbs - bestErrorAbs) <= errEps) {
-              if (shotStyle == Constraints.ShotStyle.DIRECT
-                  || shotStyle == Constraints.ShotStyle.ARC) {
-                double aBest = Math.abs(bestAngleRad);
-                double aNext = Math.abs(angleRad);
-                double aEps = 1e-3;
-                if (shotStyle == Constraints.ShotStyle.DIRECT) {
-                  if (aNext < aBest - aEps) {
-                    take = true;
-                  } else if (aBest < aNext - aEps) {
-                    take = false;
-                  } else {
-                    take = speed < bestSpeed - EPS;
-                  }
-                } else {
-                  if (aNext > aBest + aEps) {
-                    take = true;
-                  } else if (aBest > aNext + aEps) {
-                    take = false;
-                  } else {
-                    take = speed < bestSpeed - EPS;
-                  }
-                }
+            e1Abs = Double.POSITIVE_INFINITY;
+            t1 = 0.0;
+            s1 = Double.POSITIVE_INFINITY;
+          }
+
+          double e2Abs;
+          double t2;
+          double s2;
+          sims++;
+          AutoCloseable _p3 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+          try {
+            simulateToTargetPlaneInto(
+                sim,
+                gamePiece,
+                m2 * cos,
+                m2 * sin,
+                shooterReleaseHeightMeters,
+                horizontalDistance,
+                targetHeightMeters);
+          } finally {
+            closeQuietly(_p3);
+          }
+          if (sim.hitPlane) {
+            simsHit++;
+            e2Abs = Math.abs(sim.verticalErrorMeters);
+            t2 = sim.timeAtPlaneSeconds;
+            s2 = sim.verticalErrorMeters;
+            if (e2Abs <= acceptableVerticalErrorMeters) simsWithin++;
+          } else {
+            e2Abs = Double.POSITIVE_INFINITY;
+            t2 = 0.0;
+            s2 = Double.POSITIVE_INFINITY;
+          }
+
+          if (e1Abs < refineBestErrAbs) {
+            refineBestErrAbs = e1Abs;
+            refineBestSpeed = m1;
+            refineBestTime = t1;
+            refineBestSigned = s1;
+          }
+          if (e2Abs < refineBestErrAbs) {
+            refineBestErrAbs = e2Abs;
+            refineBestSpeed = m2;
+            refineBestTime = t2;
+            refineBestSigned = s2;
+          }
+
+          if (e1Abs <= e2Abs) {
+            hi = m2;
+          } else {
+            lo = m1;
+          }
+
+          if (refineBestErrAbs <= acceptableVerticalErrorMeters * 0.18) break;
+        }
+
+        boolean take;
+        if (!found) {
+          take = true;
+        } else {
+          double errEps = 1e-6;
+          if (refineBestErrAbs < bestErrorAbs - errEps) {
+            take = true;
+          } else if (Math.abs(refineBestErrAbs - bestErrorAbs) <= errEps) {
+            if (shotStyle == Constraints.ShotStyle.DIRECT
+                || shotStyle == Constraints.ShotStyle.ARC) {
+              double aBest = Math.abs(bestAngleRad);
+              double aNext = Math.abs(angleRad);
+              double aEps = 1e-3;
+              if (shotStyle == Constraints.ShotStyle.DIRECT) {
+                if (aNext < aBest - aEps) take = true;
+                else if (aBest < aNext - aEps) take = false;
+                else take = refineBestSpeed < bestSpeed - EPS;
               } else {
-                take = speed < bestSpeed - EPS;
+                if (aNext > aBest + aEps) take = true;
+                else if (aBest > aNext + aEps) take = false;
+                else take = refineBestSpeed < bestSpeed - EPS;
               }
             } else {
-              take = false;
+              take = refineBestSpeed < bestSpeed - EPS;
             }
+          } else {
+            take = false;
           }
+        }
 
-          if (take) {
-            found = true;
-            bestErrorAbs = errAbs;
-            bestAngleRad = angleRad;
-            bestSpeed = speed;
-            bestTime = sim.timeAtPlaneSeconds;
-            bestSignedErr = sim.verticalErrorMeters;
-          }
+        if (take) {
+          found = true;
+          bestErrorAbs = refineBestErrAbs;
+          bestAngleRad = angleRad;
+          bestSpeed = refineBestSpeed;
+          bestTime = refineBestTime;
+          bestSignedErr = refineBestSigned;
         }
       }
 
@@ -1633,16 +1873,21 @@ public final class DragShotPlanner {
         return null;
       }
 
-      Translation2d impactPos = shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
+      Translation2d impactPos =
+          new Translation2d(sx + dirUx * horizontalDistance, sy + dirUy * horizontalDistance);
 
-      return new ShotSolution(
-          shooterFieldPosition,
-          shooterYaw,
-          bestSpeed,
-          Rotation2d.fromRadians(bestAngleRad),
-          bestTime,
-          impactPos,
-          bestSignedErr);
+      ShotSolution outSolution =
+          new ShotSolution(
+              shooterFieldPosition,
+              shooterYaw,
+              bestSpeed,
+              Rotation2d.fromRadians(bestAngleRad),
+              bestTime,
+              impactPos,
+              bestSignedErr);
+
+      solveCachePut(ck, outSolution);
+      return outSolution;
     } finally {
       closeQuietly(_p);
     }
@@ -1665,18 +1910,23 @@ public final class DragShotPlanner {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.refineShotAtPosition.body");
     try {
-      double horizontalDistance = shooterFieldPosition.getDistance(targetFieldPosition);
+      double sx = shooterFieldPosition.getX();
+      double sy = shooterFieldPosition.getY();
+      double tx = targetFieldPosition.getX();
+      double ty = targetFieldPosition.getY();
+
+      double dxT = tx - sx;
+      double dyT = ty - sy;
+      double horizontalDistance = Math.sqrt(dxT * dxT + dyT * dyT);
       if (horizontalDistance < 1e-3) {
         return null;
       }
 
       double invD = 1.0 / horizontalDistance;
-      Translation2d directionUnit =
-          new Translation2d(
-              (targetFieldPosition.getX() - shooterFieldPosition.getX()) * invD,
-              (targetFieldPosition.getY() - shooterFieldPosition.getY()) * invD);
+      double dirUx = dxT * invD;
+      double dirUy = dyT * invD;
 
-      Rotation2d shooterYaw = targetFieldPosition.minus(shooterFieldPosition).getAngle();
+      Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
       double speedWindow = Math.max(1.5, (maxSpeed - minSpeed) / 8.0);
       double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
@@ -1706,6 +1956,8 @@ public final class DragShotPlanner {
       int simsHit = 0;
       int simsWithin = 0;
 
+      SimOut sim = SIM_OUT_TL.get();
+
       for (double angleDeg = angleStartDeg;
           angleDeg <= angleEndDeg + 1e-6;
           angleDeg += angleStepFineDeg) {
@@ -1715,20 +1967,20 @@ public final class DragShotPlanner {
         if (cos <= 0.0) {
           continue;
         }
+        double sin = Math.sin(angleRad);
 
         for (double speed = speedMin; speed <= speedMax + 1e-6; speed += speedStepFine) {
           sims++;
-          SimulationResult sim;
           AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.refine");
           try {
-            sim =
-                simulateToTargetPlane(
-                    gamePiece,
-                    speed,
-                    angleRad,
-                    shooterReleaseHeightMeters,
-                    horizontalDistance,
-                    targetHeightMeters);
+            simulateToTargetPlaneInto(
+                sim,
+                gamePiece,
+                speed * cos,
+                speed * sin,
+                shooterReleaseHeightMeters,
+                horizontalDistance,
+                targetHeightMeters);
           } finally {
             closeQuietly(_p1);
           }
@@ -1749,7 +2001,7 @@ public final class DragShotPlanner {
               || (Math.abs(error - bestError) <= EPS
                   && speed < best.launchSpeedMetersPerSecond() - EPS)) {
             Translation2d impactPos =
-                shooterFieldPosition.plus(directionUnit.times(horizontalDistance));
+                new Translation2d(sx + dirUx * horizontalDistance, sy + dirUy * horizontalDistance);
             bestError = error;
             best =
                 new ShotSolution(
@@ -1774,59 +2026,68 @@ public final class DragShotPlanner {
     }
   }
 
-  private static SimulationResult simulateToTargetPlane(
+  private static void simulateToTargetPlaneInto(
+      SimOut out,
       GamePiecePhysics gamePiece,
-      double launchSpeedMetersPerSecond,
-      double launchAngleRad,
+      double vx0,
+      double vy0,
       double shooterReleaseHeightMeters,
       double targetHorizontalDistanceMeters,
       double targetHeightMeters) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.simulateToTargetPlane.body");
     try {
-      double g = 9.81;
+      final double g = 9.81;
 
-      double cos = Math.cos(launchAngleRad);
-      double horizontalSpeed = launchSpeedMetersPerSecond * cos;
-      if (horizontalSpeed < 1e-6) {
-        return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
+      double avx0 = vx0 >= 0.0 ? vx0 : -vx0;
+      if (avx0 < 1e-6) {
+        out.set(false, 0.0, Double.POSITIVE_INFINITY);
+        return;
       }
 
-      double minHorizontalSpeed = Math.max(0.5, horizontalSpeed);
+      double minHorizontalSpeed = avx0 < 0.6 ? 0.6 : avx0;
       double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
-      double maxTimeSeconds = Math.min(5.0, Math.max(0.5, timeNoDrag * 1.55));
+      double maxTimeSeconds = timeNoDrag * 1.45;
+      if (maxTimeSeconds < 0.45) maxTimeSeconds = 0.45;
+      if (maxTimeSeconds > 4.2) maxTimeSeconds = 4.2;
 
-      double m = gamePiece.massKg();
-      double A = gamePiece.crossSectionAreaM2();
-      double Cd = gamePiece.dragCoefficient();
-      double rho = gamePiece.airDensityKgPerM3();
-      double kOverM = 0.5 * rho * Cd * A / m;
+      double kOverM = simParams(gamePiece).kOverM;
 
       double x = 0.0;
       double y = shooterReleaseHeightMeters;
-      double vx = launchSpeedMetersPerSecond * cos;
-      double vy = launchSpeedMetersPerSecond * Math.sin(launchAngleRad);
+      double vx = vx0;
+      double vy = vy0;
       double t = 0.0;
 
-      double xPrev = x;
+      double xPrev = 0.0;
       double yPrev = y;
-      double tPrev = t;
+      double tPrev = 0.0;
 
-      double dxStep = 0.025;
+      double dxStep = targetHorizontalDistanceMeters / 70.0;
+      if (dxStep < 0.05) dxStep = 0.05;
+      if (dxStep > 0.14) dxStep = 0.14;
 
       int steps = 0;
 
-      while (t < maxTimeSeconds && y >= -0.25 && x <= targetHorizontalDistanceMeters + 1.0) {
+      while (t < maxTimeSeconds && y >= -0.25 && x <= targetHorizontalDistanceMeters + 0.9) {
         steps++;
+
         xPrev = x;
         yPrev = y;
         tPrev = t;
 
-        double v = Math.hypot(vx, vy);
+        double vv = vx * vx + vy * vy;
+        if (vv < 1e-12) {
+          out.set(false, 0.0, Double.POSITIVE_INFINITY);
+          return;
+        }
+
+        double v = Math.sqrt(vv);
         double ax = -kOverM * v * vx;
         double ay = -g - kOverM * v * vy;
 
-        double dt = dxStep / Math.max(0.25, Math.abs(vx));
+        double avx = vx >= 0.0 ? vx : -vx;
+        double dt = dxStep / (avx < 0.35 ? 0.35 : avx);
 
         vx += ax * dt;
         vy += ay * dt;
@@ -1837,19 +2098,22 @@ public final class DragShotPlanner {
         if (xPrev <= targetHorizontalDistanceMeters && x >= targetHorizontalDistanceMeters) {
           double denom = (x - xPrev);
           double frac =
-              Math.abs(denom) > 1e-12 ? (targetHorizontalDistanceMeters - xPrev) / denom : 1.0;
+              (Math.abs(denom) > 1e-12) ? (targetHorizontalDistanceMeters - xPrev) / denom : 1.0;
           if (frac < 0.0) frac = 0.0;
           if (frac > 1.0) frac = 1.0;
+
           double yCross = yPrev + frac * (y - yPrev);
           double tCross = tPrev + frac * (t - tPrev);
           double verticalError = yCross - targetHeightMeters;
+
           Profiler.counterAdd("DragShotPlanner.sim.steps", steps);
-          return new SimulationResult(true, tCross, verticalError);
+          out.set(true, tCross, verticalError);
+          return;
         }
       }
 
       Profiler.counterAdd("DragShotPlanner.sim.steps", steps);
-      return new SimulationResult(false, 0.0, Double.POSITIVE_INFINITY);
+      out.set(false, 0.0, Double.POSITIVE_INFINITY);
     } finally {
       closeQuietly(_p);
     }
@@ -1895,10 +2159,10 @@ public final class DragShotPlanner {
         }
       }
 
-      if (shooterPos.getX() < 0.0 || shooterPos.getX() > Constants.FIELD_LENGTH) {
+      if (x < 0.0 || x > Constants.FIELD_LENGTH) {
         return false;
       }
-      if (shooterPos.getY() < 0.0 || shooterPos.getY() > Constants.FIELD_WIDTH) {
+      if (y < 0.0 || y > Constants.FIELD_WIDTH) {
         return false;
       }
 
