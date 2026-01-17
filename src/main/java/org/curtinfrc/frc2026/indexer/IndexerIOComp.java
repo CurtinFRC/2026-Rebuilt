@@ -69,7 +69,7 @@ public class IndexerIOComp implements IndexerIO {
 
   @Override
   public void setVoltage(double volts) {
-    motor.setControl(voltageRequest.withOutput(volts));
+    motor.setVoltage(volts);
   }
 
   @Override

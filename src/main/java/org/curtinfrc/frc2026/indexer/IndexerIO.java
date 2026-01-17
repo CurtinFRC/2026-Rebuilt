@@ -15,5 +15,5 @@ public interface IndexerIO {
 
   public default void setVoltage(double volts) {}
 
-  public default void setSpeed(double targetSpeed) {}
+  public default void setSpeed(double speed) {}
 }

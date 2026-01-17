@@ -26,7 +26,7 @@ public class Indexer extends SubsystemBase {
     return run(() -> io.setVoltage(0));
   }
 
-  public Command setSpeed(double targetSpeed) {
-    return run(() -> io.setSpeed(targetSpeed));
+  public Command setSpeed(double speed) {
+    return run(() -> io.setSpeed(speed));
   }
 }
