@@ -19,14 +19,6 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IndexerIOComp implements IndexerIO {
-  private static final TalonFXConfiguration config =
-      new TalonFXConfiguration()
-          .withMotorOutput(
-              new MotorOutputConfigs()
-                  .withInverted(InvertedValue.Clockwise_Positive)
-                  .withNeutralMode(NeutralModeValue.Brake))
-          .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
   private static final int ID = 0;
 
   private final TalonFX motor = new TalonFX(ID);
@@ -37,9 +29,16 @@ public class IndexerIOComp implements IndexerIO {
   private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
 
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  private final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
-    tryUntilOk(5, () -> motor.getConfigurator().apply(config));
+    tryUntilOk(5, () -> motor.getConfigurator().apply(new TalonFXConfiguration()
+          .withMotorOutput(
+              new MotorOutputConfigs()
+                  .withInverted(InvertedValue.Clockwise_Positive)
+                  .withNeutralMode(NeutralModeValue.Brake))
+          .withCurrentLimits(
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))));
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
 
@@ -56,17 +55,16 @@ public class IndexerIOComp implements IndexerIO {
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
-    inputs.angularVelocityRotationsPerMinute = velocity.getValueAsDouble();
+    inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
   }
 
   @Override
   public void setVoltage(double volts) {
-    voltageRequest.withOutput(volts);
+    motor.setControl(voltageRequest.withOutput(volts));
   }
 
   @Override
   public void setSpeed(double speed) {
-    double rps = speed / 60.0;
-    motor.setControl(new VelocityVoltage(rps).withSlot(0));
+    motor.setControl(velocityRequest.withVelocity(speed));
   }
 }

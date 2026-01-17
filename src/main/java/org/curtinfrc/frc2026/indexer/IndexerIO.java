@@ -8,7 +8,7 @@ public interface IndexerIO {
     public double appliedVolts;
     public double currentAmps;
     public double positionRotations;
-    public double angularVelocityRotationsPerMinute;
+    public double angularVelocityRotationsPerSecond;
   }
 
   public default void updateInputs(IndexerIOInputs inputs) {}

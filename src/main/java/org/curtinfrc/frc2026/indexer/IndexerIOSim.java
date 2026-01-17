@@ -5,23 +5,23 @@ import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.simulation.DCMotorSim;
 
 public class IndexerIOSim implements IndexerIO {
-  private final DCMotor indexerMotor = DCMotor.getNEO(1);
-  private final DCMotorSim indexerMotorSim;
+  private final DCMotor motor = DCMotor.getNEO(1);
+  private final DCMotorSim motorSim;
   private double volts = 0;
 
   public IndexerIOSim() {
-    indexerMotorSim =
-        new DCMotorSim(LinearSystemId.createDCMotorSystem(indexerMotor, 3, 1), indexerMotor);
+    motorSim =
+        new DCMotorSim(LinearSystemId.createDCMotorSystem(motor, 3, 1), motor);
   }
 
   @Override
   public void updateInputs(IndexerIOInputs inputs) {
-    indexerMotorSim.setInputVoltage(volts);
-    indexerMotorSim.update(0.02);
-    inputs.appliedVolts = indexerMotorSim.getInputVoltage();
-    inputs.currentAmps = indexerMotorSim.getCurrentDrawAmps();
-    inputs.positionRotations = indexerMotorSim.getAngularPositionRotations();
-    inputs.angularVelocityRotationsPerMinute = indexerMotorSim.getAngularVelocityRPM();
+    motorSim.setInputVoltage(volts);
+    motorSim.update(0.02);
+    inputs.appliedVolts = motorSim.getInputVoltage();
+    inputs.currentAmps = motorSim.getCurrentDrawAmps();
+    inputs.positionRotations = motorSim.getAngularPositionRotations();
+    inputs.angularVelocityRotationsPerMinute = motorSim.getAngularVelocityRPM();
   }
 
   @Override

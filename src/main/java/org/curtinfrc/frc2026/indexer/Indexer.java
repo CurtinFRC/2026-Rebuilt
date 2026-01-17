@@ -8,8 +8,8 @@ public class Indexer extends SubsystemBase {
   private final IndexerIO io;
   private final IndexerIOInputsAutoLogged inputs = new IndexerIOInputsAutoLogged();
 
-  public Indexer(IndexerIO parameter_io) {
-    io = parameter_io;
+  public Indexer() {
+    this.io = io;
   }
 
   @Override
@@ -18,7 +18,7 @@ public class Indexer extends SubsystemBase {
     Logger.processInputs("Indexer", inputs);
   }
 
-  public Command indexerRaw(double volts) {
+  public Command setVoltage(double volts) {
     return run(() -> io.setVoltage(volts));
   }
 
