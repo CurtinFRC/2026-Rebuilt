@@ -8,7 +8,7 @@ public class Indexer extends SubsystemBase {
   private final IndexerIO io;
   private final IndexerIOInputsAutoLogged inputs = new IndexerIOInputsAutoLogged();
 
-  public Indexer() {
+  public Indexer(IndexerIO io) {
     this.io = io;
   }
 

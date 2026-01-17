@@ -10,8 +10,7 @@ public class IndexerIOSim implements IndexerIO {
   private double volts = 0;
 
   public IndexerIOSim() {
-    motorSim =
-        new DCMotorSim(LinearSystemId.createDCMotorSystem(motor, 3, 1), motor);
+    motorSim = new DCMotorSim(LinearSystemId.createDCMotorSystem(motor, 3, 1), motor);
   }
 
   @Override
@@ -21,7 +20,7 @@ public class IndexerIOSim implements IndexerIO {
     inputs.appliedVolts = motorSim.getInputVoltage();
     inputs.currentAmps = motorSim.getCurrentDrawAmps();
     inputs.positionRotations = motorSim.getAngularPositionRotations();
-    inputs.angularVelocityRotationsPerMinute = motorSim.getAngularVelocityRPM();
+    inputs.angularVelocityRotationsPerSecond = motorSim.getAngularVelocityRPM();
   }
 
   @Override

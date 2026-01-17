@@ -29,16 +29,25 @@ public class IndexerIOComp implements IndexerIO {
   private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
 
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  private final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
+  private final VelocityVoltage velocityRequest =
+      new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
-    tryUntilOk(5, () -> motor.getConfigurator().apply(new TalonFXConfiguration()
-          .withMotorOutput(
-              new MotorOutputConfigs()
-                  .withInverted(InvertedValue.Clockwise_Positive)
-                  .withNeutralMode(NeutralModeValue.Brake))
-          .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))));
+    tryUntilOk(
+        5,
+        () ->
+            motor
+                .getConfigurator()
+                .apply(
+                    new TalonFXConfiguration()
+                        .withMotorOutput(
+                            new MotorOutputConfigs()
+                                .withInverted(InvertedValue.Clockwise_Positive)
+                                .withNeutralMode(NeutralModeValue.Brake))
+                        .withCurrentLimits(
+                            new CurrentLimitsConfigs()
+                                .withSupplyCurrentLimit(30)
+                                .withStatorCurrentLimit(60))));
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
 
