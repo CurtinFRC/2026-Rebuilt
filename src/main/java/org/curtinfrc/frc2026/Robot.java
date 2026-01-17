@@ -159,9 +159,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller.y()
-      .whileTrue(indexer.setSpeed(50))
-      .onFalse(indexer.stop());
+    controller.y().whileTrue(indexer.setSpeed(50)).onFalse(indexer.stop());
   }
 
   /** This function is called periodically during all modes. */
