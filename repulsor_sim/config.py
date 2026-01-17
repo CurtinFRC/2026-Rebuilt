@@ -20,6 +20,9 @@ class Config:
     max_objects: int
     max_obstacles: int
 
+    pose_base_path: str
+    pose_struct_key: str
+
 def load_config() -> Config:
     nt_server = os.getenv("NT_SERVER", "localhost")
     fieldvision_name = os.getenv("FIELDVISION_NAME", "main")
@@ -30,11 +33,11 @@ def load_config() -> Config:
     field_width_m = float(os.getenv("FIELD_WIDTH_M", "8.21"))
 
     grid_cell_m = float(os.getenv("GRID_CELL_M", "0.25"))
-    grid_region_half_x_m = float(os.getenv("GRID_REGION_HALF_X_M", "4.0"))
+    grid_region_half_x_m = float(os.getenv("GRID_REGION_HALF_X_M", "2.0"))
     grid_region_half_y_m = float(os.getenv("GRID_REGION_HALF_Y_M", "2.0"))
     fuel_z_m = float(os.getenv("FUEL_Z_M", "0.10"))
 
-    max_objects = int(os.getenv("MAX_OBJECTS", "300"))
+    max_objects = int(os.getenv("MAX_OBJECTS", "500"))
     max_obstacles = int(os.getenv("MAX_OBSTACLES", "0"))
 
     return Config(
@@ -50,4 +53,6 @@ def load_config() -> Config:
         fuel_z_m=fuel_z_m,
         max_objects=max_objects,
         max_obstacles=max_obstacles,
+        pose_base_path= "AdvantageKit/RealOutputs/Odometry",
+        pose_struct_key= "Robot",
     )

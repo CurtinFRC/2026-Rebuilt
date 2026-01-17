@@ -12,6 +12,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.net.WebServer;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DataLogManager;
@@ -21,7 +22,6 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
-import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -69,6 +69,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.Test.VisionSimTest;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -154,7 +155,9 @@ public class Robot extends LoggedRobot {
   VisionSimTest visionSim = new VisionSimTest();
   RepulsorSetpoint goal = new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.L2);
 
-  private boolean simHasPiece = true;
+  private boolean simHasPiece = false;
+  private NetworkTablesValue<Long> pieceCount =
+      NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
 
   Trigger scoreDone;
   Trigger collectDone;
@@ -170,17 +173,6 @@ public class Robot extends LoggedRobot {
             .withFallback(new Fallback().new PID(1, 0, 0))
             .withVision(visionSim)
             .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING));
-
-    repulsor
-        .within(Meters.of(0.2))
-        .debounce(3)
-        .onTrue(
-            Commands.runOnce(
-                () -> {
-                  simHasPiece = !simHasPiece;
-                  Logger.recordOutput("simHasPiece", simHasPiece);
-                }));
-    // Triggers.flow(pg).when(() -> pg.isOn(Tag.COLLECTING));
 
     repulsor.setup();
   }
@@ -493,6 +485,15 @@ public class Robot extends LoggedRobot {
 
     VisionSimTest.setSelfPose(drive.getPose());
 
+    Logger.recordOutput("PIECE", pieceCount.get());
+    if (pieceCount.get() > 10) {
+      simHasPiece = true;
+      Logger.recordOutput("simHasPiece", simHasPiece);
+    }
+    if (pieceCount.get() == 0) {
+      simHasPiece = false;
+      Logger.recordOutput("simHasPiece", simHasPiece);
+    }
     telem.poll();
   }
 
@@ -500,7 +501,7 @@ public class Robot extends LoggedRobot {
   @Override
   public void disabledInit() {
     // Profiler.shutdown();
-    System.out.println("Profiler shut down.");
+    // System.out.println("Profiler shut down.");
     // Profiler.dumpNow("disabled_init");
   }
 

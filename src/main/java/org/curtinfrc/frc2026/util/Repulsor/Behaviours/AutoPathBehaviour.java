@@ -7,8 +7,10 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import java.util.EnumSet;
 import java.util.List;
@@ -35,6 +37,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
+import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 import org.littletonrobotics.junction.Logger;
 
 public class AutoPathBehaviour extends Behaviour {
@@ -49,6 +52,9 @@ public class AutoPathBehaviour extends Behaviour {
   private final Supplier<Double> ourSpeedCap;
 
   private Pose2d lastCollectBluePose = null;
+
+  private final NetworkTablesValue<Long> pieceCount =
+      NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
 
   public AutoPathBehaviour(
       int priority,
@@ -117,6 +123,27 @@ public class AutoPathBehaviour extends Behaviour {
         ctx.vision.getObstacles());
   }
 
+  private Command buildShootReadyCommand(BehaviourContext ctx) {
+    return Commands.waitSeconds(2)
+        .andThen(
+            Commands.runOnce(
+                () -> {
+                  pieceCount.set(0L);
+                }));
+  }
+
+  private boolean isReadyToShoot(
+      Pose2d robotPose, Pose2d goalPose, boolean piece, CategorySpec cat) {
+    if (!piece) return false;
+    if (cat != CategorySpec.kScore) return false;
+    if (goalPose == null) return false;
+    double distToGoal = robotPose.getTranslation().getDistance(goalPose.getTranslation());
+    boolean near = nearPose(robotPose, goalPose, 0.28, 10.0);
+    if (!near) return false;
+    // if (inScoring != null && !inScoring.get()) return false;
+    return true;
+  }
+
   @Override
   public Command build(BehaviourContext ctx) {
     AtomicReference<RepulsorSetpoint> lastActive = new AtomicReference<>(null);
@@ -158,6 +185,9 @@ public class AutoPathBehaviour extends Behaviour {
 
     final RepulsorSetpoint scoreFallback =
         new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
+
+    Command shootReadyCmd = buildShootReadyCommand(ctx);
+    AtomicBoolean shootLatched = new AtomicBoolean(false);
 
     Consumer<Boolean> finalizeEpisode =
         forceSuccess -> {
@@ -201,6 +231,10 @@ public class AutoPathBehaviour extends Behaviour {
                 lastActive.set(null);
                 timingStartNs.set(0);
                 timingStation.set(null);
+                if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
+                  shootReadyCmd.cancel();
+                }
+                shootLatched.set(false);
               }
               lastCat.set(cat);
 
@@ -229,6 +263,10 @@ public class AutoPathBehaviour extends Behaviour {
               lastActive.set(sp);
 
               if (sp == null) {
+                if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
+                  shootReadyCmd.cancel();
+                }
+                shootLatched.set(false);
                 ctx.drive.runVelocity(new ChassisSpeeds());
                 return;
               }
@@ -239,6 +277,10 @@ public class AutoPathBehaviour extends Behaviour {
               } else if (prevGoal != sp) {
                 finalizeEpisode.accept(false);
                 lastEpisodeGoal.set(sp);
+                if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
+                  shootReadyCmd.cancel();
+                }
+                shootLatched.set(false);
               }
 
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
@@ -265,6 +307,23 @@ public class AutoPathBehaviour extends Behaviour {
                 episodeEverNearGoal.set(true);
               }
 
+              boolean readyToShoot = isReadyToShoot(robotPose, goalPose, piece, cat);
+              if (readyToShoot) {
+                if (!shootLatched.get()) {
+                  shootLatched.set(true);
+                  if (shootReadyCmd != null && !shootReadyCmd.isScheduled()) {
+                    CommandScheduler.getInstance().schedule(shootReadyCmd);
+                  }
+                }
+              } else {
+                if (shootLatched.get()) {
+                  shootLatched.set(false);
+                  if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
+                    shootReadyCmd.cancel();
+                  }
+                }
+              }
+
               if (cat == CategorySpec.kCollect) {
                 if (atHPStation.get() && timingStartNs.get() == 0) {
                   timingStartNs.set(System.nanoTime());
@@ -284,8 +343,6 @@ public class AutoPathBehaviour extends Behaviour {
                 timingStartNs.set(0);
                 timingStation.set(null);
               }
-              // Logger.recordOutput("Repulsor/Goal1", new Pose2d(ctx.planner.getGoal(), new
-              // Rotation2d()));
 
               RepulsorSample sample =
                   ctx.planner.calculate(
@@ -359,6 +416,9 @@ public class AutoPathBehaviour extends Behaviour {
             ctx.drive)
         .finallyDo(
             interrupted -> {
+              if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
+                shootReadyCmd.cancel();
+              }
               if (lastEpisodeGoal.get() != null) {
                 finalizeEpisode.accept(!interrupted);
               }
@@ -400,8 +460,6 @@ public class AutoPathBehaviour extends Behaviour {
 
     Pose2d nextBlue =
         FieldTracker.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
-
-    Logger.recordOutput("Repulsor/Goal2", new Pose2d(nextBlue.getTranslation(), new Rotation2d()));
 
     if (nextBlue == null) {
       nextBlue =

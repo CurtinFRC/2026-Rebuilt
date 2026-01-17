@@ -5,6 +5,9 @@ import random
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+from ntcore import NetworkTableInstance
+from wpimath.geometry import Pose2d
+
 from repulsor_sim.config import Config
 from repulsor_sim.types import (
     CLASS_FUEL,
@@ -57,6 +60,16 @@ class MockProvider(RepulsorProvider):
         self.ny = 0
         self._frozen = False
 
+        self.piece_count = 0
+        self._picked_up: Dict[str, _FuelObj] = {}
+        self._nt_inst = None
+        self._piece_pub = None
+        self._piece_sub = None
+
+        # self._nt_inst = NetworkTableInstance.getDefault()
+        # self._piece_pub = self._nt_inst.getIntegerTopic("/PieceCount").publish()
+        # self._piece_sub = self._nt_inst.getIntegerTopic("/PieceCount").subscribe(0)
+
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
         self.rng = random.Random()
@@ -74,6 +87,16 @@ class MockProvider(RepulsorProvider):
         self.cluster_centers = self._make_cluster_centers()
         self._regen_fuel()
         self._init_robots()
+
+        self._nt_inst = NetworkTableInstance.getDefault()
+        self._piece_pub = self._nt_inst.getIntegerTopic("/PieceCount").publish()
+        self._piece_sub = self._nt_inst.getIntegerTopic("/PieceCount").subscribe(0)
+
+        self.piece_count = 0
+        self.last_piece_count = 0
+        self._picked_up.clear()
+        self._piece_pub.set(0)
+
         self._frozen = True
 
     def _make_cluster_centers(self) -> List[Tuple[float, float, float]]:
@@ -121,6 +144,8 @@ class MockProvider(RepulsorProvider):
         low = scores[len(scores) // 2 :]
 
         def alloc(bucket, lo, hi, frac):
+            assert self.cfg is not None
+            assert self.rng is not None
             nonlocal budget
             want = int(min(self.cfg.max_objects, 300) * frac)
             want = min(want, budget)
@@ -148,6 +173,7 @@ class MockProvider(RepulsorProvider):
         assert self.rng is not None
 
         self.fuel.clear()
+        self._picked_up.clear()
         counts = self._pick_counts_per_cell()
         oid_num = 0
         for (ix, iy), n in counts.items():
@@ -175,8 +201,68 @@ class MockProvider(RepulsorProvider):
             oid = f"robot_{'b' if class_id == CLASS_ROBOT_BLUE else 'r'}_{i}"
             self.robots.append(_RobotObj(oid=oid, class_id=class_id, x=x, y=y, sx=sx, sy=sy))
 
-    def step(self, now_s: float) -> ProviderFrame:
+    def _pickup_radius2(self) -> float:
         assert self.cfg is not None
+        r = max(0.25, max(0.705, 0.730) * 0.5)
+        return r * r
+
+    def _maybe_respawn_on_reset(self) -> None:
+        assert self.cfg is not None
+        assert self.rng is not None
+        ext = int(self._piece_sub.get())
+        if self.piece_count > 0 and ext == 0:
+            if self._picked_up:
+                min_d2 = (max(self.cfg.grid_cell_m, 0.6) * 3.0) ** 2
+                for oid, fo in list(self._picked_up.items()):
+                    x = fo.x
+                    y = fo.y
+                    for _ in range(40):
+                        nx = self.rng.uniform(self.x0, self.x1)
+                        ny = self.rng.uniform(self.y0, self.y1)
+                        dx = nx - fo.x
+                        dy = ny - fo.y
+                        if dx * dx + dy * dy >= min_d2:
+                            x, y = nx, ny
+                            break
+                    self.fuel[oid] = _FuelObj(oid=oid, x=x, y=y, z=fo.z)
+                self._picked_up.clear()
+            self.piece_count = 0
+
+    def _maybe_pickup(self, pose: Pose2d) -> None:
+        assert self.cfg is not None
+        if not self.fuel:
+            return
+        px = float(pose.x)
+        py = float(pose.y)
+        r2 = self._pickup_radius2()
+
+        to_remove: List[str] = []
+        for oid, fo in self.fuel.items():
+            dx = fo.x - px
+            dy = fo.y - py
+            if dx * dx + dy * dy <= r2:
+                to_remove.append(oid)
+
+        if not to_remove:
+            return
+
+        for oid in to_remove:
+            fo = self.fuel.pop(oid, None)
+            if fo is None:
+                continue
+            self._picked_up[oid] = fo
+            self.piece_count += 1
+
+    def step(self, now_s: float, pose: Pose2d) -> ProviderFrame:
+        assert self.cfg is not None
+
+        self._maybe_respawn_on_reset()
+        if pose is not None:
+            self._maybe_pickup(pose)
+
+        if (self.piece_count != self.last_piece_count):
+            self.last_piece_count = self.piece_count
+            self._piece_pub.set(int(self.piece_count))
 
         objs: List[WorldObject] = []
         for fo in self.fuel.values():

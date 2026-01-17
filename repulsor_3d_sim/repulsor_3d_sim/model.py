@@ -29,7 +29,7 @@ class Pose2D:
     y: float
     theta: float
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class WorldSnapshot:
     fieldvision: List[FieldVisionObject]
     repulsorvision: List[RepulsorVisionObstacle]

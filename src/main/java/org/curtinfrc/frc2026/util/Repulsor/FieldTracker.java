@@ -40,17 +40,21 @@ public class FieldTracker {
   private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.18;
   private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.65;
 
-  private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 0.55;
-  private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 1.60;
+  private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 1.60;
+  private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 3.20;
 
-  private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.18;
-  private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 0.70;
+  private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.55;
+  private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 1.80;
 
-  private static final double COLLECT_STICKY_REACHED_M = 0.65;
-  private static final double COLLECT_STICKY_SAME_M = 0.10;
+  private static final double COLLECT_STICKY_SAME_M = 0.18;
+private volatile long collectStickyReachedTsNs = 0L;
 
-  private static final double COLLECT_STICKY_NEAR_DIST_M = 1.10;
-  private static final double COLLECT_STICKY_FAR_DIST_M = 3.80;
+  private static final double COLLECT_STICKY_NEAR_DIST_M = 1.40;
+  private static final double COLLECT_STICKY_FAR_DIST_M = 4.80;
+
+  private static final double COLLECT_STICKY_REACHED_M = 0.28;
+private static final double COLLECT_STICKY_REACHED_HOLD_S = 0.22;
+
 
   private static double lerp(double a, double b, double t) {
     return a + (b - a) * t;
@@ -567,12 +571,13 @@ public class FieldTracker {
     return h;
   }
 
-  private void rebuildObjectiveCaches() {
-    rebuildObjectiveCacheForCategory(collectCache, CategorySpec.kCollect);
-    collectStickyPoint = null;
-    collectStickyScore = -1e18;
-    collectStickyTsNs = 0L;
-  }
+private void rebuildObjectiveCaches() {
+  rebuildObjectiveCacheForCategory(collectCache, CategorySpec.kCollect);
+  collectStickyPoint = null;
+  collectStickyScore = -1e18;
+  collectStickyTsNs = 0L;
+  collectStickyReachedTsNs = 0L;
+}
 
   private void rebuildObjectiveCacheForCategory(ObjectiveCache cache, CategorySpec cat) {
     GameElement[] fm = field_map;
@@ -669,62 +674,76 @@ public class FieldTracker {
     double chosenScore = proposed != null ? proposedScore : (sticky != null ? stickyScore : -1e18);
 
     if (sticky != null) {
-      double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
+  double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
 
-      double t =
-          clamp01(
-              (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
-                  / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
+  double t =
+      clamp01(
+          (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
+              / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
 
-      double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
-      double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
-      double switchMargin =
-          lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
+  double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
+  double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
+  double switchMargin =
+      lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
 
-      double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
-      boolean reached = distToSticky <= COLLECT_STICKY_REACHED_M;
+  double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
 
-      if (!reached) {
-        boolean minHold = holdS < minHoldS;
-        boolean maxHold = holdS > maxHoldS;
+  boolean insideReach = distToSticky <= COLLECT_STICKY_REACHED_M;
+  if (insideReach) {
+    if (collectStickyReachedTsNs == 0L) collectStickyReachedTsNs = nowNs;
+  } else {
+    collectStickyReachedTsNs = 0L;
+  }
+  boolean reached =
+      insideReach
+          && collectStickyReachedTsNs != 0L
+          && ((nowNs - collectStickyReachedTsNs) / 1e9) >= COLLECT_STICKY_REACHED_HOLD_S;
 
-        if (proposed == null) {
-          chosen = sticky;
-          chosenScore = stickyScore;
-        } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
-          chosen = sticky;
-          chosenScore = Math.max(stickyScore, proposedScore);
-        } else if (minHold) {
-          if (proposedScore < stickyScore + switchMargin) {
-            chosen = sticky;
-            chosenScore = stickyScore;
-          }
-        } else if (!maxHold) {
-          if (proposedScore < stickyScore + switchMargin) {
-            chosen = sticky;
-            chosenScore = stickyScore;
-          }
-        }
+  if (!reached) {
+    boolean minHold = holdS < minHoldS;
+    boolean maxHold = holdS > maxHoldS;
+
+    if (proposed == null) {
+      chosen = sticky;
+      chosenScore = stickyScore;
+    } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
+      chosen = sticky;
+      chosenScore = Math.max(stickyScore, proposedScore);
+    } else if (minHold) {
+      if (proposedScore < stickyScore + switchMargin) {
+        chosen = sticky;
+        chosenScore = stickyScore;
       }
-
-      if (reached) {
-        collectStickyPoint = null;
-        collectStickyScore = -1e18;
-        collectStickyTsNs = 0L;
-        sticky = null;
-      }
-    }
-
-    if (chosen != null) {
-      Translation2d curSticky = collectStickyPoint;
-      if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
-        collectStickyPoint = chosen;
-        collectStickyScore = chosenScore;
-        collectStickyTsNs = nowNs;
-      } else {
-        collectStickyScore = Math.max(collectStickyScore, chosenScore);
+    } else if (!maxHold) {
+      if (proposedScore < stickyScore + switchMargin) {
+        chosen = sticky;
+        chosenScore = stickyScore;
       }
     }
+  }
+
+  if (reached) {
+    collectStickyPoint = null;
+    collectStickyScore = -1e18;
+    collectStickyTsNs = 0L;
+    collectStickyReachedTsNs = 0L;
+    sticky = null;
+  }
+}
+
+
+if (chosen != null) {
+  Translation2d curSticky = collectStickyPoint;
+  if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
+    collectStickyPoint = chosen;
+    collectStickyScore = chosenScore;
+    collectStickyTsNs = nowNs;
+    collectStickyReachedTsNs = 0L;
+  } else {
+    collectStickyScore = Math.max(collectStickyScore, chosenScore);
+  }
+}
+
 
     Logger.recordOutput("collect_target_xy", chosen);
     Logger.recordOutput("collect_points_n", pts.length);

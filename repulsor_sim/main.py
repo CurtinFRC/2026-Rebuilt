@@ -10,7 +10,7 @@ from repulsor_sim.publishers.repulsorvision import publish_repulsorvision
 
 def main():
     cfg = load_config()
-    nt = NTClient(cfg.nt_server)
+    nt = NTClient(cfg)
 
     fv = nt.table("FieldVision/" + cfg.fieldvision_name)
     rv = nt.table("RepulsorVision")
@@ -22,7 +22,7 @@ def main():
     dt = 1.0 / max(1e-6, cfg.fps)
     while True:
         t0 = time.time()
-        frame = provider.step(t0)
+        frame = provider.step(t0, nt.pose())
         publish_fieldvision(fv, frame.objects, nt.pose())
         publish_repulsorvision(rv, frame.obstacles)
         nt.flush()
