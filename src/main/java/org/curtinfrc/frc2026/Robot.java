@@ -24,6 +24,10 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.indexer.Indexer;
+import org.curtinfrc.frc2026.indexer.IndexerIO;
+import org.curtinfrc.frc2026.indexer.IndexerIOComp;
+import org.curtinfrc.frc2026.indexer.IndexerIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -46,6 +50,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Indexer indexer;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -97,6 +102,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          indexer = new Indexer(new IndexerIOComp());
         }
         case DEV -> {
           drive =
@@ -112,6 +118,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          indexer = new Indexer(new IndexerIOComp());
         }
         case SIM -> {
           drive =
@@ -127,6 +134,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+          indexer = new Indexer(new IndexerIOSim());
         }
       }
     } else {
@@ -138,6 +146,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      indexer = new Indexer(new IndexerIO() {});
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -149,6 +158,10 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    controller.y()
+      .whileTrue(indexer.setSpeed(50))
+      .onFalse(indexer.stop());
   }
 
   /** This function is called periodically during all modes. */
