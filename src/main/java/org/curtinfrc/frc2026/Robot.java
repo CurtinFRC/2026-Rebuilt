@@ -295,7 +295,7 @@ public class Robot extends LoggedRobot {
                   new ModuleIOSim(TunerConstants.BackLeft),
                   new ModuleIOSim(TunerConstants.BackRight));
 
-          drive.setPose(new Pose2d(15, 10, new Rotation2d()));
+          drive.setPose(new Pose2d(15, 5, new Rotation2d()));
 
           vision =
               new Vision(

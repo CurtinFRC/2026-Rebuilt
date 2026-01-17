@@ -1,8 +1,8 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Fields/Rebuilt2026.java
 package org.curtinfrc.frc2026.util.Repulsor.Fields;
 
 import static org.curtinfrc.frc2026.util.Repulsor.Constants.FIELD_LENGTH;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -17,6 +17,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
+import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -125,8 +126,8 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> fieldObstacles() {
     double maxRangeY = 0.9;
-    double maxRangeX = 1.5;
-    double strength = 0.8;
+    double maxRangeX = 2;
+    double strength = 1;
     return List.of(
         new SquareObstacle(new Translation2d(4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 2, 3),
         new SquareObstacle(
@@ -168,5 +169,114 @@ public final class Rebuilt2026 implements FieldDefinition {
         new HorizontalObstacle(Constants.FIELD_WIDTH, 1, false),
         new VerticalObstacle(0.0, 2, true),
         new VerticalObstacle(Constants.FIELD_LENGTH, 2, false));
+  }
+
+  @Override
+  public Heatmap getHeatmap() {
+    final double SLOW_HEAT = 0.6;
+    final double FAST_HEAT = 1.0;
+
+    final double TRANS_M = 0.30;
+
+    double cx = Constants.FIELD_LENGTH * 0.5;
+    double cy = Constants.FIELD_WIDTH * 0.5;
+
+    double x0 = cx - GRID_REGION_HALF_X_M;
+    double x1 = cx + GRID_REGION_HALF_X_M;
+    double y0 = cy - GRID_REGION_HALF_Y_M;
+    double y1 = cy + GRID_REGION_HALF_Y_M;
+
+    double half = 1.1938 * 0.5;
+
+    double leftSqCx = 4.625594;
+    double leftRectCx = (FIELD_LENGTH * 0.5) - 3.63982;
+
+    double rightSqCx = FIELD_LENGTH - 4.625594;
+    double rightRectCx = (FIELD_LENGTH * 0.5) + 3.63982;
+
+    double leftBandX0 = Math.min(leftSqCx, leftRectCx) - half;
+    double leftBandX1 = Math.max(leftSqCx, leftRectCx) + half;
+
+    double rightBandX0 = Math.min(rightSqCx, rightRectCx) - half;
+    double rightBandX1 = Math.max(rightSqCx, rightRectCx) + half;
+
+    leftBandX0 = MathUtil.clamp(leftBandX0, x0, x1);
+    leftBandX1 = MathUtil.clamp(leftBandX1, x0, x1);
+    rightBandX0 = MathUtil.clamp(rightBandX0, x0, x1);
+    rightBandX1 = MathUtil.clamp(rightBandX1, x0, x1);
+
+    if (leftBandX1 > rightBandX0) {
+      double mid = 0.5 * (leftBandX1 + rightBandX0);
+      leftBandX1 = mid;
+      rightBandX0 = mid;
+    }
+
+    double fastL = Math.max(0.0, leftBandX0 - x0);
+    double fastM = Math.max(0.0, rightBandX0 - leftBandX1);
+    double fastR = Math.max(0.0, x1 - rightBandX1);
+
+    double eL = MathUtil.clamp(TRANS_M, 0.0, fastL);
+    double eML = MathUtil.clamp(TRANS_M, 0.0, fastM * 0.5);
+    double eMR = MathUtil.clamp(TRANS_M, 0.0, fastM * 0.5);
+    double eR = MathUtil.clamp(TRANS_M, 0.0, fastR);
+
+    double fastLCoreW = Math.max(0.0, fastL - eL);
+    double fastMCoreW = Math.max(0.0, fastM - eML - eMR);
+    double fastRCoreW = Math.max(0.0, fastR - eR);
+
+    var hb = Heatmap.builder();
+
+    double curX = x0;
+
+    if (fastLCoreW > 0.0) {
+      hb.block("FAST_L_CORE", new Translation2d(curX, y0), fastLCoreW, y1 - y0, FAST_HEAT);
+      curX += fastLCoreW;
+    }
+    if (eL > 0.0) {
+      hb.block("FAST_L_EDGE", new Translation2d(curX, y0), eL, y1 - y0, FAST_HEAT);
+      curX += eL;
+    }
+
+    hb.block(
+        "SLOW_L", new Translation2d(leftBandX0, y0), leftBandX1 - leftBandX0, y1 - y0, SLOW_HEAT);
+    curX = leftBandX1;
+
+    if (eML > 0.0) {
+      hb.block("FAST_M_L_EDGE", new Translation2d(curX, y0), eML, y1 - y0, FAST_HEAT);
+      curX += eML;
+    }
+    if (fastMCoreW > 0.0) {
+      hb.block("FAST_M_CORE", new Translation2d(curX, y0), fastMCoreW, y1 - y0, FAST_HEAT);
+      curX += fastMCoreW;
+    }
+    if (eMR > 0.0) {
+      hb.block("FAST_M_R_EDGE", new Translation2d(curX, y0), eMR, y1 - y0, FAST_HEAT);
+      curX += eMR;
+    }
+
+    hb.block(
+        "SLOW_R",
+        new Translation2d(rightBandX0, y0),
+        rightBandX1 - rightBandX0,
+        y1 - y0,
+        SLOW_HEAT);
+    curX = rightBandX1;
+
+    if (eR > 0.0) {
+      hb.block("FAST_R_EDGE", new Translation2d(curX, y0), eR, y1 - y0, FAST_HEAT);
+      curX += eR;
+    }
+    if (fastRCoreW > 0.0) {
+      hb.block("FAST_R_CORE", new Translation2d(curX, y0), fastRCoreW, y1 - y0, FAST_HEAT);
+      curX += fastRCoreW;
+    }
+
+    if (eL > 0.0) hb.transition("SLOW_L", "FAST_L_EDGE", 1.0);
+    if (eML > 0.0) hb.transition("SLOW_L", "FAST_M_L_EDGE", 1.0);
+
+    if (eMR > 0.0) hb.transition("SLOW_R", "FAST_M_R_EDGE", 1.0);
+    if (eR > 0.0) hb.transition("SLOW_R", "FAST_R_EDGE", 1.0);
+
+    return hb.build();
   }
 }

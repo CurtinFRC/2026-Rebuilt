@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Behaviours/AutoPathBehaviour.java
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -137,10 +136,8 @@ public class AutoPathBehaviour extends Behaviour {
     if (!piece) return false;
     if (cat != CategorySpec.kScore) return false;
     if (goalPose == null) return false;
-    double distToGoal = robotPose.getTranslation().getDistance(goalPose.getTranslation());
     boolean near = nearPose(robotPose, goalPose, 0.28, 10.0);
     if (!near) return false;
-    // if (inScoring != null && !inScoring.get()) return false;
     return true;
   }
 
@@ -164,6 +161,13 @@ public class AutoPathBehaviour extends Behaviour {
     final double SUCCESS_NEAR_DIST_METERS = 0.40;
 
     final int COLLECT_GOAL_UNITS = 3;
+
+    final double SHOOT_LOCK_ENTER_M = 3.0;
+    final double SHOOT_LOCK_EXIT_M = 3.6;
+    final double SHOOT_LOCK_MIN_ROT_DEG = 8.0;
+
+    AtomicBoolean shootGoalLocked = new AtomicBoolean(false);
+    AtomicReference<Pose2d> lockedShootPose = new AtomicReference<>(null);
 
     AtomicLong episodeStartNs = new AtomicLong(0L);
     AtomicReference<Double> episodeBestDist = new AtomicReference<>(null);
@@ -213,6 +217,8 @@ public class AutoPathBehaviour extends Behaviour {
           pinnedBestDist.set(null);
           pinnedFailedThisLatch.set(false);
           episodeEverNearGoal.set(false);
+          shootGoalLocked.set(false);
+          lockedShootPose.set(null);
         };
 
     return Commands.run(
@@ -235,6 +241,8 @@ public class AutoPathBehaviour extends Behaviour {
                   shootReadyCmd.cancel();
                 }
                 shootLatched.set(false);
+                shootGoalLocked.set(false);
+                lockedShootPose.set(null);
               }
               lastCat.set(cat);
 
@@ -267,6 +275,8 @@ public class AutoPathBehaviour extends Behaviour {
                   shootReadyCmd.cancel();
                 }
                 shootLatched.set(false);
+                shootGoalLocked.set(false);
+                lockedShootPose.set(null);
                 ctx.drive.runVelocity(new ChassisSpeeds());
                 return;
               }
@@ -281,9 +291,47 @@ public class AutoPathBehaviour extends Behaviour {
                   shootReadyCmd.cancel();
                 }
                 shootLatched.set(false);
+                shootGoalLocked.set(false);
+                lockedShootPose.set(null);
               }
 
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
+
+              if (cat == CategorySpec.kScore && piece) {
+                double d = robotPose.getTranslation().getDistance(goalPose.getTranslation());
+
+                if (!shootGoalLocked.get()) {
+                  if (d <= SHOOT_LOCK_ENTER_M) {
+                    Pose2d lock = goalPose;
+                    lockedShootPose.set(lock);
+                    shootGoalLocked.set(true);
+                  }
+                } else {
+                  Pose2d lock = lockedShootPose.get();
+                  if (lock == null) {
+                    shootGoalLocked.set(false);
+                  } else {
+                    double dLock = robotPose.getTranslation().getDistance(lock.getTranslation());
+                    if (dLock >= SHOOT_LOCK_EXIT_M) {
+                      shootGoalLocked.set(false);
+                      lockedShootPose.set(null);
+                    } else {
+                      double rotErr =
+                          Math.abs(
+                              shortestAngleRad(
+                                  robotPose.getRotation().getRadians(),
+                                  lock.getRotation().getRadians()));
+                      if (rotErr < Math.toRadians(SHOOT_LOCK_MIN_ROT_DEG)) {
+                        lockedShootPose.set(new Pose2d(lock.getTranslation(), lock.getRotation()));
+                      }
+                      goalPose = lock;
+                    }
+                  }
+                }
+              } else {
+                shootGoalLocked.set(false);
+                lockedShootPose.set(null);
+              }
 
               ctx.repulsor.setCurrentGoal(sp);
               ctx.planner.setGoal(goalPose);
@@ -408,6 +456,7 @@ public class AutoPathBehaviour extends Behaviour {
               Logger.recordOutput("autopath_goal_y", goalPose.getY());
               Logger.recordOutput("autopath_goal_theta", goalPose.getRotation().getRadians());
               Logger.recordOutput("autopath_dist_to_goal", distToGoal);
+              Logger.recordOutput("autopath_shoot_lock", shootGoalLocked.get());
 
               ctx.drive.runVelocity(
                   sample.asChassisSpeeds(

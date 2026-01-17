@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Profiler/ProfilerEventWriter.java
 package org.curtinfrc.frc2026.util.Repulsor.Profiler;
 
 import edu.wpi.first.wpilibj.Filesystem;

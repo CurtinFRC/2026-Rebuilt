@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Profiler/ProfilerStats.java
 package org.curtinfrc.frc2026.util.Repulsor.Profiler;
 
 import java.util.concurrent.atomic.AtomicLong;

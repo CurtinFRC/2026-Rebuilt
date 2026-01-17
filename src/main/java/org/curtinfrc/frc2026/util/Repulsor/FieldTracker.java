@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/FieldTracker.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -14,6 +13,8 @@ import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.Distance;
+import edu.wpi.first.wpilibj.RobotBase;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -33,28 +34,289 @@ public class FieldTracker {
   private static volatile FieldTracker instance;
   private static volatile FieldLayoutProvider defaultProvider = new Rebuilt2026();
 
-  private static final double COLLECT_CELL_M = 0.45;
-  private static final int COLLECT_COARSE_TOPK = 4;
-  private static final int COLLECT_REFINE_GRID = 3;
 
-  private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.18;
-  private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.65;
+  private volatile long collectStickyReachedTsNs = 0L;
 
-  private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 1.60;
-  private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 3.20;
+  
+  private volatile Translation2d collectStickyApproachHat = null;
+  private volatile double collectStickyPushM = 0.0;
+  private volatile long collectStickyNoProgressSinceNs = 0L;
+  private volatile double collectStickyLastDistM = Double.POSITIVE_INFINITY;
 
-  private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.55;
-  private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 1.80;
+  private volatile Translation2d collectStickyDriveTarget = null;
+  private volatile int collectStickySide = 0;
+  private volatile long collectStickyLastSwitchNs = 0L;
 
-  private static final double COLLECT_STICKY_SAME_M = 0.18;
-private volatile long collectStickyReachedTsNs = 0L;
+  private static final double COLLECT_GROUP_CELL_M = 0.40;
+  private static final double COLLECT_GROUP_R1_M = 0.95;
+  private static final double COLLECT_GROUP_R2_M = 1.70;
+  private static final double COLLECT_GROUP_MIN_COUNT = 2.0;
+  private static final double COLLECT_RELOCK_ENABLE_DIST_M = 1.6;
+  private static final double COLLECT_HALF_KEEP_MID_BAND_M = 1.2;
 
-  private static final double COLLECT_STICKY_NEAR_DIST_M = 1.40;
-  private static final double COLLECT_STICKY_FAR_DIST_M = 4.80;
+  private static final double COLLECT_STUCK_RADIUS_M = 0.10;
+  private static final double COLLECT_STUCK_RESET_MOVE_M = 0.22;
 
-  private static final double COLLECT_STICKY_REACHED_M = 0.28;
-private static final double COLLECT_STICKY_REACHED_HOLD_S = 0.22;
+  private Translation2d collectStuckAnchorPos = new Translation2d();
+  private long collectStuckAnchorNs = 0L;
 
+  private volatile int collectStickyHalfLock = 0;
+
+  private static final double COLLECT_GROUP_W_C1 = 1.00;
+  private static final double COLLECT_GROUP_W_C2 = 0.35;
+  private static final double COLLECT_GROUP_W_ETA = 1.25;
+  private static final double COLLECT_GROUP_W_SPREAD = 0.60;
+  private static final double COLLECT_GROUP_W_CENTER = 0.18;
+  private static final double COLLECT_NEARBY_RADIUS_M = 2.2;
+  private static final int COLLECT_NEARBY_MIN_COUNT = 1;
+
+    private static final double COLLECT_LIVE_FUEL_NEAR_TARGET_R_M = 0.65;
+  private static final double COLLECT_REACHED_EMPTY_FORCE_DROP_SEC = 0.18;
+  private static final double COLLECT_REACHED_EMPTY_NEAR_TARGET_M = 0.95;
+  private double collectReachedEmptySec = 0.0;
+
+
+  private static final double COLLECT_DONE_NO_FUEL_SEC = 0.35;
+  private static final double COLLECT_DONE_STUCK_SEC = 0.35;
+  private static final double COLLECT_STUCK_SPEED_MPS = 0.15;
+
+  private static final double COLLECT_EMPTY_DRIVE_DONE_SEC = 0.35;
+  private static final double COLLECT_EMPTY_DRIVE_NEAR_ROBOT_M = 1.05;
+  private static final double COLLECT_EMPTY_DRIVE_PROBE_R_M = 0.55;
+  private static final double COLLECT_EMPTY_DRIVE_MIN_UNITS = 0.06;
+
+  private double collectEmptyDriveSec = 0.0;
+
+  private static final double COLLECT_CELL_M = 0.14;
+private static final int COLLECT_COARSE_TOPK = 4;
+private static final int COLLECT_REFINE_GRID = 3;
+
+private static final double COLLECT_STICKY_MIN_HOLD_S_FAR = 0.25;
+private static final double COLLECT_STICKY_MIN_HOLD_S_NEAR = 0.70;
+
+private static final double COLLECT_STICKY_MAX_HOLD_S_FAR = 1.80;
+private static final double COLLECT_STICKY_MAX_HOLD_S_NEAR = 3.80;
+
+private static final double COLLECT_STICKY_SWITCH_MARGIN_FAR = 0.50;
+private static final double COLLECT_STICKY_SWITCH_MARGIN_NEAR = 1.45;
+
+private static final double COLLECT_DRIVE_PROBE_R_M = 0.55;
+private static final double COLLECT_DRIVE_MIN_UNITS = 0.045;
+private static final double COLLECT_DRIVE_SEARCH_STEP_M = 0.14;
+private static final int COLLECT_DRIVE_SEARCH_GRID = 3;
+private static final double COLLECT_STICKY_FORCE_SWITCH_MARGIN_SCALE = 0.55;
+
+private static final double COLLECT_STICKY_NEAR_DIST_M = 1.40;
+private static final double COLLECT_STICKY_FAR_DIST_M = 4.80;
+
+private static final double COLLECT_STICKY_REACHED_HOLD_S = 0.35;
+
+private static final double COLLECT_POINT_CANONICAL_SNAP_M = 0.45;
+
+private static final double COLLECT_STICKY_SAME_M = 0.30;
+private static final double COLLECT_DRIVE_STABILIZE_TO_STICKY_M = 0.16;
+
+private static final double COLLECT_STICKY_REACHED_M = 0.22;
+private static final double COLLECT_STICKY_TARGET_RECALC_EPS_M = 0.14;
+
+private static final double COLLECT_STICKY_NO_PROGRESS_S = 0.40;
+private static final double COLLECT_STICKY_NO_PROGRESS_DROP_M = 0.06;
+private static final double COLLECT_STICKY_NO_PROGRESS_MIN_DIST_M = 0.50;
+
+private static final double COLLECT_STICKY_FLAP_COOLDOWN_S = 0.95;
+private static final double COLLECT_STICKY_TIE_ETA_EPS = 0.18;
+private static final double COLLECT_STICKY_SIDE_SWITCH_EXTRA = 0.22;
+
+private static final double COLLECT_SWITCH_MIN_MOVE_M = 0.18;
+private static final double COLLECT_SWITCH_OPPOSITE_SIDE_SCORE_BONUS = 0.55;
+private static final double COLLECT_SWITCH_APPROACH_COS_MIN = Math.cos(Math.toRadians(78.0));
+
+private static final double COLLECT_SWITCH_COOLDOWN_S = 0.70;
+private static final double COLLECT_STICKY_TIE_SCORE_EPS = 0.35;
+
+
+  private double collectNoFuelSec = 0.0;
+  private double collectStuckSec = 0.0;
+
+  private Translation2d lastRobotPosForStuck = new Translation2d();
+
+  private static final double COLLECT_GROUP_OVERRIDE_MARGIN = 0.35;
+
+  private volatile double collectStickyEtaS = 0.0;
+  private volatile long lastObjectiveTickNs = 0L;
+
+  private static final double COLLECT_RESOURCE_SNAP_MAX_DIST_M = 0.55;
+  private static final double COLLECT_RESOURCE_SNAP_MIN_UNITS = 0.07;
+
+  private static final double SIM_AGE_CLAMP_S = 0.05;
+
+
+  private static final double COLLECT_SNAP_TO_POINT_M = 0.14;
+  private static final double COLLECT_SNAP_HYST_M = 0.06; // prevents snap/un-snap jitter
+  private boolean collectSnapActive = false;
+
+  private Translation2d collectStickyLastSwitchRobotPos = null;
+
+  private static Translation2d canonicalizeCollectPoint(
+      Translation2d p, Translation2d[] setpoints) {
+    if (p == null || setpoints == null || setpoints.length == 0) return p;
+
+    Translation2d best = null;
+    double bestD2 = Double.POSITIVE_INFINITY;
+
+    for (Translation2d s : setpoints) {
+      if (s == null) continue;
+      double dx = p.getX() - s.getX();
+      double dy = p.getY() - s.getY();
+      double d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = s;
+      }
+    }
+
+    if (best == null) return p;
+    double snap2 = COLLECT_POINT_CANONICAL_SNAP_M * COLLECT_POINT_CANONICAL_SNAP_M;
+    return bestD2 <= snap2 ? best : p;
+  }
+
+  private void clearCollectSticky() {
+    collectStickyPoint = null;
+    collectStickyScore = -1e18;
+    collectStickyTsNs = 0L;
+    collectStickyReachedTsNs = 0L;
+    collectStickyApproachHat = null;
+    collectStickyPushM = 0.0;
+    collectStickyDriveTarget = null;
+    collectStickyNoProgressSinceNs = 0L;
+    collectStickyLastDistM = Double.POSITIVE_INFINITY;
+    collectStickyLastSwitchNs = 0L;
+    collectStickyLastSwitchRobotPos = null;
+    collectStickyEtaS = 0.0;
+    collectStickySide = 0;
+    collectSnapActive = false;
+    collectStickyHalfLock = 0;
+    collectNoFuelSec = 0.0;
+    collectStuckSec = 0.0;
+    lastRobotPosForStuck = new Translation2d();
+    collectEmptyDriveSec = 0.0;
+    collectStuckAnchorPos = new Translation2d();
+    collectStuckAnchorNs = 0L;
+        collectReachedEmptySec = 0.0;
+
+  }
+
+    private static int countLiveFuelWithin(
+      java.util.List<PredictiveFieldState.DynamicObject> dyn,
+      Translation2d center,
+      double r) {
+    if (dyn == null || dyn.isEmpty() || center == null) return 0;
+    double r2 = r * r;
+    int n = 0;
+    for (int i = 0; i < dyn.size(); i++) {
+      PredictiveFieldState.DynamicObject o = dyn.get(i);
+      if (o == null || o.pos == null || o.type == null) continue;
+      if (!"fuel".equalsIgnoreCase(o.type)) continue;
+      double dx = o.pos.getX() - center.getX();
+      double dy = o.pos.getY() - center.getY();
+      if ((dx * dx + dy * dy) <= r2) n++;
+    }
+    return n;
+  }
+
+
+  private static double dot(Translation2d a, Translation2d b) {
+    return a.getX() * b.getX() + a.getY() * b.getY();
+  }
+
+  private static Translation2d unit(Translation2d v) {
+    double n = v.getNorm();
+    if (n <= 1e-9) return new Translation2d(1.0, 0.0);
+    return v.div(n);
+  }
+
+  private static boolean movedEnough(Translation2d a, Translation2d b, double minMove) {
+    if (a == null || b == null) return true;
+    return a.getDistance(b) >= minMove;
+  }
+
+  private static boolean violatesApproach(Translation2d approachHat, Translation2d toCandHat) {
+    if (approachHat == null || toCandHat == null) return false;
+    return dot(approachHat, toCandHat) < COLLECT_SWITCH_APPROACH_COS_MIN;
+  }
+
+  private Translation2d relockCollectPointToLiveFuel(
+      Translation2d desiredCollectPoint,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall,
+      java.util.function.Function<Translation2d, Translation2d> nudgeOutOfForbidden) {
+
+    if (desiredCollectPoint == null) return null;
+
+    Translation2d p = desiredCollectPoint;
+
+    Translation2d near = predictor.nearestCollectResource(p, COLLECT_RESOURCE_SNAP_MAX_DIST_M);
+    if (near != null) p = near;
+
+    Translation2d centroid = predictor.snapToCollectCentroid(p, 0.75, 0.15);
+    if (centroid != null) p = centroid;
+
+    p = clampToFieldRobotSafe.apply(p);
+    if (inForbidden.test(p)) p = nudgeOutOfForbidden.apply(p);
+    p = clampToFieldRobotSafe.apply(p);
+
+    if (inForbidden.test(p) || violatesWall.test(p)) return desiredCollectPoint;
+    return p;
+  }
+
+  private static final double DYN_STALE_S = 0.3;
+  private static final double FUEL_STALE_S = 0.35;
+
+  private static Translation2d unitOrDefault(Translation2d v, Translation2d def) {
+    double n = v.getNorm();
+    if (n <= 1e-9) return def;
+    return v.div(n);
+  }
+
+  private Translation2d computeFrozenDriveTarget(
+      Translation2d resource,
+      Translation2d approachHat,
+      double pushM,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall,
+      java.util.function.Function<Translation2d, Translation2d> nudgeOutOfForbidden) {
+
+    Translation2d t = clampToFieldRobotSafe.apply(resource.plus(approachHat.times(pushM)));
+    if (inForbidden.test(t)) t = nudgeOutOfForbidden.apply(t);
+    t = clampToFieldRobotSafe.apply(t);
+
+    if (inForbidden.test(t) || violatesWall.test(t)) {
+      Translation2d base = clampToFieldRobotSafe.apply(resource);
+      if (inForbidden.test(base)) base = nudgeOutOfForbidden.apply(base);
+      base = clampToFieldRobotSafe.apply(base);
+      if (!inForbidden.test(base) && !violatesWall.test(base)) return base;
+    }
+    return t;
+  }
+
+  private static int sideSignX(double x) {
+    return sideSignXBand(x, 0.10);
+  }
+
+  private static int sideSignXBand(double x, double band) {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+    double b = Math.max(0.0, band);
+    if (x < mid - b) return -1;
+    if (x > mid + b) return 1;
+    return 0;
+  }
+
+  private static int sideSign(Translation2d p) {
+    if (p == null) return 0;
+    return sideSignX(p.getX());
+  }
 
   private static double lerp(double a, double b, double t) {
     return a + (b - a) * t;
@@ -571,13 +833,10 @@ private static final double COLLECT_STICKY_REACHED_HOLD_S = 0.22;
     return h;
   }
 
-private void rebuildObjectiveCaches() {
-  rebuildObjectiveCacheForCategory(collectCache, CategorySpec.kCollect);
-  collectStickyPoint = null;
-  collectStickyScore = -1e18;
-  collectStickyTsNs = 0L;
-  collectStickyReachedTsNs = 0L;
-}
+  private void rebuildObjectiveCaches() {
+    rebuildObjectiveCacheForCategory(collectCache, CategorySpec.kCollect);
+    clearCollectSticky();
+  }
 
   private void rebuildObjectiveCacheForCategory(ObjectiveCache cache, CategorySpec cat) {
     GameElement[] fm = field_map;
@@ -604,165 +863,1265 @@ private void rebuildObjectiveCaches() {
     cache.points = arr;
     cache.lastHash = h;
   }
-
-  private static final double DYN_STALE_S = 0.3;
-
   private List<PredictiveFieldState.DynamicObject> snapshotDynamics() {
-    long nowNs = System.nanoTime();
-    ArrayList<PredictiveFieldState.DynamicObject> out = new ArrayList<>(tracked.size());
-    for (TrackedObj o : tracked.values()) {
-      if (o == null) continue;
-      Pose3d p = o.pos;
-      if (p == null) continue;
-      long t = o.tNs;
-      if (t == 0L) continue;
-      double ageS = (nowNs - t) / 1e9;
-      if (ageS < 0.0 || ageS > DYN_STALE_S) continue;
-      String ty = o.type != null ? o.type : "unknown";
-      out.add(
-          new PredictiveFieldState.DynamicObject(
-              o.id,
-              ty,
-              new Translation2d(p.getX(), p.getY()),
-              new Translation2d(o.vx, o.vy),
-              ageS));
-    }
-    return out;
+  long nowNs = System.nanoTime();
+  boolean isSim = RobotBase.isSimulation();
+
+  ArrayList<PredictiveFieldState.DynamicObject> out = new ArrayList<>(tracked.size());
+  for (TrackedObj o : tracked.values()) {
+    if (o == null) continue;
+    Pose3d p = o.pos;
+    if (p == null) continue;
+    long t = o.tNs;
+    if (t == 0L) continue;
+
+    double ageS = (nowNs - t) / 1e9;
+    if (ageS < 0.0) continue;
+
+    String ty = o.type != null ? o.type : "unknown";
+
+    if (isSim) ageS = 0.0;
+
+    out.add(
+        new PredictiveFieldState.DynamicObject(
+            o.id,
+            ty,
+            new Translation2d(p.getX(), p.getY()),
+            new Translation2d(o.vx, o.vy),
+            ageS));
   }
+  return out;
+}
 
   private static boolean samePoint(Translation2d a, Translation2d b, double tol) {
     if (a == null || b == null) return false;
     return a.getDistance(b) <= tol;
   }
 
-  // Replace nextObjectiveGoalBlue() with this version:
+  private static final double COLLECT_EMPTY_SPACE_MAX_DIST_TO_FUEL_M = 0.18;
+  private static final double COLLECT_HOTSPOT_SNAP_RADIUS_M = 0.85;
+  private static final double COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M = 0.12;
+  private static final double COLLECT_SNAP_TO_NEAREST_FUEL_M = 0.22;
+
+  private static final class NearestPoint {
+    final Translation2d p;
+    final double d;
+
+    NearestPoint(Translation2d p, double d) {
+      this.p = p;
+      this.d = d;
+    }
+  }
+
+  private static NearestPoint nearestPointTo(Translation2d q, Translation2d[] pts) {
+    if (q == null || pts == null || pts.length == 0)
+      return new NearestPoint(null, Double.POSITIVE_INFINITY);
+    Translation2d best = null;
+    double bestD = Double.POSITIVE_INFINITY;
+    for (Translation2d p : pts) {
+      if (p == null) continue;
+      double d = q.getDistance(p);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return new NearestPoint(best, bestD);
+  }
+
+  private static final class _CellKey {
+    final int ix;
+    final int iy;
+
+    _CellKey(int ix, int iy) {
+      this.ix = ix;
+      this.iy = iy;
+    }
+
+    @Override
+    public int hashCode() {
+      return (ix * 73856093) ^ (iy * 19349663);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof _CellKey)) return false;
+      _CellKey k = (_CellKey) o;
+      return ix == k.ix && iy == k.iy;
+    }
+  }
+
+  private static final class _SpatialIndex {
+    final double cell;
+    final java.util.HashMap<_CellKey, java.util.ArrayList<Translation2d>> map =
+        new java.util.HashMap<>();
+
+    _SpatialIndex(double cell) {
+      this.cell = Math.max(1e-6, cell);
+    }
+
+    void add(Translation2d p) {
+      int ix = (int) Math.floor(p.getX() / cell);
+      int iy = (int) Math.floor(p.getY() / cell);
+      _CellKey k = new _CellKey(ix, iy);
+      map.computeIfAbsent(k, kk -> new java.util.ArrayList<>()).add(p);
+    }
+
+    java.util.ArrayList<Translation2d> getCell(int ix, int iy) {
+      return map.get(new _CellKey(ix, iy));
+    }
+
+    int ix(double x) {
+      return (int) Math.floor(x / cell);
+    }
+
+    int iy(double y) {
+      return (int) Math.floor(y / cell);
+    }
+  }
+
+  private static final class _GroupCandidate {
+    final Translation2d point;
+    final double groupScore;
+
+    _GroupCandidate(Translation2d point, double groupScore) {
+      this.point = point;
+      this.groupScore = groupScore;
+    }
+  }
+
+  private static double _sqr(double v) {
+    return v * v;
+  }
+
+  private static double _dist2(Translation2d a, Translation2d b) {
+    double dx = a.getX() - b.getX();
+    double dy = a.getY() - b.getY();
+    return dx * dx + dy * dy;
+  }
+
+  private static double _centerPenalty(Translation2d p) {
+    double dx = p.getX() - (Constants.FIELD_LENGTH * 0.5);
+    double dy = p.getY() - (Constants.FIELD_WIDTH * 0.5);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  private _SpatialIndex buildIndex(Translation2d[] pts, double cellM) {
+    _SpatialIndex idx = new _SpatialIndex(cellM);
+    for (Translation2d p : pts) {
+      if (p != null) idx.add(p);
+    }
+    return idx;
+  }
+
+  private double evalGroupScore(
+      Translation2d robotPosBlue,
+      double cap,
+      Translation2d resource,
+      Translation2d[] pts,
+      _SpatialIndex idx,
+      java.util.function.Function<Translation2d, Translation2d> safePushedFromRobot,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall) {
+
+    if (resource == null) return -1e18;
+
+    Translation2d drive = safePushedFromRobot.apply(resource);
+    if (drive == null) return -1e18;
+
+    drive = clampToFieldRobotSafe.apply(drive);
+    if (inForbidden.test(drive) || violatesWall.test(drive)) return -1e18;
+
+    double eta = robotPosBlue.getDistance(drive) / Math.max(0.2, cap);
+
+    double r1 = COLLECT_GROUP_R1_M;
+    double r2 = COLLECT_GROUP_R2_M;
+    double r1_2 = r1 * r1;
+    double r2_2 = r2 * r2;
+
+    int ix0 = idx.ix(resource.getX());
+    int iy0 = idx.iy(resource.getY());
+
+    int radCells = (int) Math.ceil(r2 / idx.cell);
+
+    int c1 = 0;
+    int c2 = 0;
+
+    double spreadAccum = 0.0;
+    int spreadN = 0;
+
+    for (int dx = -radCells; dx <= radCells; dx++) {
+      for (int dy = -radCells; dy <= radCells; dy++) {
+        java.util.ArrayList<Translation2d> cell = idx.getCell(ix0 + dx, iy0 + dy);
+        if (cell == null) continue;
+        for (int i = 0; i < cell.size(); i++) {
+          Translation2d q = cell.get(i);
+          double d2 = _dist2(resource, q);
+          if (d2 <= r2_2) {
+            c2++;
+            if (d2 <= r1_2) c1++;
+            if (d2 > 1e-9) {
+              spreadAccum += Math.sqrt(d2);
+              spreadN++;
+            }
+          }
+        }
+      }
+    }
+
+    double c1d = (double) c1;
+    double c2d = (double) c2;
+
+    if (c1d < COLLECT_GROUP_MIN_COUNT && c2d < (COLLECT_GROUP_MIN_COUNT + 1.0)) {
+      return -1e18;
+    }
+
+    double spread = spreadN > 0 ? (spreadAccum / spreadN) : r2;
+
+    double center = _centerPenalty(resource);
+
+    double score =
+        (COLLECT_GROUP_W_C1 * c1d)
+            + (COLLECT_GROUP_W_C2 * Math.sqrt(Math.max(0.0, c2d)))
+            - (COLLECT_GROUP_W_ETA * eta)
+            - (COLLECT_GROUP_W_SPREAD * spread)
+            - (COLLECT_GROUP_W_CENTER * (1.0 / Math.max(0.35, center)));
+
+    return score;
+  }
+
+  private _GroupCandidate chooseGroupCandidate(
+      Translation2d robotPosBlue,
+      double cap,
+      Translation2d[] pts,
+      java.util.function.Function<Translation2d, Translation2d> safePushedFromRobot,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall) {
+
+    _SpatialIndex idx = buildIndex(pts, COLLECT_GROUP_CELL_M);
+
+    _GroupCandidate best = null;
+    double bestScore = -1e18;
+
+    int limit = Math.min(180, pts.length);
+    double bestD2 = Double.POSITIVE_INFINITY;
+
+    java.util.ArrayList<Translation2d> seed = new java.util.ArrayList<>(limit);
+    for (int i = 0; i < pts.length; i++) {
+      Translation2d p = pts[i];
+      if (p == null) continue;
+
+      Translation2d drive = safePushedFromRobot.apply(p);
+      if (drive == null) continue;
+      drive = clampToFieldRobotSafe.apply(drive);
+      if (inForbidden.test(drive) || violatesWall.test(drive)) continue;
+
+      double d2 = _dist2(robotPosBlue, p);
+      if (seed.size() < limit) {
+        seed.add(p);
+      } else {
+        if (d2 < bestD2) {
+          int worstIdx = 0;
+          double worstD2 = -1.0;
+          for (int k = 0; k < seed.size(); k++) {
+            double dd2 = _dist2(robotPosBlue, seed.get(k));
+            if (dd2 > worstD2) {
+              worstD2 = dd2;
+              worstIdx = k;
+            }
+          }
+          seed.set(worstIdx, p);
+        }
+      }
+      if (d2 < bestD2) bestD2 = d2;
+    }
+
+    for (int i = 0; i < seed.size(); i++) {
+      Translation2d p = seed.get(i);
+      double s =
+          evalGroupScore(
+              robotPosBlue,
+              cap,
+              p,
+              pts,
+              idx,
+              safePushedFromRobot,
+              clampToFieldRobotSafe,
+              inForbidden,
+              violatesWall);
+      if (s > bestScore) {
+        bestScore = s;
+        best = new _GroupCandidate(p, s);
+      }
+    }
+
+    return best;
+  }
+
+  private Translation2d refineCollectDriveTarget(
+      Translation2d robotPos,
+      double cap,
+      Translation2d chosenResource,
+      Translation2d seedDrive,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall,
+      java.util.function.Function<Translation2d, Translation2d> nudgeOutOfForbidden) {
+
+    if (seedDrive == null) seedDrive = chosenResource;
+    if (seedDrive == null) return null;
+
+    Translation2d base = clampToFieldRobotSafe.apply(seedDrive);
+    if (inForbidden.test(base)) base = nudgeOutOfForbidden.apply(base);
+    base = clampToFieldRobotSafe.apply(base);
+    if (inForbidden.test(base) || violatesWall.test(base)) return base;
+
+    double bestScore = -1e18;
+    Translation2d best = base;
+
+    int g = Math.max(1, COLLECT_DRIVE_SEARCH_GRID);
+    double step = Math.max(0.02, COLLECT_DRIVE_SEARCH_STEP_M);
+    double half = step * (g - 1) * 0.5;
+
+    for (int ix = 0; ix < g; ix++) {
+      double ox = -half + ix * step;
+      for (int iy = 0; iy < g; iy++) {
+        double oy = -half + iy * step;
+
+        Translation2d cand = new Translation2d(base.getX() + ox, base.getY() + oy);
+        cand = clampToFieldRobotSafe.apply(cand);
+        if (inForbidden.test(cand)) cand = nudgeOutOfForbidden.apply(cand);
+        cand = clampToFieldRobotSafe.apply(cand);
+        if (inForbidden.test(cand) || violatesWall.test(cand)) continue;
+
+        PredictiveFieldState.CollectProbe pr =
+            predictor.probeCollect(cand, COLLECT_DRIVE_PROBE_R_M);
+        double units = pr.units;
+        int count = pr.count;
+
+        Translation2d snapped = predictor.snapToCollectCentroid(cand, 0.60, 0.15);
+        if (snapped != null) {
+          snapped = clampToFieldRobotSafe.apply(snapped);
+          if (inForbidden.test(snapped)) snapped = nudgeOutOfForbidden.apply(snapped);
+          snapped = clampToFieldRobotSafe.apply(snapped);
+          if (!inForbidden.test(snapped) && !violatesWall.test(snapped)) {
+            PredictiveFieldState.CollectProbe pr2 =
+                predictor.probeCollect(snapped, COLLECT_DRIVE_PROBE_R_M);
+            if (pr2.units > units + 0.01 || pr2.count > count) {
+              cand = snapped;
+              units = pr2.units;
+              count = pr2.count;
+            }
+          }
+        }
+
+        double distToSeed = cand.getDistance(base);
+        double distToRobot = robotPos.getDistance(cand);
+
+        double s =
+            (units * 1.0)
+                + (0.22 * Math.min(6.0, (double) count))
+                - (0.12 * (distToRobot / Math.max(0.2, cap)))
+                - (0.55 * distToSeed);
+
+        if (s > bestScore) {
+          bestScore = s;
+          best = cand;
+        }
+      }
+    }
+
+    PredictiveFieldState.CollectProbe bestPr =
+        predictor.probeCollect(best, COLLECT_DRIVE_PROBE_R_M);
+    if (bestPr.count <= 0 || bestPr.units < COLLECT_DRIVE_MIN_UNITS) {
+      Translation2d snap = chosenResource != null ? chosenResource : base;
+      snap = clampToFieldRobotSafe.apply(snap);
+      if (inForbidden.test(snap)) snap = nudgeOutOfForbidden.apply(snap);
+      snap = clampToFieldRobotSafe.apply(snap);
+      if (!inForbidden.test(snap) && !violatesWall.test(snap)) {
+        PredictiveFieldState.CollectProbe pr =
+            predictor.probeCollect(snap, COLLECT_DRIVE_PROBE_R_M);
+        if (pr.count > 0 || pr.units >= COLLECT_DRIVE_MIN_UNITS) return snap;
+      }
+    }
+
+    return best;
+  }
+
+  private static Translation2d perp(Translation2d v) {
+    return new Translation2d(-v.getY(), v.getX());
+  }
+
+  private static double nowSFromNs(long ns) {
+    return ns / 1e9;
+  }
+
+  private static double holdSForDist(double d) {
+    double t =
+        clamp01(
+            (d - COLLECT_STICKY_NEAR_DIST_M)
+                / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
+    double min = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
+    double max = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
+    return Math.max(min, Math.min(max, lerp(max, min, 0.0)));
+  }
+
+  private static double switchMarginForDist(double d) {
+    double t =
+        clamp01(
+            (d - COLLECT_STICKY_NEAR_DIST_M)
+                / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
+    return lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
+  }
 
   public Pose2d nextObjectiveGoalBlue(
       Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
     if (robotPoseBlue == null) return Pose2d.kZero;
     double cap = Math.max(0.2, ourSpeedCap);
 
-    ObjectiveCache cache = cat == CategorySpec.kCollect ? collectCache : collectCache;
-    Translation2d[] pts = cache.points;
+    for (int pass = 0; pass < 2; pass++) {
 
-    if (pts == null || pts.length == 0) {
-      return new Pose2d(
-          Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
-    }
+      ObjectiveCache cache = cat == CategorySpec.kCollect ? collectCache : collectCache;
+      Translation2d[] pts = cache.points;
 
-    predictor.setDynamicObjects(snapshotDynamics());
-
-    PredictiveFieldState.PointCandidate best =
-        predictor.rankCollectHierarchical(
-            robotPoseBlue.getTranslation(),
-            cap,
-            pts,
-            COLLECT_CELL_M,
-            goalUnits,
-            COLLECT_COARSE_TOPK,
-            COLLECT_REFINE_GRID);
-
-    long nowNs = System.nanoTime();
-    Translation2d proposed = best != null ? best.point : null;
-    double proposedScore = best != null ? best.score : -1e18;
-
-    Translation2d sticky = collectStickyPoint;
-    double stickyScore = collectStickyScore;
-    long stickyTs = collectStickyTsNs;
-
-    Translation2d chosen = proposed != null ? proposed : (sticky != null ? sticky : pts[0]);
-    double chosenScore = proposed != null ? proposedScore : (sticky != null ? stickyScore : -1e18);
-
-    if (sticky != null) {
-  double distToSticky = robotPoseBlue.getTranslation().getDistance(sticky);
-
-  double t =
-      clamp01(
-          (distToSticky - COLLECT_STICKY_NEAR_DIST_M)
-              / (COLLECT_STICKY_FAR_DIST_M - COLLECT_STICKY_NEAR_DIST_M));
-
-  double minHoldS = lerp(COLLECT_STICKY_MIN_HOLD_S_NEAR, COLLECT_STICKY_MIN_HOLD_S_FAR, t);
-  double maxHoldS = lerp(COLLECT_STICKY_MAX_HOLD_S_NEAR, COLLECT_STICKY_MAX_HOLD_S_FAR, t);
-  double switchMargin =
-      lerp(COLLECT_STICKY_SWITCH_MARGIN_NEAR, COLLECT_STICKY_SWITCH_MARGIN_FAR, t);
-
-  double holdS = stickyTs != 0L ? (nowNs - stickyTs) / 1e9 : 1e9;
-
-  boolean insideReach = distToSticky <= COLLECT_STICKY_REACHED_M;
-  if (insideReach) {
-    if (collectStickyReachedTsNs == 0L) collectStickyReachedTsNs = nowNs;
-  } else {
-    collectStickyReachedTsNs = 0L;
-  }
-  boolean reached =
-      insideReach
-          && collectStickyReachedTsNs != 0L
-          && ((nowNs - collectStickyReachedTsNs) / 1e9) >= COLLECT_STICKY_REACHED_HOLD_S;
-
-  if (!reached) {
-    boolean minHold = holdS < minHoldS;
-    boolean maxHold = holdS > maxHoldS;
-
-    if (proposed == null) {
-      chosen = sticky;
-      chosenScore = stickyScore;
-    } else if (samePoint(proposed, sticky, COLLECT_STICKY_SAME_M)) {
-      chosen = sticky;
-      chosenScore = Math.max(stickyScore, proposedScore);
-    } else if (minHold) {
-      if (proposedScore < stickyScore + switchMargin) {
-        chosen = sticky;
-        chosenScore = stickyScore;
+      if (pts == null || pts.length == 0) {
+        clearCollectSticky();
+        return new Pose2d(
+            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
       }
-    } else if (!maxHold) {
-      if (proposedScore < stickyScore + switchMargin) {
-        chosen = sticky;
-        chosenScore = stickyScore;
+
+      final double FORBID_MARGIN_M = 0.6;
+
+      final double robotHalf =
+          0.5
+              * Math.max(
+                  org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y);
+      final double robotWallMargin = robotHalf + 0.03;
+
+      double L = Constants.FIELD_LENGTH;
+      double halfW = 1.1938 * 0.5 + FORBID_MARGIN_M;
+
+      double leftSqCx = 4.625594;
+      double leftRectCx = (L * 0.5) - 3.63982;
+
+      double rightSqCx = L - 4.625594;
+      double rightRectCx = (L * 0.5) + 3.63982;
+
+      double leftBandX0 = Math.min(leftSqCx, leftRectCx) - halfW;
+      double leftBandX1 = Math.max(leftSqCx, leftRectCx) + halfW;
+
+      double rightBandX0 = Math.min(rightSqCx, rightRectCx) - halfW;
+      double rightBandX1 = Math.max(rightSqCx, rightRectCx) + halfW;
+
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe =
+          p -> {
+            double x = p.getX();
+            double y = p.getY();
+            double minX = robotWallMargin;
+            double maxX = Constants.FIELD_LENGTH - robotWallMargin;
+            double minY = robotWallMargin;
+            double maxY = Constants.FIELD_WIDTH - robotWallMargin;
+            if (x < minX) x = minX;
+            if (x > maxX) x = maxX;
+            if (y < minY) y = minY;
+            if (y > maxY) y = maxY;
+            return new Translation2d(x, y);
+          };
+
+      java.util.function.Function<Translation2d, Double> wallClearance =
+          p -> {
+            double x = p.getX();
+            double y = p.getY();
+            double dL = x;
+            double dR = Constants.FIELD_LENGTH - x;
+            double dB = y;
+            double dT = Constants.FIELD_WIDTH - y;
+            return Math.min(Math.min(dL, dR), Math.min(dB, dT));
+          };
+
+      java.util.function.Predicate<Translation2d> violatesWall =
+          p -> wallClearance.apply(p) < robotWallMargin;
+
+      java.util.function.Predicate<Translation2d> inForbidden =
+          p -> {
+            double x = p.getX();
+            return (x >= leftBandX0 && x <= leftBandX1) || (x >= rightBandX0 && x <= rightBandX1);
+          };
+
+      java.util.function.Function<Translation2d, Translation2d> nudgeOutOfForbidden =
+          p -> {
+            if (!inForbidden.test(p)) return p;
+            double x = p.getX();
+            double y = p.getY();
+            double pad = 0.06;
+            if (x >= leftBandX0 && x <= leftBandX1) {
+              double dl = Math.abs(x - leftBandX0);
+              double dr = Math.abs(leftBandX1 - x);
+              x = (dl < dr) ? (leftBandX0 - pad) : (leftBandX1 + pad);
+            } else if (x >= rightBandX0 && x <= rightBandX1) {
+              double dl = Math.abs(x - rightBandX0);
+              double dr = Math.abs(rightBandX1 - x);
+              x = (dl < dr) ? (rightBandX0 - pad) : (rightBandX1 + pad);
+            }
+            return clampToFieldRobotSafe.apply(new Translation2d(x, y));
+          };
+
+      java.util.function.Function<Translation2d, Translation2d> safePushedFromRobot =
+          resource -> {
+            Translation2d rp = robotPoseBlue.getTranslation();
+            Translation2d dir = resource.minus(rp);
+            double n = dir.getNorm();
+            if (n <= 1e-6) return clampToFieldRobotSafe.apply(resource);
+
+            double dist = rp.getDistance(resource);
+            double pushT = clamp01((dist - 0.35) / (2.50 - 0.35));
+            double pushM = Math.min(lerp(0.42, 0.18, pushT), COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M);
+
+            Translation2d dirHat = dir.div(n);
+
+            Translation2d targetFull =
+                clampToFieldRobotSafe.apply(resource.plus(dirHat.times(pushM)));
+            if (!inForbidden.test(targetFull) && !violatesWall.test(targetFull)) return targetFull;
+
+            double lo = 0.0;
+            double hi = 1.0;
+            Translation2d best = clampToFieldRobotSafe.apply(resource);
+            if (!inForbidden.test(best) && !violatesWall.test(best)) return best;
+
+            for (int i = 0; i < 16; i++) {
+              double mid = 0.5 * (lo + hi);
+              Translation2d cand =
+                  clampToFieldRobotSafe.apply(resource.plus(dirHat.times(pushM * mid)));
+              boolean ok2 = !inForbidden.test(cand) && !violatesWall.test(cand);
+              if (ok2) {
+                best = cand;
+                lo = mid;
+              } else {
+                hi = mid;
+              }
+            }
+
+            best = nudgeOutOfForbidden.apply(best);
+            best = clampToFieldRobotSafe.apply(best);
+            return best;
+          };
+
+      ArrayList<Translation2d> ok = new ArrayList<>(pts.length);
+      for (Translation2d p : pts) {
+        if (p == null) continue;
+        Translation2d drive = safePushedFromRobot.apply(p);
+        drive = clampToFieldRobotSafe.apply(drive);
+        if (inForbidden.test(drive)) drive = nudgeOutOfForbidden.apply(drive);
+        drive = clampToFieldRobotSafe.apply(drive);
+        if (violatesWall.test(drive)) continue;
+        if (!inForbidden.test(drive)) ok.add(p);
+      }
+
+      Translation2d[] usePts = ok.toArray(new Translation2d[0]);
+      if (usePts.length == 0) {
+        clearCollectSticky();
+        return new Pose2d(
+            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+      }
+
+      Translation2d robotPos = robotPoseBlue.getTranslation();
+
+      java.util.List<PredictiveFieldState.DynamicObject> dynAll = snapshotDynamics();
+
+      int lockHalf = collectStickyHalfLock;
+
+      int sensedHalf = sideSignXBand(robotPos.getX(), COLLECT_HALF_KEEP_MID_BAND_M);
+
+      if (lockHalf == 0) {
+        if (sensedHalf != 0) {
+          lockHalf = sensedHalf;
+          collectStickyHalfLock = sensedHalf;
+        }
+      } else {
+        if (sensedHalf == 0) {
+        } else if (sensedHalf != lockHalf) {
+          lockHalf = sensedHalf;
+          collectStickyHalfLock = sensedHalf;
+        }
+      }
+
+      java.util.List<PredictiveFieldState.DynamicObject> dynUse = dynAll;
+
+      if (lockHalf != 0 && dynAll != null && !dynAll.isEmpty()) {
+        double mid = Constants.FIELD_LENGTH * 0.5;
+        java.util.ArrayList<PredictiveFieldState.DynamicObject> filtered =
+            new java.util.ArrayList<>(dynAll.size());
+
+        for (int i = 0; i < dynAll.size(); i++) {
+          PredictiveFieldState.DynamicObject o = dynAll.get(i);
+          if (o == null || o.pos == null) continue;
+
+          double x = o.pos.getX();
+
+          if (Math.abs(x - mid) <= COLLECT_HALF_KEEP_MID_BAND_M) {
+            filtered.add(o);
+            continue;
+          }
+
+          if (sideSignX(x) == lockHalf) filtered.add(o);
+        }
+
+        if (!filtered.isEmpty()) dynUse = filtered;
+      }
+
+      predictor.setDynamicObjects(dynUse);
+
+      long nowNs = System.nanoTime();
+      long prevNs = lastObjectiveTickNs;
+      lastObjectiveTickNs = nowNs;
+      double dt = prevNs != 0L ? (nowNs - prevNs) / 1e9 : 0.02;
+      if (dt < 1e-3) dt = 1e-3;
+      if (dt > 0.08) dt = 0.08;
+
+      int nearbyFuelCount = 0;
+      double nearbySX = 0.0;
+      double nearbySY = 0.0;
+
+      if (dynUse != null && !dynUse.isEmpty()) {
+        for (int i = 0; i < dynUse.size(); i++) {
+          PredictiveFieldState.DynamicObject o = dynUse.get(i);
+          if (o == null || o.pos == null || o.type == null) continue;
+          if (!"fuel".equalsIgnoreCase(o.type)) continue;
+          double d = o.pos.getDistance(robotPos);
+          if (d <= COLLECT_NEARBY_RADIUS_M) {
+            nearbyFuelCount++;
+            nearbySX += o.pos.getX();
+            nearbySY += o.pos.getY();
+          }
+        }
+      }
+
+      Translation2d nearbyCentroid =
+          nearbyFuelCount > 0
+              ? new Translation2d(nearbySX / nearbyFuelCount, nearbySY / nearbyFuelCount)
+              : null;
+
+      java.util.function.Function<Translation2d, PredictiveFieldState.CollectProbe> probe =
+          p -> predictor.probeCollect(p, 0.75);
+
+      java.util.function.Predicate<Translation2d> collectValid =
+          p -> {
+            PredictiveFieldState.CollectProbe pr = probe.apply(p);
+            if (pr == null) return false;
+            return pr.count >= 1
+                && pr.units >= Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75);
+          };
+
+      java.util.function.Function<Translation2d, Double> collectUnits =
+          p -> {
+            PredictiveFieldState.CollectProbe pr = probe.apply(p);
+            if (pr == null) return 0.0;
+            return pr.units;
+          };
+
+      PredictiveFieldState.PointCandidate best = null;
+
+      for (int attempt = 0; attempt < 3; attempt++) {
+        best =
+            predictor.rankCollectNearest(
+                robotPos,
+                cap,
+                usePts,
+                COLLECT_CELL_M,
+                goalUnits,
+                Math.min(160, Math.max(32, usePts.length)));
+
+        if (best != null && collectValid.test(best.point)) break;
+
+        best =
+            predictor.rankCollectHierarchical(
+                robotPos,
+                cap,
+                usePts,
+                COLLECT_CELL_M,
+                goalUnits,
+                COLLECT_COARSE_TOPK,
+                COLLECT_REFINE_GRID);
+
+        if (best != null && collectValid.test(best.point)) break;
+
+        best =
+            predictor.rankCollectPoints(
+                robotPos, cap, usePts, goalUnits, Math.max(24, usePts.length));
+
+        if (best != null && collectValid.test(best.point)) break;
+
+        Translation2d hot = predictor.bestCollectHotspot(usePts, COLLECT_CELL_M);
+        if (hot != null) {
+          NearestPoint snap = nearestPointTo(hot, usePts);
+          if (snap.p != null
+              && snap.d <= COLLECT_HOTSPOT_SNAP_RADIUS_M
+              && collectValid.test(snap.p)) {
+            best =
+                new PredictiveFieldState.PointCandidate(
+                    snap.p,
+                    robotPos.getDistance(snap.p) / Math.max(0.1, cap),
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    -1e9);
+            break;
+          }
+        }
+      }
+
+      Translation2d candidateResource = (best != null ? best.point : null);
+      if (candidateResource == null || !collectValid.test(candidateResource)) {
+        Translation2d fallback = null;
+        double bestU = 0.0;
+        for (Translation2d p : usePts) {
+          if (p == null) continue;
+          double u = collectUnits.apply(p);
+          if (u > bestU) {
+            bestU = u;
+            fallback = p;
+          }
+        }
+        if (fallback == null || !collectValid.test(fallback)) {
+          clearCollectSticky();
+          return new Pose2d(
+              Constants.FIELD_LENGTH * 0.5,
+              Constants.FIELD_WIDTH * 0.5,
+              robotPoseBlue.getRotation());
+        }
+        candidateResource = fallback;
+      }
+
+      candidateResource = canonicalizeCollectPoint(candidateResource, usePts);
+      Translation2d chosenResource = candidateResource;
+
+      double distToChosen = robotPos.getDistance(chosenResource);
+      double holdS = holdSForDist(distToChosen);
+      double switchMargin = switchMarginForDist(distToChosen);
+
+      java.util.function.Function<Translation2d, Double> scoreResource =
+          p -> {
+            if (p == null) return -1e18;
+            double u = collectUnits.apply(p);
+            Translation2d d = safePushedFromRobot.apply(p);
+            if (d == null) d = p;
+            d = clampToFieldRobotSafe.apply(d);
+            if (inForbidden.test(d)) d = nudgeOutOfForbidden.apply(d);
+            d = clampToFieldRobotSafe.apply(d);
+            if (inForbidden.test(d) || violatesWall.test(d)) return -1e18;
+            double eta = robotPos.getDistance(d) / Math.max(0.2, cap);
+            return (u * 1.0) - (0.55 * eta);
+          };
+
+      java.util.function.Function<Translation2d, Double> etaResource =
+          p -> {
+            if (p == null) return 1e9;
+            Translation2d d = safePushedFromRobot.apply(p);
+            if (d == null) d = p;
+            d = clampToFieldRobotSafe.apply(d);
+            if (inForbidden.test(d)) d = nudgeOutOfForbidden.apply(d);
+            d = clampToFieldRobotSafe.apply(d);
+            if (inForbidden.test(d) || violatesWall.test(d)) return 1e9;
+            return robotPos.getDistance(d) / Math.max(0.2, cap);
+          };
+
+      if (collectStickyPoint != null) {
+        Translation2d sticky = collectStickyPoint;
+
+        boolean stickyOk = collectValid.test(sticky);
+        if (!stickyOk) {
+          predictor.markCollectDepleted(sticky, COLLECT_CELL_M, 1.0);
+          clearCollectSticky();
+        } else {
+          double stickyScoreNow = scoreResource.apply(sticky);
+          double candScoreNow = scoreResource.apply(chosenResource);
+
+          double stickyEtaNow = etaResource.apply(sticky);
+          double candEtaNow = etaResource.apply(chosenResource);
+
+          boolean sameCluster = sticky.getDistance(chosenResource) <= COLLECT_STICKY_SAME_M;
+          double ageS = nowSFromNs(nowNs - collectStickyTsNs);
+
+          boolean stillInHold = ageS < holdS;
+          boolean cooldownOk =
+              nowSFromNs(nowNs - collectStickyLastSwitchNs) >= COLLECT_SWITCH_COOLDOWN_S;
+          boolean movedOk =
+              movedEnough(collectStickyLastSwitchRobotPos, robotPos, COLLECT_SWITCH_MIN_MOVE_M);
+
+          boolean candClearlyBetter = candScoreNow > stickyScoreNow + switchMargin;
+
+          boolean tie =
+              Math.abs(candScoreNow - stickyScoreNow) <= COLLECT_STICKY_TIE_SCORE_EPS
+                  && Math.abs(candEtaNow - stickyEtaNow) <= COLLECT_STICKY_TIE_ETA_EPS;
+
+          if (sameCluster) {
+            collectStickyTsNs = nowNs;
+            chosenResource = sticky;
+          } else if (stillInHold) {
+            chosenResource = sticky;
+          } else {
+            if (tie) {
+              chosenResource = sticky;
+            } else if (!candClearlyBetter) {
+              chosenResource = sticky;
+            } else if (cooldownOk && movedOk) {
+              chosenResource = chosenResource;
+            } else {
+              chosenResource = sticky;
+            }
+          }
+        }
+      }
+
+      boolean switched =
+          (collectStickyPoint == null) || (collectStickyPoint.getDistance(chosenResource) > 0.35);
+
+      if (switched) {
+        collectStickyPoint = canonicalizeCollectPoint(chosenResource, usePts);
+        collectStickyTsNs = nowNs;
+        collectStickyReachedTsNs = 0L;
+        collectStickyLastSwitchNs = nowNs;
+        collectStickyLastSwitchRobotPos = robotPos;
+        collectStickyNoProgressSinceNs = nowNs;
+        collectStickyLastDistM = Double.POSITIVE_INFINITY;
+        collectSnapActive = false;
+
+        Translation2d dir = chosenResource.minus(robotPos);
+        Translation2d hat = unitOrDefault(dir, new Translation2d(1.0, 0.0));
+
+        double dist = robotPos.getDistance(chosenResource);
+        double pushT = clamp01((dist - 0.35) / (2.50 - 0.35));
+        double pushM = Math.min(lerp(0.42, 0.18, pushT), COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M);
+
+        collectStickyApproachHat = hat;
+        collectStickyPushM = pushM;
+        collectStickySide = 0;
+
+        Translation2d frozen =
+            computeFrozenDriveTarget(
+                chosenResource,
+                collectStickyApproachHat,
+                collectStickyPushM,
+                clampToFieldRobotSafe,
+                inForbidden,
+                violatesWall,
+                nudgeOutOfForbidden);
+        collectStickyDriveTarget = frozen;
+      }
+
+      Translation2d desiredCollectPoint = collectStickyPoint;
+
+      Translation2d relocked = desiredCollectPoint;
+
+      if (desiredCollectPoint != null) {
+        relocked =
+            relockCollectPointToLiveFuel(
+                desiredCollectPoint,
+                clampToFieldRobotSafe,
+                inForbidden,
+                violatesWall,
+                nudgeOutOfForbidden);
+      }
+
+      if (relocked != null && desiredCollectPoint != null) {
+        double moved = desiredCollectPoint.getDistance(relocked);
+
+        if (moved > COLLECT_STICKY_TARGET_RECALC_EPS_M) {
+          collectStickyPoint = relocked;
+          desiredCollectPoint = relocked;
+
+          collectStickyTsNs = nowNs;
+          collectStickyReachedTsNs = 0L;
+          collectStickyNoProgressSinceNs = nowNs;
+          collectStickyLastDistM = Double.POSITIVE_INFINITY;
+          collectSnapActive = false;
+
+          Translation2d dir = desiredCollectPoint.minus(robotPos);
+          Translation2d hat =
+              unitOrDefault(
+                  dir,
+                  collectStickyApproachHat != null
+                      ? collectStickyApproachHat
+                      : new Translation2d(1.0, 0.0));
+
+          double dist = robotPos.getDistance(desiredCollectPoint);
+          double pushT = clamp01((dist - 0.35) / (2.50 - 0.35));
+          double pushM = Math.min(lerp(0.42, 0.18, pushT), COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M);
+
+          collectStickyApproachHat = hat;
+          collectStickyPushM = pushM;
+
+          Translation2d frozen =
+              computeFrozenDriveTarget(
+                  desiredCollectPoint,
+                  collectStickyApproachHat,
+                  collectStickyPushM,
+                  clampToFieldRobotSafe,
+                  inForbidden,
+                  violatesWall,
+                  nudgeOutOfForbidden);
+
+          collectStickyDriveTarget = frozen;
+        } else {
+          desiredCollectPoint = desiredCollectPoint;
+        }
+      }
+
+      if (desiredCollectPoint == null) {
+        clearCollectSticky();
+        return new Pose2d(
+            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+      }
+
+      if (!collectValid.test(desiredCollectPoint)) {
+        predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 1.0);
+        clearCollectSticky();
+        return new Pose2d(
+            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+      }
+
+      boolean allowCentroidRetarget =
+          (robotPos.getDistance(desiredCollectPoint) <= COLLECT_NEARBY_RADIUS_M)
+              || (collectStickyReachedTsNs != 0L);
+
+      if (allowCentroidRetarget && nearbyCentroid != null) {
+        Translation2d c = clampToFieldRobotSafe.apply(nearbyCentroid);
+        if (inForbidden.test(c)) c = nudgeOutOfForbidden.apply(c);
+        c = clampToFieldRobotSafe.apply(c);
+
+        if (!inForbidden.test(c) && !violatesWall.test(c)) {
+          collectStickyPoint = c;
+          desiredCollectPoint = c;
+
+          Translation2d dir = desiredCollectPoint.minus(robotPos);
+          Translation2d hat =
+              unitOrDefault(
+                  dir,
+                  collectStickyApproachHat != null
+                      ? collectStickyApproachHat
+                      : new Translation2d(1.0, 0.0));
+
+          double dist = robotPos.getDistance(desiredCollectPoint);
+          double pushT = clamp01((dist - 0.35) / (2.50 - 0.35));
+          double pushM = Math.min(lerp(0.42, 0.18, pushT), COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M);
+
+          collectStickyApproachHat = hat;
+          collectStickyPushM = pushM;
+
+          Translation2d frozen =
+              computeFrozenDriveTarget(
+                  desiredCollectPoint,
+                  collectStickyApproachHat,
+                  collectStickyPushM,
+                  clampToFieldRobotSafe,
+                  inForbidden,
+                  violatesWall,
+                  nudgeOutOfForbidden);
+
+          collectStickyDriveTarget = frozen;
+        }
+      }
+
+      Translation2d desiredDriveTarget = collectStickyDriveTarget;
+      if (desiredDriveTarget == null) {
+        desiredDriveTarget =
+            computeFrozenDriveTarget(
+                desiredCollectPoint,
+                collectStickyApproachHat != null
+                    ? collectStickyApproachHat
+                    : unit(desiredCollectPoint.minus(robotPos)),
+                collectStickyPushM > 1e-6 ? collectStickyPushM : 0.18,
+                clampToFieldRobotSafe,
+                inForbidden,
+                violatesWall,
+                nudgeOutOfForbidden);
+        collectStickyDriveTarget = desiredDriveTarget;
+      }
+
+      desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
+      if (inForbidden.test(desiredDriveTarget))
+        desiredDriveTarget = nudgeOutOfForbidden.apply(desiredDriveTarget);
+      desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
+
+      if (inForbidden.test(desiredDriveTarget) || violatesWall.test(desiredDriveTarget)) {
+        desiredDriveTarget =
+            computeFrozenDriveTarget(
+                desiredCollectPoint,
+                collectStickyApproachHat != null
+                    ? collectStickyApproachHat
+                    : unit(desiredCollectPoint.minus(robotPos)),
+                collectStickyPushM > 1e-6 ? collectStickyPushM : 0.18,
+                clampToFieldRobotSafe,
+                inForbidden,
+                violatesWall,
+                nudgeOutOfForbidden);
+        collectStickyDriveTarget = desiredDriveTarget;
+      }
+
+      double dToTarget = robotPos.getDistance(desiredDriveTarget);
+
+      if (dToTarget <= COLLECT_STICKY_REACHED_M) {
+        if (collectStickyReachedTsNs == 0L) collectStickyReachedTsNs = nowNs;
+      } else {
+        collectStickyReachedTsNs = 0L;
+      }
+
+      double dToCollect = robotPos.getDistance(desiredCollectPoint);
+
+      boolean snapNow = collectSnapActive;
+      if (!snapNow) {
+        if (dToCollect <= COLLECT_SNAP_TO_POINT_M) snapNow = true;
+      } else {
+        if (dToCollect >= (COLLECT_SNAP_TO_POINT_M + COLLECT_SNAP_HYST_M)) snapNow = false;
+      }
+      collectSnapActive = snapNow;
+
+      if (collectSnapActive) {
+        desiredDriveTarget = desiredCollectPoint;
+        collectStickyDriveTarget = desiredDriveTarget;
+      }
+
+      Translation2d forced =
+          forceDriveTargetOntoFuel(
+              robotPos,
+              cap,
+              desiredCollectPoint,
+              desiredDriveTarget,
+              clampToFieldRobotSafe,
+              inForbidden,
+              violatesWall,
+              nudgeOutOfForbidden);
+
+      if (forced != null) {
+        desiredDriveTarget = forced;
+        collectStickyDriveTarget = forced;
+      }
+
+      double distNow = robotPos.getDistance(desiredDriveTarget);
+      if (distNow + 1e-6 < collectStickyLastDistM - COLLECT_STICKY_NO_PROGRESS_DROP_M) {
+        collectStickyLastDistM = distNow;
+        collectStickyNoProgressSinceNs = nowNs;
+      } else {
+        double sinceS = nowSFromNs(nowNs - collectStickyNoProgressSinceNs);
+        if (sinceS >= COLLECT_STICKY_NO_PROGRESS_S
+            && distNow <= COLLECT_STICKY_NO_PROGRESS_MIN_DIST_M) {
+          double cooldownS = nowSFromNs(nowNs - collectStickyLastSwitchNs);
+          if (cooldownS >= COLLECT_STICKY_FLAP_COOLDOWN_S) {
+            Translation2d hat =
+                collectStickyApproachHat != null
+                    ? collectStickyApproachHat
+                    : unit(desiredCollectPoint.minus(robotPos));
+            Translation2d sideHat = perp(hat);
+
+            int nextSide =
+                collectStickySide == 0
+                    ? (sideSign(desiredCollectPoint) >= 0 ? 1 : -1)
+                    : -collectStickySide;
+            collectStickySide = nextSide;
+            collectStickyLastSwitchNs = nowNs;
+            collectStickyLastSwitchRobotPos = robotPos;
+
+            Translation2d cand =
+                desiredCollectPoint
+                    .plus(hat.times(collectStickyPushM))
+                    .plus(sideHat.times((double) nextSide * COLLECT_STICKY_SIDE_SWITCH_EXTRA));
+
+            cand = clampToFieldRobotSafe.apply(cand);
+            if (inForbidden.test(cand)) cand = nudgeOutOfForbidden.apply(cand);
+            cand = clampToFieldRobotSafe.apply(cand);
+
+            if (!inForbidden.test(cand) && !violatesWall.test(cand)) {
+              collectStickyDriveTarget = cand;
+              desiredDriveTarget = cand;
+            }
+
+            collectStickyNoProgressSinceNs = nowNs;
+            collectStickyLastDistM = robotPos.getDistance(desiredDriveTarget);
+          }
+        }
+      }
+
+      desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
+      if (inForbidden.test(desiredDriveTarget))
+        desiredDriveTarget = nudgeOutOfForbidden.apply(desiredDriveTarget);
+      desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
+
+      if (inForbidden.test(desiredDriveTarget) || violatesWall.test(desiredDriveTarget)) {
+        clearCollectSticky();
+        return new Pose2d(
+            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+      }
+
+      PredictiveFieldState.CollectProbe drivePr =
+          predictor.probeCollect(desiredDriveTarget, COLLECT_EMPTY_DRIVE_PROBE_R_M);
+
+      boolean driveLooksEmpty =
+          drivePr == null || drivePr.count <= 0 || drivePr.units < COLLECT_EMPTY_DRIVE_MIN_UNITS;
+
+            int liveFuelNearTarget =
+          countLiveFuelWithin(dynUse, desiredDriveTarget, COLLECT_LIVE_FUEL_NEAR_TARGET_R_M);
+
+      boolean nearTarget =
+          robotPos.getDistance(desiredDriveTarget) <= COLLECT_REACHED_EMPTY_NEAR_TARGET_M;
+
+      boolean reachedOrNear = (collectStickyReachedTsNs != 0L) || nearTarget;
+
+      if (reachedOrNear && liveFuelNearTarget <= 0 && driveLooksEmpty) {
+        collectReachedEmptySec += dt;
+      } else {
+        collectReachedEmptySec = 0.0;
+      }
+
+      Logger.recordOutput("collect_reached_empty_s", collectReachedEmptySec);
+      Logger.recordOutput("collect_live_fuel_near_target_n", liveFuelNearTarget);
+
+      if (collectReachedEmptySec >= COLLECT_REACHED_EMPTY_FORCE_DROP_SEC && pass == 0) {
+        if (desiredCollectPoint != null) {
+          predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 1.0);
+        }
+        clearCollectSticky();
+        continue;
+      }
+
+      if (robotPos.getDistance(desiredDriveTarget) <= COLLECT_EMPTY_DRIVE_NEAR_ROBOT_M) {
+        if (driveLooksEmpty) collectEmptyDriveSec += dt;
+        else collectEmptyDriveSec = 0.0;
+      } else {
+        collectEmptyDriveSec = 0.0;
+      }
+
+      Logger.recordOutput("collect_empty_drive_s", collectEmptyDriveSec);
+
+      if (collectEmptyDriveSec >= COLLECT_EMPTY_DRIVE_DONE_SEC && pass == 0) {
+        clearCollectSticky();
+        continue;
+      }
+
+      double stepDist = 0.0;
+      double speed = 0.0;
+
+      if (collectStuckAnchorNs == 0L) {
+        collectStuckAnchorNs = nowNs;
+        collectStuckAnchorPos = robotPos;
+        collectStuckSec = 0.0;
+        lastRobotPosForStuck = robotPos;
+      } else {
+        stepDist = robotPos.getDistance(lastRobotPosForStuck);
+        speed = stepDist / Math.max(1e-3, dt);
+        lastRobotPosForStuck = robotPos;
+
+        double movedFromAnchor = robotPos.getDistance(collectStuckAnchorPos);
+
+        if (movedFromAnchor >= COLLECT_STUCK_RESET_MOVE_M) {
+          collectStuckAnchorNs = nowNs;
+          collectStuckAnchorPos = robotPos;
+          collectStuckSec = 0.0;
+        } else {
+          boolean lowSpeed = speed <= COLLECT_STUCK_SPEED_MPS;
+          boolean nearAnchor = movedFromAnchor <= COLLECT_STUCK_RADIUS_M;
+
+          if (lowSpeed && nearAnchor) collectStuckSec += dt;
+          else collectStuckSec = 0.0;
+        }
+      }
+
+      if (nearbyFuelCount < COLLECT_NEARBY_MIN_COUNT) collectNoFuelSec += dt;
+      else collectNoFuelSec = 0.0;
+
+      boolean patchDone = collectNoFuelSec >= COLLECT_DONE_NO_FUEL_SEC;
+      boolean stuckTooLong = collectStuckSec >= COLLECT_DONE_STUCK_SEC;
+
+      if ((patchDone || stuckTooLong) && pass == 0) {
+        if (stuckTooLong && desiredCollectPoint != null) {
+          predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 0.65);
+        }
+        clearCollectSticky();
+        continue;
+      }
+
+      Logger.recordOutput("collect_resource_xy", desiredCollectPoint);
+      Logger.recordOutput("collect_target_xy", desiredDriveTarget);
+      Logger.recordOutput("collect_points_n", usePts.length);
+      Logger.recordOutput("collect_snap_active", collectSnapActive);
+      Logger.recordOutput("collect_sticky_side", collectStickySide);
+      Logger.recordOutput("collect_nearby_fuel_n", nearbyFuelCount);
+      Logger.recordOutput("collect_done_nofuel_s", collectNoFuelSec);
+      Logger.recordOutput("collect_done_stuck_s", collectStuckSec);
+
+      if (best != null) {
+        Logger.recordOutput("collect_score", best.score);
+        Logger.recordOutput("collect_value", best.value);
+        Logger.recordOutput("collect_our_eta", best.ourEtaS);
+        Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
+        Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
+        Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
+        Logger.recordOutput("collect_intent_ally", best.allyIntent);
+      }
+
+      return new Pose2d(desiredDriveTarget, robotPoseBlue.getRotation());
+    }
+
+    clearCollectSticky();
+    return new Pose2d(
+        Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+  }
+
+  private Translation2d forceDriveTargetOntoFuel(
+      Translation2d robotPos,
+      double cap,
+      Translation2d collectPoint,
+      Translation2d driveSeed,
+      java.util.function.Function<Translation2d, Translation2d> clampToFieldRobotSafe,
+      java.util.function.Predicate<Translation2d> inForbidden,
+      java.util.function.Predicate<Translation2d> violatesWall,
+      java.util.function.Function<Translation2d, Translation2d> nudgeOutOfForbidden) {
+
+    Translation2d drive = driveSeed != null ? driveSeed : collectPoint;
+    if (drive == null) return null;
+
+    drive = clampToFieldRobotSafe.apply(drive);
+    if (inForbidden.test(drive)) drive = nudgeOutOfForbidden.apply(drive);
+    drive = clampToFieldRobotSafe.apply(drive);
+
+    if (inForbidden.test(drive) || violatesWall.test(drive)) return null;
+
+    Translation2d near = predictor.nearestCollectResource(drive, COLLECT_SNAP_TO_NEAREST_FUEL_M);
+    if (near != null) {
+      Translation2d snapped = clampToFieldRobotSafe.apply(near);
+      if (inForbidden.test(snapped)) snapped = nudgeOutOfForbidden.apply(snapped);
+      snapped = clampToFieldRobotSafe.apply(snapped);
+      if (!inForbidden.test(snapped) && !violatesWall.test(snapped)) return snapped;
+    }
+
+    Translation2d centroid = predictor.snapToCollectCentroid(drive, 0.75, 0.15);
+    if (centroid != null) {
+      centroid = clampToFieldRobotSafe.apply(centroid);
+      if (inForbidden.test(centroid)) centroid = nudgeOutOfForbidden.apply(centroid);
+      centroid = clampToFieldRobotSafe.apply(centroid);
+      if (!inForbidden.test(centroid) && !violatesWall.test(centroid)) {
+        Translation2d near2 =
+            predictor.nearestCollectResource(centroid, COLLECT_SNAP_TO_NEAREST_FUEL_M);
+        if (near2 != null) {
+          Translation2d snapped2 = clampToFieldRobotSafe.apply(near2);
+          if (inForbidden.test(snapped2)) snapped2 = nudgeOutOfForbidden.apply(snapped2);
+          snapped2 = clampToFieldRobotSafe.apply(snapped2);
+          if (!inForbidden.test(snapped2) && !violatesWall.test(snapped2)) return snapped2;
+        }
+        return centroid;
       }
     }
-  }
 
-  if (reached) {
-    collectStickyPoint = null;
-    collectStickyScore = -1e18;
-    collectStickyTsNs = 0L;
-    collectStickyReachedTsNs = 0L;
-    sticky = null;
-  }
-}
+    Translation2d fallback = clampToFieldRobotSafe.apply(collectPoint);
+    if (inForbidden.test(fallback)) fallback = nudgeOutOfForbidden.apply(fallback);
+    fallback = clampToFieldRobotSafe.apply(fallback);
+    if (!inForbidden.test(fallback) && !violatesWall.test(fallback)) return fallback;
 
-
-if (chosen != null) {
-  Translation2d curSticky = collectStickyPoint;
-  if (curSticky == null || !samePoint(curSticky, chosen, COLLECT_STICKY_SAME_M)) {
-    collectStickyPoint = chosen;
-    collectStickyScore = chosenScore;
-    collectStickyTsNs = nowNs;
-    collectStickyReachedTsNs = 0L;
-  } else {
-    collectStickyScore = Math.max(collectStickyScore, chosenScore);
-  }
-}
-
-
-    Logger.recordOutput("collect_target_xy", chosen);
-    Logger.recordOutput("collect_points_n", pts.length);
-    Logger.recordOutput("collect_sticky_active", collectStickyPoint != null);
-    Logger.recordOutput(
-        "collect_sticky_age_s", collectStickyTsNs != 0L ? (nowNs - collectStickyTsNs) / 1e9 : 0.0);
-
-    if (best != null) {
-      Logger.recordOutput("collect_score", best.score);
-      Logger.recordOutput("collect_value", best.value);
-      Logger.recordOutput("collect_our_eta", best.ourEtaS);
-      Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
-      Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
-      Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
-      Logger.recordOutput("collect_intent_ally", best.allyIntent);
-    }
-
-    Translation2d target = chosen != null ? chosen : pts[0];
-    return new Pose2d(target, robotPoseBlue.getRotation());
+    return drive;
   }
 
   public Pose2d nextCollectionGoalBlue(Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {

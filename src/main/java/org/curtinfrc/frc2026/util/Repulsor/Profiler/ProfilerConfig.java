@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Profiler/ProfilerConfig.java
 package org.curtinfrc.frc2026.util.Repulsor.Profiler;
 
 public final class ProfilerConfig {

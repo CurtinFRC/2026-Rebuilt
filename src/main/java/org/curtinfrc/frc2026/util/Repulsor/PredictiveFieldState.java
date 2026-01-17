@@ -4,6 +4,7 @@ package org.curtinfrc.frc2026.util.Repulsor;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,6 +18,34 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.littletonrobotics.junction.Logger;
 
 public final class PredictiveFieldState {
+
+  public static final class CollectProbe {
+    public final int count;
+    public final double units;
+
+    public CollectProbe(int count, double units) {
+      this.count = Math.max(0, count);
+      this.units = Math.max(0.0, units);
+    }
+  }
+
+  public CollectProbe probeCollect(Translation2d p) {
+    return probeCollect(p, 0.75);
+  }
+
+  public CollectProbe probeCollect(Translation2d p, double countR) {
+    if (p == null) return new CollectProbe(0, 0.0);
+    SpatialDyn dyn = cachedDyn();
+    if (dyn == null) return new CollectProbe(0, 0.0);
+    int c = dyn.countResourcesWithin(p, Math.max(0.05, countR));
+    double u = dyn.valueAt(p);
+    return new CollectProbe(c, u);
+  }
+
+  public void markCollectDepleted(Translation2d p, double cellM, double strength) {
+    markDepleted(p, cellM, strength);
+  }
+
   public static final class Candidate {
     public final RepulsorSetpoint setpoint;
     public final Translation2d targetXY;
@@ -113,14 +142,15 @@ public final class PredictiveFieldState {
     double lastTs;
 
     Track(Translation2d p, Translation2d v, double cap, double t) {
-      pos = p;
-      vel = v;
+      pos = p != null ? p : new Translation2d();
+      vel = v != null ? v : new Translation2d();
       speedCap = cap;
       lastTs = t;
     }
   }
 
   private static final double MIN_DT = 0.02;
+  private static final double MAX_MEAS_DT = 0.20;
   private static final double ETA_FLOOR = 0.05;
   private static final double DEFAULT_ENEMY_SPEED = 2.2;
   private static final double DEFAULT_ALLY_SPEED = 3.0;
@@ -154,16 +184,19 @@ public final class PredictiveFieldState {
   private static final double COLLECT_ACTIVITY_ENEMY_W = 0.55;
   private static final double COLLECT_ACTIVITY_DYN_W = 0.60;
   private static final double COLLECT_REGION_SAMPLES_W = 0.70;
+  private static final double COLLECT_CELL_M = 0.20;
+  private static final double COLLECT_NEAR_BONUS = 0.55;
+  private static final double COLLECT_NEAR_DECAY = 1.35;
 
-  private static final double COLLECT_COARSE_MIN_REGION_UNITS = 0.10;
-  private static final double COLLECT_FINE_MIN_UNITS = 0.06;
+  private static final double COLLECT_COARSE_MIN_REGION_UNITS = 0.12;
+  private static final double COLLECT_FINE_MIN_UNITS = 0.08;
 
   private static final double RESOURCE_SIGMA_ABS_MAX = 0.45;
   private static final double RESOURCE_SIGMA_REL_MAX = 1.25;
   private static final double RESOURCE_SIGMA_MIN = 0.06;
 
   private static final int COLLECT_CLUSTER_MAX = 72;
-  private static final double COLLECT_CLUSTER_BIN_M = 0.75;
+  private static final double COLLECT_CLUSTER_BIN_M = 0.14;
   private static final int COLLECT_GRID_FALLBACK_MAX = 1400;
   private static final double COLLECT_DUP_SKIP_M = 0.30;
 
@@ -171,7 +204,7 @@ public final class PredictiveFieldState {
   private static final double DEPLETED_DECAY = 1.15;
   private static final double DEPLETED_PEN_W = 1.75;
   private static final double DEPLETED_MARK_NEAR_M = 0.65;
-  private static final double DEPLETED_MARK_EMPTY_UNITS = 0.05;
+  private static final double DEPLETED_MARK_EMPTY_UNITS = 0.07;
 
   private static final double RESOURCE_HARD_MAX_AGE_S = 0.95;
 
@@ -244,44 +277,70 @@ public final class PredictiveFieldState {
   }
 
   public void updateAlly(int id, Translation2d pos, Translation2d velHint, Double speedCap) {
+    if (pos == null) return;
+
     double now = Timer.getFPGATimestamp();
     Track t =
         allyMap.getOrDefault(
             id,
             new Track(
                 pos, new Translation2d(), speedCap != null ? speedCap : DEFAULT_ALLY_SPEED, now));
-    double dt = Math.max(MIN_DT, now - t.lastTs);
-    Translation2d vMeas = velHint != null ? velHint : pos.minus(t.pos).div(dt);
-    double vMag =
-        Math.min(vMeas.getNorm(), speedCap != null ? Math.max(0.1, speedCap) : DEFAULT_ALLY_SPEED);
+
+    double dtRaw = now - t.lastTs;
+    double dt = Math.max(MIN_DT, dtRaw);
+    double dtMeas = Math.min(MAX_MEAS_DT, Math.max(MIN_DT, dtRaw));
+
+    Translation2d vMeas = velHint != null ? velHint : pos.minus(t.pos).div(dtMeas);
+
+    double cap = speedCap != null ? Math.max(0.1, speedCap) : DEFAULT_ALLY_SPEED;
+    double vMag = Math.min(vMeas.getNorm(), cap);
     Translation2d vClamped =
         vMeas.getNorm() > 1e-6 ? vMeas.div(vMeas.getNorm()).times(vMag) : new Translation2d();
-    t.vel = lerpVec(t.vel, vClamped, VEL_EMA);
-    t.vel = clampAccel(t.vel, ACC_LIMIT, dt);
-    t.pos = lerpVec(t.pos, pos, POS_EMA);
-    t.speedCap = speedCap != null ? speedCap : DEFAULT_ALLY_SPEED;
+
+    double aVel = emaAlpha(VEL_EMA, dt);
+    double aPos = emaAlpha(POS_EMA, dt);
+
+    Translation2d vEma = lerpVec(t.vel, vClamped, aVel);
+    t.vel = clampDeltaV(t.vel, vEma, ACC_LIMIT, dt);
+
+    t.pos = lerpVec(t.pos, pos, aPos);
+    t.speedCap = cap;
     t.lastTs = now;
+
     allyMap.put(id, t);
   }
 
   public void updateEnemy(int id, Translation2d pos, Translation2d velHint, Double speedCap) {
+    if (pos == null) return;
+
     double now = Timer.getFPGATimestamp();
     Track t =
         enemyMap.getOrDefault(
             id,
             new Track(
                 pos, new Translation2d(), speedCap != null ? speedCap : DEFAULT_ENEMY_SPEED, now));
-    double dt = Math.max(MIN_DT, now - t.lastTs);
-    Translation2d vMeas = velHint != null ? velHint : pos.minus(t.pos).div(dt);
-    double vMag =
-        Math.min(vMeas.getNorm(), speedCap != null ? Math.max(0.1, speedCap) : DEFAULT_ENEMY_SPEED);
+
+    double dtRaw = now - t.lastTs;
+    double dt = Math.max(MIN_DT, dtRaw);
+    double dtMeas = Math.min(MAX_MEAS_DT, Math.max(MIN_DT, dtRaw));
+
+    Translation2d vMeas = velHint != null ? velHint : pos.minus(t.pos).div(dtMeas);
+
+    double cap = speedCap != null ? Math.max(0.1, speedCap) : DEFAULT_ENEMY_SPEED;
+    double vMag = Math.min(vMeas.getNorm(), cap);
     Translation2d vClamped =
         vMeas.getNorm() > 1e-6 ? vMeas.div(vMeas.getNorm()).times(vMag) : new Translation2d();
-    t.vel = lerpVec(t.vel, vClamped, VEL_EMA);
-    t.vel = clampAccel(t.vel, ACC_LIMIT, dt);
-    t.pos = lerpVec(t.pos, pos, POS_EMA);
-    t.speedCap = speedCap != null ? speedCap : DEFAULT_ENEMY_SPEED;
+
+    double aVel = emaAlpha(VEL_EMA, dt);
+    double aPos = emaAlpha(POS_EMA, dt);
+
+    Translation2d vEma = lerpVec(t.vel, vClamped, aVel);
+    t.vel = clampDeltaV(t.vel, vEma, ACC_LIMIT, dt);
+
+    t.pos = lerpVec(t.pos, pos, aPos);
+    t.speedCap = cap;
     t.lastTs = now;
+
     enemyMap.put(id, t);
   }
 
@@ -319,15 +378,18 @@ public final class PredictiveFieldState {
 
     double now = Timer.getFPGATimestamp();
     List<Candidate> out = new ArrayList<>();
+    double cap = ourSpeedCap > 0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
+
     for (int i = 0; i < targets.size(); i++) {
       Translation2d t = targets.get(i);
       RepulsorSetpoint sp = sps.get(i);
-      double ourEta = etaPath(ourPos, t, ourSpeedCap > 0 ? ourSpeedCap : DEFAULT_OUR_SPEED);
+
+      double ourEta = etaPath(ourPos, t, cap);
       double enemyEta = minEtaToTarget(enemyMap, t);
       double allyEta = minEtaToTarget(allyMap, t);
 
-      double pressure = radialPressure(enemyMap, t, enemyAgg.intent[i], enemyAgg.count);
-      double congestion = radialCongestion(allyMap, t, allyAgg.intent[i], allyAgg.count);
+      double pressure = radialPressure(enemyMap, t, ourEta, enemyAgg.intent[i], enemyAgg.count);
+      double congestion = radialCongestion(allyMap, t, ourEta, allyAgg.intent[i], allyAgg.count);
       double distBias = ourPos.getDistance(t) * DIST_COST;
 
       double capacityFrac = 0.0;
@@ -363,12 +425,172 @@ public final class PredictiveFieldState {
     return out;
   }
 
+  private static void sortIdxByKey(double[] key, int[] idx) {
+    quickSortIdx(key, idx, 0, idx.length - 1);
+  }
+
+  private static void quickSortIdx(double[] key, int[] idx, int lo, int hi) {
+    while (lo < hi) {
+      int i = lo;
+      int j = hi;
+      double pivot = key[idx[(lo + hi) >>> 1]];
+
+      while (i <= j) {
+        while (key[idx[i]] < pivot) i++;
+        while (key[idx[j]] > pivot) j--;
+        if (i <= j) {
+          int tmp = idx[i];
+          idx[i] = idx[j];
+          idx[j] = tmp;
+          i++;
+          j--;
+        }
+      }
+
+      if (j - lo < hi - i) {
+        if (lo < j) quickSortIdx(key, idx, lo, j);
+        lo = i;
+      } else {
+        if (i < hi) quickSortIdx(key, idx, i, hi);
+        hi = j;
+      }
+    }
+  }
+
   public List<RepulsorSetpoint> rankSetpoints(
       Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
     List<Candidate> c = rank(ourPos, ourSpeedCap, cat, limit);
     List<RepulsorSetpoint> out = new ArrayList<>();
     for (Candidate k : c) out.add(k.setpoint);
     return out;
+  }
+
+  public int resourceObservationCount() {
+    SpatialDyn d = cachedDyn();
+    if (d == null) return 0;
+    return d.resources.size();
+  }
+
+  public Translation2d snapToCollectCentroid(Translation2d seed, double r, double minMass) {
+    if (seed == null) return null;
+    SpatialDyn dyn = cachedDyn();
+    if (dyn == null) return seed;
+    Translation2d c = dyn.centroidResourcesWithin(seed, Math.max(0.05, r), Math.max(0.0, minMass));
+    if (c == null) return seed;
+
+    double seedU = dyn.valueAt(seed);
+    double centU = dyn.valueAt(c);
+
+    int seedC = dyn.countResourcesWithin(seed, Math.max(0.05, r));
+    int centC = dyn.countResourcesWithin(c, Math.max(0.05, r));
+
+    if (centU + 1e-9 < seedU - 0.05) return seed;
+    if (centC + 1 < seedC) return seed;
+    return c;
+  }
+
+  public Translation2d nearestCollectResource(Translation2d p, double maxDist) {
+    if (p == null) return null;
+    SpatialDyn d = cachedDyn();
+    if (d == null) return null;
+    return d.nearestResourceTo(p, Math.max(0.01, maxDist));
+  }
+
+  public PointCandidate rankCollectNearest(
+      Translation2d ourPos,
+      double ourSpeedCap,
+      Translation2d[] points,
+      double cellM,
+      int goalUnits,
+      int limit) {
+
+    if (ourPos == null) return null;
+
+    SpatialDyn dyn = cachedDyn();
+    Translation2d[] seeds = buildCollectCandidates(points, dyn);
+    if (seeds.length == 0) return null;
+
+    sweepDepleted();
+
+    double cap = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
+
+    double hardCountR = 0.60;
+    int hardMinCount = 2;
+
+    double snapR = 1.10;
+    double snapMinMass = 0.18;
+
+    Translation2d[] targets = new Translation2d[seeds.length];
+    for (int i = 0; i < seeds.length; i++) {
+      Translation2d s = seeds[i];
+      Translation2d c = dyn != null ? dyn.centroidResourcesWithin(s, snapR, snapMinMass) : null;
+      targets[i] = c != null ? c : s;
+    }
+
+    int bestI = -1;
+    double bestEta = Double.POSITIVE_INFINITY;
+    double bestUnits = 0.0;
+
+    int maxCheck = limit > 0 ? Math.min(limit, targets.length) : targets.length;
+
+    double[] etas = new double[targets.length];
+    int[] order = new int[targets.length];
+    for (int i = 0; i < targets.length; i++) {
+      order[i] = i;
+      etas[i] = etaPath(ourPos, targets[i], cap);
+    }
+
+    sortIdxByKey(etas, order);
+
+    int checked = 0;
+    for (int oi = 0; oi < order.length && checked < maxCheck; oi++) {
+      int i = order[oi];
+      Translation2d t = targets[i];
+      checked++;
+
+      if (dyn.countResourcesWithin(t, hardCountR) < hardMinCount) continue;
+
+      double units = dyn.valueAt(t);
+      if (units < COLLECT_FINE_MIN_UNITS) continue;
+
+      double dep = depletedPenalty(t, cellM);
+      if (dep > 0.45) continue;
+
+      double eta = etas[i];
+
+      if (eta < bestEta - 1e-9) {
+        bestEta = eta;
+        bestI = i;
+        bestUnits = units;
+      } else if (Math.abs(eta - bestEta) <= 0.04 && units > bestUnits + 0.08) {
+        bestEta = eta;
+        bestI = i;
+        bestUnits = units;
+      }
+    }
+
+    if (bestI < 0) return null;
+
+    Translation2d chosen = targets[bestI];
+    int count = dyn.countResourcesWithin(chosen, hardCountR);
+    double units = dyn.valueAt(chosen);
+
+    if (count < 1 || units < Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.75)) {
+      markDepleted(chosen, cellM, 1.0);
+      return null;
+    }
+
+    double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, units));
+    double value = sat * Math.max(1, goalUnits) * COLLECT_VALUE_GAIN;
+
+    lastReturnedCollect = chosen;
+    lastReturnedCollectTs = Timer.getFPGATimestamp();
+
+    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(chosen, new Rotation2d()));
+    Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", units);
+    Logger.recordOutput("Repulsor/Collect/ChosenCount", count);
+
+    return new PointCandidate(chosen, bestEta, value, 0.0, 0.0, 0.0, 0.0, -bestEta);
   }
 
   public PointCandidate rankCollectHierarchical(
@@ -381,7 +603,7 @@ public final class PredictiveFieldState {
       int refineGrid) {
 
     double hardCountR = 0.75;
-    int hardMinCountCoarse = 2;
+    int hardMinCountCoarse = 1;
     int hardMinCountFine = 1;
     double snapR = 0.85;
     double snapMinMass = 0.20;
@@ -423,20 +645,31 @@ public final class PredictiveFieldState {
       bestScore[i] = -1e18;
     }
 
+    int fallbackIdx = -1;
+    double fallbackUnits = -1e18;
+
     for (int i = 0; i < targets.length; i++) {
       Translation2d cpt = targets[i];
+
+      double regionUnitsAny = dyn.valueInSquare(cpt, half);
+      if (regionUnitsAny > fallbackUnits) {
+        fallbackUnits = regionUnitsAny;
+        fallbackIdx = i;
+      }
+
       if (dyn.countResourcesWithin(cpt, hardCountR) < hardMinCountCoarse) continue;
 
       double eta = etaPath(ourPos, cpt, cap);
+      double near = Math.exp(-COLLECT_NEAR_DECAY * eta);
 
-      double regionUnits = dyn.valueInSquare(cpt, half);
+      double regionUnits = regionUnitsAny;
       if (regionUnits < COLLECT_COARSE_MIN_REGION_UNITS) continue;
 
       double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, regionUnits));
       double value = sat * goal * COLLECT_VALUE_GAIN;
 
-      double enemyP = radialPressure(enemyMap, cpt, enemyAgg.intent[i], enemyAgg.count);
-      double allyC = radialCongestion(allyMap, cpt, allyAgg.intent[i], allyAgg.count);
+      double enemyP = radialPressure(enemyMap, cpt, eta, enemyAgg.intent[i], enemyAgg.count);
+      double allyC = radialCongestion(allyMap, cpt, eta, allyAgg.intent[i], allyAgg.count);
 
       double ei = enemyAgg.count > 0 ? enemyAgg.intent[i] / Math.max(1.0, enemyAgg.count) : 0.0;
       double ai = allyAgg.count > 0 ? allyAgg.intent[i] / Math.max(1.0, allyAgg.count) : 0.0;
@@ -451,6 +684,7 @@ public final class PredictiveFieldState {
       double score =
           value * COLLECT_REGION_SAMPLES_W
               - eta * COLLECT_ETA_COST
+              + near * COLLECT_NEAR_BONUS
               - enemyP * COLLECT_ENEMY_PRESS_COST
               - allyC * COLLECT_ALLY_CONGEST_COST
               - ei * COLLECT_ENEMY_INTENT_COST
@@ -480,17 +714,27 @@ public final class PredictiveFieldState {
       }
     }
 
-    int bestI = -1;
-    double bestFineScore = -1e18;
-    double bestFineEta = 0.0;
-    double bestFineVal = 0.0;
-    double bestFineEP = 0.0;
-    double bestFineAC = 0.0;
-    double bestFineEI = 0.0;
-    double bestFineAI = 0.0;
-    Translation2d bestPt = null;
+    boolean anyCoarse = false;
+    for (int k = 0; k < topK; k++) if (bestIdx[k] >= 0) anyCoarse = true;
+
+    if (!anyCoarse && fallbackIdx >= 0) {
+      bestIdx[0] = fallbackIdx;
+      bestScore[0] = -1e12;
+    }
+
+    final int MAX_TRIES = 10;
 
     double step = (2.0 * half) / (rg - 1);
+
+    double[] candScore = new double[MAX_TRIES];
+    Translation2d[] candPt = new Translation2d[MAX_TRIES];
+    double[] candEta = new double[MAX_TRIES];
+    double[] candVal = new double[MAX_TRIES];
+    double[] candEP = new double[MAX_TRIES];
+    double[] candAC = new double[MAX_TRIES];
+    double[] candEI = new double[MAX_TRIES];
+    double[] candAI = new double[MAX_TRIES];
+    int candN = 0;
 
     for (int k = 0; k < topK; k++) {
       int idx = bestIdx[k];
@@ -511,6 +755,7 @@ public final class PredictiveFieldState {
           if (dyn.countResourcesWithin(p, hardCountR) < hardMinCountFine) continue;
 
           double eta = etaPath(ourPos, p, cap);
+          double near = Math.exp(-COLLECT_NEAR_DECAY * eta);
 
           double rawUnits = dyn.valueAt(p);
           if (rawUnits < COLLECT_FINE_MIN_UNITS) continue;
@@ -518,8 +763,8 @@ public final class PredictiveFieldState {
           double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, rawUnits));
           double value = sat * goal * COLLECT_VALUE_GAIN;
 
-          double enemyP = radialPressure(enemyMap, p, enemyAgg.intent[idx], enemyAgg.count);
-          double allyC = radialCongestion(allyMap, p, allyAgg.intent[idx], allyAgg.count);
+          double enemyP = radialPressure(enemyMap, p, eta, enemyAgg.intent[idx], enemyAgg.count);
+          double allyC = radialCongestion(allyMap, p, eta, allyAgg.intent[idx], allyAgg.count);
 
           double localAvoid = dyn.localAvoidPenalty(p, COLLECT_LOCAL_AVOID_R);
 
@@ -533,6 +778,7 @@ public final class PredictiveFieldState {
           double score =
               value
                   - eta * COLLECT_ETA_COST
+                  + near * COLLECT_NEAR_BONUS
                   - enemyP * COLLECT_ENEMY_PRESS_COST
                   - allyC * COLLECT_ALLY_CONGEST_COST
                   - eiC * COLLECT_ENEMY_INTENT_COST
@@ -541,160 +787,244 @@ public final class PredictiveFieldState {
                   - activity
                   - dep * DEPLETED_PEN_W;
 
-          if (score > bestFineScore) {
-            bestFineScore = score;
-            bestI = idx;
-            bestPt = p;
-            bestFineEta = eta;
-            bestFineVal = value;
-            bestFineEP = enemyP;
-            bestFineAC = allyC;
-            bestFineEI = eiC;
-            bestFineAI = aiC;
+          int insert = -1;
+          if (candN < MAX_TRIES) {
+            insert = candN++;
+          } else {
+            int worstI = 0;
+            double worstS = candScore[0];
+            for (int t = 1; t < candN; t++) {
+              if (candScore[t] < worstS) {
+                worstS = candScore[t];
+                worstI = t;
+              }
+            }
+            if (score > worstS) insert = worstI;
+          }
+
+          if (insert >= 0) {
+            candScore[insert] = score;
+            candPt[insert] = p;
+            candEta[insert] = eta;
+            candVal[insert] = value;
+            candEP[insert] = enemyP;
+            candAC[insert] = allyC;
+            candEI[insert] = eiC;
+            candAI[insert] = aiC;
           }
         }
       }
     }
 
-    if (bestPt == null || bestI < 0) return null;
+    if (candN == 0) return null;
 
-    Translation2d snapped = dyn.centroidResourcesWithin(bestPt, snapR, snapMinMass);
-    if (snapped != null) bestPt = snapped;
+    int[] order = new int[candN];
+    for (int i = 0; i < candN; i++) order[i] = i;
 
-    int finalCount = dyn.countResourcesWithin(bestPt, hardCountR);
-    double finalUnits = dyn.valueAt(bestPt);
-
-    Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalUnits);
-    Logger.recordOutput("Repulsor/Collect/ChosenScore", bestFineScore);
-    Logger.recordOutput("Repulsor/Collect/ChosenCount", finalCount);
-
-    if (finalCount < 1 || finalUnits < COLLECT_FINE_MIN_UNITS) {
-      markDepleted(bestPt, cellM, 1.0);
-      return null;
+    for (int i = 0; i < candN - 1; i++) {
+      int best = i;
+      double bestS = candScore[order[i]];
+      for (int j = i + 1; j < candN; j++) {
+        double s = candScore[order[j]];
+        if (s > bestS) {
+          best = j;
+          bestS = s;
+        }
+      }
+      int tmp = order[i];
+      order[i] = order[best];
+      order[best] = tmp;
     }
 
-    lastReturnedCollect = bestPt;
-    lastReturnedCollectTs = Timer.getFPGATimestamp();
+    for (int oi = 0; oi < candN; oi++) {
+      int ci = order[oi];
+      Translation2d p = candPt[ci];
+      if (p == null) continue;
 
-    if (ourPos.getDistance(bestPt) <= DEPLETED_MARK_NEAR_M) {
-      double u = dyn.valueAt(bestPt);
-      if (u < DEPLETED_MARK_EMPTY_UNITS) markDepleted(bestPt, cellM, 1.0);
+      Translation2d snapped = dyn.centroidResourcesWithin(p, snapR, snapMinMass);
+      Translation2d use = snapped != null ? snapped : p;
+
+      double pU = dyn.valueAt(p);
+      double uU = dyn.valueAt(use);
+      int pC = dyn.countResourcesWithin(p, hardCountR);
+      int uC = dyn.countResourcesWithin(use, hardCountR);
+
+      if (snapped != null) {
+        if (uU + 1e-9 < pU - 0.05) use = p;
+        else if (uC + 1 < pC) use = p;
+      }
+
+      int finalCount = dyn.countResourcesWithin(use, hardCountR);
+      double finalUnits = dyn.valueAt(use);
+
+      Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalUnits);
+      Logger.recordOutput("Repulsor/Collect/ChosenScore", candScore[ci]);
+      Logger.recordOutput("Repulsor/Collect/ChosenCount", finalCount);
+
+      if (finalCount >= 1 && finalUnits >= Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.75)) {
+        lastReturnedCollect = use;
+        lastReturnedCollectTs = Timer.getFPGATimestamp();
+
+        if (ourPos.getDistance(use) <= DEPLETED_MARK_NEAR_M) {
+          double u = dyn.valueAt(use);
+          if (u < DEPLETED_MARK_EMPTY_UNITS) markDepleted(use, cellM, 1.0);
+        }
+
+        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
+
+        return new PointCandidate(
+            use,
+            candEta[ci],
+            candVal[ci],
+            candEP[ci],
+            candAC[ci],
+            candEI[ci],
+            candAI[ci],
+            candScore[ci]);
+      }
+
+      markDepleted(use, cellM, 1.0);
     }
 
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestPt, new Rotation2d()));
-
-    return new PointCandidate(
-        bestPt,
-        bestFineEta,
-        bestFineVal,
-        bestFineEP,
-        bestFineAC,
-        bestFineEI,
-        bestFineAI,
-        bestFineScore);
+    return null;
   }
 
-  public PointCandidate rankCollectPoints(
-      Translation2d ourPos, double ourSpeedCap, Translation2d[] points, int goalUnits, int limit) {
-    if (ourPos == null) return null;
-
+  public Translation2d bestCollectHotspot(Translation2d[] points, double cellM) {
+    if (points == null || points.length == 0) return null;
     SpatialDyn dyn = cachedDyn();
+    if (dyn == null || dyn.resources.isEmpty()) return null;
 
-    Translation2d[] targets = buildCollectCandidates(points, dyn);
-    if (targets.length == 0) return null;
+    double half = Math.max(0.05, cellM * 0.5);
+    Translation2d best = null;
+    double bestU = 0.0;
 
-    IntentAgg allyAgg = softIntentAggArr(allyMap, targets);
-    IntentAgg enemyAgg = softIntentAggArr(enemyMap, targets);
-
-    sweepDepleted();
-
-    double cap = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
-
-    int goal = Math.max(1, goalUnits);
-    int bestI = -1;
-    double bestScore = -1e18;
-    double bestEta = 0.0;
-    double bestVal = 0.0;
-    double bestEP = 0.0;
-    double bestAC = 0.0;
-    double bestEI = 0.0;
-    double bestAI = 0.0;
-
-    for (int i = 0; i < targets.length; i++) {
-      Translation2d t = targets[i];
-      double eta = etaPath(ourPos, t, cap);
-
-      double rawUnits = dyn.valueAt(t);
-      if (rawUnits < COLLECT_FINE_MIN_UNITS) continue;
-
-      double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, rawUnits));
-      double value = sat * goal * COLLECT_VALUE_GAIN;
-
-      double enemyP = radialPressure(enemyMap, t, enemyAgg.intent[i], enemyAgg.count);
-      double allyC = radialCongestion(allyMap, t, allyAgg.intent[i], allyAgg.count);
-
-      double ei = enemyAgg.count > 0 ? enemyAgg.intent[i] / Math.max(1.0, enemyAgg.count) : 0.0;
-      double ai = allyAgg.count > 0 ? allyAgg.intent[i] / Math.max(1.0, allyAgg.count) : 0.0;
-
-      double localAvoid = dyn.localAvoidPenalty(t, COLLECT_LOCAL_AVOID_R);
-
-      double activity =
-          COLLECT_ACTIVITY_ALLY_W * radialDensity(allyMap, t, COLLECT_ACTIVITY_SIGMA)
-              + COLLECT_ACTIVITY_ENEMY_W * radialDensity(enemyMap, t, COLLECT_ACTIVITY_SIGMA)
-              + COLLECT_ACTIVITY_DYN_W * dyn.otherDensity(t, COLLECT_ACTIVITY_SIGMA);
-
-      double dep = depletedPenalty(t, 0.45);
-
-      double score =
-          value
-              - eta * COLLECT_ETA_COST
-              - enemyP * COLLECT_ENEMY_PRESS_COST
-              - allyC * COLLECT_ALLY_CONGEST_COST
-              - ei * COLLECT_ENEMY_INTENT_COST
-              - ai * COLLECT_ALLY_INTENT_COST
-              - localAvoid
-              - activity
-              - dep * DEPLETED_PEN_W;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestI = i;
-        bestEta = eta;
-        bestVal = value;
-        bestEP = enemyP;
-        bestAC = allyC;
-        bestEI = ei;
-        bestAI = ai;
+    for (Translation2d p : points) {
+      if (p == null) continue;
+      double u = dyn.valueInSquare(p, half);
+      if (u > bestU) {
+        bestU = u;
+        best = p;
       }
     }
 
-    if (bestI < 0) return null;
-    Translation2d chosen = targets[bestI];
-
-    int count = dyn.countResourcesWithin(chosen, 0.75);
-    double units = dyn.valueAt(chosen);
-
-    Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", units);
-    Logger.recordOutput("Repulsor/Collect/ChosenScore", bestScore);
-    Logger.recordOutput("Repulsor/Collect/ChosenCount", count);
-
-    if (count < 1 || units < COLLECT_FINE_MIN_UNITS) {
-      markDepleted(chosen, 0.45, 1.0);
-      return null;
-    }
-
-    lastReturnedCollect = chosen;
-    lastReturnedCollectTs = Timer.getFPGATimestamp();
-
-    if (ourPos.getDistance(chosen) <= DEPLETED_MARK_NEAR_M) {
-      double u = dyn.valueAt(chosen);
-      if (u < DEPLETED_MARK_EMPTY_UNITS) markDepleted(chosen, 0.45, 1.0);
-    }
-
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(chosen, new Rotation2d()));
-
-    return new PointCandidate(chosen, bestEta, bestVal, bestEP, bestAC, bestEI, bestAI, bestScore);
+    double min = Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.5);
+    return bestU >= min ? best : null;
   }
+
+public PointCandidate rankCollectPoints(
+    Translation2d ourPos,
+    double ourSpeedCap,
+    Translation2d[] points,
+    int goalUnits,
+    int limit) {
+
+  if (ourPos == null) return null;
+
+  SpatialDyn dyn = cachedDyn();
+  Translation2d[] targets = buildCollectCandidates(points, dyn);
+  if (targets == null || targets.length == 0) return null;
+
+  sweepDepleted();
+
+  IntentAgg allyAgg = softIntentAggArr(allyMap, targets);
+  IntentAgg enemyAgg = softIntentAggArr(enemyMap, targets);
+
+  double cap = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
+  int goal = Math.max(1, goalUnits);
+
+  double hardCountR = 0.70;
+  int hardMinCount = 1;
+
+  int maxCheck = limit > 0 ? Math.min(Math.max(1, limit), targets.length) : targets.length;
+
+  double[] etas = new double[targets.length];
+  int[] order = new int[targets.length];
+  for (int i = 0; i < targets.length; i++) {
+    order[i] = i;
+    Translation2d t = targets[i];
+    etas[i] = t != null ? etaPath(ourPos, t, cap) : Double.POSITIVE_INFINITY;
+  }
+
+  sortIdxByKey(etas, order);
+
+  int bestI = -1;
+  double bestScore = -1e18;
+
+  for (int oi = 0; oi < order.length && oi < maxCheck; oi++) {
+    int i = order[oi];
+    Translation2d p = targets[i];
+    if (p == null) continue;
+
+    if (dyn == null) continue;
+
+    int count = dyn.countResourcesWithin(p, hardCountR);
+    if (count < hardMinCount) continue;
+
+    double units = dyn.valueAt(p);
+    if (units < COLLECT_FINE_MIN_UNITS) continue;
+
+    double dep = depletedPenalty(p, COLLECT_CELL_M);
+    if (dep > 0.55) continue;
+
+    double eta = etas[i];
+    double near = Math.exp(-COLLECT_NEAR_DECAY * eta);
+
+    double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, units));
+    double value = sat * goal * COLLECT_VALUE_GAIN;
+
+    double enemyP = radialPressure(enemyMap, p, eta, enemyAgg.intent[i], enemyAgg.count);
+    double allyC = radialCongestion(allyMap, p, eta, allyAgg.intent[i], allyAgg.count);
+
+    double ei = enemyAgg.count > 0 ? enemyAgg.intent[i] / Math.max(1.0, enemyAgg.count) : 0.0;
+    double ai = allyAgg.count > 0 ? allyAgg.intent[i] / Math.max(1.0, allyAgg.count) : 0.0;
+
+    double activity =
+        COLLECT_ACTIVITY_ALLY_W * radialDensity(allyMap, p, COLLECT_ACTIVITY_SIGMA)
+            + COLLECT_ACTIVITY_ENEMY_W * radialDensity(enemyMap, p, COLLECT_ACTIVITY_SIGMA)
+            + COLLECT_ACTIVITY_DYN_W * dyn.otherDensity(p, COLLECT_ACTIVITY_SIGMA);
+
+    double score =
+        value
+            - eta * COLLECT_ETA_COST
+            + near * COLLECT_NEAR_BONUS
+            - enemyP * COLLECT_ENEMY_PRESS_COST
+            - allyC * COLLECT_ALLY_CONGEST_COST
+            - ei * COLLECT_ENEMY_INTENT_COST
+            - ai * COLLECT_ALLY_INTENT_COST
+            - activity
+            - dep * DEPLETED_PEN_W;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestI = i;
+    }
+  }
+
+  if (bestI < 0) return null;
+
+  Translation2d chosen = targets[bestI];
+  int count = dyn.countResourcesWithin(chosen, hardCountR);
+  double units = dyn.valueAt(chosen);
+
+  if (count < 1 || units < Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.75)) {
+    markDepleted(chosen, COLLECT_CELL_M, 1.0);
+    return null;
+  }
+
+  double eta = etaPath(ourPos, chosen, cap);
+  double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, units));
+  double value = sat * goal * COLLECT_VALUE_GAIN;
+
+  lastReturnedCollect = chosen;
+  lastReturnedCollectTs = Timer.getFPGATimestamp();
+
+  Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(chosen, new Rotation2d()));
+  Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", units);
+  Logger.recordOutput("Repulsor/Collect/ChosenCount", count);
+  Logger.recordOutput("Repulsor/Collect/ChosenScore", bestScore);
+
+  return new PointCandidate(chosen, eta, value, 0.0, 0.0, 0.0, 0.0, bestScore);
+}
 
   private Translation2d[] buildCollectCandidates(Translation2d[] gridPoints, SpatialDyn dyn) {
     Translation2d[] clusters =
@@ -714,8 +1044,8 @@ public final class PredictiveFieldState {
 
     double dup2 = COLLECT_DUP_SKIP_M * COLLECT_DUP_SKIP_M;
 
-    double minKeepUnits = Math.max(COLLECT_FINE_MIN_UNITS, 0.10);
-    double countR = 0.65;
+    double minKeepUnits = Math.max(COLLECT_FINE_MIN_UNITS * 0.5, 0.04);
+    double countR = 0.55;
 
     int added = 0;
     int seen = 0;
@@ -728,8 +1058,8 @@ public final class PredictiveFieldState {
       if (dyn.countResourcesWithin(p, countR) < 1) continue;
 
       boolean dup = false;
-      for (int j = 0; j < clusters.length; j++) {
-        Translation2d c = clusters[j];
+      for (int j = 0; j < out.size(); j++) {
+        Translation2d c = out.get(j);
         if (c == null) continue;
         double dx = c.getX() - p.getX();
         double dy = c.getY() - p.getY();
@@ -775,7 +1105,8 @@ public final class PredictiveFieldState {
         acc.put(k, a);
       }
 
-      double ageW = Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+      double ageW =
+          RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
       double w = Math.max(0.0, s.unitValue) * ageW;
 
       a.sx += o.pos.getX() * w;
@@ -824,12 +1155,16 @@ public final class PredictiveFieldState {
   }
 
   private void sweepDepleted() {
+    if (RobotBase.isSimulation()) return;
+
     if (depleted.isEmpty()) return;
     double now = Timer.getFPGATimestamp();
     depleted.entrySet().removeIf(e -> now - e.getValue().t > DEPLETED_TTL_S);
   }
 
   private void markDepleted(Translation2d p, double cellM, double strength) {
+    if (RobotBase.isSimulation()) return;
+
     if (p == null) return;
     double now = Timer.getFPGATimestamp();
     long k = depletedKey(p, cellM);
@@ -843,6 +1178,8 @@ public final class PredictiveFieldState {
   }
 
   private double depletedPenalty(Translation2d p, double cellM) {
+    if (RobotBase.isSimulation()) return 0.0;
+
     if (p == null || depleted.isEmpty()) return 0.0;
     long k = depletedKey(p, cellM);
     Depleted d = depleted.get(k);
@@ -861,15 +1198,25 @@ public final class PredictiveFieldState {
   }
 
   private static Translation2d lerpVec(Translation2d a, Translation2d b, double alpha) {
+    double t = Math.max(0.0, Math.min(1.0, alpha));
     return new Translation2d(
-        a.getX() + (b.getX() - a.getX()) * alpha, a.getY() + (b.getY() - a.getY()) * alpha);
+        a.getX() + (b.getX() - a.getX()) * t, a.getY() + (b.getY() - a.getY()) * t);
   }
 
-  private static Translation2d clampAccel(Translation2d v, double aMax, double dt) {
-    double lim = Math.max(0.1, aMax * dt);
-    double n = v.getNorm();
-    if (n <= lim) return v;
-    return v.div(n).times(lim);
+  private static double emaAlpha(double baseAlpha, double dt) {
+    double a = Math.max(0.0, Math.min(1.0, baseAlpha));
+    double x = Math.max(0.0, dt / MIN_DT);
+    return 1.0 - Math.pow(1.0 - a, x);
+  }
+
+  private static Translation2d clampDeltaV(
+      Translation2d oldV, Translation2d newV, double aMax, double dt) {
+    double lim = Math.max(0.0, aMax) * Math.max(0.0, dt);
+    Translation2d dv = newV.minus(oldV);
+    double n = dv.getNorm();
+    if (n <= lim || n <= 1e-9) return newV;
+    Translation2d dvClamped = dv.div(n).times(lim);
+    return oldV.plus(dvClamped);
   }
 
   private static double etaPath(Translation2d a, Translation2d b, double speed) {
@@ -915,12 +1262,24 @@ public final class PredictiveFieldState {
     return agg / Math.max(1.0, map.size());
   }
 
+  private static Translation2d predictAt(Track r, double horizonS) {
+    if (r == null) return new Translation2d();
+    double h = Math.max(0.0, horizonS);
+    if (r.vel == null || r.vel.getNorm() < 1e-9) return r.pos;
+    return r.pos.plus(r.vel.times(h));
+  }
+
   private double radialPressure(
-      HashMap<Integer, Track> enemies, Translation2d target, double intentMass, int count) {
+      HashMap<Integer, Track> enemies,
+      Translation2d target,
+      double ourEtaS,
+      double intentMass,
+      int count) {
     if (enemies.isEmpty()) return 0.0;
     double agg = 0.0;
     for (Track r : enemies.values()) {
-      double d = r.pos.getDistance(target);
+      Translation2d p = predictAt(r, ourEtaS);
+      double d = p.getDistance(target);
       double k = radialKernel(Math.max(0.0, d - RESERVATION_RADIUS));
       agg += k;
     }
@@ -930,11 +1289,16 @@ public final class PredictiveFieldState {
   }
 
   private double radialCongestion(
-      HashMap<Integer, Track> allies, Translation2d target, double intentMass, int count) {
+      HashMap<Integer, Track> allies,
+      Translation2d target,
+      double ourEtaS,
+      double intentMass,
+      int count) {
     if (allies.isEmpty()) return 0.0;
     double agg = 0.0;
     for (Track r : allies.values()) {
-      double d = r.pos.getDistance(target);
+      Translation2d p = predictAt(r, ourEtaS);
+      double d = p.getDistance(target);
       double k = radialKernel(Math.max(0.0, d - RESERVATION_RADIUS));
       agg += k;
     }
@@ -990,6 +1354,7 @@ public final class PredictiveFieldState {
 
     ensureScratch(m);
     double[] logits = scratchLogits;
+    double[] probs = scratchLogits2;
 
     int n = 0;
     double invT = 1.0 / Math.max(0.2, SOFTMAX_TEMP);
@@ -1006,22 +1371,25 @@ public final class PredictiveFieldState {
         Translation2d dir = t.minus(r.pos);
         double align = 0.0;
         if (dir.getNorm() > 1e-6 && r.vel.getNorm() > 1e-6) {
-          double cos = dotNorm(dir, r.vel);
-          align = (cos + 1.0) * 0.5;
+          align = Math.max(0.0, dotNorm(dir, r.vel));
         }
 
-        double logit = -(eta) + 0.65 * align;
+        double logit = -(eta * invT) + 0.35 * align;
         logits[i] = logit;
         if (logit > maxLogit) maxLogit = logit;
       }
 
-      double denom = 0.0;
-      for (int i = 0; i < m; i++) denom += Math.exp((logits[i] - maxLogit) * invT);
-      double invDen = 1.0 / Math.max(1e-9, denom);
+      double sum = 0.0;
+      for (int i = 0; i < m; i++) {
+        double e = Math.exp(logits[i] - maxLogit);
+        probs[i] = e;
+        sum += e;
+      }
+      double inv = 1.0 / Math.max(1e-9, sum);
 
       for (int i = 0; i < m; i++) {
-        double p = Math.exp((logits[i] - maxLogit) * invT) * invDen;
-        accum[i] += p;
+        double w = probs[i] * inv;
+        accum[i] += w;
       }
     }
 
@@ -1029,12 +1397,13 @@ public final class PredictiveFieldState {
   }
 
   private IntentAgg softIntentAggArr(HashMap<Integer, Track> map, Translation2d[] targets) {
-    int m = targets.length;
+    int m = targets != null ? targets.length : 0;
     double[] accum = new double[m];
     if (map.isEmpty() || m == 0) return new IntentAgg(accum, 0);
 
     ensureScratch(m);
     double[] logits = scratchLogits;
+    double[] probs = scratchLogits2;
 
     int n = 0;
     double invT = 1.0 / Math.max(0.2, SOFTMAX_TEMP);
@@ -1045,28 +1414,40 @@ public final class PredictiveFieldState {
 
       for (int i = 0; i < m; i++) {
         Translation2d t = targets[i];
+        if (t == null) {
+          logits[i] = -1e18;
+          continue;
+        }
+
         double d = r.pos.getDistance(t);
         double eta = d / Math.max(0.1, r.speedCap);
 
         Translation2d dir = t.minus(r.pos);
         double align = 0.0;
         if (dir.getNorm() > 1e-6 && r.vel.getNorm() > 1e-6) {
-          double cos = dotNorm(dir, r.vel);
-          align = (cos + 1.0) * 0.5;
+          align = Math.max(0.0, dotNorm(dir, r.vel));
         }
 
-        double logit = -(eta) + 0.65 * align;
+        double logit = -(eta * invT) + 0.35 * align;
         logits[i] = logit;
         if (logit > maxLogit) maxLogit = logit;
       }
 
-      double denom = 0.0;
-      for (int i = 0; i < m; i++) denom += Math.exp((logits[i] - maxLogit) * invT);
-      double invDen = 1.0 / Math.max(1e-9, denom);
+      double sum = 0.0;
+      for (int i = 0; i < m; i++) {
+        double li = logits[i];
+        if (li <= -1e17) {
+          probs[i] = 0.0;
+          continue;
+        }
+        double e = Math.exp(li - maxLogit);
+        probs[i] = e;
+        sum += e;
+      }
+      double inv = 1.0 / Math.max(1e-9, sum);
 
       for (int i = 0; i < m; i++) {
-        double p = Math.exp((logits[i] - maxLogit) * invT) * invDen;
-        accum[i] += p;
+        accum[i] += probs[i] * inv;
       }
     }
 
@@ -1074,210 +1455,266 @@ public final class PredictiveFieldState {
   }
 
   private static final class SpatialDyn {
-    private final ArrayList<DynamicObject> resources = new ArrayList<>();
-    private final ArrayList<DynamicObject> others = new ArrayList<>();
-    private final HashMap<String, ResourceSpec> specs;
-    private final HashMap<Long, IntList> grid = new HashMap<>();
-    private final double cell;
-    private final double invCell;
+    static long key(int cx, int cy) {
+      return (((long) cx) << 32) ^ (cy & 0xffffffffL);
+    }
 
-    SpatialDyn(List<DynamicObject> dyn, HashMap<String, ResourceSpec> specs) {
-      this.specs = specs != null ? specs : new HashMap<>();
-      double c = 0.45;
-      for (ResourceSpec s : this.specs.values()) {
-        c = Math.max(c, s.radiusM);
-      }
-      this.cell = c;
-      this.invCell = 1.0 / Math.max(1e-6, c);
+    final List<DynamicObject> all;
+    final List<DynamicObject> resources;
+    final List<DynamicObject> others;
+    final HashMap<String, ResourceSpec> specs;
 
-      if (dyn != null) {
-        for (DynamicObject o : dyn) {
-          if (o == null) continue;
-          if (isResource(o)) {
-            if (o.ageS <= RESOURCE_HARD_MAX_AGE_S) resources.add(o);
-          } else {
-            others.add(o);
-          }
+    final double cellM;
+    final HashMap<Long, ArrayList<DynamicObject>> resCells;
+    final HashMap<Long, ArrayList<DynamicObject>> othCells;
+
+    SpatialDyn(List<DynamicObject> dyn, HashMap<String, ResourceSpec> specsIn) {
+      this.all = dyn != null ? dyn : List.of();
+      this.specs = new HashMap<>();
+      if (specsIn != null) {
+        for (var e : specsIn.entrySet()) {
+          if (e.getKey() == null || e.getValue() == null) continue;
+          this.specs.put(e.getKey().toLowerCase(), e.getValue());
         }
       }
 
-      for (int i = 0; i < resources.size(); i++) {
-        DynamicObject o = resources.get(i);
-        int cx = (int) Math.floor(o.pos.getX() * invCell);
-        int cy = (int) Math.floor(o.pos.getY() * invCell);
-        long k = key(cx, cy);
-        IntList lst = grid.get(k);
-        if (lst == null) {
-          lst = new IntList();
-          grid.put(k, lst);
-        }
-        lst.add(i);
-      }
-    }
+      this.cellM = 0.50;
+      this.resCells = new HashMap<>(128);
+      this.othCells = new HashMap<>(128);
 
-    private boolean isResource(DynamicObject o) {
-      if (o.type == null) return false;
-      return specs.containsKey(o.type.toLowerCase());
-    }
+      ArrayList<DynamicObject> res = new ArrayList<>();
+      ArrayList<DynamicObject> oth = new ArrayList<>();
 
-    private static long key(int x, int y) {
-      return (((long) x) << 32) ^ (y & 0xffffffffL);
-    }
+      for (DynamicObject o : this.all) {
+        if (o == null || o.pos == null) continue;
+        if (!RobotBase.isSimulation() && o.ageS > RESOURCE_HARD_MAX_AGE_S) continue;
 
-    private double kernel(double d, double sigma) {
-      double s2 = sigma * sigma;
-      return Math.exp(-0.5 * (d * d) / Math.max(1e-6, s2));
-    }
-
-    private double effectiveSigma(ResourceSpec s) {
-      double maxRel = Math.max(RESOURCE_SIGMA_MIN, s.radiusM * RESOURCE_SIGMA_REL_MAX);
-      double cap = Math.min(RESOURCE_SIGMA_ABS_MAX, maxRel);
-      return Math.max(RESOURCE_SIGMA_MIN, Math.min(s.sigmaM, cap));
-    }
-
-    double valueAt(Translation2d p) {
-      if (resources.isEmpty() || specs.isEmpty()) return 0.0;
-      int cx = (int) Math.floor(p.getX() * invCell);
-      int cy = (int) Math.floor(p.getY() * invCell);
-      double sum = 0.0;
-
-      for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-          IntList lst = grid.get(key(cx + dx, cy + dy));
-          if (lst == null) continue;
-          int[] a = lst.a;
-          int n = lst.n;
-          for (int ii = 0; ii < n; ii++) {
-            DynamicObject o = resources.get(a[ii]);
-            ResourceSpec s = specs.get(o.type.toLowerCase());
-            if (s == null) continue;
-            double d = o.pos.getDistance(p);
-            if (d <= s.radiusM * 2.2) {
-              double ageW = Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
-              double sig = effectiveSigma(s);
-              sum += s.unitValue * kernel(d, sig) * ageW;
-            }
-          }
+        String ty = o.type != null ? o.type.toLowerCase() : "unknown";
+        if (this.specs.containsKey(ty)) {
+          res.add(o);
+          addTo(resCells, o.pos, o);
+        } else {
+          oth.add(o);
+          addTo(othCells, o.pos, o);
         }
       }
-      return sum;
+
+      this.resources = res;
+      this.others = oth;
     }
 
-    double valueInSquare(Translation2d center, double half) {
-      double s = 0.0;
-      s += valueAt(center);
-      s += valueAt(new Translation2d(center.getX() - half * 0.6, center.getY()));
-      s += valueAt(new Translation2d(center.getX() + half * 0.6, center.getY()));
-      s += valueAt(new Translation2d(center.getX(), center.getY() - half * 0.6));
-      s += valueAt(new Translation2d(center.getX(), center.getY() + half * 0.6));
-      return s * 0.2;
+    private void addTo(
+        HashMap<Long, ArrayList<DynamicObject>> map, Translation2d p, DynamicObject o) {
+      int cx = (int) Math.floor(p.getX() / Math.max(1e-6, cellM));
+      int cy = (int) Math.floor(p.getY() / Math.max(1e-6, cellM));
+      long k = key(cx, cy);
+      map.computeIfAbsent(k, kk -> new ArrayList<>()).add(o);
     }
 
-    double otherDensity(Translation2d p, double sigma) {
-      if (others.isEmpty()) return 0.0;
-      double agg = 0.0;
-      for (DynamicObject o : others) {
-        double d = o.pos.getDistance(p);
-        agg += densityKernel(d, sigma);
-      }
-      return agg / Math.max(1.0, others.size());
-    }
-
-    double localAvoidPenalty(Translation2d p, double r) {
-      if (others.isEmpty()) return 0.0;
-      double r2 = r * r;
-      double agg = 0.0;
-      for (DynamicObject o : others) {
-        double dx = o.pos.getX() - p.getX();
-        double dy = o.pos.getY() - p.getY();
-        double d2 = dx * dx + dy * dy;
-        if (d2 <= r2) {
-          double d = Math.sqrt(Math.max(1e-9, d2));
-          double w = 1.0 / (0.22 + d);
-          agg += w;
+    private Iterable<ArrayList<DynamicObject>> cellsInRadius(
+        Translation2d p, double r, HashMap<Long, ArrayList<DynamicObject>> map) {
+      int cx0 = (int) Math.floor(p.getX() / Math.max(1e-6, cellM));
+      int cy0 = (int) Math.floor(p.getY() / Math.max(1e-6, cellM));
+      int rad = (int) Math.ceil(r / Math.max(1e-6, cellM));
+      ArrayList<ArrayList<DynamicObject>> out = new ArrayList<>((2 * rad + 1) * (2 * rad + 1));
+      for (int dx = -rad; dx <= rad; dx++) {
+        for (int dy = -rad; dy <= rad; dy++) {
+          ArrayList<DynamicObject> c = map.get(key(cx0 + dx, cy0 + dy));
+          if (c != null) out.add(c);
         }
       }
-      return agg * 0.22;
+      return out;
     }
 
     int countResourcesWithin(Translation2d p, double r) {
-      if (resources.isEmpty() || specs.isEmpty()) return 0;
-      double r2 = r * r;
-      int cx = (int) Math.floor(p.getX() * invCell);
-      int cy = (int) Math.floor(p.getY() * invCell);
-
-      int cnt = 0;
-      int cells = (int) Math.ceil(r * invCell);
-
-      for (int dx = -cells; dx <= cells; dx++) {
-        for (int dy = -cells; dy <= cells; dy++) {
-          IntList lst = grid.get(key(cx + dx, cy + dy));
-          if (lst == null) continue;
-          int[] a = lst.a;
-          int n = lst.n;
-          for (int ii = 0; ii < n; ii++) {
-            DynamicObject o = resources.get(a[ii]);
-            ResourceSpec s = specs.get(o.type.toLowerCase());
-            if (s == null) continue;
-            double ox = o.pos.getX() - p.getX();
-            double oy = o.pos.getY() - p.getY();
-            if (ox * ox + oy * oy <= r2) cnt++;
-          }
+      if (p == null) return 0;
+      double rr2 = r * r;
+      int c = 0;
+      for (ArrayList<DynamicObject> cell : cellsInRadius(p, r, resCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null) continue;
+          double dx = o.pos.getX() - p.getX();
+          double dy = o.pos.getY() - p.getY();
+          if (dx * dx + dy * dy <= rr2) c++;
         }
       }
-      return cnt;
+      return c;
     }
 
-    Translation2d centroidResourcesWithin(Translation2d p, double r, double minMass) {
-      if (resources.isEmpty() || specs.isEmpty()) return null;
-      double r2 = r * r;
-      int cx = (int) Math.floor(p.getX() * invCell);
-      int cy = (int) Math.floor(p.getY() * invCell);
+    double valueAt(Translation2d p) {
+      if (p == null || resources.isEmpty() || specs.isEmpty()) return 0.0;
 
-      double sx = 0.0, sy = 0.0, sw = 0.0;
-      int cells = (int) Math.ceil(r * invCell);
+      double r = 2.0;
+      double sum = 0.0;
 
-      for (int dx = -cells; dx <= cells; dx++) {
-        for (int dy = -cells; dy <= cells; dy++) {
-          IntList lst = grid.get(key(cx + dx, cy + dy));
-          if (lst == null) continue;
-          int[] a = lst.a;
-          int n = lst.n;
-          for (int ii = 0; ii < n; ii++) {
-            DynamicObject o = resources.get(a[ii]);
-            ResourceSpec s = specs.get(o.type.toLowerCase());
-            if (s == null) continue;
+      for (ArrayList<DynamicObject> cell : cellsInRadius(p, r, resCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null || o.type == null) continue;
 
-            double ox = o.pos.getX() - p.getX();
-            double oy = o.pos.getY() - p.getY();
-            double d2 = ox * ox + oy * oy;
-            if (d2 > r2) continue;
+          ResourceSpec s = specs.get(o.type.toLowerCase());
+          if (s == null) continue;
 
-            double ageW = Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
-            double w = Math.max(0.0, s.unitValue) * ageW;
-            sx += o.pos.getX() * w;
-            sy += o.pos.getY() * w;
-            sw += w;
-          }
+          double dx = o.pos.getX() - p.getX();
+          double dy = o.pos.getY() - p.getY();
+          double d2 = dx * dx + dy * dy;
+
+          double sigma =
+              Math.max(
+                  RESOURCE_SIGMA_MIN,
+                  Math.min(
+                      RESOURCE_SIGMA_ABS_MAX, Math.min(s.sigmaM * RESOURCE_SIGMA_REL_MAX, 2.0)));
+          double sig2 = sigma * sigma;
+
+          double ageW =
+              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+
+          double w = Math.max(0.0, s.unitValue) * ageW;
+          double k = Math.exp(-0.5 * d2 / Math.max(1e-6, sig2));
+
+          sum += w * k;
         }
       }
 
-      if (sw < minMass) return null;
+      return Math.max(0.0, sum);
+    }
+
+    double valueInSquare(Translation2d center, double half) {
+      if (center == null || resources.isEmpty() || specs.isEmpty()) return 0.0;
+      double x0 = center.getX() - half;
+      double x1 = center.getX() + half;
+      double y0 = center.getY() - half;
+      double y1 = center.getY() + half;
+
+      double r = Math.sqrt(2.0) * half + 0.20;
+      double sum = 0.0;
+
+      for (ArrayList<DynamicObject> cell : cellsInRadius(center, r, resCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null || o.type == null) continue;
+          double x = o.pos.getX();
+          double y = o.pos.getY();
+          if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+
+          ResourceSpec s = specs.get(o.type.toLowerCase());
+          if (s == null) continue;
+
+          double ageW =
+              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+          sum += Math.max(0.0, s.unitValue) * ageW;
+        }
+      }
+
+      return Math.max(0.0, sum);
+    }
+
+    Translation2d centroidResourcesWithin(Translation2d seed, double r, double minMass) {
+      if (seed == null || resources.isEmpty() || specs.isEmpty()) return null;
+
+      double rr2 = r * r;
+      double sx = 0.0;
+      double sy = 0.0;
+      double sw = 0.0;
+
+      for (ArrayList<DynamicObject> cell : cellsInRadius(seed, r, resCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null || o.type == null) continue;
+
+          ResourceSpec s = specs.get(o.type.toLowerCase());
+          if (s == null) continue;
+
+          double dx = o.pos.getX() - seed.getX();
+          double dy = o.pos.getY() - seed.getY();
+          double d2 = dx * dx + dy * dy;
+          if (d2 > rr2) continue;
+
+          double sigma = Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, s.sigmaM));
+          double sig2 = sigma * sigma;
+
+          double ageW =
+              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+          double w = Math.max(0.0, s.unitValue) * ageW * Math.exp(-0.5 * d2 / Math.max(1e-6, sig2));
+
+          sx += o.pos.getX() * w;
+          sy += o.pos.getY() * w;
+          sw += w;
+        }
+      }
+
+      if (sw < Math.max(0.0, minMass)) return null;
       return new Translation2d(sx / sw, sy / sw);
     }
-  }
 
-  private static final class IntList {
-    int[] a = new int[8];
-    int n = 0;
+    Translation2d nearestResourceTo(Translation2d p, double maxDist) {
+      if (p == null || resources.isEmpty()) return null;
+      double bestD2 = maxDist * maxDist;
+      Translation2d best = null;
 
-    void add(int v) {
-      if (n >= a.length) {
-        int[] b = new int[a.length * 2];
-        System.arraycopy(a, 0, b, 0, a.length);
-        a = b;
+      for (ArrayList<DynamicObject> cell : cellsInRadius(p, maxDist, resCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null) continue;
+          double dx = o.pos.getX() - p.getX();
+          double dy = o.pos.getY() - p.getY();
+          double d2 = dx * dx + dy * dy;
+          if (d2 <= bestD2) {
+            bestD2 = d2;
+            best = o.pos;
+          }
+        }
       }
-      a[n++] = v;
+
+      return best;
+    }
+
+    double otherDensity(Translation2d p, double sigma) {
+      if (p == null || others.isEmpty()) return 0.0;
+      double s = Math.max(0.05, sigma);
+      double r = 3.0 * s;
+      double agg = 0.0;
+      int n = 0;
+
+      for (ArrayList<DynamicObject> cell : cellsInRadius(p, r, othCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null) continue;
+          double d = o.pos.getDistance(p);
+          agg += densityKernel(d, s);
+          n++;
+        }
+      }
+
+      if (n == 0) return 0.0;
+      return agg / Math.max(1.0, n);
+    }
+
+    double localAvoidPenalty(Translation2d p, double r) {
+      if (p == null || others.isEmpty()) return 0.0;
+      double rr = Math.max(0.05, r);
+      double rr2 = rr * rr;
+
+      double pen = 0.0;
+      int n = 0;
+
+      for (ArrayList<DynamicObject> cell : cellsInRadius(p, rr, othCells)) {
+        for (int i = 0; i < cell.size(); i++) {
+          DynamicObject o = cell.get(i);
+          if (o == null || o.pos == null) continue;
+          double dx = o.pos.getX() - p.getX();
+          double dy = o.pos.getY() - p.getY();
+          double d2 = dx * dx + dy * dy;
+          if (d2 > rr2) continue;
+          double d = Math.sqrt(Math.max(0.0, d2));
+          pen += Math.exp(-0.5 * (d * d) / Math.max(1e-6, (0.45 * 0.45)));
+          n++;
+        }
+      }
+
+      if (n == 0) return 0.0;
+      return Math.min(1.25, pen / Math.max(1.0, n));
     }
   }
 }

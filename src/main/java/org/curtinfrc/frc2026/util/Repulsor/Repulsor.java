@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2025/util/Repulsor/Repulsor.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -36,6 +35,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
+import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuningHeat;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
 import org.littletonrobotics.junction.Logger;
 
@@ -137,7 +137,7 @@ public class Repulsor {
     this.algae_offset = algae_offset;
     this.m_hasPiece = hasPiece;
 
-    m_planner = new FieldPlanner(new Rebuilt2026());
+    m_planner = new FieldPlanner(new Rebuilt2026(), new DriveTuningHeat(() -> m_drive.getPose()));
 
     Supplier<Boolean> inScoreSup = () -> m_gateInScoring.map(Trigger::getAsBoolean).orElse(true);
     Supplier<Boolean> inCollectSup =
