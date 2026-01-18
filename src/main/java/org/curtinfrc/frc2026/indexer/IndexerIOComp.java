@@ -19,17 +19,17 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IndexerIOComp implements IndexerIO {
-  private static final int ID = 0;
+  protected static final int ID = 0;
 
-  private final TalonFX motor = new TalonFX(ID);
+  protected final TalonFX motor = new TalonFX(ID);
 
-  private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
-  private final StatusSignal<Current> current = motor.getStatorCurrent();
-  private final StatusSignal<Angle> position = motor.getPosition();
-  private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+  protected final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
+  protected final StatusSignal<Current> current = motor.getStatorCurrent();
+  protected final StatusSignal<Angle> position = motor.getPosition();
+  protected final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
 
-  private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  private final VelocityVoltage velocityRequest =
+  protected final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  protected final VelocityVoltage velocityRequest =
       new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
