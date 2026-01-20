@@ -13,10 +13,10 @@ import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.simulation.DCMotorSim;
 
 public class IndexerIOSim extends IndexerIOComp {
-  private static final double kGearRatio = 10.0;
   private static final double kSimDt = 0.001;
 
   private final TalonFXSimState motorSim;
+  private final DCMotor motorType = DCMotor.getKrakenX60Foc(1);
   private final DCMotorSim motorSimModel;
   private final Notifier simNotifier;
 
@@ -28,9 +28,7 @@ public class IndexerIOSim extends IndexerIOComp {
     motorSim.Orientation = ChassisReference.CounterClockwise_Positive;
 
     motorSimModel =
-        new DCMotorSim(
-            LinearSystemId.createDCMotorSystem(DCMotor.getKrakenX60Foc(1), 0.001, kGearRatio),
-            DCMotor.getKrakenX60Foc(1));
+        new DCMotorSim(LinearSystemId.createDCMotorSystem(motorType, 0.001, kGearRatio), motorType);
 
     simNotifier = new Notifier(this::updateSim);
     simNotifier.startPeriodic(kSimDt);

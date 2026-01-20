@@ -5,6 +5,7 @@ import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
+import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -19,17 +20,18 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IndexerIOComp implements IndexerIO {
-  protected static final int ID = 0;
+  static final int ID = 0;
+  static final double kGearRatio = 10.0;
 
-  protected final TalonFX motor = new TalonFX(ID);
+  protected static final TalonFX motor = new TalonFX(ID);
 
-  protected final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
-  protected final StatusSignal<Current> current = motor.getStatorCurrent();
-  protected final StatusSignal<Angle> position = motor.getPosition();
-  protected final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+  static final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
+  static final StatusSignal<Current> current = motor.getStatorCurrent();
+  static final StatusSignal<Angle> position = motor.getPosition();
+  static final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
 
-  protected final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  protected final VelocityVoltage velocityRequest =
+  static final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  static final VelocityVoltage velocityRequest =
       new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
@@ -47,7 +49,9 @@ public class IndexerIOComp implements IndexerIO {
                         .withCurrentLimits(
                             new CurrentLimitsConfigs()
                                 .withSupplyCurrentLimit(30)
-                                .withStatorCurrentLimit(60))));
+                                .withStatorCurrentLimit(60))
+                        .withFeedback(
+                            new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))));
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
 
