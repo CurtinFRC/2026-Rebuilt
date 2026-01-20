@@ -20,19 +20,18 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IndexerIOComp implements IndexerIO {
-  static final int ID = 0;
-  static final double kGearRatio = 10.0;
+  private final int ID = 0;
+  final double kGearRatio = 10.0;
 
-  protected static final TalonFX motor = new TalonFX(ID);
+  protected final TalonFX motor = new TalonFX(ID);
 
-  static final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
-  static final StatusSignal<Current> current = motor.getStatorCurrent();
-  static final StatusSignal<Angle> position = motor.getPosition();
-  static final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+  private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
+  private final StatusSignal<Current> current = motor.getStatorCurrent();
+  private final StatusSignal<Angle> position = motor.getPosition();
+  private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
 
-  static final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  static final VelocityVoltage velocityRequest =
-      new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
+  final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
     tryUntilOk(
@@ -50,21 +49,18 @@ public class IndexerIOComp implements IndexerIO {
                             new CurrentLimitsConfigs()
                                 .withSupplyCurrentLimit(30)
                                 .withStatorCurrentLimit(60))
-                        .withFeedback(
-                            new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))));
+                        .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))
+                        .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1))));
+
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
-
-    var slot0Configs = new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1);
-
-    var pidConfig = new TalonFXConfiguration();
-    pidConfig.Slot0 = slot0Configs;
-
-    tryUntilOk(5, () -> motor.getConfigurator().apply(pidConfig));
   }
 
   @Override
   public void updateInputs(IndexerIOInputs inputs) {
+    BaseStatusSignal.refreshAll(
+        voltage, current, position, velocity); // Refresh values, mainly for sim
+
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
@@ -73,7 +69,7 @@ public class IndexerIOComp implements IndexerIO {
 
   @Override
   public void setVoltage(double volts) {
-    motor.setVoltage(volts);
+    motor.setControl(voltageRequest.withOutput(volts));
   }
 
   @Override

@@ -2,7 +2,6 @@ package org.curtinfrc.frc2026.indexer;
 
 import static edu.wpi.first.units.Units.Volts;
 
-import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.sim.ChassisReference;
 import com.ctre.phoenix6.sim.TalonFXSimState;
 import com.ctre.phoenix6.sim.TalonFXSimState.MotorType;
@@ -41,8 +40,8 @@ public class IndexerIOSim extends IndexerIOComp {
     motorSimModel.setInputVoltage(motorVolts);
     motorSimModel.update(kSimDt);
 
-    motorSim.setRawRotorPosition(motorSimModel.getAngularPosition().times(kGearRatio));
-    motorSim.setRotorVelocity(motorSimModel.getAngularVelocity().times(kGearRatio));
+    motorSim.setRawRotorPosition(motorSimModel.getAngularPosition());
+    motorSim.setRotorVelocity(motorSimModel.getAngularVelocity());
   }
 
   @Override
@@ -52,11 +51,11 @@ public class IndexerIOSim extends IndexerIOComp {
 
   @Override
   public void setVoltage(double volts) {
-    motor.setVoltage(volts);
+    motor.setControl(voltageRequest.withOutput(volts));
   }
 
   @Override
   public void setSpeed(double speed) {
-    motor.setControl(new VelocityVoltage(speed));
+    motor.setControl(velocityRequest.withVelocity(speed));
   }
 }
