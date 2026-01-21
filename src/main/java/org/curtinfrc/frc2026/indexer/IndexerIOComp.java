@@ -9,10 +9,12 @@ import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
+import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
@@ -20,10 +22,23 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IndexerIOComp implements IndexerIO {
-  private final int ID = 0;
+  private final int ID = 20;
+  private final int followerID = 22;
   final double kGearRatio = 10.0;
 
   protected final TalonFX motor = new TalonFX(ID);
+  protected final TalonFX followerMotor = new TalonFX(followerID);
+
+  private final TalonFXConfiguration motorConfig =
+      new TalonFXConfiguration()
+          .withMotorOutput(
+              new MotorOutputConfigs()
+                  .withInverted(InvertedValue.Clockwise_Positive)
+                  .withNeutralMode(NeutralModeValue.Brake))
+          .withCurrentLimits(
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
+          .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))
+          .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
 
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Current> current = motor.getStatorCurrent();
@@ -34,23 +49,10 @@ public class IndexerIOComp implements IndexerIO {
   final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public IndexerIOComp() {
-    tryUntilOk(
-        5,
-        () ->
-            motor
-                .getConfigurator()
-                .apply(
-                    new TalonFXConfiguration()
-                        .withMotorOutput(
-                            new MotorOutputConfigs()
-                                .withInverted(InvertedValue.Clockwise_Positive)
-                                .withNeutralMode(NeutralModeValue.Brake))
-                        .withCurrentLimits(
-                            new CurrentLimitsConfigs()
-                                .withSupplyCurrentLimit(30)
-                                .withStatorCurrentLimit(60))
-                        .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))
-                        .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1))));
+    tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
+    tryUntilOk(5, () -> followerMotor.getConfigurator().apply(motorConfig));
+
+    followerMotor.setControl(new Follower(ID, MotorAlignmentValue.Aligned));
 
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
