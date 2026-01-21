@@ -29,16 +29,19 @@ public class IndexerIOComp implements IndexerIO {
   protected final TalonFX motor = new TalonFX(ID);
   protected final TalonFX followerMotor = new TalonFX(followerID);
 
-  private final TalonFXConfiguration motorConfig =
+  private final TalonFXConfiguration sharedMotorConfig =
       new TalonFXConfiguration()
-          .withMotorOutput(
-              new MotorOutputConfigs()
-                  .withInverted(InvertedValue.Clockwise_Positive)
-                  .withNeutralMode(NeutralModeValue.Brake))
+          .withMotorOutput(new MotorOutputConfigs().withNeutralMode(NeutralModeValue.Brake))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))
           .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
+  private final TalonFXConfiguration motorConfig =
+      sharedMotorConfig.withMotorOutput(
+          sharedMotorConfig.MotorOutput.withInverted(InvertedValue.Clockwise_Positive));
+  private final TalonFXConfiguration followerMotorConfig =
+      sharedMotorConfig.withMotorOutput(
+          sharedMotorConfig.MotorOutput.withInverted(InvertedValue.CounterClockwise_Positive));
 
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Current> current = motor.getStatorCurrent();
@@ -50,9 +53,9 @@ public class IndexerIOComp implements IndexerIO {
 
   public IndexerIOComp() {
     tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
-    tryUntilOk(5, () -> followerMotor.getConfigurator().apply(motorConfig));
+    tryUntilOk(5, () -> followerMotor.getConfigurator().apply(followerMotorConfig));
 
-    followerMotor.setControl(new Follower(ID, MotorAlignmentValue.Aligned));
+    followerMotor.setControl(new Follower(ID, MotorAlignmentValue.Opposed));
 
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
     motor.optimizeBusUtilization();
