@@ -12,13 +12,20 @@ public class Shooter extends SubsystemBase {
     this.io = io;
   }
 
+  // public final Trigger backSensor = new Trigger(() -> inputs.backSensor);
+  // public final Trigger frontSensor = new Trigger(() -> inputs.frontSensor);
+
   @Override
   public void periodic() {
     io.updateInputs(inputs);
     Logger.processInputs("Shooter", inputs);
   }
 
-  public Command plusFour(double numbah) {
-    return run(() -> io.setVoltage(numbah + 4));
+  public Command Stop() {
+    return run(() -> io.setVoltage(0));
+  }
+
+  public Command Go(double volts) {
+    return run(() -> io.setVoltage(volts));
   }
 }
