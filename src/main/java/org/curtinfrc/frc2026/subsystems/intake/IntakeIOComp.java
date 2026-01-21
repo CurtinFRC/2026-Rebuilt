@@ -18,6 +18,6 @@ public class IntakeIOComp implements IntakeIO {
 
   @Override
   public void setVoltage(double volts) {
-    motor.setVoltage(volts);
+    motor.setVoltage(-volts);
   }
 }
