@@ -1,4 +1,4 @@
-package org.curtinfrc.frc2026.indexer;
+package org.curtinfrc.frc2026.subsystems.indexer;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
