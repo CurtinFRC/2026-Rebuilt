@@ -19,7 +19,7 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class ShooterIOComp implements ShooterIO {
-  private static final int ID = 99;
+  private static final int ID = 40;
   private static final CurrentLimitsConfigs currentLimits =
       new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
   private static final TalonFXConfiguration leaderConfig =

@@ -1,0 +1,84 @@
+package org.curtinfrc.frc2026.subsystems.indexer;
+
+import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
+
+import com.ctre.phoenix6.BaseStatusSignal;
+import com.ctre.phoenix6.StatusSignal;
+import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
+import com.ctre.phoenix6.configs.FeedbackConfigs;
+import com.ctre.phoenix6.configs.MotorOutputConfigs;
+import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.controls.Follower;
+import com.ctre.phoenix6.controls.VelocityVoltage;
+import com.ctre.phoenix6.controls.VoltageOut;
+import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.signals.InvertedValue;
+import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import com.ctre.phoenix6.signals.NeutralModeValue;
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.AngularVelocity;
+import edu.wpi.first.units.measure.Current;
+import edu.wpi.first.units.measure.Voltage;
+
+public class IndexerIOComp implements IndexerIO {
+  private final int ID = 20;
+  private final int followerID = 22;
+  final double kGearRatio = 10.0;
+
+  protected final TalonFX motor = new TalonFX(ID);
+  protected final TalonFX followerMotor = new TalonFX(followerID);
+
+  private final TalonFXConfiguration sharedMotorConfig =
+      new TalonFXConfiguration()
+          .withMotorOutput(new MotorOutputConfigs().withNeutralMode(NeutralModeValue.Brake))
+          .withCurrentLimits(
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
+          .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(kGearRatio))
+          .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
+  private final TalonFXConfiguration motorConfig =
+      sharedMotorConfig.withMotorOutput(
+          sharedMotorConfig.MotorOutput.withInverted(InvertedValue.Clockwise_Positive));
+  private final TalonFXConfiguration followerMotorConfig =
+      sharedMotorConfig.withMotorOutput(
+          sharedMotorConfig.MotorOutput.withInverted(InvertedValue.CounterClockwise_Positive));
+
+  private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
+  private final StatusSignal<Current> current = motor.getStatorCurrent();
+  private final StatusSignal<Angle> position = motor.getPosition();
+  private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+
+  final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
+
+  public IndexerIOComp() {
+    tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
+    tryUntilOk(5, () -> followerMotor.getConfigurator().apply(followerMotorConfig));
+
+    followerMotor.setControl(new Follower(ID, MotorAlignmentValue.Opposed));
+
+    BaseStatusSignal.setUpdateFrequencyForAll(20.0, velocity, voltage, current, position);
+    motor.optimizeBusUtilization();
+  }
+
+  @Override
+  public void updateInputs(IndexerIOInputs inputs) {
+    BaseStatusSignal.refreshAll(
+        voltage, current, position, velocity); // Refresh values, mainly for sim
+
+    inputs.appliedVolts = voltage.getValueAsDouble();
+    inputs.currentAmps = current.getValueAsDouble();
+    inputs.positionRotations = position.getValueAsDouble();
+    inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
+  }
+
+  @Override
+  public void setVoltage(double volts) {
+    motor.setControl(voltageRequest.withOutput(volts));
+  }
+
+  @Override
+  public void setSpeed(double speed) {
+    motor.setControl(velocityRequest.withVelocity(speed));
+  }
+}

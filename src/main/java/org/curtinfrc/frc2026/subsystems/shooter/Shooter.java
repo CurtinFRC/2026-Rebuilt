@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026.subsystems.shooter;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import java.util.function.DoubleSupplier;
 import org.littletonrobotics.junction.Logger;
 
 public class Shooter extends SubsystemBase {
@@ -25,7 +26,7 @@ public class Shooter extends SubsystemBase {
     return run(() -> io.setVoltage(0));
   }
 
-  public Command Go(double volts) {
-    return run(() -> io.setVoltage(volts));
+  public Command Go(DoubleSupplier volts) {
+    return run(() -> io.setVoltage(volts.getAsDouble()));
   }
 }
