@@ -24,6 +24,10 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.indexer.Indexer;
+import org.curtinfrc.frc2026.indexer.IndexerIO;
+import org.curtinfrc.frc2026.indexer.IndexerIOComp;
+import org.curtinfrc.frc2026.indexer.IndexerIOSim;
 import org.curtinfrc.frc2026.subsystems.intake.Intake;
 import org.curtinfrc.frc2026.subsystems.intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.intake.IntakeIOComp;
@@ -49,6 +53,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Indexer indexer;
   private Intake intake;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
@@ -101,6 +106,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          indexer = new Indexer(new IndexerIOComp());
           intake = new Intake(new IntakeIOComp());
         }
         case DEV -> {
@@ -117,6 +123,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          indexer = new Indexer(new IndexerIOComp());
           intake = new Intake(new IntakeIOComp());
         }
         case SIM -> {
@@ -133,6 +140,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+          indexer = new Indexer(new IndexerIOSim());
           intake = new Intake(new IntakeIO() {});
         }
       }
@@ -145,6 +153,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      indexer = new Indexer(new IndexerIO() {});
       intake = new Intake(new IntakeIO() {});
     }
 
@@ -157,6 +166,9 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    indexer.setDefaultCommand(indexer.stop());
+    controller.y().whileTrue(indexer.setSpeed(50));
 
     controller.b().whileTrue(intake.intake()).onFalse(intake.stop());
   }
