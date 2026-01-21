@@ -535,560 +535,576 @@ public class FieldPlanner {
   }
 
   public static class RectangleObstacle extends Obstacle {
-  public final Translation2d center;
-  public final double halfX;
-  public final double halfY;
-  public final Rotation2d rot;
-  public final double maxRangeX;
-  public final double maxRangeY;
+    public final Translation2d center;
+    public final double halfX;
+    public final double halfY;
+    public final Rotation2d rot;
+    public final double maxRangeX;
+    public final double maxRangeY;
 
-  private static final double X_AXIS_ANGLE_BIAS_RAD = Math.toRadians(18.0);
+    private static final double X_AXIS_ANGLE_BIAS_RAD = Math.toRadians(18.0);
 
-  private static final double CORNER_RANGE_M = 1.15;
-  private static final double CORNER_FORCE_SCALE = 14.0;
-  private static final double CORNER_FORCE_SOFTEN = 0.07;
+    private static final double CORNER_RANGE_M = 1.15;
+    private static final double CORNER_FORCE_SCALE = 14.0;
+    private static final double CORNER_FORCE_SOFTEN = 0.07;
 
-  private static final double CORNER_SLIDE_SCALE = 9.0;
-  private static final double CORNER_SLIDE_SOFTEN = 0.22;
-  private static final double CORNER_SLIDE_STEP = 0.38;
-  private static final double CORNER_SLIDE_OUT_STEP = 0.10;
+    private static final double CORNER_SLIDE_SCALE = 9.0;
+    private static final double CORNER_SLIDE_SOFTEN = 0.22;
+    private static final double CORNER_SLIDE_STEP = 0.38;
+    private static final double CORNER_SLIDE_OUT_STEP = 0.10;
 
-  private static final double CORNER_ORBIT_SCALE = 7.5;
-  private static final double CORNER_ORBIT_SOFTEN = 0.18;
-  private static final double CORNER_ORBIT_STEP_T = 0.55;
-  private static final double CORNER_ORBIT_STEP_O = 0.20;
+    private static final double CORNER_ORBIT_SCALE = 7.5;
+    private static final double CORNER_ORBIT_SOFTEN = 0.18;
+    private static final double CORNER_ORBIT_STEP_T = 0.55;
+    private static final double CORNER_ORBIT_STEP_O = 0.20;
 
-  private static final double TIE_EPS = 0.03;
+    private static final double TIE_EPS = 0.03;
 
-  private static double clamp01(double x) {
-    return Math.max(0.0, Math.min(1.0, x));
-  }
-
-  private static double smooth01(double x) {
-    x = clamp01(x);
-    return x * x * (3.0 - 2.0 * x);
-  }
-
-  private static double wallMovePenalty(Translation2d pos, Translation2d cand) {
-    double L = Constants.FIELD_LENGTH;
-    double W = Constants.FIELD_WIDTH;
-
-    double edge = 0.95;
-    double dy = cand.getY() - pos.getY();
-    double dx = cand.getX() - pos.getX();
-
-    double pen = 0.0;
-
-    if (pos.getY() > W - edge && dy > 0.02) pen += 1.6 * dy;
-    if (pos.getY() < edge && dy < -0.02) pen += 1.6 * (-dy);
-
-    if (pos.getX() > L - edge && dx > 0.02) pen += 1.6 * dx;
-    if (pos.getX() < edge && dx < -0.02) pen += 1.6 * (-dx);
-
-    return pen;
-  }
-
-  private static Translation2d stablePick(
-      Translation2d pos,
-      Translation2d goal,
-      Translation2d centerWorld,
-      Translation2d tCW,
-      Translation2d tCCW,
-      Translation2d pCW,
-      Translation2d pCCW,
-      double sCW,
-      double sCCW) {
-
-    double diff = Math.abs(sCW - sCCW);
-    if (diff > TIE_EPS) return (sCW <= sCCW) ? tCW : tCCW;
-
-    double wCW = wallMovePenalty(pos, pCW);
-    double wCCW = wallMovePenalty(pos, pCCW);
-    if (Math.abs(wCW - wCCW) > 1e-6) return (wCW <= wCCW) ? tCW : tCCW;
-
-    Translation2d toGoal = goal.minus(pos);
-    double gN = toGoal.getNorm();
-    Translation2d toGoalU = (gN > EPS) ? toGoal.div(gN) : new Translation2d(1.0, 0.0);
-
-    double aCW = dot(tCW, toGoalU);
-    double aCCW = dot(tCCW, toGoalU);
-    if (Math.abs(aCW - aCCW) > 1e-6) return (aCW >= aCCW) ? tCW : tCCW;
-
-    Translation2d cp = pos.minus(centerWorld);
-    Translation2d cg = goal.minus(centerWorld);
-    double cross = cp.getX() * cg.getY() - cp.getY() * cg.getX();
-    return (cross >= 0.0) ? tCCW : tCW;
-  }
-
-  private static Translation2d chooseCornerSlideDir(
-      Translation2d pos,
-      Translation2d goal,
-      Translation2d cornerWorld,
-      Translation2d centerWorld,
-      Translation2d[] polyExp) {
-
-    Translation2d outward = pos.minus(centerWorld);
-    double outN = outward.getNorm();
-    if (outN < EPS) outward = new Translation2d(1.0, 0.0);
-    outward = outward.div(Math.max(EPS, outward.getNorm()));
-
-    Translation2d v = pos.minus(cornerWorld);
-    double vN = v.getNorm();
-    if (vN < EPS) v = outward;
-    v = v.div(Math.max(EPS, v.getNorm()));
-
-    Translation2d t1 = new Translation2d(-v.getY(), v.getX());
-    Translation2d t2 = new Translation2d(v.getY(), -v.getX());
-
-    Translation2d p1 = pos.plus(t1.times(CORNER_SLIDE_STEP)).plus(outward.times(CORNER_SLIDE_OUT_STEP));
-    Translation2d p2 = pos.plus(t2.times(CORNER_SLIDE_STEP)).plus(outward.times(CORNER_SLIDE_OUT_STEP));
-
-    double base = pos.getDistance(goal);
-
-    double s1 = scoreCandidatePolyWithWalls(pos, goal, p1, base, polyExp);
-    double s2 = scoreCandidatePolyWithWalls(pos, goal, p2, base, polyExp);
-
-    Translation2d tCW = t2;
-    Translation2d tCCW = t1;
-    Translation2d pCW = p2;
-    Translation2d pCCW = p1;
-    double sCW = s2;
-    double sCCW = s1;
-
-    return stablePick(pos, goal, centerWorld, tCW, tCCW, pCW, pCCW, sCW, sCCW) == tCW ? t2 : t1;
-  }
-
-  private static Translation2d chooseCornerOrbitDir(
-      Translation2d pos,
-      Translation2d goal,
-      Translation2d cornerWorld,
-      Translation2d centerWorld,
-      Translation2d[] polyExp) {
-
-    Translation2d outward = pos.minus(centerWorld);
-    double outN = outward.getNorm();
-    if (outN < EPS) outward = new Translation2d(1.0, 0.0);
-    outward = outward.div(Math.max(EPS, outward.getNorm()));
-
-    Translation2d v = pos.minus(cornerWorld);
-    double vN = v.getNorm();
-    if (vN < EPS) v = outward;
-    v = v.div(Math.max(EPS, v.getNorm()));
-
-    Translation2d tCCW = new Translation2d(-v.getY(), v.getX());
-    Translation2d tCW = new Translation2d(v.getY(), -v.getX());
-
-    Translation2d pCW = pos.plus(tCW.times(CORNER_ORBIT_STEP_T)).plus(outward.times(CORNER_ORBIT_STEP_O));
-    Translation2d pCCW = pos.plus(tCCW.times(CORNER_ORBIT_STEP_T)).plus(outward.times(CORNER_ORBIT_STEP_O));
-
-    double base = pos.getDistance(goal);
-
-    double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, base, polyExp);
-    double sCCW = scoreCandidatePolyWithWalls(pos, goal, pCCW, base, polyExp);
-
-    return stablePick(pos, goal, centerWorld, tCW, tCCW, pCW, pCCW, sCW, sCCW);
-  }
-
-  public RectangleObstacle(
-      Translation2d center,
-      double widthMeters,
-      double heightMeters,
-      Rotation2d rot,
-      double strength,
-      double maxRangeX,
-      double maxRangeY) {
-    super(strength, true);
-    this.center = center;
-    this.halfX = Math.max(0.0, widthMeters * 0.5);
-    this.halfY = Math.max(0.0, heightMeters * 0.5);
-    this.rot = (rot == null) ? Rotation2d.kZero : rot;
-    this.maxRangeX = Math.max(0.0, maxRangeX);
-    this.maxRangeY = Math.max(0.0, maxRangeY);
-  }
-
-  public RectangleObstacle(
-      Translation2d center,
-      double widthMeters,
-      double heightMeters,
-      double strength,
-      double maxRangeX,
-      double maxRangeY) {
-    this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRangeX, maxRangeY);
-  }
-
-  public RectangleObstacle(
-      Translation2d center,
-      double widthMeters,
-      double heightMeters,
-      double strength,
-      double maxRange) {
-    this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRange, maxRange);
-  }
-
-  @Override
-  public Force getForceAtPosition(Translation2d position, Translation2d target) {
-    Translation2d pLocal = position.minus(center).rotateBy(rot.unaryMinus());
-    Translation2d gLocal = target.minus(center).rotateBy(rot.unaryMinus());
-
-    double px = pLocal.getX();
-    double py = pLocal.getY();
-
-    double clx = Math.max(-halfX, Math.min(px, halfX));
-    double cly = Math.max(-halfY, Math.min(py, halfY));
-
-    double dx = px - clx;
-    double dy = py - cly;
-
-    boolean inside = (px >= -halfX && px <= halfX && py >= -halfY && py <= halfY);
-
-    double ax = inside ? 0.0 : Math.abs(dx);
-    double ay = inside ? 0.0 : Math.abs(dy);
-
-    Translation2d[] poly = corners();
-    boolean occludes = segmentIntersectsPolygon(position, target, poly);
-
-    if (!inside && (ax > maxRangeX || ay > maxRangeY) && !occludes) return new Force();
-
-    double diag = Math.hypot(halfX, halfY);
-    double falloffMeters = Math.max(EPS, Math.max(maxRangeX, maxRangeY) + diag + 0.35);
-
-    Translation2d awayLocal;
-    double effectiveDistMeters;
-
-    if (!inside) {
-      awayLocal = new Translation2d(dx, dy);
-      double n = awayLocal.getNorm();
-      if (n < EPS) return new Force();
-      if (Math.abs(dx) > Math.abs(dy)) {
-        double sign = Math.signum(target.getY() - position.getY());
-        if (sign == 0.0) sign = 1.0;
-        Rotation2d biasedAngle =
-            awayLocal.getAngle().rotateBy(Rotation2d.fromRadians(sign * X_AXIS_ANGLE_BIAS_RAD));
-        awayLocal = new Translation2d(n, biasedAngle);
-      }
-      effectiveDistMeters = Math.hypot(ax, ay);
-      if (effectiveDistMeters < EPS) effectiveDistMeters = EPS;
-    } else {
-      double dL = px + halfX;
-      double dR = halfX - px;
-      double dB = py + halfY;
-      double dT = halfY - py;
-
-      double min = dL;
-      double nx = -1, ny = 0;
-
-      if (dR < min) {
-        min = dR;
-        nx = 1;
-        ny = 0;
-      }
-      if (dB < min) {
-        min = dB;
-        nx = 0;
-        ny = -1;
-      }
-      if (dT < min) {
-        min = dT;
-        nx = 0;
-        ny = 1;
-      }
-
-      awayLocal = new Translation2d(nx, ny);
-      effectiveDistMeters = -Math.max(EPS, min);
+    private static double clamp01(double x) {
+      return Math.max(0.0, Math.min(1.0, x));
     }
 
-    double mag = distToForceMag(effectiveDistMeters, falloffMeters);
-
-    Translation2d primaryWorld = Translation2d.kZero;
-    Translation2d awayWorldU = Translation2d.kZero;
-    if (Math.abs(mag) >= EPS && awayLocal.getNorm() >= EPS) {
-      Translation2d awayWorld = awayLocal.rotateBy(rot);
-      double n = Math.max(EPS, awayWorld.getNorm());
-      awayWorldU = awayWorld.div(n);
-      primaryWorld = awayWorldU.times(Math.abs(mag));
+    private static double smooth01(double x) {
+      x = clamp01(x);
+      return x * x * (3.0 - 2.0 * x);
     }
 
-    Translation2d escapeWorld = Translation2d.kZero;
+    private static double wallMovePenalty(Translation2d pos, Translation2d cand) {
+      double L = Constants.FIELD_LENGTH;
+      double W = Constants.FIELD_WIDTH;
 
-    double engageR = Math.max(0.9, falloffMeters + 0.65);
-    double distC = position.getDistance(center);
+      double edge = 0.95;
+      double dy = cand.getY() - pos.getY();
+      double dx = cand.getX() - pos.getX();
 
-    if (distC <= engageR) {
-      Translation2d outwardW = position.minus(center);
-      double outN = outwardW.getNorm();
-      if (outN < EPS) outwardW = new Translation2d(1.0, 0.0);
-      outN = Math.max(EPS, outwardW.getNorm());
-      Translation2d outwardWU = outwardW.div(outN);
+      double pen = 0.0;
 
-      Translation2d toGoal = target.minus(position);
-      double gN = Math.max(EPS, toGoal.getNorm());
-      Translation2d toGoalU = toGoal.div(gN);
+      if (pos.getY() > W - edge && dy > 0.02) pen += 1.6 * dy;
+      if (pos.getY() < edge && dy < -0.02) pen += 1.6 * (-dy);
 
-      Translation2d tCCW = new Translation2d(-outwardWU.getY(), outwardWU.getX());
-      Translation2d tCW = new Translation2d(outwardWU.getY(), -outwardWU.getX());
+      if (pos.getX() > L - edge && dx > 0.02) pen += 1.6 * dx;
+      if (pos.getX() < edge && dx < -0.02) pen += 1.6 * (-dx);
 
-      double pad = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
-      Translation2d[] polyExp = expandedCorners(pad);
+      return pen;
+    }
 
-      Translation2d chosenT = chooseTangentPolyWithWalls(position, target, outwardWU, tCW, tCCW, polyExp);
+    private static Translation2d stablePick(
+        Translation2d pos,
+        Translation2d goal,
+        Translation2d centerWorld,
+        Translation2d tCW,
+        Translation2d tCCW,
+        Translation2d pCW,
+        Translation2d pCCW,
+        double sCW,
+        double sCCW) {
 
-      double d = Math.max(0.12, distC - diag);
-      double w = smooth01(1.0 - (d / engageR));
+      double diff = Math.abs(sCW - sCCW);
+      if (diff > TIE_EPS) return (sCW <= sCCW) ? tCW : tCCW;
 
-      double swirlMag = (strength * 6.8) / (0.30 + d * d);
-      double slideMag = (strength * 3.6) / (0.35 + d * d);
-      double pushOutMag = (strength * 2.1) / (0.55 + d * d);
+      double wCW = wallMovePenalty(pos, pCW);
+      double wCCW = wallMovePenalty(pos, pCCW);
+      if (Math.abs(wCW - wCCW) > 1e-6) return (wCW <= wCCW) ? tCW : tCCW;
 
-      double along = dot(chosenT, toGoalU);
-      double boost = (along < 0.12) ? 1.45 : 1.0;
+      Translation2d toGoal = goal.minus(pos);
+      double gN = toGoal.getNorm();
+      Translation2d toGoalU = (gN > EPS) ? toGoal.div(gN) : new Translation2d(1.0, 0.0);
 
-      Translation2d swirl = chosenT.times(swirlMag * w * boost);
-      Translation2d slide = chosenT.times(slideMag * w);
-      Translation2d pushOut = outwardWU.times(pushOutMag * w);
+      double aCW = dot(tCW, toGoalU);
+      double aCCW = dot(tCCW, toGoalU);
+      if (Math.abs(aCW - aCCW) > 1e-6) return (aCW >= aCCW) ? tCW : tCCW;
 
-      Translation2d add = swirl.plus(slide).plus(pushOut);
+      Translation2d cp = pos.minus(centerWorld);
+      Translation2d cg = goal.minus(centerWorld);
+      double cross = cp.getX() * cg.getY() - cp.getY() * cg.getX();
+      return (cross >= 0.0) ? tCCW : tCW;
+    }
 
-      if (occludes) {
-        escapeWorld = escapeWorld.plus(add);
+    private static Translation2d chooseCornerSlideDir(
+        Translation2d pos,
+        Translation2d goal,
+        Translation2d cornerWorld,
+        Translation2d centerWorld,
+        Translation2d[] polyExp) {
+
+      Translation2d outward = pos.minus(centerWorld);
+      double outN = outward.getNorm();
+      if (outN < EPS) outward = new Translation2d(1.0, 0.0);
+      outward = outward.div(Math.max(EPS, outward.getNorm()));
+
+      Translation2d v = pos.minus(cornerWorld);
+      double vN = v.getNorm();
+      if (vN < EPS) v = outward;
+      v = v.div(Math.max(EPS, v.getNorm()));
+
+      Translation2d t1 = new Translation2d(-v.getY(), v.getX());
+      Translation2d t2 = new Translation2d(v.getY(), -v.getX());
+
+      Translation2d p1 =
+          pos.plus(t1.times(CORNER_SLIDE_STEP)).plus(outward.times(CORNER_SLIDE_OUT_STEP));
+      Translation2d p2 =
+          pos.plus(t2.times(CORNER_SLIDE_STEP)).plus(outward.times(CORNER_SLIDE_OUT_STEP));
+
+      double base = pos.getDistance(goal);
+
+      double s1 = scoreCandidatePolyWithWalls(pos, goal, p1, base, polyExp);
+      double s2 = scoreCandidatePolyWithWalls(pos, goal, p2, base, polyExp);
+
+      Translation2d tCW = t2;
+      Translation2d tCCW = t1;
+      Translation2d pCW = p2;
+      Translation2d pCCW = p1;
+      double sCW = s2;
+      double sCCW = s1;
+
+      return stablePick(pos, goal, centerWorld, tCW, tCCW, pCW, pCCW, sCW, sCCW) == tCW ? t2 : t1;
+    }
+
+    private static Translation2d chooseCornerOrbitDir(
+        Translation2d pos,
+        Translation2d goal,
+        Translation2d cornerWorld,
+        Translation2d centerWorld,
+        Translation2d[] polyExp) {
+
+      Translation2d outward = pos.minus(centerWorld);
+      double outN = outward.getNorm();
+      if (outN < EPS) outward = new Translation2d(1.0, 0.0);
+      outward = outward.div(Math.max(EPS, outward.getNorm()));
+
+      Translation2d v = pos.minus(cornerWorld);
+      double vN = v.getNorm();
+      if (vN < EPS) v = outward;
+      v = v.div(Math.max(EPS, v.getNorm()));
+
+      Translation2d tCCW = new Translation2d(-v.getY(), v.getX());
+      Translation2d tCW = new Translation2d(v.getY(), -v.getX());
+
+      Translation2d pCW =
+          pos.plus(tCW.times(CORNER_ORBIT_STEP_T)).plus(outward.times(CORNER_ORBIT_STEP_O));
+      Translation2d pCCW =
+          pos.plus(tCCW.times(CORNER_ORBIT_STEP_T)).plus(outward.times(CORNER_ORBIT_STEP_O));
+
+      double base = pos.getDistance(goal);
+
+      double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, base, polyExp);
+      double sCCW = scoreCandidatePolyWithWalls(pos, goal, pCCW, base, polyExp);
+
+      return stablePick(pos, goal, centerWorld, tCW, tCCW, pCW, pCCW, sCW, sCCW);
+    }
+
+    public RectangleObstacle(
+        Translation2d center,
+        double widthMeters,
+        double heightMeters,
+        Rotation2d rot,
+        double strength,
+        double maxRangeX,
+        double maxRangeY) {
+      super(strength, true);
+      this.center = center;
+      this.halfX = Math.max(0.0, widthMeters * 0.5);
+      this.halfY = Math.max(0.0, heightMeters * 0.5);
+      this.rot = (rot == null) ? Rotation2d.kZero : rot;
+      this.maxRangeX = Math.max(0.0, maxRangeX);
+      this.maxRangeY = Math.max(0.0, maxRangeY);
+    }
+
+    public RectangleObstacle(
+        Translation2d center,
+        double widthMeters,
+        double heightMeters,
+        double strength,
+        double maxRangeX,
+        double maxRangeY) {
+      this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRangeX, maxRangeY);
+    }
+
+    public RectangleObstacle(
+        Translation2d center,
+        double widthMeters,
+        double heightMeters,
+        double strength,
+        double maxRange) {
+      this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRange, maxRange);
+    }
+
+    @Override
+    public Force getForceAtPosition(Translation2d position, Translation2d target) {
+      Translation2d pLocal = position.minus(center).rotateBy(rot.unaryMinus());
+      Translation2d gLocal = target.minus(center).rotateBy(rot.unaryMinus());
+
+      double px = pLocal.getX();
+      double py = pLocal.getY();
+
+      double clx = Math.max(-halfX, Math.min(px, halfX));
+      double cly = Math.max(-halfY, Math.min(py, halfY));
+
+      double dx = px - clx;
+      double dy = py - cly;
+
+      boolean inside = (px >= -halfX && px <= halfX && py >= -halfY && py <= halfY);
+
+      double ax = inside ? 0.0 : Math.abs(dx);
+      double ay = inside ? 0.0 : Math.abs(dy);
+
+      Translation2d[] poly = corners();
+      boolean occludes = segmentIntersectsPolygon(position, target, poly);
+
+      if (!inside && (ax > maxRangeX || ay > maxRangeY) && !occludes) return new Force();
+
+      double diag = Math.hypot(halfX, halfY);
+      double falloffMeters = Math.max(EPS, Math.max(maxRangeX, maxRangeY) + diag + 0.35);
+
+      Translation2d awayLocal;
+      double effectiveDistMeters;
+
+      if (!inside) {
+        awayLocal = new Translation2d(dx, dy);
+        double n = awayLocal.getNorm();
+        if (n < EPS) return new Force();
+        if (Math.abs(dx) > Math.abs(dy)) {
+          double sign = Math.signum(target.getY() - position.getY());
+          if (sign == 0.0) sign = 1.0;
+          Rotation2d biasedAngle =
+              awayLocal.getAngle().rotateBy(Rotation2d.fromRadians(sign * X_AXIS_ANGLE_BIAS_RAD));
+          awayLocal = new Translation2d(n, biasedAngle);
+        }
+        effectiveDistMeters = Math.hypot(ax, ay);
+        if (effectiveDistMeters < EPS) effectiveDistMeters = EPS;
       } else {
-        Translation2d sumTry = primaryWorld.plus(add);
-        if (sumTry.getNorm() < 1e-6 || along < 0.03) escapeWorld = escapeWorld.plus(add);
-      }
-    }
+        double dL = px + halfX;
+        double dR = halfX - px;
+        double dB = py + halfY;
+        double dT = halfY - py;
 
-    Translation2d cornerBoost = Translation2d.kZero;
-    Translation2d[] c = poly;
-    double dC0 = position.getDistance(c[0]);
-    double dC1 = position.getDistance(c[1]);
-    double dC2 = position.getDistance(c[2]);
-    double dC3 = position.getDistance(c[3]);
-    double dCorner = Math.min(Math.min(dC0, dC1), Math.min(dC2, dC3));
-    boolean nearCorner = dCorner <= CORNER_RANGE_M;
+        double min = dL;
+        double nx = -1, ny = 0;
 
-    if (nearCorner) {
-      int idx = 0;
-      double best = dC0;
-      if (dC1 < best) {
-        best = dC1;
-        idx = 1;
-      }
-      if (dC2 < best) {
-        best = dC2;
-        idx = 2;
-      }
-      if (dC3 < best) {
-        best = dC3;
-        idx = 3;
+        if (dR < min) {
+          min = dR;
+          nx = 1;
+          ny = 0;
+        }
+        if (dB < min) {
+          min = dB;
+          nx = 0;
+          ny = -1;
+        }
+        if (dT < min) {
+          min = dT;
+          nx = 0;
+          ny = 1;
+        }
+
+        awayLocal = new Translation2d(nx, ny);
+        effectiveDistMeters = -Math.max(EPS, min);
       }
 
-      Translation2d corner = c[idx];
+      double mag = distToForceMag(effectiveDistMeters, falloffMeters);
 
-      Translation2d away = position.minus(corner);
-      double n = away.getNorm();
-      if (n < EPS) {
-        Translation2d outward = position.minus(center);
-        double on = outward.getNorm();
-        if (on < EPS) outward = new Translation2d(1.0, 0.0);
-        away = outward.div(Math.max(EPS, outward.getNorm()));
-        n = 1.0;
+      Translation2d primaryWorld = Translation2d.kZero;
+      Translation2d awayWorldU = Translation2d.kZero;
+      if (Math.abs(mag) >= EPS && awayLocal.getNorm() >= EPS) {
+        Translation2d awayWorld = awayLocal.rotateBy(rot);
+        double n = Math.max(EPS, awayWorld.getNorm());
+        awayWorldU = awayWorld.div(n);
+        primaryWorld = awayWorldU.times(Math.abs(mag));
       }
-      Translation2d awayU = away.div(Math.max(EPS, n));
 
-      Translation2d toGoal = target.minus(position);
-      double gN = Math.max(EPS, toGoal.getNorm());
-      Translation2d toGoalU = toGoal.div(gN);
+      Translation2d escapeWorld = Translation2d.kZero;
 
-      double w = smooth01(1.0 - (dCorner / CORNER_RANGE_M));
-      double w2 = w * w;
+      double engageR = Math.max(0.9, falloffMeters + 0.65);
+      double distC = position.getDistance(center);
 
-      double mPush = (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
-      Translation2d push = awayU.times(mPush);
+      if (distC <= engageR) {
+        Translation2d outwardW = position.minus(center);
+        double outN = outwardW.getNorm();
+        if (outN < EPS) outwardW = new Translation2d(1.0, 0.0);
+        outN = Math.max(EPS, outwardW.getNorm());
+        Translation2d outwardWU = outwardW.div(outN);
 
-      double padCorner = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
-      Translation2d[] polyExpCorner = expandedCorners(padCorner);
+        Translation2d toGoal = target.minus(position);
+        double gN = Math.max(EPS, toGoal.getNorm());
+        Translation2d toGoalU = toGoal.div(gN);
 
-      Translation2d slideDir = chooseCornerSlideDir(position, target, corner, center, polyExpCorner);
-      double mSlide = (strength * CORNER_SLIDE_SCALE) * w2 / (CORNER_SLIDE_SOFTEN + dCorner * dCorner);
-      Translation2d slide = slideDir.times(mSlide);
+        Translation2d tCCW = new Translation2d(-outwardWU.getY(), outwardWU.getX());
+        Translation2d tCW = new Translation2d(outwardWU.getY(), -outwardWU.getX());
 
-      double alignAway = 0.0;
-      if (awayWorldU.getNorm() > EPS) alignAway = dot(awayWorldU, toGoalU);
-      double needOrbit = clamp01((0.42 - alignAway) / 0.42);
+        double pad = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
+        Translation2d[] polyExp = expandedCorners(pad);
 
-      Translation2d orbitDir = chooseCornerOrbitDir(position, target, corner, center, polyExpCorner);
-      double mOrbit =
-          (strength * CORNER_ORBIT_SCALE) * w2 * needOrbit / (CORNER_ORBIT_SOFTEN + dCorner * dCorner);
+        Translation2d chosenT =
+            chooseTangentPolyWithWalls(position, target, outwardWU, tCW, tCCW, polyExp);
 
-      Translation2d orbit = orbitDir.times(mOrbit);
+        double d = Math.max(0.12, distC - diag);
+        double w = smooth01(1.0 - (d / engageR));
 
-      Translation2d outwardFromCenter = position.minus(center);
-      double ocn = outwardFromCenter.getNorm();
-      if (ocn < EPS) outwardFromCenter = new Translation2d(1.0, 0.0);
-      outwardFromCenter = outwardFromCenter.div(Math.max(EPS, outwardFromCenter.getNorm()));
-      Translation2d unstickOut =
-          outwardFromCenter.times((strength * 1.6) * w2 / (0.35 + dCorner * dCorner));
+        double swirlMag = (strength * 6.8) / (0.30 + d * d);
+        double slideMag = (strength * 3.6) / (0.35 + d * d);
+        double pushOutMag = (strength * 2.1) / (0.55 + d * d);
 
-      cornerBoost = push.plus(slide).plus(orbit).plus(unstickOut);
-    }
+        double along = dot(chosenT, toGoalU);
+        double boost = (along < 0.12) ? 1.45 : 1.0;
 
-    Translation2d sum = primaryWorld.plus(escapeWorld).plus(cornerBoost);
+        Translation2d swirl = chosenT.times(swirlMag * w * boost);
+        Translation2d slide = chosenT.times(slideMag * w);
+        Translation2d pushOut = outwardWU.times(pushOutMag * w);
 
-    double sumN = sum.getNorm();
-    Translation2d g = target.minus(position);
-    double gN = g.getNorm();
-    if (gN > EPS) {
-      Translation2d gU = g.div(gN);
-      double engageR2 = Math.max(1.25, falloffMeters + 0.95);
-      if (distC <= engageR2 || nearCorner) {
-        if (sumN > EPS) {
-          double align = dot(sum.div(sumN), gU);
-          if (align < 0.25) {
-            double d = Math.max(0.18, distC - diag);
-            double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
-            sum = sum.plus(gU.times(pushThroughMag * (0.25 - align)));
-            sumN = sum.getNorm();
-          }
+        Translation2d add = swirl.plus(slide).plus(pushOut);
+
+        if (occludes) {
+          escapeWorld = escapeWorld.plus(add);
         } else {
-          double d = Math.max(0.18, distC - diag);
-          double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
-          sum = sum.plus(gU.times(pushThroughMag));
-          sumN = sum.getNorm();
+          Translation2d sumTry = primaryWorld.plus(add);
+          if (sumTry.getNorm() < 1e-6 || along < 0.03) escapeWorld = escapeWorld.plus(add);
         }
       }
+
+      Translation2d cornerBoost = Translation2d.kZero;
+      Translation2d[] c = poly;
+      double dC0 = position.getDistance(c[0]);
+      double dC1 = position.getDistance(c[1]);
+      double dC2 = position.getDistance(c[2]);
+      double dC3 = position.getDistance(c[3]);
+      double dCorner = Math.min(Math.min(dC0, dC1), Math.min(dC2, dC3));
+      boolean nearCorner = dCorner <= CORNER_RANGE_M;
+
+      if (nearCorner) {
+        int idx = 0;
+        double best = dC0;
+        if (dC1 < best) {
+          best = dC1;
+          idx = 1;
+        }
+        if (dC2 < best) {
+          best = dC2;
+          idx = 2;
+        }
+        if (dC3 < best) {
+          best = dC3;
+          idx = 3;
+        }
+
+        Translation2d corner = c[idx];
+
+        Translation2d away = position.minus(corner);
+        double n = away.getNorm();
+        if (n < EPS) {
+          Translation2d outward = position.minus(center);
+          double on = outward.getNorm();
+          if (on < EPS) outward = new Translation2d(1.0, 0.0);
+          away = outward.div(Math.max(EPS, outward.getNorm()));
+          n = 1.0;
+        }
+        Translation2d awayU = away.div(Math.max(EPS, n));
+
+        Translation2d toGoal = target.minus(position);
+        double gN = Math.max(EPS, toGoal.getNorm());
+        Translation2d toGoalU = toGoal.div(gN);
+
+        double w = smooth01(1.0 - (dCorner / CORNER_RANGE_M));
+        double w2 = w * w;
+
+        double mPush =
+            (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
+        Translation2d push = awayU.times(mPush);
+
+        double padCorner = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
+        Translation2d[] polyExpCorner = expandedCorners(padCorner);
+
+        Translation2d slideDir =
+            chooseCornerSlideDir(position, target, corner, center, polyExpCorner);
+        double mSlide =
+            (strength * CORNER_SLIDE_SCALE) * w2 / (CORNER_SLIDE_SOFTEN + dCorner * dCorner);
+        Translation2d slide = slideDir.times(mSlide);
+
+        double alignAway = 0.0;
+        if (awayWorldU.getNorm() > EPS) alignAway = dot(awayWorldU, toGoalU);
+        double needOrbit = clamp01((0.42 - alignAway) / 0.42);
+
+        Translation2d orbitDir =
+            chooseCornerOrbitDir(position, target, corner, center, polyExpCorner);
+        double mOrbit =
+            (strength * CORNER_ORBIT_SCALE)
+                * w2
+                * needOrbit
+                / (CORNER_ORBIT_SOFTEN + dCorner * dCorner);
+
+        Translation2d orbit = orbitDir.times(mOrbit);
+
+        Translation2d outwardFromCenter = position.minus(center);
+        double ocn = outwardFromCenter.getNorm();
+        if (ocn < EPS) outwardFromCenter = new Translation2d(1.0, 0.0);
+        outwardFromCenter = outwardFromCenter.div(Math.max(EPS, outwardFromCenter.getNorm()));
+        Translation2d unstickOut =
+            outwardFromCenter.times((strength * 1.6) * w2 / (0.35 + dCorner * dCorner));
+
+        cornerBoost = push.plus(slide).plus(orbit).plus(unstickOut);
+      }
+
+      Translation2d sum = primaryWorld.plus(escapeWorld).plus(cornerBoost);
+
+      double sumN = sum.getNorm();
+      Translation2d g = target.minus(position);
+      double gN = g.getNorm();
+      if (gN > EPS) {
+        Translation2d gU = g.div(gN);
+        double engageR2 = Math.max(1.25, falloffMeters + 0.95);
+        if (distC <= engageR2 || nearCorner) {
+          if (sumN > EPS) {
+            double align = dot(sum.div(sumN), gU);
+            if (align < 0.25) {
+              double d = Math.max(0.18, distC - diag);
+              double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
+              sum = sum.plus(gU.times(pushThroughMag * (0.25 - align)));
+              sumN = sum.getNorm();
+            }
+          } else {
+            double d = Math.max(0.18, distC - diag);
+            double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
+            sum = sum.plus(gU.times(pushThroughMag));
+            sumN = sum.getNorm();
+          }
+        }
+      }
+
+      if (sumN < EPS) return new Force();
+      return new Force(sumN, sum.getAngle());
     }
 
-    if (sumN < EPS) return new Force();
-    return new Force(sumN, sum.getAngle());
-  }
-
-  private Translation2d[] corners() {
-    Translation2d[] local =
-        new Translation2d[] {
-          new Translation2d(-halfX, -halfY),
-          new Translation2d(halfX, -halfY),
-          new Translation2d(halfX, halfY),
-          new Translation2d(-halfX, halfY)
-        };
-    Translation2d[] out = new Translation2d[4];
-    for (int i = 0; i < 4; i++) out[i] = local[i].rotateBy(rot).plus(center);
-    return out;
-  }
-
-  private Translation2d[] expandedCorners(double pad) {
-    Translation2d[] c = corners();
-    Translation2d[] out = new Translation2d[c.length];
-    for (int i = 0; i < c.length; i++) {
-      Translation2d v = c[i].minus(center);
-      double n = Math.max(EPS, v.getNorm());
-      Translation2d u = v.div(n);
-      out[i] = center.plus(u.times(n + pad));
+    private Translation2d[] corners() {
+      Translation2d[] local =
+          new Translation2d[] {
+            new Translation2d(-halfX, -halfY),
+            new Translation2d(halfX, -halfY),
+            new Translation2d(halfX, halfY),
+            new Translation2d(-halfX, halfY)
+          };
+      Translation2d[] out = new Translation2d[4];
+      for (int i = 0; i < 4; i++) out[i] = local[i].rotateBy(rot).plus(center);
+      return out;
     }
-    return out;
-  }
 
-  private static Translation2d chooseTangentPolyWithWalls(
-      Translation2d pos,
-      Translation2d goal,
-      Translation2d outwardU,
-      Translation2d tCW,
-      Translation2d tCCW,
-      Translation2d[] polyExp) {
-
-    double stepT = 0.62;
-    double stepO = 0.24;
-
-    Translation2d pCW = pos.plus(tCW.times(stepT)).plus(outwardU.times(stepO));
-    Translation2d pCCW = pos.plus(tCCW.times(stepT)).plus(outwardU.times(stepO));
-
-    double base = pos.getDistance(goal);
-
-    double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, base, polyExp);
-    double sCCW = scoreCandidatePolyWithWalls(pos, goal, pCCW, base, polyExp);
-
-    Translation2d centerGuess = pos.minus(outwardU.times(0.001));
-    return stablePick(pos, goal, centerGuess, tCW, tCCW, pCW, pCCW, sCW, sCCW);
-  }
-
-  private static double scoreCandidatePolyWithWalls(
-      Translation2d pos,
-      Translation2d goal,
-      Translation2d cand,
-      double baseDist,
-      Translation2d[] polyExp) {
-
-    double d = cand.getDistance(goal);
-
-    boolean stillOccluding = segmentIntersectsPolygon(cand, goal, polyExp);
-    double occPenalty = stillOccluding ? 1.10 : 0.0;
-
-    double progressPenalty = (d >= baseDist - 0.015) ? 0.55 : 0.0;
-
-    double x = cand.getX();
-    double y = cand.getY();
-    double dxW = Math.min(x, Constants.FIELD_LENGTH - x);
-    double dyW = Math.min(y, Constants.FIELD_WIDTH - y);
-    double wall = Math.min(dxW, dyW);
-    double wallPenalty = (wall < 0.70) ? (1.05 * (0.70 - wall) / 0.70) : 0.0;
-
-    double wallMove = wallMovePenalty(pos, cand);
-
-    return d + occPenalty + progressPenalty + wallPenalty + wallMove;
-  }
-
-  private static boolean segmentIntersectsPolygon(Translation2d a, Translation2d b, Translation2d[] poly) {
-    if (FieldPlanner.isPointInPolygon(a, poly) || FieldPlanner.isPointInPolygon(b, poly)) return true;
-    for (int i = 0; i < poly.length; i++) {
-      Translation2d c = poly[i];
-      Translation2d d = poly[(i + 1) % poly.length];
-      if (segmentsIntersect(a, b, c, d)) return true;
+    private Translation2d[] expandedCorners(double pad) {
+      Translation2d[] c = corners();
+      Translation2d[] out = new Translation2d[c.length];
+      for (int i = 0; i < c.length; i++) {
+        Translation2d v = c[i].minus(center);
+        double n = Math.max(EPS, v.getNorm());
+        Translation2d u = v.div(n);
+        out[i] = center.plus(u.times(n + pad));
+      }
+      return out;
     }
-    return false;
-  }
 
-  private static double orient(Translation2d a, Translation2d b, Translation2d c) {
-    return (b.getX() - a.getX()) * (c.getY() - a.getY()) - (b.getY() - a.getY()) * (c.getX() - a.getX());
-  }
+    private static Translation2d chooseTangentPolyWithWalls(
+        Translation2d pos,
+        Translation2d goal,
+        Translation2d outwardU,
+        Translation2d tCW,
+        Translation2d tCCW,
+        Translation2d[] polyExp) {
 
-  private static boolean onSeg(Translation2d a, Translation2d b, Translation2d p) {
-    return p.getX() >= Math.min(a.getX(), b.getX()) - 1e-9
-        && p.getX() <= Math.max(a.getX(), b.getX()) + 1e-9
-        && p.getY() >= Math.min(a.getY(), b.getY()) - 1e-9
-        && p.getY() <= Math.max(a.getY(), b.getY()) + 1e-9;
-  }
+      double stepT = 0.62;
+      double stepO = 0.24;
 
-  private static boolean segmentsIntersect(Translation2d a, Translation2d b, Translation2d c, Translation2d d) {
-    double o1 = orient(a, b, c);
-    double o2 = orient(a, b, d);
-    double o3 = orient(c, d, a);
-    double o4 = orient(c, d, b);
+      Translation2d pCW = pos.plus(tCW.times(stepT)).plus(outwardU.times(stepO));
+      Translation2d pCCW = pos.plus(tCCW.times(stepT)).plus(outwardU.times(stepO));
 
-    if ((o1 > 0) != (o2 > 0) && (o3 > 0) != (o4 > 0)) return true;
+      double base = pos.getDistance(goal);
 
-    if (Math.abs(o1) < 1e-9 && onSeg(a, b, c)) return true;
-    if (Math.abs(o2) < 1e-9 && onSeg(a, b, d)) return true;
-    if (Math.abs(o3) < 1e-9 && onSeg(c, d, a)) return true;
-    if (Math.abs(o4) < 1e-9 && onSeg(c, d, b)) return true;
+      double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, base, polyExp);
+      double sCCW = scoreCandidatePolyWithWalls(pos, goal, pCCW, base, polyExp);
 
-    return false;
-  }
+      Translation2d centerGuess = pos.minus(outwardU.times(0.001));
+      return stablePick(pos, goal, centerGuess, tCW, tCCW, pCW, pCCW, sCW, sCCW);
+    }
 
-  @Override
-  public boolean intersectsRectangle(Translation2d[] rectCorners) {
-    Translation2d[] me = corners();
-    for (int i = 0; i < me.length; i++) {
-      Translation2d a = me[i];
-      Translation2d b = me[(i + 1) % me.length];
-      for (int j = 0; j < rectCorners.length; j++) {
-        Translation2d c = rectCorners[j];
-        Translation2d d = rectCorners[(j + 1) % rectCorners.length];
+    private static double scoreCandidatePolyWithWalls(
+        Translation2d pos,
+        Translation2d goal,
+        Translation2d cand,
+        double baseDist,
+        Translation2d[] polyExp) {
+
+      double d = cand.getDistance(goal);
+
+      boolean stillOccluding = segmentIntersectsPolygon(cand, goal, polyExp);
+      double occPenalty = stillOccluding ? 1.10 : 0.0;
+
+      double progressPenalty = (d >= baseDist - 0.015) ? 0.55 : 0.0;
+
+      double x = cand.getX();
+      double y = cand.getY();
+      double dxW = Math.min(x, Constants.FIELD_LENGTH - x);
+      double dyW = Math.min(y, Constants.FIELD_WIDTH - y);
+      double wall = Math.min(dxW, dyW);
+      double wallPenalty = (wall < 0.70) ? (1.05 * (0.70 - wall) / 0.70) : 0.0;
+
+      double wallMove = wallMovePenalty(pos, cand);
+
+      return d + occPenalty + progressPenalty + wallPenalty + wallMove;
+    }
+
+    private static boolean segmentIntersectsPolygon(
+        Translation2d a, Translation2d b, Translation2d[] poly) {
+      if (FieldPlanner.isPointInPolygon(a, poly) || FieldPlanner.isPointInPolygon(b, poly))
+        return true;
+      for (int i = 0; i < poly.length; i++) {
+        Translation2d c = poly[i];
+        Translation2d d = poly[(i + 1) % poly.length];
         if (segmentsIntersect(a, b, c, d)) return true;
       }
+      return false;
     }
-    for (Translation2d p : rectCorners) if (FieldPlanner.isPointInPolygon(p, me)) return true;
-    for (Translation2d p : me) if (FieldPlanner.isPointInPolygon(p, rectCorners)) return true;
-    return false;
+
+    private static double orient(Translation2d a, Translation2d b, Translation2d c) {
+      return (b.getX() - a.getX()) * (c.getY() - a.getY())
+          - (b.getY() - a.getY()) * (c.getX() - a.getX());
+    }
+
+    private static boolean onSeg(Translation2d a, Translation2d b, Translation2d p) {
+      return p.getX() >= Math.min(a.getX(), b.getX()) - 1e-9
+          && p.getX() <= Math.max(a.getX(), b.getX()) + 1e-9
+          && p.getY() >= Math.min(a.getY(), b.getY()) - 1e-9
+          && p.getY() <= Math.max(a.getY(), b.getY()) + 1e-9;
+    }
+
+    private static boolean segmentsIntersect(
+        Translation2d a, Translation2d b, Translation2d c, Translation2d d) {
+      double o1 = orient(a, b, c);
+      double o2 = orient(a, b, d);
+      double o3 = orient(c, d, a);
+      double o4 = orient(c, d, b);
+
+      if ((o1 > 0) != (o2 > 0) && (o3 > 0) != (o4 > 0)) return true;
+
+      if (Math.abs(o1) < 1e-9 && onSeg(a, b, c)) return true;
+      if (Math.abs(o2) < 1e-9 && onSeg(a, b, d)) return true;
+      if (Math.abs(o3) < 1e-9 && onSeg(c, d, a)) return true;
+      if (Math.abs(o4) < 1e-9 && onSeg(c, d, b)) return true;
+
+      return false;
+    }
+
+    @Override
+    public boolean intersectsRectangle(Translation2d[] rectCorners) {
+      Translation2d[] me = corners();
+      for (int i = 0; i < me.length; i++) {
+        Translation2d a = me[i];
+        Translation2d b = me[(i + 1) % me.length];
+        for (int j = 0; j < rectCorners.length; j++) {
+          Translation2d c = rectCorners[j];
+          Translation2d d = rectCorners[(j + 1) % rectCorners.length];
+          if (segmentsIntersect(a, b, c, d)) return true;
+        }
+      }
+      for (Translation2d p : rectCorners) if (FieldPlanner.isPointInPolygon(p, me)) return true;
+      for (Translation2d p : me) if (FieldPlanner.isPointInPolygon(p, rectCorners)) return true;
+      return false;
+    }
   }
-}
 
   static class PointObstacle extends Obstacle {
     Translation2d loc;
