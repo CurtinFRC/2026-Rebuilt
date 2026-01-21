@@ -28,6 +28,9 @@ import org.curtinfrc.frc2026.indexer.Indexer;
 import org.curtinfrc.frc2026.indexer.IndexerIO;
 import org.curtinfrc.frc2026.indexer.IndexerIOComp;
 import org.curtinfrc.frc2026.indexer.IndexerIOSim;
+import org.curtinfrc.frc2026.subsystems.intake.Intake;
+import org.curtinfrc.frc2026.subsystems.intake.IntakeIO;
+import org.curtinfrc.frc2026.subsystems.intake.IntakeIOComp;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -51,6 +54,7 @@ public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
   private Indexer indexer;
+  private Intake intake;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -103,6 +107,7 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           indexer = new Indexer(new IndexerIOComp());
+          intake = new Intake(new IntakeIOComp());
         }
         case DEV -> {
           drive =
@@ -119,6 +124,7 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           indexer = new Indexer(new IndexerIOComp());
+          intake = new Intake(new IntakeIOComp());
         }
         case SIM -> {
           drive =
@@ -135,6 +141,7 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
           indexer = new Indexer(new IndexerIOSim());
+          intake = new Intake(new IntakeIO() {});
         }
       }
     } else {
@@ -147,6 +154,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
       indexer = new Indexer(new IndexerIO() {});
+      intake = new Intake(new IntakeIO() {});
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -158,8 +166,11 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+            
     indexer.setDefaultCommand(indexer.stop());
     controller.y().whileTrue(indexer.setSpeed(50));
+
+    controller.b().whileTrue(intake.intake()).onFalse(intake.stop());
   }
 
   /** This function is called periodically during all modes. */
