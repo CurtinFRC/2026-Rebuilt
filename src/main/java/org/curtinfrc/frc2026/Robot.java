@@ -158,7 +158,6 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-
     controller.b().whileTrue(intake.intake()).onFalse(intake.stop());
   }
 
