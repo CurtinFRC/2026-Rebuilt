@@ -101,8 +101,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          intake = 
-              new Intake(new IntakeIOComp());
+          intake = new Intake(new IntakeIOComp());
         }
         case DEV -> {
           drive =
@@ -118,8 +117,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          intake = 
-              new Intake(new IntakeIOComp());
+          intake = new Intake(new IntakeIOComp());
         }
         case SIM -> {
           drive =
@@ -135,8 +133,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
-          intake = 
-              new Intake(new IntakeIO() {});
+          intake = new Intake(new IntakeIO() {});
         }
       }
     } else {

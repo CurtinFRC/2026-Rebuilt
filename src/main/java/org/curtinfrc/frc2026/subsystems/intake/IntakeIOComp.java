@@ -2,8 +2,6 @@ package org.curtinfrc.frc2026.subsystems.intake;
 
 import com.revrobotics.spark.SparkMax;
 
-
-
 public class IntakeIOComp implements IntakeIO {
   private static final int ID = 43;
 
