@@ -135,6 +135,7 @@ public class HoodedShooter extends SubsystemBase {
   public void periodic() {
     hoodIO.updateInputs(hoodInputs);
     shooterIO.updateInputs(shooterInputs);
+
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
     Logger.recordOutput("Ball", ballSim.update(0.02));
@@ -175,8 +176,8 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> hoodIO.setVoltage(voltage));
   }
 
-  public Command setHoodVoltage(Supplier<Double> voltage) {
-    return run(() -> hoodIO.setVoltage(voltage.get()));
+  public Command setHoodVoltage(double voltage) {
+    return run(() -> hoodIO.setVoltage(voltage));
   }
 
   public Command stopHood() {
