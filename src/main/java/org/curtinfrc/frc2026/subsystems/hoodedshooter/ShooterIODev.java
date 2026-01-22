@@ -2,8 +2,6 @@ package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
-import org.curtinfrc.frc2026.util.PhoenixUtil;
-
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
@@ -22,6 +20,7 @@ import edu.wpi.first.units.measure.AngularAcceleration;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
+import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIODev implements ShooterIO {
   public static final int ID1 = 10;
@@ -101,11 +100,11 @@ public class ShooterIODev implements ShooterIO {
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
 
-  public double convertVelocityToRPS(double velocity) {
+  public static double convertVelocityToRPS(double velocity) {
     return velocity / (HoodedShooter.WHEEL_DIAMETER * Math.PI);
   }
 
-  public double convertRPSToVelocity(double angularVelocityRotationsPerSecond) {
+  public static double convertRPSToVelocity(double angularVelocityRotationsPerSecond) {
     return angularVelocityRotationsPerSecond * (HoodedShooter.WHEEL_DIAMETER * Math.PI);
   }
 }
