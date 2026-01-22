@@ -4,6 +4,7 @@ package org.curtinfrc.frc2026.util.Repulsor;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
@@ -184,7 +185,7 @@ public final class PredictiveFieldState {
   private static final double COLLECT_ACTIVITY_ENEMY_W = 0.55;
   private static final double COLLECT_ACTIVITY_DYN_W = 0.60;
   private static final double COLLECT_REGION_SAMPLES_W = 0.70;
-  private static final double COLLECT_CELL_M = 0.20;
+  private static final double COLLECT_CELL_M = 0.10;
   private static final double COLLECT_NEAR_BONUS = 0.55;
   private static final double COLLECT_NEAR_DECAY = 1.35;
 
@@ -275,7 +276,10 @@ public final class PredictiveFieldState {
   private final HashMap<Integer, Track> enemyMap = new HashMap<>();
 
   private List<GameElement> worldElements = List.of();
-  private Alliance ourAlliance = Alliance.kBlue;
+  private Alliance ourAlliance =
+      DriverStation.getAlliance().get() == edu.wpi.first.wpilibj.DriverStation.Alliance.Blue
+          ? Alliance.kBlue
+          : Alliance.kRed;
 
   private RepulsorSetpoint lastChosen = null;
   private double lastChosenTs = 0.0;
@@ -619,6 +623,15 @@ public final class PredictiveFieldState {
     double totalEv = dyn.totalEvidence();
     double minUnits = dynamicMinUnits(totalEv);
     int minCount = dynamicMinCount(totalEv);
+    double minEv = minEvidence(totalEv);
+
+    double nearHalf = Math.max(0.16, Math.max(half, cellM * 0.85));
+    double nearR = Math.max(COLLECT_ARRIVE_R, 0.60);
+
+    double onHalf = Math.max(0.10, Math.min(nearHalf * 0.60, 0.22));
+    double onR = Math.max(0.20, Math.min(0.30, Math.max(0.20, COLLECT_ARRIVE_R * 0.70)));
+
+    double minHardUnits = Math.max(0.025, Math.min(COLLECT_FINE_MIN_UNITS, minUnits * 0.80));
 
     if (lastReturnedCollect != null) {
       double now = Timer.getFPGATimestamp();
@@ -668,7 +681,7 @@ public final class PredictiveFieldState {
                   + COLLECT_ACTIVITY_ENEMY_W * radialDensity(enemyMap, p, COLLECT_ACTIVITY_SIGMA)
                   + COLLECT_ACTIVITY_DYN_W * dyn.otherDensity(p, COLLECT_ACTIVITY_SIGMA));
 
-      double evGate = ev < minEvidence(totalEv) ? -2.25 : 0.0;
+      double evGate = ev < minEv ? -2.25 : 0.0;
       double coarseScore =
           regionUnits * COLLECT_REGION_SAMPLES_W
               - eta * 0.55
@@ -688,8 +701,7 @@ public final class PredictiveFieldState {
             Math.min(
                 n,
                 Math.max(
-                    Math.min(COLLECT_SHORTLIST_ETA, n),
-                    Math.min(COLLECT_SHORTLIST_COARSE, n))));
+                    Math.min(COLLECT_SHORTLIST_ETA, n), Math.min(COLLECT_SHORTLIST_COARSE, n))));
 
     boolean[] chosen = new boolean[n];
     ArrayList<Integer> shortlist = new ArrayList<>(shortlistCap * 2);
@@ -735,8 +747,10 @@ public final class PredictiveFieldState {
       Translation2d center = seeds[idx];
       if (center == null) continue;
 
-      double regionUnits = dyn.valueInSquare(center, half);
-      if (regionUnits < Math.min(COLLECT_COARSE_MIN_REGION_UNITS, minUnits * 0.90)) continue;
+      double regionUnitsNear = dyn.valueInSquare(center, nearHalf);
+      int cNear0 = dyn.countResourcesWithin(center, nearR);
+      if (regionUnitsNear < Math.min(COLLECT_COARSE_MIN_REGION_UNITS, minUnits * 0.90)
+          || cNear0 < 1) continue;
 
       double step = Math.max(0.05, cellM * COLLECT_FINE_OFFSETS_SCALE);
       int g = Math.max(2, COLLECT_FINE_OFFSETS_GRID);
@@ -752,18 +766,40 @@ public final class PredictiveFieldState {
           double oy = start + iy * step;
           Translation2d p = new Translation2d(center.getX() + ox, center.getY() + oy);
 
-          CollectEval e = evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
-          e.regionUnits = regionUnits;
-          e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
+          final double SHOOT_X_END_BAND_M = 12.5631260802;
+          final double BAND_WIDTH_M = 2.167294751;
 
+          double leftLo = SHOOT_X_END_BAND_M - BAND_WIDTH_M;
+          double leftHi = SHOOT_X_END_BAND_M;
+
+          double rightLo = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
+          double rightHi = Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M);
+
+          double x = p.getX();
+          if ((x >= leftLo && x <= leftHi) || (x >= rightLo && x <= rightHi)) continue;
+
+          double fuelNear = dyn.valueInSquare(p, nearHalf);
+          int cNear = dyn.countResourcesWithin(p, nearR);
+          if (fuelNear < minHardUnits || cNear < 1) continue;
+
+          double fuelOn = dyn.valueInSquare(p, onHalf);
+          int cOn = dyn.countResourcesWithin(p, onR);
+          double evHard = dyn.evidenceMassWithin(p, EVIDENCE_R);
+          if (fuelOn < minHardUnits || cOn < 1 || evHard < minEv) continue;
+
+          CollectEval e =
+              evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
+
+          e.units = fuelOn;
+          e.count = cOn;
+          e.evidence = evHard;
+
+          e.regionUnits = regionUnitsNear;
+          e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
           e.score += e.banditBonus;
 
-          if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) {
-            e.score -= 2.75;
-          }
-          if (e.evidence < minEvidence(totalEv)) {
-            e.score -= 2.25;
-          }
+          if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
+          if (e.evidence < minEv) e.score -= 2.25;
 
           if (localBestE == null
               || e.score > localBestE.score + 1e-9
@@ -779,20 +815,34 @@ public final class PredictiveFieldState {
 
       if (localBest == null || localBestE == null) continue;
 
-      Translation2d snapped = dyn.centroidResourcesWithin(localBest, 0.85, 0.18);
+      Translation2d snapped = dyn.centroidResourcesWithin(localBest, 1.35, 0.10);
       if (snapped != null) {
-        CollectEval es =
-            evalCollectPoint(ourPos, cap, snapped, goal, cellM, dyn, enemyIntent, allyIntent);
-        es.regionUnits = localBestE.regionUnits;
-        es.banditBonus = regionBanditBonus(dyn, snapped, Timer.getFPGATimestamp());
-        es.score += es.banditBonus;
+        Translation2d snapped2 = dyn.centroidResourcesWithin(snapped, 0.55, 0.08);
+        if (snapped2 != null) snapped = snapped2;
 
-        if (es.units < minUnits * 0.55 || es.count < Math.max(1, minCount - 1)) es.score -= 2.75;
-        if (es.evidence < minEvidence(totalEv)) es.score -= 2.25;
+        double uOn = dyn.valueInSquare(snapped, onHalf);
+        int cOn = dyn.countResourcesWithin(snapped, onR);
+        double evOn = dyn.evidenceMassWithin(snapped, EVIDENCE_R);
 
-        if (es.score > localBestE.score + 1e-9) {
-          localBestE = es;
-          localBest = snapped;
+        if (uOn >= minHardUnits && cOn >= 1 && evOn >= minEv) {
+          CollectEval es =
+              evalCollectPoint(ourPos, cap, snapped, goal, cellM, dyn, enemyIntent, allyIntent);
+
+          es.units = uOn;
+          es.count = cOn;
+          es.evidence = evOn;
+
+          es.regionUnits = localBestE.regionUnits;
+          es.banditBonus = regionBanditBonus(dyn, snapped, Timer.getFPGATimestamp());
+          es.score += es.banditBonus;
+
+          if (es.units < minUnits * 0.55 || es.count < Math.max(1, minCount - 1)) es.score -= 2.75;
+          if (es.evidence < minEv) es.score -= 2.25;
+
+          if (es.score > localBestE.score + 1e-9) {
+            localBestE = es;
+            localBest = snapped;
+          }
         }
       }
 
@@ -854,14 +904,17 @@ public final class PredictiveFieldState {
                 : shouldEscapeCurrentCollect(ourPos, dyn, totalEv, minUnits, minCount, cellM));
 
     double commitS = collectCommitWindow(currentCollectEta);
-    double switchMargin = COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta);
+    double switchMargin =
+        COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta);
 
     if (!escape && currentCollectTarget != null) {
       double age = now - currentCollectChosenTs;
       CollectEval curE =
           evalCollectPoint(
               ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
-      curE.score += regionBanditBonus(dyn, currentCollectTarget, now);
+      curE.banditBonus = regionBanditBonus(dyn, currentCollectTarget, now);
+      curE.score += curE.banditBonus;
+
       currentCollectScore = curE.score;
       currentCollectUnits = curE.units;
       currentCollectEta = curE.eta;
@@ -915,7 +968,8 @@ public final class PredictiveFieldState {
     }
 
     boolean arrived =
-        currentCollectTarget != null && ourPos.getDistance(currentCollectTarget) <= COLLECT_ARRIVE_R;
+        currentCollectTarget != null
+            && ourPos.getDistance(currentCollectTarget) <= COLLECT_ARRIVE_R;
 
     if (arrived) {
       if (collectArrivalTs < 0.0) collectArrivalTs = now;
@@ -946,11 +1000,58 @@ public final class PredictiveFieldState {
 
     if (currentCollectTarget == null) return null;
 
-    CollectEval finalE =
-        evalCollectPoint(ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
-    finalE.score += regionBanditBonus(dyn, currentCollectTarget, now);
+    double finalOnUnits = dyn.valueInSquare(currentCollectTarget, onHalf);
+    int finalOnCount = dyn.countResourcesWithin(currentCollectTarget, onR);
+    double finalEv = dyn.evidenceMassWithin(currentCollectTarget, EVIDENCE_R);
 
-    if (finalE.units < minUnits * 0.65 || finalE.count < Math.max(1, minCount - 1)) {
+    if (finalOnUnits < minHardUnits || finalOnCount < 1 || finalEv < minEv) {
+      Translation2d snapped = dyn.centroidResourcesWithin(currentCollectTarget, 1.35, 0.10);
+      if (snapped != null) {
+        Translation2d snapped2 = dyn.centroidResourcesWithin(snapped, 0.55, 0.08);
+        if (snapped2 != null) snapped = snapped2;
+
+        double sOnU = dyn.valueInSquare(snapped, onHalf);
+        int sOnC = dyn.countResourcesWithin(snapped, onR);
+        double sEv = dyn.evidenceMassWithin(snapped, EVIDENCE_R);
+
+        if (sOnU >= minHardUnits && sOnC >= 1 && sEv >= minEv) {
+          currentCollectTarget = snapped;
+          finalOnUnits = sOnU;
+          finalOnCount = sOnC;
+          finalEv = sEv;
+        } else {
+          addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+          addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+          recordRegionAttempt(dyn, currentCollectTarget, now, false);
+          currentCollectTarget = null;
+          collectArrivalTs = -1.0;
+          Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+          return null;
+        }
+      } else {
+        addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+        addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+        return null;
+      }
+    }
+
+    CollectEval finalE =
+        evalCollectPoint(
+            ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
+    finalE.banditBonus = regionBanditBonus(dyn, currentCollectTarget, now);
+    finalE.score += finalE.banditBonus;
+
+    finalE.units = finalOnUnits;
+    finalE.count = finalOnCount;
+    finalE.evidence = finalEv;
+
+    if (finalE.units < minUnits * 0.65
+        || finalE.count < Math.max(1, minCount - 1)
+        || finalE.evidence < minEv) {
       addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
       addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
       recordRegionAttempt(dyn, currentCollectTarget, now, false);
@@ -963,7 +1064,8 @@ public final class PredictiveFieldState {
     lastReturnedCollect = currentCollectTarget;
     lastReturnedCollectTs = now;
 
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, new Rotation2d()));
+    Logger.recordOutput(
+        "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, new Rotation2d()));
     Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalE.units);
     Logger.recordOutput("Repulsor/Collect/ChosenCount", finalE.count);
     Logger.recordOutput("Repulsor/Collect/ChosenScore", finalE.score);
@@ -1145,7 +1247,8 @@ public final class PredictiveFieldState {
           double oy = -half + iy * step;
           Translation2d p = new Translation2d(center.getX() + ox, center.getY() + oy);
 
-          CollectEval e = evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
+          CollectEval e =
+              evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
           e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
           e.score += e.banditBonus;
 
@@ -1223,7 +1326,8 @@ public final class PredictiveFieldState {
         }
       }
 
-      if (eUse.units >= Math.max(0.02, minUnits * 0.70) && eUse.count >= Math.max(1, minCount - 1)) {
+      if (eUse.units >= Math.max(0.02, minUnits * 0.70)
+          && eUse.count >= Math.max(1, minCount - 1)) {
         lastReturnedCollect = use;
         lastReturnedCollectTs = now;
 
@@ -1326,7 +1430,8 @@ public final class PredictiveFieldState {
       Translation2d p = targets[i];
       if (p == null) continue;
 
-      CollectEval e = evalCollectPoint(ourPos, cap, p, goal, COLLECT_CELL_M, dyn, enemyIntent, allyIntent);
+      CollectEval e =
+          evalCollectPoint(ourPos, cap, p, goal, COLLECT_CELL_M, dyn, enemyIntent, allyIntent);
       e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
       e.score += e.banditBonus;
 
@@ -1612,7 +1717,8 @@ public final class PredictiveFieldState {
     }
   }
 
-  private void addDepletedMark(Translation2d p, double radiusM, double strength, double ttlS, boolean merge) {
+  private void addDepletedMark(
+      Translation2d p, double radiusM, double strength, double ttlS, boolean merge) {
     if (RobotBase.isSimulation()) return;
     if (p == null) return;
 
@@ -1639,11 +1745,13 @@ public final class PredictiveFieldState {
     if (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
   }
 
-  private void addDepletedRing(Translation2d p, double r0, double r1, double strength, double ttlS) {
+  private void addDepletedRing(
+      Translation2d p, double r0, double r1, double strength, double ttlS) {
     if (RobotBase.isSimulation()) return;
     if (p == null) return;
     double now = Timer.getFPGATimestamp();
-    depletedMarks.add(new DepletedMark(p, now, Math.max(0.0, strength), r0, r1, Math.max(0.1, ttlS)));
+    depletedMarks.add(
+        new DepletedMark(p, now, Math.max(0.0, strength), r0, r1, Math.max(0.1, ttlS)));
     if (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
   }
 
@@ -2169,7 +2277,8 @@ public final class PredictiveFieldState {
     return value / Math.max(0.65, denom);
   }
 
-  private double reservationOverlapPenalty(HashMap<Integer, Track> allies, Translation2d p, double ourEtaS) {
+  private double reservationOverlapPenalty(
+      HashMap<Integer, Track> allies, Translation2d p, double ourEtaS) {
     if (allies.isEmpty() || p == null) return 0.0;
     double best = Double.POSITIVE_INFINITY;
     for (Track r : allies.values()) {
@@ -2460,8 +2569,7 @@ public final class PredictiveFieldState {
           double d2 = dx * dx + dy * dy;
 
           double age = Math.max(0.0, o.ageS);
-          double ageW =
-              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
+          double ageW = RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
 
           double sigmaBase =
               Math.max(
@@ -2470,8 +2578,7 @@ public final class PredictiveFieldState {
                       RESOURCE_SIGMA_ABS_MAX, Math.min(s.sigmaM * RESOURCE_SIGMA_REL_MAX, 2.0)));
 
           double sigma = sigmaBase * (0.70 + 0.35 * Math.exp(-0.85 * age));
-          sigma =
-              Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, sigma));
+          sigma = Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, sigma));
 
           double sig2 = sigma * sigma;
 
@@ -2537,13 +2644,12 @@ public final class PredictiveFieldState {
           if (d2 > rr2) continue;
 
           double age = Math.max(0.0, o.ageS);
-          double ageW =
-              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
+          double ageW = RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
 
-          double sigmaBase = Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, s.sigmaM));
+          double sigmaBase =
+              Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, s.sigmaM));
           double sigma = sigmaBase * (0.70 + 0.35 * Math.exp(-0.85 * age));
-          sigma =
-              Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, sigma));
+          sigma = Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, sigma));
 
           double sig2 = sigma * sigma;
 
