@@ -108,7 +108,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+          hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
         }
         case DEV -> {
           drive =
@@ -124,7 +124,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
+          hoodedShooter = new HoodedShooter(new ShooterIODev(), new HoodIODev(), drive::getPose);
         }
         case SIM -> {
           drive =
@@ -140,7 +140,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
-          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
+          hoodedShooter = new HoodedShooter(new ShooterIOSim(), new HoodIOSim(), drive::getPose);
         }
       }
     } else {
@@ -152,7 +152,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
-      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+      hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -165,31 +165,8 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller
-        .leftTrigger()
-        .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(1.0),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
-
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
-
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
-
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    controller.a().whileTrue(hoodedShooter.aimAtHub());
+    controller.b().whileTrue(hoodedShooter.shoot());
   }
 
   /** This function is called periodically during all modes. */
