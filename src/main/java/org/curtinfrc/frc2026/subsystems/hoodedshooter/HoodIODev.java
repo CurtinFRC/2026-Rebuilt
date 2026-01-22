@@ -2,33 +2,29 @@ package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
+import org.curtinfrc.frc2026.util.PhoenixUtil;
+
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MagnetSensorConfigs;
-import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.Slot1Configs;
-import com.ctre.phoenix6.configs.SoftwareLimitSwitchConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
-import com.ctre.phoenix6.controls.MotionMagicVoltage;
+import com.ctre.phoenix6.controls.PositionVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.FeedbackSensorSourceValue;
-import com.ctre.phoenix6.signals.GravityTypeValue;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.SensorDirectionValue;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
-import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
-import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
@@ -61,46 +57,15 @@ public class HoodIODev implements HoodIO {
           .withMotorOutput(
               new MotorOutputConfigs()
                   .withNeutralMode(NeutralModeValue.Brake)
-                  .withInverted(InvertedValue.CounterClockwise_Positive))
+                  .withInverted(InvertedValue.Clockwise_Positive))
           .withFeedback(
               new FeedbackConfigs()
-                  .withFeedbackRemoteSensorID(ENCODER_ID)
-                  .withFeedbackSensorSource(FeedbackSensorSourceValue.RotorSensor)
-                  .withSensorToMechanismRatio(GEAR_RATIO))
+                  .withFeedbackRemoteSensorID(ENCODER_ID) // Ties encoder with motor
+                  .withFeedbackSensorSource(
+                      FeedbackSensorSourceValue.FusedCANcoder)) // Ties encoder with motor
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
-          .withSoftwareLimitSwitch(
-              new SoftwareLimitSwitchConfigs()
-                  .withForwardSoftLimitThreshold(FORWARD_LIMIT_ROTATIONS)
-                  .withForwardSoftLimitEnable(true)
-                  .withReverseSoftLimitThreshold(REVERSE_LIMIT_ROTATIONS)
-                  .withReverseSoftLimitEnable(true))
-          .withSlot0(
-              new Slot0Configs()
-                  .withKP(KP)
-                  .withKI(KI)
-                  .withKD(KD)
-                  .withKS(KS_STOWED)
-                  .withKV(KV)
-                  .withKA(KA)
-                  .withKG(KG)
-                  .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
-                  .withGravityType(GravityTypeValue.Arm_Cosine))
-          .withSlot1(
-              new Slot1Configs()
-                  .withKP(KP)
-                  .withKI(KI)
-                  .withKD(KD)
-                  .withKS(KS_OUT)
-                  .withKV(KV)
-                  .withKA(KA)
-                  .withKG(KG)
-                  .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
-                  .withGravityType(GravityTypeValue.Arm_Cosine))
-          .withMotionMagic(
-              new MotionMagicConfigs()
-                  .withMotionMagicAcceleration(MM_ACCLERATION)
-                  .withMotionMagicCruiseVelocity(MM_CRUISE_VELOCITY));
+          .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
 
   protected final CANcoder encoder = new CANcoder(ENCODER_ID);
   private final CANcoderConfiguration encoderConfig =
@@ -119,10 +84,8 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<Angle> encoderPosition = encoder.getPosition();
   private final StatusSignal<Temperature> temperature = motor.getDeviceTemp();
 
-  private final VoltageOut voltageRequest =
-      new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
-  private final MotionMagicVoltage positionRequest =
-      new MotionMagicVoltage(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
+  private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  private final PositionVoltage positionRequest = new PositionVoltage(0).withEnableFOC(true);
 
   public HoodIODev() {
     tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
@@ -144,13 +107,6 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void updateInputs(HoodIOInputs inputs) {
-    inputs.motorConnected =
-        position.getStatus().isOK()
-            && velocity.getStatus().isOK()
-            && current.getStatus().isOK()
-            && voltage.getStatus().isOK()
-            && temperature.getStatus().isOK();
-    inputs.motorTemperature = temperature.getValueAsDouble();
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble() * 360;
@@ -166,18 +122,7 @@ public class HoodIODev implements HoodIO {
   }
 
   @Override
-  public void setVoltageV(Voltage voltage) {
-    motor.setControl(voltageRequest.withOutput(voltage));
-  }
-
-  @Override
   public void setPosition(double position) {
-    var request = positionRequest.withPosition(position);
-    if (this.position.getValueAsDouble() > STOWED_OUT_POSITION_THRESHOLD) {
-      request.withSlot(1);
-    } else {
-      request.withSlot(0);
-    }
-    motor.setControl(request);
+    motor.setControl(positionRequest.withPosition(position));
   }
 }
