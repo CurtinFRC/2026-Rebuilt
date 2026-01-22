@@ -6,6 +6,7 @@ import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
@@ -46,6 +47,11 @@ public class Drive extends SubsystemBase {
           Math.max(
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
+
+  private final PIDController faceHubPID = new PIDController(4.0, 0.0, 0.2);
+
+  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
+  public static final Translation2d HUB_LOCATION = new Translation2d(12, 4);
 
   private static final double ANGLE_MAX_ACCELERATION = 20.0;
   private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
