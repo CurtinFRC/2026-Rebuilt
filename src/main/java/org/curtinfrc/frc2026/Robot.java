@@ -32,6 +32,13 @@ import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -56,6 +63,7 @@ public class Robot extends LoggedRobot {
   private Vision vision;
   private Intake intake;
   private Mag mag;
+  private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -107,6 +115,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
         }
         case DEV -> {
           drive =
@@ -131,6 +140,7 @@ public class Robot extends LoggedRobot {
                       Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
         }
         case SIM -> {
           drive =
@@ -147,6 +157,7 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
           intake = new Intake(new IntakeIOSim());
+          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
         }
       }
     } else {
@@ -158,6 +169,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
