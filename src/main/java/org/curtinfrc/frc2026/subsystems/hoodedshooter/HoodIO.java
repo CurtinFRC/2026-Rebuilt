@@ -16,5 +16,5 @@ public interface HoodIO {
 
   public default void setVoltage(double voltage) {}
 
-  public default void setPosition(double position) {}
+  public default void setPosition(double positionRotations) {}
 }
