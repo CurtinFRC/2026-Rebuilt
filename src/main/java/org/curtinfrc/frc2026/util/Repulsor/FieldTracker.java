@@ -28,6 +28,7 @@ import java.util.function.ToDoubleBiFunction;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
+import org.curtinfrc.frc2026.util.Repulsor.PredictiveFieldState.PointCandidate;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.littletonrobotics.junction.Logger;
 
@@ -69,6 +70,8 @@ public class FieldTracker {
   private long collectStuckAnchorNs = 0L;
 
   private volatile int collectStickyHalfLock = 0;
+
+  PointCandidate lastBest;
 
   private static final double COLLECT_GROUP_W_C1 = 1.00;
   private static final double COLLECT_GROUP_W_C2 = 0.35;
@@ -162,23 +165,24 @@ public class FieldTracker {
       Translation2d p, Translation2d[] setpoints) {
     if (p == null || setpoints == null || setpoints.length == 0) return p;
 
-    Translation2d best = null;
-    double bestD2 = Double.POSITIVE_INFINITY;
+    // Translation2d best = null;
+    // double bestD2 = Double.POSITIVE_INFINITY;
 
-    for (Translation2d s : setpoints) {
-      if (s == null) continue;
-      double dx = p.getX() - s.getX();
-      double dy = p.getY() - s.getY();
-      double d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = s;
-      }
-    }
+    // for (Translation2d s : setpoints) {
+    //   if (s == null) continue;
+    //   double dx = p.getX() - s.getX();
+    //   double dy = p.getY() - s.getY();
+    //   double d2 = dx * dx + dy * dy;
+    //   if (d2 < bestD2) {
+    //     bestD2 = d2;
+    //     best = s;
+    //   }
+    // }
 
-    if (best == null) return p;
-    double snap2 = COLLECT_POINT_CANONICAL_SNAP_M * COLLECT_POINT_CANONICAL_SNAP_M;
-    return bestD2 <= snap2 ? best : p;
+    // if (best == null) return p;
+    // double snap2 = COLLECT_POINT_CANONICAL_SNAP_M * COLLECT_POINT_CANONICAL_SNAP_M;
+    // return bestD2 <= snap2 ? best : p;
+    return p;
   }
 
   private void clearCollectSticky() {
@@ -1334,7 +1338,7 @@ public class FieldTracker {
 
       PredictiveFieldState.PointCandidate best = null;
 
-      for (int attempt = 0; attempt < 3; attempt++) {
+      for (int attempt = 0; attempt < 5; attempt++) {
         best =
             predictor.rankCollectNearest(
                 robotPos,
@@ -1344,8 +1348,14 @@ public class FieldTracker {
                 goalUnits,
                 Math.min(160, Math.max(32, usePts.length)));
 
-        if (best != null && collectValid.test(best.point)) {
+        if (best != null) { // && collectValid.test(best.point)
+          lastBest = best;
           Logger.recordOutput("method", "collect_nearest_attempt");
+          break;
+        }
+
+        if (best == null && lastBest != null) {
+          best = lastBest;
           break;
         }
 
@@ -1360,7 +1370,7 @@ public class FieldTracker {
                 COLLECT_REFINE_GRID);
 
         if (best != null && collectValid.test(best.point)) {
-        Logger.recordOutput("method", "collect_hierarchical_attempt");
+          Logger.recordOutput("method", "collect_hierarchical_attempt");
           break;
         }
 
@@ -1369,7 +1379,7 @@ public class FieldTracker {
                 robotPos, cap, usePts, goalUnits, Math.max(24, usePts.length));
 
         if (best != null && collectValid.test(best.point)) {
-        Logger.recordOutput("method", "collect_point_rank_attempt");
+          Logger.recordOutput("method", "collect_point_rank_attempt");
           break;
         }
 
@@ -1395,7 +1405,10 @@ public class FieldTracker {
         }
       }
 
+      // Logger.recordOutput("best", new Pose2d(best.point, Rotation2d.kZero));
       Translation2d rawCandidate = (best != null ? best.point : null);
+      Logger.recordOutput("best1", rawCandidate);
+      Logger.recordOutput("collectValid", collectValid.test(rawCandidate));
 
       if (rawCandidate == null || !collectValid.test(rawCandidate)) {
         Translation2d fallback = null;
@@ -1484,7 +1497,7 @@ public class FieldTracker {
         if (sr >= sb - 0.04) bestCandidate = relockCand;
       }
 
-      // bestCandidate = canonicalizeCollectPoint(bestCandidate, usePts);
+      bestCandidate = canonicalizeCollectPoint(bestCandidate, usePts);
 
       double distToCand = robotPos.getDistance(bestCandidate);
       double holdS = holdSForDist(distToCand);
@@ -1524,12 +1537,14 @@ public class FieldTracker {
       Logger.recordOutput("sticky_dbg_lockHalf", collectStickyHalfLock);
       Logger.recordOutput("sticky_dbg_sensedHalf", sensedHalf);
       Translation2d selectedResource;
+      Logger.recordOutput("pass", pass);
 
       if (pass == 0) {
+        Logger.recordOutput("tracker_dbg_bestCandidate", rawCandidate);
         selectedResource =
             collectStickySelector.update(
-                bestCandidate,
-                scoreResource.apply(bestCandidate),
+                rawCandidate,
+                scoreResource.apply(rawCandidate),
                 scoreResource::apply,
                 collectValid,
                 holdS,
@@ -1580,6 +1595,25 @@ public class FieldTracker {
 
       prevSticky = collectStickyPoint;
       boolean switched = stickySwitched(prevSticky, selectedResource);
+
+      // Prevent rapid oscillation: if we just switched recently and the robot hasn't
+      // moved enough since that switch, prefer the previous sticky to avoid ping-pong.
+      if (switched && collectStickyLastSwitchNs != 0L) {
+        double sinceLastSwitchS = nowSFromNs(nowNs - collectStickyLastSwitchNs);
+        double movedSinceLastSwitch =
+            collectStickyLastSwitchRobotPos != null
+                ? robotPos.getDistance(collectStickyLastSwitchRobotPos)
+                : Double.POSITIVE_INFINITY;
+        if (sinceLastSwitchS < COLLECT_SWITCH_COOLDOWN_S
+            && movedSinceLastSwitch < COLLECT_SWITCH_MIN_MOVE_M) {
+          // revert to previous sticky and inform selector
+          if (prevSticky != null) {
+            selectedResource = prevSticky;
+            collectStickySelector.force(prevSticky);
+            switched = false;
+          }
+        }
+      }
 
       if (robotInCenterBand && collectStickyHalfLock == 0) {
         int s = sideSign(selectedResource);
@@ -1818,9 +1852,39 @@ public class FieldTracker {
       desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
 
       if (inForbidden.test(desiredDriveTarget) || violatesWall.test(desiredDriveTarget)) {
-        clearCollectSticky();
-        return new Pose2d(
-            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+        // Try to recover instead of immediately abandoning: first attempt a gentle nudge
+        // out of the forbidden band, then a stronger side-escape toward the nearest
+        // safe x position. Only if both fail do we clear sticky and fallback to center.
+        Translation2d escape = nudgeOutOfForbidden.apply(desiredDriveTarget);
+        escape = clampToFieldRobotSafe.apply(escape);
+        if (!inForbidden.test(escape) && !violatesWall.test(escape)) {
+          desiredDriveTarget = escape;
+          collectStickyDriveTarget = escape;
+        } else {
+          // Stronger fallback: pick a point outside the nearest forbidden band on the
+          // same side of the field as the robot, offset by a safe margin.
+          // reuse midX from outer scope
+          double escapeX;
+          double safePad = 0.60; // meters to push outside the band
+          if (robotPos.getX() < midX) {
+            escapeX = leftBandX0 - safePad;
+          } else {
+            escapeX = rightBandX1 + safePad;
+          }
+          Translation2d escape2 =
+              clampToFieldRobotSafe.apply(new Translation2d(escapeX, robotPos.getY()));
+          if (!inForbidden.test(escape2) && !violatesWall.test(escape2)) {
+            desiredDriveTarget = escape2;
+            collectStickyDriveTarget = escape2;
+          } else {
+            // Give up and reset sticky to safe center fallback
+            clearCollectSticky();
+            return new Pose2d(
+                Constants.FIELD_LENGTH * 0.5,
+                Constants.FIELD_WIDTH * 0.5,
+                robotPoseBlue.getRotation());
+          }
+        }
       }
 
       PredictiveFieldState.CollectProbe drivePr =

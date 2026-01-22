@@ -411,6 +411,9 @@ public class FieldPlanner {
       }
 
       if (sumN < EPS) return new Force();
+      if (sum.getX() == 0 && sum.getY() == 0) {
+        return new Force(0, 0);
+      }
       return new Force(sumN, sum.getAngle());
     }
 

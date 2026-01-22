@@ -568,6 +568,7 @@ public final class DragShotPlanner {
       this.airDensityKgPerM3 = airDensityKgPerM3;
     }
 
+    @SuppressWarnings("unused")
     public String name() {
       return name;
     }
