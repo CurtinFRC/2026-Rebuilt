@@ -105,7 +105,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+          hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
         }
         case DEV -> {
           drive =
@@ -121,7 +121,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
+          hoodedShooter = new HoodedShooter(new ShooterIODev(), new HoodIODev(), drive::getPose);
         }
         case SIM -> {
           drive =
@@ -137,7 +137,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
-          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
+          hoodedShooter = new HoodedShooter(new ShooterIOSim(), new HoodIOSim(), drive::getPose);
         }
       }
     } else {
@@ -149,7 +149,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
-      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+      hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -161,6 +161,9 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    controller.a().whileTrue(hoodedShooter.aimAtHub());
+    controller.b().whileTrue(hoodedShooter.shoot());
   }
 
   /** This function is called periodically during all modes. */

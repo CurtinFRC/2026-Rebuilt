@@ -6,7 +6,9 @@ import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -45,6 +47,11 @@ public class Drive extends SubsystemBase {
           Math.max(
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
+
+  private final PIDController faceHubPID = new PIDController(4.0, 0.0, 0.2);
+
+  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
+  public static final Translation2d HUB_LOCATION = new Translation2d(12, 4);
 
   private static final double ANGLE_MAX_ACCELERATION = 20.0;
   private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
@@ -298,6 +305,25 @@ public class Drive extends SubsystemBase {
           runVelocity(
               ChassisSpeeds.fromFieldRelativeSpeeds(
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+        });
+  }
+
+  public Command faceHub() {
+    return run(
+        () -> {
+          Pose2d pose = getPose();
+          double distanceX = HUB_LOCATION.getX() - pose.getX();
+          double distanceY = HUB_LOCATION.getY() - pose.getY();
+
+          Rotation2d targetAngle = new Rotation2d(Math.atan2(distanceX, distanceY));
+
+          double currentAngle = pose.getRotation().getRadians();
+          double error =
+              targetAngle.minus(new Rotation2d(currentAngle)).getRadians(); // calculate error
+          double output = faceHubPID.calculate(error, 0.0);
+          output = MathUtil.clamp(output, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED); // limit output
+
+          runVelocity(new ChassisSpeeds(0, 0, output)); // turn
         });
   }
 }
