@@ -28,6 +28,12 @@ import org.littletonrobotics.junction.Logger;
 public class HoodedShooter extends SubsystemBase {
   public static final Translation2d HUB_LOCATION = new Translation2d(12, 4);
   public static final double WHEEL_DIAMETER = 0.101;
+  public static final double SHOOTER_TARGET_VELOCITY = 15;
+  public static final Transform3d SHOOTER_TRANSFORM =
+      new Transform3d(0, 0, 1, new Rotation3d()); // Not confirmed
+
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_OPTIMAL_VELOCITY =
+      new InterpolatingDoubleTreeMap();
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
       new InterpolatingDoubleTreeMap();
@@ -135,7 +141,6 @@ public class HoodedShooter extends SubsystemBase {
   public void periodic() {
     hoodIO.updateInputs(hoodInputs);
     shooterIO.updateInputs(shooterInputs);
-
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
     Logger.recordOutput("Ball", ballSim.update(0.02));
