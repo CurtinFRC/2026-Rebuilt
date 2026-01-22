@@ -25,10 +25,11 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class HoodIOComp implements HoodIO {
-  private final int motorID = 67;
-  private final int encoderID = 76;
+  public final int motorID = 67;
+  public final int encoderID = 76;
+  public final double kGearRatio = 1; // definitely not this value
 
-  private final TalonFX motor = new TalonFX(motorID);
+  protected final TalonFX motor = new TalonFX(motorID);
   private final TalonFXConfiguration motorConfig =
       new TalonFXConfiguration()
           .withMotorOutput(
@@ -37,8 +38,9 @@ public class HoodIOComp implements HoodIO {
                   .withInverted(InvertedValue.Clockwise_Positive))
           .withFeedback(
               new FeedbackConfigs()
-                  .withFeedbackRemoteSensorID(encoderID)
-                  .withFeedbackSensorSource(FeedbackSensorSourceValue.FusedCANcoder))
+                  .withFeedbackRemoteSensorID(encoderID) // Ties encoder with motor
+                  .withFeedbackSensorSource(
+                      FeedbackSensorSourceValue.FusedCANcoder)) // Ties encoder with motor
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
@@ -58,8 +60,8 @@ public class HoodIOComp implements HoodIO {
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final boolean atTargetPosition = false;
 
-  final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  final PositionVoltage positionRequest = new PositionVoltage(0).withEnableFOC(true);
+  private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  private final PositionVoltage positionRequest = new PositionVoltage(0).withEnableFOC(true);
 
   public HoodIOComp() {
     tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
@@ -71,6 +73,8 @@ public class HoodIOComp implements HoodIO {
 
   @Override
   public void updateInputs(HoodIOInputs inputs) {
+    BaseStatusSignal.refreshAll(velocity, voltage, current, position);
+
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
@@ -85,6 +89,10 @@ public class HoodIOComp implements HoodIO {
 
   @Override
   public void setPosition(double positionAngle) {
-    motor.setControl(positionRequest.withPosition(positionAngle));
+    motor.setControl(positionRequest.withPosition(positionAngleToRotations(positionAngle)));
+  }
+
+  public double positionAngleToRotations(double angle) {
+    return angle * 360 / kGearRatio;
   }
 }
