@@ -75,6 +75,8 @@ public class ShooterIOComp implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
+    BaseStatusSignal.refreshAll(velocity, acceleration, voltage, current);
+
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
