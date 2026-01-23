@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import org.curtinfrc.frc2026.Subsystem.Intake.Intake;
+import org.curtinfrc.frc2026.Subsystem.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -46,6 +48,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Intake intake;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -127,6 +130,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+          intake = new Intake(new IntakeIOSim());
         }
       }
     } else {
