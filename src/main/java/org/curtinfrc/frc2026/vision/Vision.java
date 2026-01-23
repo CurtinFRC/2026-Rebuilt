@@ -7,7 +7,9 @@ import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.interpolation.TimeInterpolatableBuffer;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
@@ -26,7 +28,12 @@ public class Vision extends VirtualSubsystem {
   public static record CameraConfig(String name, Transform3d robotToCamera, double stdDev) {}
 
   public static CameraConfig[] cameraConfigs =
-      new CameraConfig[] {new CameraConfig("test", Transform3d.kZero, 1.0)};
+      new CameraConfig[] {
+        new CameraConfig(
+            "OV9281",
+            new Transform3d(new Translation3d(0.35, 0.2, 0), new Rotation3d(180, 0, 0)),
+            1.0)
+      };
 
   private static double maxAmbiguity = 0.2;
   private static double maxZError = 0.4;
