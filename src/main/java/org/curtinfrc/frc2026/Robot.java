@@ -12,6 +12,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,6 +32,8 @@ import org.curtinfrc.frc2026.subsystems.indexer.IndexerIOSim;
 import org.curtinfrc.frc2026.subsystems.intake.Intake;
 import org.curtinfrc.frc2026.subsystems.intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.intake.IntakeIOComp;
+import org.curtinfrc.frc2026.subsystems.shooter.Shooter;
+import org.curtinfrc.frc2026.subsystems.shooter.ShooterIOComp;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -55,6 +58,7 @@ public class Robot extends LoggedRobot {
   private Vision vision;
   private Indexer indexer;
   private Intake intake;
+  private Shooter shooter;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -108,6 +112,7 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           indexer = new Indexer(new IndexerIOComp());
           intake = new Intake(new IntakeIOComp());
+          shooter = new Shooter(new ShooterIOComp());
         }
         case DEV -> {
           drive =
@@ -125,6 +130,7 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           indexer = new Indexer(new IndexerIOComp());
           intake = new Intake(new IntakeIOComp());
+          shooter = new Shooter(new ShooterIOComp());
         }
         case SIM -> {
           drive =
@@ -142,6 +148,7 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
           indexer = new Indexer(new IndexerIOSim());
           intake = new Intake(new IntakeIO() {});
+          shooter = new Shooter(new ShooterIOComp());
         }
       }
     } else {
@@ -156,6 +163,10 @@ public class Robot extends LoggedRobot {
       indexer = new Indexer(new IndexerIO() {});
       intake = new Intake(new IntakeIO() {});
     }
+
+    new Trigger(() -> controller.getRightTriggerAxis() > 0.05)
+        .whileTrue(shooter.ShootPercentSpeed(controller.getRightTriggerAxis()))
+        .onFalse(shooter.Stop());
 
     DriverStation.silenceJoystickConnectionWarning(true);
 
