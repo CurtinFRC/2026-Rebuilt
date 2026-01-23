@@ -164,12 +164,8 @@ public class Robot extends LoggedRobot {
       intake = new Intake(new IntakeIO() {});
     }
 
-    // if (controller.getRightTriggerAxis() > 0.05) {
-    //   shooter.Go(controller.getRightTriggerAxis() * 12.0);
-    // }
-
     new Trigger(() -> controller.getRightTriggerAxis() > 0.05)
-        .whileTrue(shooter.Go(() -> controller.getRightTriggerAxis() * -12))
+        .whileTrue(shooter.ShootPercentSpeed(controller.getRightTriggerAxis()))
         .onFalse(shooter.Stop());
 
     DriverStation.silenceJoystickConnectionWarning(true);

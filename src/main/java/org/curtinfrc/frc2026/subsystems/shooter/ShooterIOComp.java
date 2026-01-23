@@ -33,9 +33,6 @@ public class ShooterIOComp implements ShooterIO {
 
   private final TalonFX motor = new TalonFX(ID);
 
-  //   private final DigitalInput frontSensor = new DigitalInput(4);
-  //   private final DigitalInput backSensor = new DigitalInput(2);
-
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Current> current = motor.getStatorCurrent();
   private final StatusSignal<Angle> position = motor.getPosition();
@@ -57,8 +54,6 @@ public class ShooterIOComp implements ShooterIO {
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.angularVelocityRotationsPerMinute = position.getValueAsDouble();
-    // inputs.frontSensor = frontSensor.get();
-    // inputs.backSensor = backSensor.get();
   }
 
   @Override
