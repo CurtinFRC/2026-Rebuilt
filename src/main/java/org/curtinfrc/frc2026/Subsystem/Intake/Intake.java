@@ -39,8 +39,8 @@ public class Intake extends SubsystemBase {
     return run(() -> io.setVoltage(idleVolts)).withName("idleVolts");
   }
 
-  public Command ControlConsume(double target) {
-    return run(() -> io.setVelocity(target)).withName("consumeVel");
+  public Command ControlConsume() {
+    return run(() -> io.setVelocity(consumeVel)).withName("consumeVel");
   }
 
   public Command Idle() {
