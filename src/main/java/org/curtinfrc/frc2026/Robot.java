@@ -24,6 +24,9 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.subsystems.intake.Intake;
+import org.curtinfrc.frc2026.subsystems.intake.IntakeIO;
+import org.curtinfrc.frc2026.subsystems.intake.IntakeIOComp;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -46,6 +49,8 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Intake intake;
+
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -97,6 +102,8 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          intake = 
+              new Intake (new IntakeIOComp ());
         }
         case DEV -> {
           drive =
@@ -112,6 +119,9 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          intake =
+              new Intake (new IntakeIO () {});
+
         }
         case SIM -> {
           drive =
@@ -149,6 +159,8 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+            controller.a().whileTrue(intake.intakeRaw(6)); 
   }
 
   /** This function is called periodically during all modes. */
