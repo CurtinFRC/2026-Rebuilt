@@ -24,6 +24,8 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIO;
+import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -80,7 +82,7 @@ public class Robot extends LoggedRobot {
     }
 
     Logger.start();
-
+    MagRollerIO roller1 = new MagRollerIODev(11);
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
