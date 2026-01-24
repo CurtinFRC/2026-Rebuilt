@@ -158,6 +158,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+    controller.a().whileTrue(intake.ControlConsume());
   }
 
   /** This function is called periodically during all modes. */
