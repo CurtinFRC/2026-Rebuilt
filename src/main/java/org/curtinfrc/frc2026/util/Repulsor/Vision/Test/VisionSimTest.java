@@ -19,7 +19,7 @@ import org.littletonrobotics.junction.Logger;
 
 public class VisionSimTest implements RepulsorVision {
   private static final boolean USE_CONTROLLER = true;
-  private static final boolean USE_KEYBOARD = false;
+  private static final boolean USE_KEYBOARD = true;
   private static final int ROBOT_COUNT = 6;
   private static final double STUCK_SPEED_THRESH = 0.08;
   private static final double STUCK_TIME = 1.0;
@@ -195,8 +195,8 @@ public class VisionSimTest implements RepulsorVision {
     double strafe;
     double rot;
     if (USE_KEYBOARD) {
-      fwd = keyboard.getRawAxis(0);
-      strafe = -keyboard.getRawAxis(1);
+      fwd = -keyboard.getRawAxis(0);
+      strafe = keyboard.getRawAxis(1);
       rot = keyboard.getRawAxis(2);
     } else {
       fwd = driver.getLeftX();

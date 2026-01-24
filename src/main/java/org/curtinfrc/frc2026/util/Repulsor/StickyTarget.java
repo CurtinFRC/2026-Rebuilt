@@ -265,7 +265,8 @@ public final class StickyTarget<T> {
     hardLockUntilSec = now + lock;
   }
 
-  private void notePingPong(double now, T from, T to, ToDoubleBiFunction<T, T> distanceFn, double eps) {
+  private void notePingPong(
+      double now, T from, T to, ToDoubleBiFunction<T, T> distanceFn, double eps) {
     if (from == null || to == null) return;
 
     if (pingA == null || pingB == null) {
@@ -393,7 +394,8 @@ public final class StickyTarget<T> {
     return v;
   }
 
-  private T fallbackOut(double now, Predicate<T> valid, ToDoubleBiFunction<T, T> distanceFn, double sameEps) {
+  private T fallbackOut(
+      double now, Predicate<T> valid, ToDoubleBiFunction<T, T> distanceFn, double sameEps) {
     if (sticky != null) return sticky;
     if (lastOut != null && valid.test(lastOut) && seenRecently(now, lastOut)) {
       sticky = lastOut;
@@ -724,16 +726,21 @@ public final class StickyTarget<T> {
 
     if (forceMoveOn) {
       shouldSwitch = true;
-    } else if (!freezeOnFlicker && bestStableEnough && candStableShort && advantage >= immediateDelta) {
+    } else if (!freezeOnFlicker
+        && bestStableEnough
+        && candStableShort
+        && advantage >= immediateDelta) {
       shouldSwitch = true;
     } else if (!switchBackBlocked && !freezeOnFlicker) {
-      if (bestStableEnough && holdPassed && candStable && advantage >= keepMargin) shouldSwitch = true;
+      if (bestStableEnough && holdPassed && candStable && advantage >= keepMargin)
+        shouldSwitch = true;
       else if (bestStableEnough
           && candStable
           && (stickyStale || forcedRefresh)
           && advantage >= Math.max(0.02, keepMargin * 0.25)) shouldSwitch = true;
     } else {
-      if (bestStableEnough && candStable && advantage >= (immediateDelta * 1.65)) shouldSwitch = true;
+      if (bestStableEnough && candStable && advantage >= (immediateDelta * 1.65))
+        shouldSwitch = true;
     }
 
     if (shouldSwitch) {
@@ -755,7 +762,8 @@ public final class StickyTarget<T> {
       if (pingBlock) req *= 2.25;
       if (freezeOnFlicker) req *= 3.0;
 
-      double hardOverride = Math.max(req, Math.max(immediateDelta, keepMargin) * HARD_LOCK_OVERRIDE_MULT);
+      double hardOverride =
+          Math.max(req, Math.max(immediateDelta, keepMargin) * HARD_LOCK_OVERRIDE_MULT);
       if (hardLocked && !forcedRefresh && advantage < hardOverride) {
         shouldSwitch = false;
       } else if (advantage < req

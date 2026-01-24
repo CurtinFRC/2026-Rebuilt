@@ -189,6 +189,24 @@ public final class PredictiveFieldState {
   private static final double COLLECT_NEAR_BONUS = 0.55;
   private static final double COLLECT_NEAR_DECAY = 1.35;
 
+  private static final double COLLECT_CORE_R_MIN = 0.05;
+  private static final double COLLECT_CORE_R_MAX = 0.12;
+  private static final double COLLECT_SNAP_R_MIN = 0.35;
+  private static final double COLLECT_SNAP_R_MAX = 0.60;
+  private static final double COLLECT_MICRO_CENTROID_R_MIN = 0.18;
+  private static final double COLLECT_MICRO_CENTROID_R_MAX = 0.35;
+  private static final double COLLECT_JITTER_R_MIN = 0.06;
+  private static final double COLLECT_JITTER_R_MAX = 0.14;
+  private static final double COLLECT_HOLE_PENALTY = 2.35;
+  private static final double COLLECT_EDGE_PENALTY = 0.85;
+  private static final double COLLECT_NOFUEL_PENALTY = 3.00;
+
+  private static final int COLLECT_GRID_TOPK = 420;
+  private static final int COLLECT_RESOURCE_SEEDS_MAX = 64;
+  private static final double COLLECT_CAND_GATE_R = 0.60;
+  private static final double COLLECT_PEAK_GATE_R = 0.60;
+  private static final double COLLECT_PEAK_SCORE_R = 0.85;
+
   private static final double COLLECT_COARSE_MIN_REGION_UNITS = 0.12;
   private static final double COLLECT_FINE_MIN_UNITS = 0.08;
 
@@ -593,6 +611,70 @@ public final class PredictiveFieldState {
     return d.nearestResourceTo(p, Math.max(0.01, maxDist));
   }
 
+  private Translation2d[] peakFinder(Translation2d[] gridPoints, SpatialDyn dyn, int topN) {
+    if (gridPoints == null || gridPoints.length == 0 || dyn == null) return new Translation2d[0];
+
+    int K = Math.max(1, topN);
+    Translation2d[] bestP = new Translation2d[K];
+    double[] bestV = new double[K];
+    for (int i = 0; i < K; i++) bestV[i] = -1e18;
+
+    for (int i = 0; i < gridPoints.length; i++) {
+      Translation2d p = gridPoints[i];
+      if (p == null) continue;
+
+      Translation2d near = dyn.nearestResourceTo(p, COLLECT_PEAK_GATE_R);
+      if (near == null) continue;
+
+      double v = dyn.evidenceMassWithin(p, COLLECT_PEAK_SCORE_R);
+      if (v <= 1e-9) continue;
+
+      int worstI = 0;
+      double worst = bestV[0];
+      for (int k = 1; k < K; k++) {
+        if (bestV[k] < worst) {
+          worst = bestV[k];
+          worstI = k;
+        }
+      }
+      if (v > worst) {
+        bestV[worstI] = v;
+        bestP[worstI] = p;
+      }
+    }
+
+    ArrayList<Translation2d> tmp = new ArrayList<>(K);
+    for (Translation2d p : bestP) if (p != null) tmp.add(p);
+
+    tmp = dedupPoints(tmp, adaptiveDupSkip(dyn));
+    return tmp.toArray(new Translation2d[0]);
+  }
+
+  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.robotSquare(0.1);
+
+  private Rotation2d currentCollectHeading = new Rotation2d();
+  private Translation2d currentCollectTouch = null;
+
+  private static Rotation2d face(Translation2d from, Translation2d to, Rotation2d fallback) {
+    Translation2d d = to.minus(from);
+    if (d.getNorm() < 1e-9) return fallback;
+    return d.getAngle();
+  }
+
+  private Translation2d resolveCollectTouch(
+      SpatialDyn dyn,
+      Translation2d center,
+      Rotation2d heading,
+      double rCore,
+      double rSnap,
+      double rCentroid) {
+    if (center == null) return null;
+    Translation2d front =
+        center.plus(
+            COLLECT_INTAKE.supportPointRobotFrame(new Translation2d(1.0, 0.0)).rotateBy(heading));
+    return enforceHardStopOnFuel(dyn, front, rCore, rSnap, rCentroid, 0.10);
+  }
+
   public PointCandidate rankCollectNearest(
       Translation2d ourPos,
       double ourSpeedCap,
@@ -605,6 +687,23 @@ public final class PredictiveFieldState {
 
     SpatialDyn dyn = cachedDyn();
     if (dyn == null || dyn.resources.isEmpty()) return null;
+
+    final double SHOOT_X_END_BAND_M = 12.5631260802;
+    final double BAND_WIDTH_M = 2.167294751;
+
+    final Interval<Double> xLeftBand =
+        Interval.closed(SHOOT_X_END_BAND_M - BAND_WIDTH_M, SHOOT_X_END_BAND_M);
+    final Interval<Double> xRightBand =
+        Interval.closed(
+            Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M,
+            Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M));
+
+    final java.util.function.Predicate<Translation2d> inShootBand =
+        (pt) -> {
+          if (pt == null) return true;
+          double x = pt.getX();
+          return xLeftBand.within(x) || xRightBand.within(x);
+        };
 
     lastOurPosForCollect = ourPos;
     lastOurCapForCollect = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
@@ -630,6 +729,11 @@ public final class PredictiveFieldState {
 
     double onHalf = Math.max(0.10, Math.min(nearHalf * 0.60, 0.22));
     double onR = Math.max(0.20, Math.min(0.30, Math.max(0.20, COLLECT_ARRIVE_R * 0.70)));
+
+    double rCore = coreRadiusFor(cellM);
+    double rSnap = snapRadiusFor(cellM);
+    double rCentroid = microCentroidRadiusFor(cellM);
+    double rJitter = jitterRadiusFor(cellM);
 
     double minHardUnits = Math.max(0.025, Math.min(COLLECT_FINE_MIN_UNITS, minUnits * 0.80));
 
@@ -662,9 +766,9 @@ public final class PredictiveFieldState {
       orderEta[i] = i;
       orderCoarse[i] = i;
 
-      if (p == null) {
+      if (p == null || inShootBand.test(p)) {
         etaKey[i] = Double.POSITIVE_INFINITY;
-        coarseKey[i] = -1e18;
+        coarseKey[i] = 1e18;
         continue;
       }
 
@@ -728,6 +832,8 @@ public final class PredictiveFieldState {
         limit > 0 ? Math.min(Math.max(1, limit), Math.max(1, shortlist.size())) : shortlist.size();
 
     Translation2d bestP = null;
+    Translation2d bestTouch = null;
+    Rotation2d bestHeading = new Rotation2d();
     CollectEval bestE = null;
 
     double[] topScore = new double[Math.min(10, Math.max(1, maxCheck))];
@@ -742,10 +848,12 @@ public final class PredictiveFieldState {
     double[] topEv = new double[topScore.length];
     int topN = 0;
 
+    double now0 = Timer.getFPGATimestamp();
+
     for (int si = 0; si < maxCheck; si++) {
       int idx = shortlist.get(si);
       Translation2d center = seeds[idx];
-      if (center == null) continue;
+      if (center == null || inShootBand.test(center)) continue;
 
       double regionUnitsNear = dyn.valueInSquare(center, nearHalf);
       int cNear0 = dyn.countResourcesWithin(center, nearR);
@@ -758,34 +866,38 @@ public final class PredictiveFieldState {
       double start = -0.5 * span;
 
       Translation2d localBest = null;
+      Translation2d localBestTouch = null;
+      Rotation2d localBestHeading = new Rotation2d();
       CollectEval localBestE = null;
+      boolean localHasCore = false;
 
       for (int ix = 0; ix < g; ix++) {
         double ox = start + ix * step;
         for (int iy = 0; iy < g; iy++) {
           double oy = start + iy * step;
-          Translation2d p = new Translation2d(center.getX() + ox, center.getY() + oy);
+          Translation2d p0 = new Translation2d(center.getX() + ox, center.getY() + oy);
 
-          final double SHOOT_X_END_BAND_M = 12.5631260802;
-          final double BAND_WIDTH_M = 2.167294751;
+          if (inShootBand.test(p0)) continue;
 
-          double leftLo = SHOOT_X_END_BAND_M - BAND_WIDTH_M;
-          double leftHi = SHOOT_X_END_BAND_M;
-
-          double rightLo = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
-          double rightHi = Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M);
-
-          double x = p.getX();
-          if ((x >= leftLo && x <= leftHi) || (x >= rightLo && x <= rightHi)) continue;
-
-          double fuelNear = dyn.valueInSquare(p, nearHalf);
-          int cNear = dyn.countResourcesWithin(p, nearR);
+          double fuelNear = dyn.valueInSquare(p0, nearHalf);
+          int cNear = dyn.countResourcesWithin(p0, nearR);
           if (fuelNear < minHardUnits || cNear < 1) continue;
 
-          double fuelOn = dyn.valueInSquare(p, onHalf);
-          int cOn = dyn.countResourcesWithin(p, onR);
-          double evHard = dyn.evidenceMassWithin(p, EVIDENCE_R);
+          Translation2d fuelTouch = enforceHardStopOnFuel(dyn, p0, rCore, rSnap, rCentroid, 0.10);
+          if (fuelTouch == null || inShootBand.test(fuelTouch)) continue;
+
+          double fuelOn = dyn.valueInSquare(fuelTouch, onHalf);
+          int cOn = dyn.countResourcesWithin(fuelTouch, onR);
+          double evHard = dyn.evidenceMassWithin(fuelTouch, EVIDENCE_R);
           if (fuelOn < minHardUnits || cOn < 1 || evHard < minEv) continue;
+
+          int cCore = dyn.countResourcesWithin(fuelTouch, rCore);
+          if (cCore < 1) continue;
+
+          Rotation2d heading = face(p0, fuelTouch, new Rotation2d());
+          Translation2d p =
+              COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(p0, heading, fuelTouch);
+          if (inShootBand.test(p)) continue;
 
           CollectEval e =
               evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
@@ -793,62 +905,119 @@ public final class PredictiveFieldState {
           e.units = fuelOn;
           e.count = cOn;
           e.evidence = evHard;
+          e.coreCount = cCore;
+          Translation2d nn = dyn.nearestResourceTo(fuelTouch, rCore);
+          e.coreDist = nn != null ? nn.getDistance(fuelTouch) : 1e9;
 
           e.regionUnits = regionUnitsNear;
-          e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
+          e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
           e.score += e.banditBonus;
 
           if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
           if (e.evidence < minEv) e.score -= 2.25;
 
-          if (localBestE == null
-              || e.score > localBestE.score + 1e-9
-              || (Math.abs(e.score - localBestE.score) <= 0.03
-                  && (e.count > localBestE.count + 1
-                      || (e.count == localBestE.count && e.depleted < localBestE.depleted - 0.04)
-                      || (e.count == localBestE.count && e.units > localBestE.units + 0.06)))) {
+          if (!localHasCore) {
+            localHasCore = true;
             localBestE = e;
             localBest = p;
+            localBestTouch = fuelTouch;
+            localBestHeading = heading;
+          } else {
+            if (localBestE == null
+                || e.score > localBestE.score + 1e-9
+                || (Math.abs(e.score - localBestE.score) <= 0.03
+                    && (e.count > localBestE.count + 1
+                        || (e.count == localBestE.count && e.depleted < localBestE.depleted - 0.04)
+                        || (e.count == localBestE.count && e.units > localBestE.units + 0.06)))) {
+              localBestE = e;
+              localBest = p;
+              localBestTouch = fuelTouch;
+              localBestHeading = heading;
+            }
           }
         }
       }
 
-      if (localBest == null || localBestE == null) continue;
+      if (!localHasCore) {
+        Translation2d anchor = enforceHardStopOnFuel(dyn, center, rCore, rSnap, rCentroid, 0.10);
+        if (anchor != null && !inShootBand.test(anchor)) {
+          double micro = Math.max(0.03, 0.75 * rCore);
+          Translation2d bestMicroP = null;
+          Translation2d bestMicroTouch = null;
+          Rotation2d bestMicroHeading = new Rotation2d();
+          CollectEval bestMicroE = null;
 
-      Translation2d snapped = dyn.centroidResourcesWithin(localBest, 1.35, 0.10);
-      if (snapped != null) {
-        Translation2d snapped2 = dyn.centroidResourcesWithin(snapped, 0.55, 0.08);
-        if (snapped2 != null) snapped = snapped2;
+          for (int ix = -1; ix <= 1; ix++) {
+            for (int iy = -1; iy <= 1; iy++) {
+              Translation2d p0 =
+                  new Translation2d(anchor.getX() + ix * micro, anchor.getY() + iy * micro);
+              if (inShootBand.test(p0)) continue;
 
-        double uOn = dyn.valueInSquare(snapped, onHalf);
-        int cOn = dyn.countResourcesWithin(snapped, onR);
-        double evOn = dyn.evidenceMassWithin(snapped, EVIDENCE_R);
+              Translation2d fuelTouch =
+                  enforceHardStopOnFuel(dyn, p0, rCore, rSnap, rCentroid, 0.08);
+              if (fuelTouch == null || inShootBand.test(fuelTouch)) continue;
 
-        if (uOn >= minHardUnits && cOn >= 1 && evOn >= minEv) {
-          CollectEval es =
-              evalCollectPoint(ourPos, cap, snapped, goal, cellM, dyn, enemyIntent, allyIntent);
+              int cCore = dyn.countResourcesWithin(fuelTouch, rCore);
+              if (cCore < 1) continue;
 
-          es.units = uOn;
-          es.count = cOn;
-          es.evidence = evOn;
+              double fuelOn = dyn.valueInSquare(fuelTouch, onHalf);
+              int cOn = dyn.countResourcesWithin(fuelTouch, onR);
+              double evHard = dyn.evidenceMassWithin(fuelTouch, EVIDENCE_R);
+              if (fuelOn < minHardUnits || cOn < 1 || evHard < minEv) continue;
 
-          es.regionUnits = localBestE.regionUnits;
-          es.banditBonus = regionBanditBonus(dyn, snapped, Timer.getFPGATimestamp());
-          es.score += es.banditBonus;
+              Rotation2d heading = face(p0, fuelTouch, new Rotation2d());
+              Translation2d p =
+                  COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(p0, heading, fuelTouch);
+              if (inShootBand.test(p)) continue;
 
-          if (es.units < minUnits * 0.55 || es.count < Math.max(1, minCount - 1)) es.score -= 2.75;
-          if (es.evidence < minEv) es.score -= 2.25;
+              CollectEval e =
+                  evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
 
-          if (es.score > localBestE.score + 1e-9) {
-            localBestE = es;
-            localBest = snapped;
+              e.units = fuelOn;
+              e.count = cOn;
+              e.evidence = evHard;
+              e.coreCount = cCore;
+              Translation2d nn = dyn.nearestResourceTo(fuelTouch, rCore);
+              e.coreDist = nn != null ? nn.getDistance(fuelTouch) : 1e9;
+
+              e.regionUnits = regionUnitsNear;
+              e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
+              e.score += e.banditBonus;
+
+              if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
+              if (e.evidence < minEv) e.score -= 2.25;
+
+              if (bestMicroE == null || e.score > bestMicroE.score + 1e-9) {
+                bestMicroE = e;
+                bestMicroP = p;
+                bestMicroTouch = fuelTouch;
+                bestMicroHeading = heading;
+              }
+            }
+          }
+
+          if (bestMicroP != null && bestMicroE != null && !inShootBand.test(bestMicroP)) {
+            localBest = bestMicroP;
+            localBestE = bestMicroE;
+            localBestTouch = bestMicroTouch;
+            localBestHeading = bestMicroHeading;
+            localHasCore = true;
           }
         }
       }
+
+      if (!localHasCore
+          || localBest == null
+          || localBestE == null
+          || localBestTouch == null
+          || inShootBand.test(localBest)
+          || inShootBand.test(localBestTouch)) continue;
 
       if (bestE == null || localBestE.score > bestE.score + 1e-9) {
         bestE = localBestE;
         bestP = localBest;
+        bestTouch = localBestTouch;
+        bestHeading = localBestHeading;
       }
 
       if (topN < topScore.length) {
@@ -887,15 +1056,26 @@ public final class PredictiveFieldState {
       }
     }
 
-    if (bestP == null || bestE == null) {
+    if (bestP == null || bestE == null || bestTouch == null || inShootBand.test(bestP)) {
       Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
       return null;
     }
 
     Translation2d chosenPt = bestP;
+    Translation2d chosenTouch = bestTouch;
+    Rotation2d chosenHeading = bestHeading;
     CollectEval chosenE = bestE;
 
     double now = Timer.getFPGATimestamp();
+
+    if (currentCollectTarget != null && inShootBand.test(currentCollectTarget)) {
+      addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+      addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+      recordRegionAttempt(dyn, currentCollectTarget, now, false);
+      currentCollectTarget = null;
+      currentCollectTouch = null;
+      collectArrivalTs = -1.0;
+    }
 
     boolean escape =
         currentCollectTarget != null
@@ -909,11 +1089,41 @@ public final class PredictiveFieldState {
 
     if (!escape && currentCollectTarget != null) {
       double age = now - currentCollectChosenTs;
+
+      Translation2d curTouch =
+          currentCollectTouch != null
+              ? currentCollectTouch
+              : resolveCollectTouch(
+                  dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
+
+      if (curTouch == null
+          || inShootBand.test(curTouch)
+          || inShootBand.test(currentCollectTarget)) {
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        currentCollectTouch = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
+        return null;
+      }
+
       CollectEval curE =
           evalCollectPoint(
               ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
-      curE.banditBonus = regionBanditBonus(dyn, currentCollectTarget, now);
+      curE.banditBonus = regionBanditBonus(dyn, curTouch, now);
       curE.score += curE.banditBonus;
+
+      double curOnUnits = dyn.valueInSquare(curTouch, onHalf);
+      int curOnCount = dyn.countResourcesWithin(curTouch, onR);
+      double curEv = dyn.evidenceMassWithin(curTouch, EVIDENCE_R);
+      int curCore = dyn.countResourcesWithin(curTouch, rCore);
+      Translation2d curNN = dyn.nearestResourceTo(curTouch, rCore);
+
+      curE.units = curOnUnits;
+      curE.count = curOnCount;
+      curE.evidence = curEv;
+      curE.coreCount = curCore;
+      curE.coreDist = curNN != null ? curNN.getDistance(curTouch) : 1e9;
 
       currentCollectScore = curE.score;
       currentCollectUnits = curE.units;
@@ -923,19 +1133,34 @@ public final class PredictiveFieldState {
         if (chosenE.score <= currentCollectScore + switchMargin) {
           chosenPt = currentCollectTarget;
           chosenE = curE;
+          chosenTouch = curTouch;
+          chosenHeading = currentCollectHeading;
         } else {
-          recordRegionAttempt(dyn, currentCollectTarget, now, false);
-          currentCollectTarget = chosenPt;
-          currentCollectChosenTs = now;
-          currentCollectScore = chosenE.score;
-          currentCollectUnits = chosenE.units;
-          currentCollectEta = chosenE.eta;
-          recordRegionAttempt(dyn, currentCollectTarget, now, false);
+          if (inShootBand.test(chosenPt) || inShootBand.test(chosenTouch)) {
+            chosenPt = currentCollectTarget;
+            chosenE = curE;
+            chosenTouch = curTouch;
+            chosenHeading = currentCollectHeading;
+          } else {
+            recordRegionAttempt(dyn, currentCollectTarget, now, false);
+            currentCollectTarget = chosenPt;
+            currentCollectTouch = chosenTouch;
+            currentCollectHeading = chosenHeading;
+            currentCollectChosenTs = now;
+            currentCollectScore = chosenE.score;
+            currentCollectUnits = chosenE.units;
+            currentCollectEta = chosenE.eta;
+            recordRegionAttempt(dyn, currentCollectTarget, now, false);
+          }
         }
       } else {
-        if (chosenE.score > currentCollectScore + switchMargin) {
+        if (chosenE.score > currentCollectScore + switchMargin
+            && !inShootBand.test(chosenPt)
+            && !inShootBand.test(chosenTouch)) {
           recordRegionAttempt(dyn, currentCollectTarget, now, false);
           currentCollectTarget = chosenPt;
+          currentCollectTouch = chosenTouch;
+          currentCollectHeading = chosenHeading;
           currentCollectChosenTs = now;
           currentCollectScore = chosenE.score;
           currentCollectUnits = chosenE.units;
@@ -944,9 +1169,16 @@ public final class PredictiveFieldState {
         } else {
           chosenPt = currentCollectTarget;
           chosenE = curE;
+          chosenTouch = curTouch;
+          chosenHeading = currentCollectHeading;
         }
       }
     } else {
+      if (inShootBand.test(chosenPt) || inShootBand.test(chosenTouch)) {
+        Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
+        return null;
+      }
+
       if (currentCollectTarget == null
           || chosenPt.getDistance(currentCollectTarget) > 0.05
           || escape) {
@@ -954,6 +1186,8 @@ public final class PredictiveFieldState {
           recordRegionAttempt(dyn, currentCollectTarget, now, false);
         }
         currentCollectTarget = chosenPt;
+        currentCollectTouch = chosenTouch;
+        currentCollectHeading = chosenHeading;
         currentCollectChosenTs = now;
         currentCollectScore = chosenE.score;
         currentCollectUnits = chosenE.units;
@@ -961,9 +1195,64 @@ public final class PredictiveFieldState {
         recordRegionAttempt(dyn, currentCollectTarget, now, false);
       } else {
         currentCollectTarget = chosenPt;
+        currentCollectTouch = chosenTouch;
+        currentCollectHeading = chosenHeading;
         currentCollectScore = chosenE.score;
         currentCollectUnits = chosenE.units;
         currentCollectEta = chosenE.eta;
+      }
+    }
+
+    if (currentCollectTarget != null) {
+      if (inShootBand.test(currentCollectTarget)) {
+        addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+        addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        currentCollectTouch = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenInShootBand", 1.0);
+        return null;
+      }
+
+      if (currentCollectTouch == null) {
+        currentCollectTouch =
+            resolveCollectTouch(
+                dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
+      }
+
+      Translation2d anchoredTouch =
+          currentCollectTouch != null
+              ? enforceHardStopOnFuel(dyn, currentCollectTouch, rCore, rSnap, rCentroid, 0.10)
+              : null;
+
+      if (anchoredTouch == null || inShootBand.test(anchoredTouch)) {
+        addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+        addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        currentCollectTouch = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
+        return null;
+      }
+
+      currentCollectTouch = anchoredTouch;
+      currentCollectHeading =
+          face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
+      currentCollectTarget =
+          COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(
+              currentCollectTarget, currentCollectHeading, currentCollectTouch);
+
+      if (inShootBand.test(currentCollectTarget)) {
+        addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+        addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        currentCollectTouch = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostSnap", 1.0);
+        return null;
       }
     }
 
@@ -975,7 +1264,39 @@ public final class PredictiveFieldState {
       if (collectArrivalTs < 0.0) collectArrivalTs = now;
       double held = now - collectArrivalTs;
       if (held >= COLLECT_ARRIVE_VERIFY_S) {
-        CollectProbe pr = probeCollect(currentCollectTarget, 0.65);
+        Translation2d touch = currentCollectTouch;
+        if (touch == null) {
+          touch =
+              resolveCollectTouch(
+                  dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
+          currentCollectTouch = touch;
+        }
+
+        Translation2d nn = touch != null ? dyn.nearestResourceTo(touch, rCore) : null;
+        int cc = touch != null ? dyn.countResourcesWithin(touch, rCore) : 0;
+
+        if (touch == null
+            || nn == null
+            || cc < 1
+            || inShootBand.test(touch)
+            || inShootBand.test(currentCollectTarget)) {
+          addDepletedMark(currentCollectTarget, 0.70, 1.85, DEPLETED_TTL_S, false);
+          addDepletedMark(currentCollectTarget, 0.95, 1.10, COLLECT_FAIL_COOLDOWN_S, false);
+          addDepletedRing(currentCollectTarget, 0.35, 1.05, 0.95, COLLECT_FAIL_COOLDOWN_S);
+          recordRegionAttempt(dyn, currentCollectTarget, now, false);
+          currentCollectTarget = null;
+          currentCollectTouch = null;
+          currentCollectScore = -1e18;
+          currentCollectUnits = 0.0;
+          currentCollectEta = 0.0;
+          collectArrivalTs = -1.0;
+          lastReturnedCollect = null;
+          lastReturnedCollectTs = 0.0;
+          Logger.recordOutput("Repulsor/Collect/ArrivalFailCore", 1.0);
+          return null;
+        }
+
+        CollectProbe pr = probeCollect(touch, 0.65);
         double needU = Math.max(0.02, minUnits * 0.80);
         int needC = Math.max(1, minCount);
         if (pr.units < needU || pr.count < needC) {
@@ -984,6 +1305,7 @@ public final class PredictiveFieldState {
           addDepletedRing(currentCollectTarget, 0.35, 1.05, 0.95, COLLECT_FAIL_COOLDOWN_S);
           recordRegionAttempt(dyn, currentCollectTarget, now, false);
           currentCollectTarget = null;
+          currentCollectTouch = null;
           currentCollectScore = -1e18;
           currentCollectUnits = 0.0;
           currentCollectEta = 0.0;
@@ -998,64 +1320,98 @@ public final class PredictiveFieldState {
       collectArrivalTs = -1.0;
     }
 
-    if (currentCollectTarget == null) return null;
+    if (currentCollectTarget == null || inShootBand.test(currentCollectTarget)) return null;
 
-    double finalOnUnits = dyn.valueInSquare(currentCollectTarget, onHalf);
-    int finalOnCount = dyn.countResourcesWithin(currentCollectTarget, onR);
-    double finalEv = dyn.evidenceMassWithin(currentCollectTarget, EVIDENCE_R);
+    if (currentCollectTouch == null) {
+      currentCollectTouch =
+          resolveCollectTouch(
+              dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
+    }
+    if (currentCollectTouch == null || inShootBand.test(currentCollectTouch)) {
+      addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+      addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+      recordRegionAttempt(dyn, currentCollectTarget, now, false);
+      currentCollectTarget = null;
+      collectArrivalTs = -1.0;
+      Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+      return null;
+    }
+
+    double finalOnUnits = dyn.valueInSquare(currentCollectTouch, onHalf);
+    int finalOnCount = dyn.countResourcesWithin(currentCollectTouch, onR);
+    double finalEv = dyn.evidenceMassWithin(currentCollectTouch, EVIDENCE_R);
 
     if (finalOnUnits < minHardUnits || finalOnCount < 1 || finalEv < minEv) {
-      Translation2d snapped = dyn.centroidResourcesWithin(currentCollectTarget, 1.35, 0.10);
-      if (snapped != null) {
-        Translation2d snapped2 = dyn.centroidResourcesWithin(snapped, 0.55, 0.08);
-        if (snapped2 != null) snapped = snapped2;
-
-        double sOnU = dyn.valueInSquare(snapped, onHalf);
-        int sOnC = dyn.countResourcesWithin(snapped, onR);
-        double sEv = dyn.evidenceMassWithin(snapped, EVIDENCE_R);
-
-        if (sOnU >= minHardUnits && sOnC >= 1 && sEv >= minEv) {
-          currentCollectTarget = snapped;
-          finalOnUnits = sOnU;
-          finalOnCount = sOnC;
-          finalEv = sEv;
-        } else {
+      Translation2d anchoredTouch =
+          enforceHardStopOnFuel(dyn, currentCollectTouch, rCore, rSnap, rCentroid, 0.10);
+      if (anchoredTouch != null && !inShootBand.test(anchoredTouch)) {
+        currentCollectTouch = anchoredTouch;
+        currentCollectHeading =
+            face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
+        currentCollectTarget =
+            COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(
+                currentCollectTarget, currentCollectHeading, currentCollectTouch);
+        if (inShootBand.test(currentCollectTarget)) {
           addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
           addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
           recordRegionAttempt(dyn, currentCollectTarget, now, false);
           currentCollectTarget = null;
+          currentCollectTouch = null;
           collectArrivalTs = -1.0;
-          Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+          Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostReanchor", 1.0);
           return null;
         }
+        finalOnUnits = dyn.valueInSquare(currentCollectTouch, onHalf);
+        finalOnCount = dyn.countResourcesWithin(currentCollectTouch, onR);
+        finalEv = dyn.evidenceMassWithin(currentCollectTouch, EVIDENCE_R);
       } else {
         addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
         addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
         recordRegionAttempt(dyn, currentCollectTarget, now, false);
         currentCollectTarget = null;
+        currentCollectTouch = null;
         collectArrivalTs = -1.0;
         Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
         return null;
       }
     }
 
+    Translation2d nnCore = dyn.nearestResourceTo(currentCollectTouch, rCore);
+    int cCoreFinal = dyn.countResourcesWithin(currentCollectTouch, rCore);
+    if (nnCore == null || cCoreFinal < 1) {
+      addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
+      addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+      recordRegionAttempt(dyn, currentCollectTarget, now, false);
+      currentCollectTarget = null;
+      currentCollectTouch = null;
+      collectArrivalTs = -1.0;
+      Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCoreFinal", 1.0);
+      return null;
+    }
+
     CollectEval finalE =
         evalCollectPoint(
             ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
-    finalE.banditBonus = regionBanditBonus(dyn, currentCollectTarget, now);
+    finalE.banditBonus = regionBanditBonus(dyn, currentCollectTouch, now);
     finalE.score += finalE.banditBonus;
 
     finalE.units = finalOnUnits;
     finalE.count = finalOnCount;
     finalE.evidence = finalEv;
+    finalE.coreCount = cCoreFinal;
+    finalE.coreDist = nnCore.getDistance(currentCollectTouch);
 
     if (finalE.units < minUnits * 0.65
         || finalE.count < Math.max(1, minCount - 1)
-        || finalE.evidence < minEv) {
+        || finalE.evidence < minEv
+        || finalE.coreCount < 1
+        || inShootBand.test(currentCollectTarget)
+        || inShootBand.test(currentCollectTouch)) {
       addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
       addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
       recordRegionAttempt(dyn, currentCollectTarget, now, false);
       currentCollectTarget = null;
+      currentCollectTouch = null;
       collectArrivalTs = -1.0;
       Logger.recordOutput("Repulsor/Collect/ChosenInvalid", 1.0);
       return null;
@@ -1065,7 +1421,7 @@ public final class PredictiveFieldState {
     lastReturnedCollectTs = now;
 
     Logger.recordOutput(
-        "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, new Rotation2d()));
+        "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, currentCollectHeading));
     Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalE.units);
     Logger.recordOutput("Repulsor/Collect/ChosenCount", finalE.count);
     Logger.recordOutput("Repulsor/Collect/ChosenScore", finalE.score);
@@ -1475,49 +1831,99 @@ public final class PredictiveFieldState {
     Translation2d[] clusters = buildResourceClustersMulti(dyn, COLLECT_CLUSTER_MAX);
 
     ArrayList<Translation2d> peaks = new ArrayList<>(64);
-    if (dyn != null && dyn.resources != null && !dyn.resources.isEmpty()) {
+    if (dyn != null && dyn.resources != null && !dyn.resources.isEmpty() && gridPoints != null) {
       Translation2d[] peakPts = peakFinder(gridPoints, dyn, PEAK_FINDER_TOPN);
       for (Translation2d p : peakPts) if (p != null) peaks.add(p);
     }
 
+    ArrayList<Translation2d> out = new ArrayList<>(256);
+    for (Translation2d c : clusters) if (c != null) out.add(c);
+    for (Translation2d p : peaks) if (p != null) out.add(p);
+
+    if (dyn != null
+        && dyn.resources != null
+        && !dyn.resources.isEmpty()
+        && dyn.specs != null
+        && !dyn.specs.isEmpty()) {
+      Translation2d[] bestRes = new Translation2d[Math.max(1, COLLECT_RESOURCE_SEEDS_MAX)];
+      double[] bestW = new double[bestRes.length];
+      for (int i = 0; i < bestW.length; i++) bestW[i] = -1e18;
+
+      for (DynamicObject o : dyn.resources) {
+        if (o == null || o.pos == null || o.type == null) continue;
+        ResourceSpec s = dyn.specs.get(o.type.toLowerCase());
+        if (s == null) continue;
+
+        double ageW =
+            RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+        double w = Math.max(0.0, s.unitValue) * ageW;
+
+        int worstI = 0;
+        double worst = bestW[0];
+        for (int k = 1; k < bestW.length; k++) {
+          if (bestW[k] < worst) {
+            worst = bestW[k];
+            worstI = k;
+          }
+        }
+        if (w > worst) {
+          bestW[worstI] = w;
+          bestRes[worstI] = o.pos;
+        }
+      }
+
+      for (Translation2d p : bestRes) if (p != null) out.add(p);
+    }
+
     if (gridPoints == null || gridPoints.length == 0) {
-      ArrayList<Translation2d> out = new ArrayList<>(clusters.length + peaks.size());
-      for (Translation2d c : clusters) if (c != null) out.add(c);
-      for (Translation2d p : peaks) if (p != null) out.add(p);
       return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
     }
 
     int nGrid = 0;
     for (Translation2d p : gridPoints) if (p != null) nGrid++;
     if (nGrid == 0) {
-      ArrayList<Translation2d> out = new ArrayList<>(clusters.length + peaks.size());
-      for (Translation2d c : clusters) if (c != null) out.add(c);
-      for (Translation2d p : peaks) if (p != null) out.add(p);
       return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
     }
 
-    int take = Math.min(nGrid, COLLECT_GRID_FALLBACK_MAX);
-    int stride = (int) Math.max(1.0, Math.floor((double) nGrid / Math.max(1, take)));
+    int K = Math.min(COLLECT_GRID_TOPK, Math.min(nGrid, COLLECT_GRID_FALLBACK_MAX));
+    Translation2d[] bestP = new Translation2d[K];
+    Translation2d[] bestN = new Translation2d[K];
+    double[] bestS = new double[K];
+    for (int i = 0; i < K; i++) bestS[i] = -1e18;
 
-    ArrayList<Translation2d> out = new ArrayList<>(clusters.length + take + peaks.size());
-    for (Translation2d c : clusters) if (c != null) out.add(c);
-    for (Translation2d p : peaks) if (p != null) out.add(p);
+    double gateR = COLLECT_CAND_GATE_R;
 
-    double minKeepUnits = Math.max(COLLECT_FINE_MIN_UNITS * 0.5, 0.04);
-    double countR = 0.55;
-
-    int added = 0;
-    int seen = 0;
-    for (int i = 0; i < gridPoints.length && added < take; i++) {
+    for (int i = 0; i < gridPoints.length; i++) {
       Translation2d p = gridPoints[i];
       if (p == null) continue;
-      if ((seen++ % stride) != 0) continue;
+      if (dyn == null) continue;
 
-      if (dyn.valueAt(p) < minKeepUnits) continue;
-      if (dyn.countResourcesWithin(p, countR) < 1) continue;
+      Translation2d near = dyn.nearestResourceTo(p, gateR);
+      if (near == null) continue;
 
-      out.add(p);
-      added++;
+      double s = dyn.evidenceMassWithin(p, 0.85);
+      if (s <= 1e-9) continue;
+
+      int worstI = 0;
+      double worst = bestS[0];
+      for (int k = 1; k < K; k++) {
+        if (bestS[k] < worst) {
+          worst = bestS[k];
+          worstI = k;
+        }
+      }
+      if (s > worst) {
+        bestS[worstI] = s;
+        bestP[worstI] = p;
+        bestN[worstI] = near;
+      }
+    }
+
+    for (int i = 0; i < K; i++) {
+      Translation2d p = bestP[i];
+      if (p != null) out.add(p);
+      Translation2d q = bestN[i];
+      if (q != null) out.add(q);
     }
 
     return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
@@ -1549,44 +1955,6 @@ public final class PredictiveFieldState {
     double total = dyn != null ? dyn.totalEvidence() : 0.0;
     double x = clamp01(total / 6.0);
     return lerp(0.18, 0.42, x);
-  }
-
-  private Translation2d[] peakFinder(Translation2d[] gridPoints, SpatialDyn dyn, int topN) {
-    if (gridPoints == null || gridPoints.length == 0 || dyn == null) return new Translation2d[0];
-
-    int n = Math.min(gridPoints.length, COLLECT_GRID_FALLBACK_MAX);
-    int stride = (int) Math.max(1.0, Math.floor((double) gridPoints.length / Math.max(1, n)));
-
-    Translation2d[] bestP = new Translation2d[Math.max(1, topN)];
-    double[] bestV = new double[bestP.length];
-    for (int i = 0; i < bestV.length; i++) bestV[i] = -1e18;
-
-    int seen = 0;
-    for (int i = 0; i < gridPoints.length; i++) {
-      Translation2d p = gridPoints[i];
-      if (p == null) continue;
-      if ((seen++ % stride) != 0) continue;
-
-      double v = dyn.valueAt(p);
-      if (v < COLLECT_FINE_MIN_UNITS * 0.5) continue;
-
-      int worstI = 0;
-      double worst = bestV[0];
-      for (int k = 1; k < bestV.length; k++) {
-        if (bestV[k] < worst) {
-          worst = bestV[k];
-          worstI = k;
-        }
-      }
-      if (v > worst) {
-        bestV[worstI] = v;
-        bestP[worstI] = p;
-      }
-    }
-
-    ArrayList<Translation2d> out = new ArrayList<>(bestP.length);
-    for (Translation2d p : bestP) if (p != null) out.add(p);
-    return out.toArray(new Translation2d[0]);
   }
 
   private static final class ClusterAcc {
@@ -2185,6 +2553,130 @@ public final class PredictiveFieldState {
     return new IntentAggCont(regs.centers, accum, n);
   }
 
+  private static double clamp(double x, double lo, double hi) {
+    return Math.max(lo, Math.min(hi, x));
+  }
+
+  private static double coreRadiusFor(double cellM) {
+    double r = 0.55 * Math.max(0.10, cellM);
+    return clamp(r, COLLECT_CORE_R_MIN, COLLECT_CORE_R_MAX);
+  }
+
+  private static double snapRadiusFor(double cellM) {
+    double r = 4.5 * coreRadiusFor(cellM);
+    return clamp(r, COLLECT_SNAP_R_MIN, COLLECT_SNAP_R_MAX);
+  }
+
+  private static double microCentroidRadiusFor(double cellM) {
+    double r = 2.6 * coreRadiusFor(cellM);
+    return clamp(r, COLLECT_MICRO_CENTROID_R_MIN, COLLECT_MICRO_CENTROID_R_MAX);
+  }
+
+  private static double jitterRadiusFor(double cellM) {
+    double r = 1.15 * coreRadiusFor(cellM);
+    return clamp(r, COLLECT_JITTER_R_MIN, COLLECT_JITTER_R_MAX);
+  }
+
+  private Translation2d snapToNearestThenMicroCentroid(
+      Translation2d p, SpatialDyn dyn, double rSnap, double rCentroid, double minMass) {
+    if (p == null || dyn == null) return null;
+
+    Translation2d nearest = dyn.nearestResourceTo(p, Math.max(0.01, rSnap));
+    if (nearest == null) return null;
+
+    Translation2d q = nearest;
+
+    Translation2d c1 =
+        dyn.centroidResourcesWithin(q, Math.max(0.05, rCentroid), Math.max(0.0, minMass));
+    if (c1 != null) q = c1;
+
+    Translation2d c2 =
+        dyn.centroidResourcesWithin(
+            q, Math.max(0.05, 0.60 * rCentroid), Math.max(0.0, minMass * 0.65));
+    if (c2 != null) q = c2;
+
+    return q;
+  }
+
+  private Translation2d enforceHardStopOnFuel(
+      SpatialDyn dyn,
+      Translation2d p,
+      double rCore,
+      double rSnap,
+      double rCentroid,
+      double minMass) {
+    if (p == null || dyn == null) return null;
+
+    Translation2d nearestCore = dyn.nearestResourceTo(p, Math.max(0.01, rCore));
+    if (nearestCore != null) {
+      Translation2d q = nearestCore;
+      Translation2d c =
+          dyn.centroidResourcesWithin(
+              q, Math.max(0.05, Math.min(rCentroid, 0.22)), Math.max(0.0, minMass));
+      if (c != null) q = c;
+      if (dyn.nearestResourceTo(q, Math.max(0.01, rCore)) != null) return q;
+      return nearestCore;
+    }
+
+    Translation2d snapped = snapToNearestThenMicroCentroid(p, dyn, rSnap, rCentroid, minMass);
+    if (snapped == null) return null;
+
+    Translation2d nearest2 = dyn.nearestResourceTo(snapped, Math.max(0.01, rCore));
+    if (nearest2 == null) return null;
+
+    Translation2d q = nearest2;
+    Translation2d c =
+        dyn.centroidResourcesWithin(
+            q, Math.max(0.05, Math.min(rCentroid, 0.22)), Math.max(0.0, minMass));
+    if (c != null) q = c;
+
+    return dyn.nearestResourceTo(q, Math.max(0.01, rCore)) != null ? q : nearest2;
+  }
+
+  private double pickupRobustPenalty(
+      SpatialDyn dyn, Translation2d p, double rCore, double jitterR) {
+    if (dyn == null || p == null) return COLLECT_NOFUEL_PENALTY;
+
+    int c0 = dyn.countResourcesWithin(p, Math.max(0.01, rCore));
+    Translation2d nn0 = dyn.nearestResourceTo(p, Math.max(0.01, rCore));
+    double d0 = nn0 != null ? nn0.getDistance(p) : Double.POSITIVE_INFINITY;
+
+    double jr = Math.max(0.0, jitterR);
+    if (jr <= 1e-6) return (c0 >= 1 || d0 <= rCore) ? 0.0 : COLLECT_NOFUEL_PENALTY;
+
+    Translation2d[] samp =
+        new Translation2d[] {
+          p,
+          new Translation2d(p.getX() + jr, p.getY()),
+          new Translation2d(p.getX() - jr, p.getY()),
+          new Translation2d(p.getX(), p.getY() + jr),
+          new Translation2d(p.getX(), p.getY() - jr),
+          new Translation2d(p.getX() + 0.7071 * jr, p.getY() + 0.7071 * jr),
+          new Translation2d(p.getX() + 0.7071 * jr, p.getY() - 0.7071 * jr),
+          new Translation2d(p.getX() - 0.7071 * jr, p.getY() + 0.7071 * jr),
+          new Translation2d(p.getX() - 0.7071 * jr, p.getY() - 0.7071 * jr)
+        };
+
+    int minC = Integer.MAX_VALUE;
+    int maxC = 0;
+
+    for (Translation2d s : samp) {
+      int c = dyn.countResourcesWithin(s, Math.max(0.01, rCore));
+      minC = Math.min(minC, c);
+      maxC = Math.max(maxC, c);
+    }
+
+    boolean centerOk = (c0 >= 1) || (d0 <= rCore);
+
+    if (centerOk) {
+      if (minC >= 1) return 0.0;
+      return COLLECT_EDGE_PENALTY;
+    }
+
+    if (maxC >= 1) return COLLECT_HOLE_PENALTY;
+    return COLLECT_NOFUEL_PENALTY;
+  }
+
   private static final class CollectEval {
     Translation2d p;
     double eta;
@@ -2200,6 +2692,9 @@ public final class PredictiveFieldState {
     double activity;
     double depleted;
     double overlap;
+    int coreCount;
+    double coreDist;
+    double robustPenalty;
     double score;
     double regionUnits;
     double banditBonus;
@@ -2221,6 +2716,9 @@ public final class PredictiveFieldState {
       e.score = -1e18;
       return e;
     }
+
+    double rCore = coreRadiusFor(cellM);
+    double rJitter = jitterRadiusFor(cellM);
 
     e.eta = estimateTravelTime(ourPos, p, cap);
 
@@ -2248,6 +2746,12 @@ public final class PredictiveFieldState {
 
     e.overlap = reservationOverlapPenalty(allyMap, p, e.eta);
 
+    Translation2d nn = dyn.nearestResourceTo(p, rCore);
+    e.coreDist = nn != null ? nn.getDistance(p) : Double.POSITIVE_INFINITY;
+    e.coreCount = dyn.countResourcesWithin(p, rCore);
+
+    e.robustPenalty = pickupRobustPenalty(dyn, p, rCore, rJitter);
+
     double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, e.units));
     e.value = sat * Math.max(1, goal) * COLLECT_VALUE_GAIN;
 
@@ -2266,7 +2770,8 @@ public final class PredictiveFieldState {
             - e.localAvoid
             - e.activity
             - e.depleted * DEPLETED_PEN_W
-            - e.overlap;
+            - e.overlap
+            - e.robustPenalty;
 
     return e;
   }

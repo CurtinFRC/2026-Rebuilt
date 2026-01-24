@@ -1591,7 +1591,7 @@ public class FieldTracker {
 
       Logger.recordOutput("selectedResourceX", new Pose2d(selectedResource, new Rotation2d()));
 
-      selectedResource = canonicalizeCollectPoint(selectedResource, usePts);
+      // selectedResource = canonicalizeCollectPoint(selectedResource, usePts);
 
       prevSticky = collectStickyPoint;
       boolean switched = stickySwitched(prevSticky, selectedResource);
