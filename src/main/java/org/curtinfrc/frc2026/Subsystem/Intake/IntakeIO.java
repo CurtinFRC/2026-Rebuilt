@@ -10,7 +10,7 @@ public interface IntakeIO {
     double angularVelocity;
   }
 
-  public default void setvoltage(double Volts) {}
+  public default void setVoltage(double Volts) {}
 
   public default void updateInputs(IntakeIOInputs inputs) {}
 

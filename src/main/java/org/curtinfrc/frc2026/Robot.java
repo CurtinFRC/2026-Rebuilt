@@ -7,11 +7,13 @@ import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
+import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.JoystickButton;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 import org.curtinfrc.frc2026.Subsystem.Intake.Intake;
 import org.curtinfrc.frc2026.Subsystem.Intake.IntakeIOSim;
+import org.curtinfrc.frc2026.Subsystem.Intake.IntakeIOdev;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -53,6 +56,13 @@ public class Robot extends LoggedRobot {
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
 
+  private final Joystick keyboard = new Joystick(0);
+
+  private final JoystickButton buttonOne = new JoystickButton(keyboard, 1);
+  private final JoystickButton buttonTwo = new JoystickButton(keyboard, 2);
+  private final JoystickButton buttonThree = new JoystickButton(keyboard, 3);
+  private final JoystickButton buttonFour = new JoystickButton(keyboard, 4);
+
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
     Logger.recordMetadata("BuildDate", BuildConstants.BUILD_DATE);
@@ -73,7 +83,9 @@ public class Robot extends LoggedRobot {
       }
       case SIM -> {
         Logger.addDataReceiver(new NT4Publisher());
+        intake = new Intake(new IntakeIOSim());
       }
+
       case REPLAY -> {
         setUseTiming(false);
         String logPath = LogFileUtil.findReplayLog();
@@ -81,6 +93,10 @@ public class Robot extends LoggedRobot {
         Logger.addDataReceiver(new WPILOGWriter(LogFileUtil.addPathSuffix(logPath, "_sim")));
       }
     }
+
+    buttonOne.onTrue(intake.RawIdle());
+    buttonTwo.onTrue(intake.RawControlConsume());
+    buttonThree.onTrue(intake.Stop());
 
     Logger.start();
 
@@ -115,6 +131,8 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+
+          intake = new Intake(new IntakeIOdev());
         }
         case SIM -> {
           drive =
@@ -147,12 +165,16 @@ public class Robot extends LoggedRobot {
     DriverStation.silenceJoystickConnectionWarning(true);
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
-
+    // intake.setDefaultCommand(intake.RawIdle());
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+    buttonFour.whileTrue(intake.RawControlConsume());
+    buttonOne.whileTrue(intake.ControlConsume(60000000));
+    buttonTwo.whileTrue(intake.Idle());
+    buttonThree.whileTrue(intake.Stop());
   }
 
   /** This function is called periodically during all modes. */

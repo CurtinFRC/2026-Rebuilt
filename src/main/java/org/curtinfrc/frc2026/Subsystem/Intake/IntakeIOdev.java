@@ -64,7 +64,7 @@ public class IntakeIOdev implements IntakeIO {
   }
 
   @Override
-  public void setvoltage(double Volts) {
+  public void setVoltage(double Volts) {
     voltageRequest.withOutput(Volts);
   }
 }
