@@ -4,9 +4,6 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.littletonrobotics.junction.Logger;
 
-
-
-
 public class MagRoller extends SubsystemBase {
   private final MagRollerIO io;
 
@@ -30,4 +27,3 @@ public class MagRoller extends SubsystemBase {
     return run(() -> io.setVoltage(volts));
   }
 }
-

@@ -24,6 +24,7 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.subsystems.Mag;
 import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -48,6 +49,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Mag mag;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -114,6 +116,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          mag = new Mag(new MagRollerIODev(99), new MagRollerIODev(99), new MagRollerIODev(99));
         }
         case SIM -> {
           drive =
@@ -146,11 +149,16 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
+    mag.setDefaultCommand(mag.stop());
+
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+    controller.x().whileTrue(mag.store(5));
+    controller.b().whileTrue(mag.moveAll(5));
+    controller.a().whileTrue(mag.spinIndexer(5));
   }
 
   /** This function is called periodically during all modes. */
