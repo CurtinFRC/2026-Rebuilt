@@ -33,9 +33,9 @@ public class HoodIODev implements HoodIO {
   public static final double FORWARD_LIMIT_ROTATIONS = 0.25;
   public static final double REVERSE_LIMIT_ROTATIONS = -0.25;
 
-  public static final double K_P = 2.4;
+  public static final double K_P = 20.0;
   public static final double K_I = 0.0;
-  public static final double K_D = 0.5;
+  public static final double K_D = 2.7;
 
   protected final TalonFX motor = new TalonFX(MOTOR_ID);
   private final TalonFXConfiguration motorConfig =
