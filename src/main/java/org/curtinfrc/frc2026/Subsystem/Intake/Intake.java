@@ -32,11 +32,11 @@ public class Intake extends SubsystemBase {
   }
 
   public Command RawControlConsume() {
-    return run(() -> io.setVoltage(consumeVolts)).withName("consumeVolts");
+    return run(() -> io.setVoltage(0.5)).withName("consumeVolts");
   }
 
   public Command RawIdle() {
-    return run(() -> io.setVoltage(idleVolts)).withName("idleVolts");
+    return run(() -> io.setVoltage(0)).withName("idleVolts");
   }
 
   public Command ControlConsume() {

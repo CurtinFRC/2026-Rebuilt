@@ -18,7 +18,7 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IntakeIOdev implements IntakeIO {
-  private final TalonFX motor = new TalonFX(1990);
+  private final TalonFX motor = new TalonFX(46);
 
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
 
@@ -65,6 +65,8 @@ public class IntakeIOdev implements IntakeIO {
 
   @Override
   public void setVoltage(double Volts) {
-    voltageRequest.withOutput(Volts);
+    // voltageRequest.withOutput(Volts);
+    motor.set(Volts);
+    System.out.println("running");
   }
 }
