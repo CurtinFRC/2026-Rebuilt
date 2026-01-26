@@ -52,16 +52,18 @@ public class HoodedShooter extends SubsystemBase {
   }
 
   public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
-    return run(() -> {
-      hoodIO.setPosition(position);
-      shooterIO.setVelocity(velocity);
-    });
+    return run(
+        () -> {
+          hoodIO.setPosition(position);
+          shooterIO.setVelocity(velocity);
+        });
   }
 
   public Command resetHoodedShooter() {
-    return run(() -> {
-      hoodIO.setVoltage(0);
-      shooterIO.setVoltage(0);
-    });
+    return run(
+        () -> {
+          hoodIO.setVoltage(0);
+          shooterIO.setVoltage(0);
+        });
   }
 }

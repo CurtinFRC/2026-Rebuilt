@@ -48,8 +48,8 @@ public class HoodIOSim extends HoodIODev {
     motorSim.setRawRotorPosition(motorRotations);
     motorSim.setRotorVelocity(motorRPS);
 
-    encoderSim.setRawPosition(motorRotations * GEAR_RATIO);
-    encoderSim.setVelocity(motorRPS * GEAR_RATIO);
+    encoderSim.setRawPosition(motorRotations / GEAR_RATIO);
+    encoderSim.setVelocity(motorRPS / GEAR_RATIO);
   }
 
   @Override

@@ -197,6 +197,14 @@ public class Robot extends LoggedRobot {
     .b()
     .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
+    controller
+        .rightBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.25, 15))
+        .onFalse(hoodedShooter.setShooterVoltage(0));
+    controller
+        .leftBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.25, 15))
+        .onFalse(hoodedShooter.setShooterVoltage(0));
   }
 
   /** This function is called periodically during all modes. */

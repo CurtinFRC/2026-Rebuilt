@@ -2,8 +2,6 @@ package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
-import org.curtinfrc.frc2026.util.PhoenixUtil;
-
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CANcoderConfiguration;
@@ -12,6 +10,7 @@ import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MagnetSensorConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.SoftwareLimitSwitchConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.PositionVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
@@ -25,11 +24,18 @@ import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
+import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 16;
   public static final int ENCODER_ID = 17;
   public static final double GEAR_RATIO = 0.375;
+  public static final double FORWARD_LIMIT_ROTATIONS = 0.25;
+  public static final double REVERSE_LIMIT_ROTATIONS = -0.25;
+
+  public static final double K_P = 2.4;
+  public static final double K_I = 0.0;
+  public static final double K_D = 0.5;
 
   protected final TalonFX motor = new TalonFX(MOTOR_ID);
   private final TalonFXConfiguration motorConfig =
@@ -37,22 +43,29 @@ public class HoodIODev implements HoodIO {
           .withMotorOutput(
               new MotorOutputConfigs()
                   .withNeutralMode(NeutralModeValue.Brake)
-                  .withInverted(InvertedValue.Clockwise_Positive))
+                  .withInverted(InvertedValue.CounterClockwise_Positive))
           .withFeedback(
               new FeedbackConfigs()
                   .withFeedbackRemoteSensorID(ENCODER_ID) // Ties encoder with motor
                   .withFeedbackSensorSource(
-                      FeedbackSensorSourceValue.FusedCANcoder)) // Ties encoder with motor
+                      FeedbackSensorSourceValue.FusedCANcoder) // Ties encoder with motor
+                  .withSensorToMechanismRatio(GEAR_RATIO))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
-          .withSlot0(new Slot0Configs().withKP(2.4).withKI(0.0).withKD(0.1));
+          .withSoftwareLimitSwitch(
+              new SoftwareLimitSwitchConfigs()
+                  .withForwardSoftLimitThreshold(FORWARD_LIMIT_ROTATIONS)
+                  .withForwardSoftLimitEnable(true)
+                  .withReverseSoftLimitThreshold(REVERSE_LIMIT_ROTATIONS)
+                  .withReverseSoftLimitEnable(true))
+          .withSlot0(new Slot0Configs().withKP(K_P).withKI(K_I).withKD(K_D));
 
   protected final CANcoder encoder = new CANcoder(ENCODER_ID);
   private final CANcoderConfiguration encoderConfig =
       new CANcoderConfiguration()
           .withMagnetSensor(
               new MagnetSensorConfigs()
-                  .withAbsoluteSensorDiscontinuityPoint(1)
+                  .withAbsoluteSensorDiscontinuityPoint(0.5)
                   .withSensorDirection(SensorDirectionValue.CounterClockwise_Positive)
                   .withMagnetOffset(0));
 
@@ -62,8 +75,14 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Angle> absolutePosition = encoder.getAbsolutePosition();
 
-  private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  private final PositionVoltage positionRequest = new PositionVoltage(0).withEnableFOC(true);
+  private final VoltageOut voltageRequest =
+      new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
+  // .withLimitForwardMotion(true)
+  // .withLimitReverseMotion(true);
+  private final PositionVoltage positionRequest =
+      new PositionVoltage(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
+  // .withLimitForwardMotion(true)
+  // .withLimitReverseMotion(true);
 
   public HoodIODev() {
     tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));

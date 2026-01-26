@@ -7,7 +7,7 @@ public interface ShooterIO {
   public static class ShooterIOInputs {
     public double appliedVolts;
     public double currentAmps;
-    public double angularVelocityMetresPerSecond;
+    public double velocityMetresPerSecond;
     public double accelerationMetresPerSecondPerSecond;
   }
 
