@@ -1,13 +1,11 @@
 package org.curtinfrc.frc2026.subsystems;
 
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.curtinfrc.frc2026.subsystems.MagRoller.*;
 
 public class Mag extends SubsystemBase {
-  // private MagRoller magRoller1;
-  // private MagRoller magRoller2;
-  // private MagRoller Indexer;
 
   private MagRoller intakeMagRoller;
   private MagRoller middleMagRoller;
@@ -17,9 +15,10 @@ public class Mag extends SubsystemBase {
     intakeMagRoller = new MagRoller(roller1);
     middleMagRoller = new MagRoller(roller2);
     indexerMagRoller = new MagRoller(roller3);
-    // this.magRoller1 = roller1;
-    // this.magRoller2 = roller2;
-    // this.Indexer = roller3;
+  }
+
+  public void initDefaultCommand() {
+    setDefaultCommand(stop());
   }
 
   public Command spinIndexer(double volts) {
@@ -27,28 +26,21 @@ public class Mag extends SubsystemBase {
   }
 
   public Command moveAll(double volts) {
-    return run(
-        () -> {
-          this.intakeMagRoller.runMotor(volts);
-          this.middleMagRoller.runMotor(volts);
-          this.indexerMagRoller.runMotor(volts);
-        });
+    return intakeMagRoller.runMotor(volts);
   }
 
   public Command store(double volts) {
-    return run(
-        () -> {
-          this.intakeMagRoller.runMotor(volts);
-          this.middleMagRoller.runMotor(volts);
-        });
+    return middleMagRoller.runMotor(volts);
   }
 
   public Command stop() {
-    return run(
-        () -> {
-          this.intakeMagRoller.stop();
-          this.middleMagRoller.stop();
-          this.indexerMagRoller.stop();
-        });
+    return Commands.parallel(
+        intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
   }
+  // public Command stop() {
+  //   return middleMagRoller.stop();
+  // }
+  // public Command stop() {
+  //   return indexerMagRoller.stop();
+  // }
 }

@@ -25,7 +25,6 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Mag;
-import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
@@ -84,7 +83,6 @@ public class Robot extends LoggedRobot {
     }
 
     Logger.start();
-    MagRollerIO roller1 = new MagRollerIODev(11);
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
@@ -116,7 +114,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          mag = new Mag(new MagRollerIODev(99), new MagRollerIODev(99), new MagRollerIODev(99));
+          mag = new Mag(new MagRollerIODev(22), new MagRollerIODev(20), new MagRollerIODev(15));
         }
         case SIM -> {
           drive =
@@ -149,16 +147,17 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
-    mag.setDefaultCommand(mag.stop());
+    // mag.setDefaultCommand(mag.stop());
 
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
-    controller.x().whileTrue(mag.store(5));
-    controller.b().whileTrue(mag.moveAll(5));
-    controller.a().whileTrue(mag.spinIndexer(5));
+
+    controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
+    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop()); // only one working
+    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
