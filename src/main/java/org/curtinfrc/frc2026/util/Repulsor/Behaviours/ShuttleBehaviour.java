@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Behaviours/ShuttleBehaviour.java
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import edu.wpi.first.math.geometry.Pose2d;

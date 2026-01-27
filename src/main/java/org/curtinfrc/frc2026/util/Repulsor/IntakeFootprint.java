@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/IntakeFootprint.java
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import edu.wpi.first.math.geometry.Rotation2d;

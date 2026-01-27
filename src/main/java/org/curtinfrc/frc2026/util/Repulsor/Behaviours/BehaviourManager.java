@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Behaviours/BehaviourManager.java
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import edu.wpi.first.wpilibj2.command.Command;

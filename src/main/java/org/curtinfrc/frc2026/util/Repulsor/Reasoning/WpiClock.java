@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Reasoning/WpiClock.java
 package org.curtinfrc.frc2026.util.Repulsor.Reasoning;
 
 import edu.wpi.first.wpilibj.Timer;

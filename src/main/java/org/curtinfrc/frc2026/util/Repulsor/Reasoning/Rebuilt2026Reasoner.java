@@ -1,4 +1,3 @@
-// File: src/main/java/org/curtinfrc/frc2026/util/Repulsor/Reasoning/Rebuilt2026Reasoner.java
 package org.curtinfrc.frc2026.util.Repulsor.Reasoning;
 
 import edu.wpi.first.networktables.NetworkTableInstance;
