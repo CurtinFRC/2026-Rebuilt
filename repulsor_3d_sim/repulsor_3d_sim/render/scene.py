@@ -23,7 +23,7 @@ from repulsor_3d_sim.model import WorldSnapshot
 from repulsor_3d_sim.render.camera import OrbitCamera
 from repulsor_3d_sim.render.glutil import init_gl, set_matrices, set_viewport
 from repulsor_3d_sim.render.primitives import draw_axes, draw_box, draw_grid, draw_mesh, make_sphere_mesh
-
+import trimesh
 
 class SceneRenderer:
     def __init__(self, cfg: ViewerConfig):

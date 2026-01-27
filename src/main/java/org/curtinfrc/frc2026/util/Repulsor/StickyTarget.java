@@ -29,8 +29,21 @@ public final class StickyTarget<T> {
   private static final double EARLY_SWITCH_MULT = 2.25;
   private static final double SWITCH_BACK_EPS_MIN = 0.65;
 
-  private static final double PINGPONG_WINDOW_SEC = 0.80;
-  private static final double PINGPONG_BLOCK_SEC = 1.10;
+  private double pingPeriodEmaSec = 0.0;
+
+  private static final double PINGPONG_EMA_ALPHA = 0.35;
+
+  private static final double PINGPONG_WINDOW_MIN_SEC = 0.80;
+  private static final double PINGPONG_WINDOW_MAX_SEC = 3.10;
+
+  private static final double PINGPONG_BLOCK_MIN_SEC = 1.10;
+  private static final double PINGPONG_BLOCK_MAX_SEC = 3.80;
+
+  private static final double PINGPONG_WINDOW_BASE_SEC = 0.85;
+  private static final double PINGPONG_WINDOW_PER_M_SEC = 0.75;
+
+  private static final double PINGPONG_BLOCK_BASE_SEC = 1.10;
+  private static final double PINGPONG_BLOCK_PER_M_SEC = 0.70;
 
   private static final double MIN_SWITCH_STABLE_SEC = 0.12;
   private static final double FLICKER_DELTA_SEC = 0.12;
@@ -168,6 +181,7 @@ public final class StickyTarget<T> {
     bestValidKey = null;
     canon.clear();
     canonLastUseSec.clear();
+    pingPeriodEmaSec = 0.0;
   }
 
   public void force(T value) {
@@ -266,8 +280,24 @@ public final class StickyTarget<T> {
   }
 
   private void notePingPong(
-      double now, T from, T to, ToDoubleBiFunction<T, T> distanceFn, double eps) {
+      double now,
+      T from,
+      T to,
+      ToDoubleBiFunction<T, T> distanceFn,
+      double eps,
+      double switchDistM) {
+
     if (from == null || to == null) return;
+
+    double d = Double.isFinite(switchDistM) ? Math.max(0.0, switchDistM) : 0.0;
+
+    double windowDist = PINGPONG_WINDOW_BASE_SEC + PINGPONG_WINDOW_PER_M_SEC * d;
+    if (windowDist > PINGPONG_WINDOW_MAX_SEC) windowDist = PINGPONG_WINDOW_MAX_SEC;
+    if (windowDist < PINGPONG_WINDOW_BASE_SEC) windowDist = PINGPONG_WINDOW_BASE_SEC;
+
+    double blockDist = PINGPONG_BLOCK_BASE_SEC + PINGPONG_BLOCK_PER_M_SEC * d;
+    if (blockDist > PINGPONG_BLOCK_MAX_SEC) blockDist = PINGPONG_BLOCK_MAX_SEC;
+    if (blockDist < PINGPONG_BLOCK_BASE_SEC) blockDist = PINGPONG_BLOCK_BASE_SEC;
 
     if (pingA == null || pingB == null) {
       pingA = from;
@@ -281,11 +311,29 @@ public final class StickyTarget<T> {
 
     if (sameAB || sameBA) {
       double age = now - pingSinceSec;
-      if (age <= PINGPONG_WINDOW_SEC) {
-        pingBlockUntilSec = Math.max(pingBlockUntilSec, now + PINGPONG_BLOCK_SEC);
-      } else {
-        pingSinceSec = now;
+
+      if (age > 0.0 && Double.isFinite(age)) {
+        if (pingPeriodEmaSec <= 0.0) pingPeriodEmaSec = age;
+        else pingPeriodEmaSec += (age - pingPeriodEmaSec) * PINGPONG_EMA_ALPHA;
       }
+
+      double windowLearned = pingPeriodEmaSec > 0.0 ? (pingPeriodEmaSec * 1.12 + 0.18) : 0.0;
+      double blockLearned = pingPeriodEmaSec > 0.0 ? (pingPeriodEmaSec * 0.85 + 0.65) : 0.0;
+
+      if (windowLearned < PINGPONG_WINDOW_MIN_SEC) windowLearned = PINGPONG_WINDOW_MIN_SEC;
+      if (windowLearned > PINGPONG_WINDOW_MAX_SEC) windowLearned = PINGPONG_WINDOW_MAX_SEC;
+
+      if (blockLearned < PINGPONG_BLOCK_MIN_SEC) blockLearned = PINGPONG_BLOCK_MIN_SEC;
+      if (blockLearned > PINGPONG_BLOCK_MAX_SEC) blockLearned = PINGPONG_BLOCK_MAX_SEC;
+
+      double window = Math.max(windowDist, windowLearned);
+      double block = Math.max(blockDist, blockLearned);
+
+      if (age <= window) {
+        pingBlockUntilSec = Math.max(pingBlockUntilSec, now + block);
+      }
+
+      pingSinceSec = now;
       return;
     }
 
@@ -316,7 +364,7 @@ public final class StickyTarget<T> {
 
     double d = dist(prev, sticky, distanceFn);
     armHardLock(now, d);
-    notePingPong(now, prev, sticky, distanceFn, eps);
+    notePingPong(now, prev, sticky, distanceFn, eps, d);
 
     if (sticky != null) lastSeenSec.put(sticky, now);
 

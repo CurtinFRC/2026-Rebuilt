@@ -88,8 +88,7 @@ public class AutoPathBehaviour extends Behaviour {
 
   @Override
   public boolean shouldRun(EnumSet<BehaviourFlag> flags, BehaviourContext ctx) {
-    return !flags.contains(BehaviourFlag.DEFENSE_MODE)
-        && !flags.contains(BehaviourFlag.SHOOTING_TEST);
+    return !flags.contains(BehaviourFlag.DEFENSE_MODE);
   }
 
   private static double shortestAngleRad(double from, double to) {
@@ -123,12 +122,17 @@ public class AutoPathBehaviour extends Behaviour {
   }
 
   private Command buildShootReadyCommand(BehaviourContext ctx) {
-    return Commands.waitSeconds(2)
+    return Commands.runOnce(
+            () -> {
+              FieldTracker.getInstance().resetAll();
+            })
         .andThen(
-            Commands.runOnce(
-                () -> {
-                  pieceCount.set(0L);
-                }));
+            Commands.waitSeconds(2)
+                .andThen(
+                    Commands.runOnce(
+                        () -> {
+                          pieceCount.set(0L);
+                        })));
   }
 
   private boolean isReadyToShoot(
@@ -140,6 +144,16 @@ public class AutoPathBehaviour extends Behaviour {
     if (!near) return false;
     return true;
   }
+
+  private Command buildResetCommand() {
+    return Commands.runOnce(
+        () -> {
+          System.out.println("AutoPathBehaviour: Resetting FieldTracker");
+          FieldTracker.getInstance().resetAll();
+        });
+  }
+
+  private Command resetCommand = null;
 
   @Override
   public Command build(BehaviourContext ctx) {
@@ -250,14 +264,27 @@ public class AutoPathBehaviour extends Behaviour {
 
               RepulsorSetpoint desired;
               if (cat == CategorySpec.kScore) {
+                if (resetCommand != null && resetCommand.isScheduled()) {
+                  resetCommand.cancel();
+                }
+
                 RepulsorSetpoint fromNT = nextScore != null ? nextScore.get() : null;
                 if (fromNT != null) {
                   desired = fromNT;
                 } else {
                   RepulsorSetpoint pred = pickPredicted(ctx);
-                  desired = (pred != null) ? pred : scoreFallback;
+                  // desired = (pred != null) ? pred : scoreFallback;
+                  FieldTracker.getInstance().resetAll();
+                  desired = scoreFallback;
                 }
+
               } else {
+                if (resetCommand == null || (resetCommand != null && !resetCommand.isScheduled())) {
+                  resetCommand = Commands.waitSeconds(5).andThen(buildResetCommand());
+
+                  CommandScheduler.getInstance().schedule(resetCommand);
+                }
+
                 RepulsorSetpoint hp =
                     chooseCollect(
                         ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
