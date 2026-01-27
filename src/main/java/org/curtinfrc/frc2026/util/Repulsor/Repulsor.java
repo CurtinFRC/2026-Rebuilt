@@ -23,6 +23,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourManager;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PlannerFallback;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.FieldVision;
@@ -252,6 +254,19 @@ public class Repulsor {
 
     refreshNextScoreFromFieldTracker();
 
+    m_visionPlanner.tick();
+
+    boolean enabled = true;
+    RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
+    if (dsBase instanceof NtRepulsorDriverStation ds) {
+      enabled = ds.getConfigBool("force_controller_override");
+    }
+
+    if (!enabled) {
+      m_behaviourManager.stop();
+      return;
+    }
+    
     m_behaviourManager.update(
         new BehaviourContext(
             this,
@@ -263,8 +278,6 @@ public class Repulsor {
             coral_offset,
             algae_offset,
             m_drive::getPose));
-
-    m_visionPlanner.tick();
   }
 
   public DriveRepulsor getDrive() {
