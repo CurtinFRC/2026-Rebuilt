@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision.Kind;
@@ -30,7 +32,13 @@ public class VisionPlanner {
       double distance = loc.getDistance(position);
       if (distance > 3.0) return new Force();
 
-      double scaledRadius = Math.max(sizeX, sizeY) * 0.5;
+      var dsBase = RepulsorDriverStation.getInstance();
+      double clearanceScale = 1.0;
+      if (dsBase instanceof NtRepulsorDriverStation ds) {
+        clearanceScale = ds.getConfigDouble("clearance_scale");
+      }
+
+      double scaledRadius = Math.max(sizeX, sizeY) * 0.5 * clearanceScale;
       double radial = distance - scaledRadius;
 
       double mag = distToForceMag(radial);
@@ -40,6 +48,7 @@ public class VisionPlanner {
       }
 
       double angleRad = Math.atan2(delta.getY(), delta.getX());
+
       return new Force(mag, new edu.wpi.first.math.geometry.Rotation2d(angleRad));
     }
 

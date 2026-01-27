@@ -17,7 +17,8 @@ public final class DefenseBehaviour extends Behaviour {
   private final Supplier<RepulsorSetpoint> defenseGoal;
   private final Supplier<Double> speedCap;
 
-  public DefenseBehaviour(int priority, Supplier<RepulsorSetpoint> defenseGoal, Supplier<Double> speedCap) {
+  public DefenseBehaviour(
+      int priority, Supplier<RepulsorSetpoint> defenseGoal, Supplier<Double> speedCap) {
     this.prio = priority;
     this.defenseGoal = defenseGoal;
     this.speedCap = speedCap;
@@ -77,7 +78,8 @@ public final class DefenseBehaviour extends Behaviour {
                       0.0);
 
               ChassisSpeeds speeds =
-                  sample.asChassisSpeeds(ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation());
+                  sample.asChassisSpeeds(
+                      ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation());
 
               double cap = speedCap != null ? Math.max(0.25, speedCap.get()) : 2.8;
               speeds.vxMetersPerSecond = Math.max(-cap, Math.min(cap, speeds.vxMetersPerSecond));

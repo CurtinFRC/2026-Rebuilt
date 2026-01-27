@@ -176,7 +176,8 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
 
     public void configBool(String key, boolean initialValue) {
       String k = normalizeKey(key);
-      putUnique(configBools, k, own(NetworkTablesValue.ofBoolean(inst, configPath(k), initialValue)));
+      putUnique(
+          configBools, k, own(NetworkTablesValue.ofBoolean(inst, configPath(k), initialValue)));
     }
 
     public void configDouble(String key, double initialValue) {
@@ -187,7 +188,8 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
 
     public void configInt(String key, long initialValue) {
       String k = normalizeKey(key);
-      putUnique(configInts, k, own(NetworkTablesValue.ofInteger(inst, configPath(k), initialValue)));
+      putUnique(
+          configInts, k, own(NetworkTablesValue.ofInteger(inst, configPath(k), initialValue)));
     }
 
     public void configString(String key, String initialValue) {
@@ -206,7 +208,8 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
 
     public void poseOverrideCommand(String name, Pose2d initialPose, boolean initialEnabled) {
       String k = normalizeKey(name);
-      putUnique(poseOverrideCommands, k, new PoseOverrideCommand(ds, k, initialPose, initialEnabled));
+      putUnique(
+          poseOverrideCommands, k, new PoseOverrideCommand(ds, k, initialPose, initialEnabled));
     }
 
     public void poseResetCommand(String name, Pose2d initialPose) {
@@ -216,7 +219,8 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
 
     public void goalSetpointCommand(String name, Pose2d initialPose, boolean initialEnabled) {
       String k = normalizeKey(name);
-      putUnique(goalSetpointCommands, k, new GoalSetpointCommand(ds, k, initialPose, initialEnabled));
+      putUnique(
+          goalSetpointCommands, k, new GoalSetpointCommand(ds, k, initialPose, initialEnabled));
     }
   }
 
@@ -265,10 +269,12 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
         NtRepulsorDriverStation ds, String name, Pose2d initialPose, boolean initialEnabled) {
       String base = ds.commandPath(name + "/pose_override");
       this.apply = ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/apply", false));
-      this.enabled = ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/enabled", initialEnabled));
+      this.enabled =
+          ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/enabled", initialEnabled));
       this.pose =
           ds.own(
-              NetworkTablesValue.ofDoubleArray(ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
+              NetworkTablesValue.ofDoubleArray(
+                  ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
     }
 
     private void tick() {
@@ -306,7 +312,8 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
       this.apply = ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/apply", false));
       this.pose =
           ds.own(
-              NetworkTablesValue.ofDoubleArray(ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
+              NetworkTablesValue.ofDoubleArray(
+                  ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
     }
 
     private void tick() {
@@ -344,10 +351,12 @@ public abstract class NtRepulsorDriverStation extends RepulsorDriverStation {
         NtRepulsorDriverStation ds, String name, Pose2d initialPose, boolean initialEnabled) {
       String base = ds.commandPath(name + "/goal_setpoint");
       this.apply = ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/apply", false));
-      this.enabled = ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/enabled", initialEnabled));
+      this.enabled =
+          ds.own(NetworkTablesValue.ofBoolean(ds.inst, base + "/enabled", initialEnabled));
       this.pose =
           ds.own(
-              NetworkTablesValue.ofDoubleArray(ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
+              NetworkTablesValue.ofDoubleArray(
+                  ds.inst, base + "/pose", PoseCodec.encode(initialPose)));
 
       this.forcedPose = initialPose != null ? initialPose : new Pose2d();
       this.forcedEnabled = initialEnabled;

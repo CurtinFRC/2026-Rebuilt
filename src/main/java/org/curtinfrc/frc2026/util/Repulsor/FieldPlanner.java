@@ -18,13 +18,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PlannerFallback;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
-import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
-import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultDriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultTurnTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuning;
@@ -2468,9 +2468,17 @@ public class FieldPlanner {
   Force getObstacleForce(
       Translation2d curLocation, Translation2d target, List<? extends Obstacle> extra) {
     var force = Force.kZero;
+    var dsBase = RepulsorDriverStation.getInstance();
     for (Obstacle obs : fieldObstacles)
       force = force.plus(obs.getForceAtPosition(curLocation, target));
-    for (Obstacle obs : extra) force = force.plus(obs.getForceAtPosition(curLocation, target));
+    for (Obstacle obs : extra)
+      force =
+          force.plus(
+              obs.getForceAtPosition(curLocation, target)
+                  .times(
+                      dsBase instanceof NtRepulsorDriverStation ds
+                          ? ds.getConfigDouble("repulsion_scale")
+                          : 1.0));
     return force;
   }
 
