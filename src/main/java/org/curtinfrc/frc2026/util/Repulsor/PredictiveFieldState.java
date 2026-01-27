@@ -381,7 +381,9 @@ public final class PredictiveFieldState {
   }
 
   public void setDynamicObjects(List<DynamicObject> objs) {
-    dynamicObjects = objs != null ? objs : List.of();
+    dynamicObjects = (objs != null) ? List.copyOf(objs) : List.of();
+    lastDynRef = null;
+    lastDyn = null;
   }
 
   public void setWorld(List<GameElement> elements, Alliance ours) {
@@ -650,7 +652,7 @@ public final class PredictiveFieldState {
     return tmp.toArray(new Translation2d[0]);
   }
 
-  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.robotSquare(0.1);
+  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.robotSquare(0.7);
 
   private Rotation2d currentCollectHeading = new Rotation2d();
   private Translation2d currentCollectTouch = null;
@@ -698,11 +700,21 @@ public final class PredictiveFieldState {
             Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M,
             Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M));
 
+    final double robotHalf =
+        0.5
+            * Math.max(
+                org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y);
+    final double robotWallMargin = robotHalf + 0.03;
+
     final java.util.function.Predicate<Translation2d> inShootBand =
         (pt) -> {
           if (pt == null) return true;
           double x = pt.getX();
-          return xLeftBand.within(x) || xRightBand.within(x);
+          double y = pt.getY();
+          return xLeftBand.within(x)
+              || xRightBand.within(x)
+              || y < robotWallMargin
+              || y > (Constants.FIELD_WIDTH - robotWallMargin);
         };
 
     lastOurPosForCollect = ourPos;

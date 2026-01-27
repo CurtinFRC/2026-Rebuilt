@@ -36,8 +36,13 @@ public class FieldTracker {
   private static volatile FieldTracker instance;
   private static volatile FieldLayoutProvider defaultProvider = new Rebuilt2026();
 
-  private final StickyTarget<Translation2d> collectStickySelector =
-      new StickyTarget<>(0.22, 1.25, 1.80);
+  private StickyTarget<Translation2d> collectStickySelector = new StickyTarget<>(0.22, 1.25, 1.80);
+
+  public void resetAll() {
+    collectStickySelector = new StickyTarget<>(0.22, 1.25, 1.80);
+
+    clearCollectSticky();
+  }
 
   private volatile long collectStickyReachedTsNs = 0L;
 
@@ -1252,7 +1257,7 @@ public class FieldTracker {
         if (!filtered.isEmpty()) dynUse = filtered;
       }
 
-      predictor.setDynamicObjects(dynUse);
+      predictor.setDynamicObjects(dynAll);
 
       long nowNs = System.nanoTime();
       long prevNs = lastObjectiveTickNs;

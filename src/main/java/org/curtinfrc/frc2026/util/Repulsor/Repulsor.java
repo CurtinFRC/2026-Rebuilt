@@ -20,6 +20,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourContext;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourFlag;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourManager;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PlannerFallback;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
@@ -28,8 +30,8 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
-import org.curtinfrc.frc2026.util.Repulsor.Flags.BehaviourFlagManager;
 import org.curtinfrc.frc2026.util.Repulsor.Flags.FlagManager;
+import org.curtinfrc.frc2026.util.Repulsor.Reasoning.Rebuilt2026Reasoner;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.GameSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -152,8 +154,16 @@ public class Repulsor {
             List.of(
                 new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE));
 
+    Supplier<RepulsorSetpoint> shuttleGoalSup =
+        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE);
+
+    Supplier<RepulsorSetpoint> defenseGoalSup =
+        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
+
     m_behaviourManager =
         new BehaviourManager()
+            .add(new DefenseBehaviour(30, defenseGoalSup, () -> 2.8))
+            .add(new ShuttleBehaviour(20, shuttleGoalSup, () -> 3.2))
             .add(
                 new AutoPathBehaviour(
                     10,
@@ -166,7 +176,9 @@ public class Repulsor {
                     sp -> sp.point().name(),
                     () -> 3.5));
 
-    m_behaviourFlags = new BehaviourFlagManager();
+    Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
+    reasoner.setTesting(true);
+    m_behaviourManager.setReasoner(reasoner);
 
     FieldTracker ft = FieldTracker.getInstance();
     FieldVision front = ft.new FieldVision("main");
@@ -241,7 +253,6 @@ public class Repulsor {
     refreshNextScoreFromFieldTracker();
 
     m_behaviourManager.update(
-        m_behaviourFlags.getActiveFlags(),
         new BehaviourContext(
             this,
             m_planner,

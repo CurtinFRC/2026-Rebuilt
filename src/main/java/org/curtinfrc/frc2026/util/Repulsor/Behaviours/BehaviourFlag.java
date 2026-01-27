@@ -3,13 +3,5 @@ package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 public enum BehaviourFlag {
   DEFENSE_MODE,
   AUTOPATH_MODE,
-  COLLAB_LANE_BLOCK,
-  COLLAB_FEEDER_CHAIN,
-  COLLAB_ZONING,
-  ENSURE_RP_PARK,
-  ENSURE_RP_CORAL,
-  ENSURE_RP_ALGAE,
-  ENSURE_ENDGAME,
-  MANUAL_OVERRIDE,
-  SHOOTING_TEST
+  SHUTTLE_MODE,
 }
