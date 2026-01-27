@@ -46,6 +46,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStationBootstrap;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback;
@@ -231,11 +232,16 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
-    drive.setDefaultCommand(
-        drive.joystickDrive(
-            () -> -controller.getLeftY(),
-            () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+    var dsBase = RepulsorDriverStation.getInstance();
+
+    if (dsBase instanceof NtRepulsorDriverStation ds) {
+      new Trigger(() -> ds.getConfigBool("force_controller_override"))
+          .whileTrue(
+              drive.joystickDrive(
+                  () -> -controller.getLeftY(),
+                  () -> -controller.getLeftX(),
+                  () -> -controller.getRightX()));
+    }
 
     controller
         .leftTrigger()

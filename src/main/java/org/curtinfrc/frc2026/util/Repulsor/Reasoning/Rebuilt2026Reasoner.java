@@ -33,13 +33,14 @@ public final class Rebuilt2026Reasoner
     nts.register(WANT_DEFENSE, false);
     nts.register(WANT_AUTOPATH, false);
     nts.register(WANT_SHUTTLE, false);
-    nts.register(TESTING, false); 
+    nts.register(TESTING, false);
     this.nt = nts;
 
     Clock clock = new WpiClock();
 
     SequenceReasoner.Builder<BehaviourFlag, BehaviourContext> b =
-        new SequenceReasoner.Builder<BehaviourFlag, BehaviourContext>(BehaviourFlag.class, clock, nt)
+        new SequenceReasoner.Builder<BehaviourFlag, BehaviourContext>(
+                BehaviourFlag.class, clock, nt)
             .startAt(PH_SHUTTLE);
 
     b.addPhaseFor("shuttle_15s", EnumSet.of(BehaviourFlag.SHUTTLE_MODE), 15.0);

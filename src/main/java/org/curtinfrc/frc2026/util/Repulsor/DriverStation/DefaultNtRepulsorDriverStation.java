@@ -10,6 +10,11 @@ final class DefaultNtRepulsorDriverStation extends NtRepulsorDriverStation {
 
   @Override
   protected void declareSharedConfig(Schema schema) {
+    schema.configDouble("clearance_scale", 1);
+    schema.configDouble("repulsion_scale", 1);
+
+    schema.configBool("force_controller_override", false);
+
     schema.poseOverrideCommand("main", new Pose2d(), false);
     schema.poseResetCommand("main", new Pose2d());
 
