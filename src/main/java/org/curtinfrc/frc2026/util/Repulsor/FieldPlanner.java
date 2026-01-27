@@ -23,6 +23,8 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
+import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultDriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultTurnTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuning;
@@ -2568,6 +2570,11 @@ public class FieldPlanner {
 
     Translation2d curTrans = pose.getTranslation();
     double distToGoal = curTrans.getDistance(goal.getTranslation());
+
+    var dsBase = RepulsorDriverStation.getInstance();
+    if (dsBase instanceof NtRepulsorDriverStation ds) {
+      ds.forcedGoalPose("main").ifPresent(this::setGoal);
+    }
 
     ClearMemo memo = new ClearMemo();
 
