@@ -18,6 +18,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import org.curtinfrc.frc2026.Subsystem.Intake;
+import org.curtinfrc.frc2026.Subsystem.IntakeIODev;
+import org.curtinfrc.frc2026.Subsystem.IntakeIOSim;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -49,6 +52,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Intake intake;
   private Mag mag;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
@@ -75,6 +79,7 @@ public class Robot extends LoggedRobot {
       case SIM -> {
         Logger.addDataReceiver(new NT4Publisher());
       }
+
       case REPLAY -> {
         setUseTiming(false);
         String logPath = LogFileUtil.findReplayLog();
@@ -115,6 +120,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          intake = new Intake(new IntakeIODev());
           mag =
               new Mag(
                   new MagRollerIODev(
@@ -138,6 +144,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+          intake = new Intake(new IntakeIOSim());
         }
       }
     } else {
@@ -161,6 +168,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
+    controller.y().whileTrue(intake.RawControlConsume()).onFalse(intake.RawIdle());
     controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
     controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
     controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
