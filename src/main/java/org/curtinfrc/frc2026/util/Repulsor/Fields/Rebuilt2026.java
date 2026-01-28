@@ -10,6 +10,7 @@ import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.HorizontalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
@@ -19,7 +20,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.SquareObstacle;
 
 public final class Rebuilt2026 implements FieldDefinition {
   private static final double CORNER_CHAMFER = 0;
@@ -122,57 +123,67 @@ public final class Rebuilt2026 implements FieldDefinition {
     return 2026;
   }
 
-  @Override
-  public List<Obstacle> fieldObstacles() {
-    double maxRangeY = 0.38;
-    double maxRangeX = 0.22;
-    return List.of(
-        new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) - 3.648981,
-        Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY),
-        new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) + 3.648981,
-        Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY)
-        );
-  }
-  // @Override // TRENCH + BUMP
+  // @Override
   // public List<Obstacle> fieldObstacles() {
-  //   double maxRangeY = 0.9;
-  //   double maxRangeX = 0.5;
-  //   double strength = 1.4;
+  //   double maxRangeY = 0.38;
+  //   double maxRangeX = 3;
   //   return List.of(
-  //       new SquareObstacle(new Translation2d(4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 1,
-  // 1.4),
-  //       new SquareObstacle(
-  //           new Translation2d(FIELD_LENGTH - 4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 1,
-  // 1.4),
   //       new RectangleObstacle(
-  //           new Translation2d((FIELD_LENGTH / 2) - 3.63982, 1.4224),
-  //           1.1938,
-  //           0.255336,
-  //           strength,
+  //           new Translation2d((FIELD_LENGTH / 2) - 3.648981, Constants.FIELD_WIDTH / 2),
+  //           0.5929315,
+  //           5.711800,
+  //           3,
   //           maxRangeX,
   //           maxRangeY),
   //       new RectangleObstacle(
-  //           new Translation2d((FIELD_LENGTH / 2) - 3.63982, Constants.FIELD_WIDTH - 1.4224),
-  //           1.1938,
-  //           0.255336,
-  //           strength,
-  //           maxRangeX,
-  //           maxRangeY),
-  //       new RectangleObstacle(
-  //           new Translation2d((FIELD_LENGTH / 2) + 3.63982, 1.4224),
-  //           1.1938,
-  //           0.255336,
-  //           strength,
-  //           maxRangeX,
-  //           maxRangeY),
-  //       new RectangleObstacle(
-  //           new Translation2d((FIELD_LENGTH / 2) + 3.63982, Constants.FIELD_WIDTH - 1.4224),
-  //           1.1938,
-  //           0.255336,
-  //           strength,
+  //           new Translation2d((FIELD_LENGTH / 2) + 3.648981, Constants.FIELD_WIDTH / 2),
+  //           0.5929315,
+  //           5.711800,
+  //           3,
   //           maxRangeX,
   //           maxRangeY));
   // }
+
+  @Override // TRENCH + BUMP
+  public List<Obstacle> fieldObstacles() {
+    double maxRangeY = 0.9;
+    double maxRangeX = 0.5;
+    double strength = 1.4;
+    return List.of(
+        new SquareObstacle(new Translation2d(4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 1,
+  1.4),
+        new SquareObstacle(
+            new Translation2d(FIELD_LENGTH - 4.625594, Constants.FIELD_WIDTH / 2), 1.1938, 1,
+  1.4),
+        new RectangleObstacle(
+            new Translation2d((FIELD_LENGTH / 2) - 3.63982, 1.4224),
+            1.1938,
+            0.255336,
+            strength,
+            maxRangeX,
+            maxRangeY),
+        new RectangleObstacle(
+            new Translation2d((FIELD_LENGTH / 2) - 3.63982, Constants.FIELD_WIDTH - 1.4224),
+            1.1938,
+            0.255336,
+            strength,
+            maxRangeX,
+            maxRangeY),
+        new RectangleObstacle(
+            new Translation2d((FIELD_LENGTH / 2) + 3.63982, 1.4224),
+            1.1938,
+            0.255336,
+            strength,
+            maxRangeX,
+            maxRangeY),
+        new RectangleObstacle(
+            new Translation2d((FIELD_LENGTH / 2) + 3.63982, Constants.FIELD_WIDTH - 1.4224),
+            1.1938,
+            0.255336,
+            strength,
+            maxRangeX,
+            maxRangeY));
+  }
 
   @Override
   public List<Obstacle> walls() {

@@ -309,16 +309,21 @@ class MockProvider(RepulsorProvider):
 
     def _maybe_pickup(self, pose: Pose2d) -> None:
         assert self.cfg is not None
-        if not self.fuel:
+        if not self.fuel or pose is None:
             return
 
         px = float(pose.x)
         py = float(pose.y)
         hx, hy = self._pickup_half_extents()
 
+        r = float(getattr(self.cfg, "fuel_radius_m", 0.075))
+        r2 = r * r
+
         to_remove: List[str] = []
         for oid, fo in self.fuel.items():
-            if abs(fo.x - px) <= hx and abs(fo.y - py) <= hy:
+            dx = max(abs(fo.x - px) - hx, 0.0)
+            dy = max(abs(fo.y - py) - hy, 0.0)
+            if dx * dx + dy * dy <= r2:
                 to_remove.append(oid)
 
         if not to_remove:
