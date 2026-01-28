@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -24,6 +25,8 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.subsystems.Mag;
+import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -46,6 +49,7 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Mag mag;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -80,7 +84,6 @@ public class Robot extends LoggedRobot {
     }
 
     Logger.start();
-
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
@@ -112,6 +115,14 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          mag =
+              new Mag(
+                  new MagRollerIODev(
+                      Constants.intakeMagRollerMotorID, InvertedValue.CounterClockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
         }
         case SIM -> {
           drive =
@@ -149,6 +160,10 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
+    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
+    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */

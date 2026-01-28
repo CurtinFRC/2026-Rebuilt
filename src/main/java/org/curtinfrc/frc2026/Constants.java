@@ -3,7 +3,12 @@ package org.curtinfrc.frc2026;
 import edu.wpi.first.wpilibj.RobotBase;
 
 public final class Constants {
-  public static final RobotType robotType = RobotType.SIM;
+  // Mag port numbers for motors
+  public static final int intakeMagRollerMotorID = 22;
+  public static final int middleMagRollerMotorID = 20;
+  public static final int indexerMagRollerMotorID = 15;
+
+  public static final RobotType robotType = RobotType.DEV;
 
   public static final Mode getMode() {
     return switch (robotType) {
