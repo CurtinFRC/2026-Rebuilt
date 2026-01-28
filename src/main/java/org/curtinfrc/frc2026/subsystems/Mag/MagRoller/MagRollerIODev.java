@@ -1,12 +1,16 @@
-package org.curtinfrc.frc2026.subsystems.MagRoller;
+package org.curtinfrc.frc2026.subsystems.Mag.MagRoller;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
+
+import javax.swing.text.Position;
 
 import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.controls.PositionVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
@@ -14,6 +18,8 @@ import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
+import edu.wpi.first.wpilibj2.command.Command;
+
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class MagRollerIODev implements MagRollerIO {
@@ -28,13 +34,22 @@ public class MagRollerIODev implements MagRollerIO {
       new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
 
+  
+  
   public MagRollerIODev(int motorID, InvertedValue inverted) {
+    
     magMotor = new TalonFX(motorID);
     voltage = magMotor.getMotorVoltage();
     angularVelocity = magMotor.getVelocity();
     angle = magMotor.getPosition();
     current = magMotor.getStatorCurrent();
-
+    
+    Slot0Configs slot0Configs = new Slot0Configs();
+    slot0Configs.kP = 2.4; // An error of 1 rotation results in 2.4 V output
+    slot0Configs.kI = 0; // no output for integrated error
+    slot0Configs.kD = 0.1; // A velocity of 1 rps results in 0.1 V output
+    
+    magMotor.getConfigurator().apply(slot0Configs);
     tryUntilOk(
         5,
         () ->
@@ -67,4 +82,12 @@ public class MagRollerIODev implements MagRollerIO {
   public void setVoltage(double volts) {
     magMotor.set(volts);
   }
+
+  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
+  
+  @Override 
+  public void setPosition(double position) {
+    magMotor.setControl(m_request.withPosition(position));
+  }
+  
 }

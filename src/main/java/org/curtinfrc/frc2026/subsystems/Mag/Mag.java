@@ -1,15 +1,23 @@
-package org.curtinfrc.frc2026.subsystems;
+package org.curtinfrc.frc2026.subsystems.Mag;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import org.curtinfrc.frc2026.subsystems.MagRoller.*;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.*;
+import com.ctre.phoenix6.hardware.TalonFX;
+
+import com.ctre.phoenix6.controls.PositionVoltage;
 
 public class Mag extends SubsystemBase {
 
   private MagRoller intakeMagRoller;
   private MagRoller middleMagRoller;
   private MagRoller indexerMagRoller;
+
+  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
+
+
+  
 
   public Mag(MagRollerIO roller1, MagRollerIO roller2, MagRollerIO roller3) {
     intakeMagRoller = new MagRoller(roller1);
@@ -40,4 +48,6 @@ public class Mag extends SubsystemBase {
     return Commands.parallel(
         intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
   }
+  
+  
 }

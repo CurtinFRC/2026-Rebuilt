@@ -1,4 +1,4 @@
-package org.curtinfrc.frc2026.Subsystem;
+package org.curtinfrc.frc2026.subsystems.Intake;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -31,8 +31,8 @@ public class Intake extends SubsystemBase {
     return run(() -> io.setVoltage(STOP_MOTOR_VOLTAGE)).withName("stop");
   }
 
-  public Command RawControlConsume() {
-    return run(() -> io.setVoltage(0.5)).withName("consumeVolts");
+  public Command RawControlConsume(double Volts) {
+    return run(() -> io.setVoltage(Volts)).withName("consumeVolts");
   }
 
   public Command RawIdle() {

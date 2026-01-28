@@ -1,6 +1,8 @@
-package org.curtinfrc.frc2026.subsystems.MagRoller;
+package org.curtinfrc.frc2026.subsystems.Mag.MagRoller;
 
 import org.littletonrobotics.junction.AutoLog;
+
+import edu.wpi.first.wpilibj2.command.Command;
 
 public interface MagRollerIO {
   @AutoLog
@@ -14,4 +16,9 @@ public interface MagRollerIO {
   public default void setVoltage(double volts) {}
 
   public default void updateInputs(MagRollerIOInputs inputs) {}
+
+  public default void setPosition(double position) {
+
+  }
+ 
 }

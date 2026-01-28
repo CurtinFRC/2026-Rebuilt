@@ -1,7 +1,9 @@
-package org.curtinfrc.frc2026.subsystems.MagRoller;
+package org.curtinfrc.frc2026.subsystems.Mag.MagRoller;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+
+import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIOInputsAutoLogged;
 import org.littletonrobotics.junction.Logger;
 
 public class MagRoller extends SubsystemBase {
@@ -25,5 +27,9 @@ public class MagRoller extends SubsystemBase {
 
   public Command runMotor(double volts) {
     return run(() -> io.setVoltage(volts));
+  }
+
+  public Command stayAtCurrentPosition(double position) {
+    return run(() -> io.setPosition(position)); 
   }
 }
