@@ -28,7 +28,7 @@ public class MagRollerIODev implements MagRollerIO {
       new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
 
-  public MagRollerIODev(int motorID) {
+  public MagRollerIODev(int motorID, InvertedValue inverted) {
     magMotor = new TalonFX(motorID);
     voltage = magMotor.getMotorVoltage();
     angularVelocity = magMotor.getVelocity();
@@ -42,14 +42,14 @@ public class MagRollerIODev implements MagRollerIO {
                 .getConfigurator()
                 .apply(
                     new TalonFXConfiguration()
-                        .withMotorOutput(
-                            new MotorOutputConfigs().withInverted(InvertedValue.Clockwise_Positive))
+                        .withMotorOutput(new MotorOutputConfigs().withInverted(inverted))
                         .withCurrentLimits(currentLimits)));
 
     // Setting update frequency
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, angle, angularVelocity);
 
-    // Setting update frequency (which is slowed down) for variables which do not have an update frequency
+    // Setting update frequency (which is slowed down) for variables which do not have an update
+    // frequency
     magMotor.optimizeBusUtilization();
 
     PhoenixUtil.registerSignals(false, voltage, current, angularVelocity, angle);
@@ -65,6 +65,6 @@ public class MagRollerIODev implements MagRollerIO {
 
   @Override
   public void setVoltage(double volts) {
-    voltageRequest.withOutput(volts);
+    magMotor.set(volts);
   }
 }

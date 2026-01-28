@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -114,7 +115,14 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          mag = new Mag(new MagRollerIODev(Constants.intakeMagRollerMotorID), new MagRollerIODev(Constants.middleMagRollerMotorID), new MagRollerIODev(Constants.indexerMagRollerMotorID));
+          mag =
+              new Mag(
+                  new MagRollerIODev(
+                      Constants.intakeMagRollerMotorID, InvertedValue.CounterClockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
         }
         case SIM -> {
           drive =
@@ -153,9 +161,9 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller.x().whileTrue(mag.store(5)).onFalse(mag.stop());
-    controller.a().whileTrue(mag.spinIndexer(5)).onFalse(mag.stop()); 
-    controller.b().whileTrue(mag.moveAll(5)).onFalse(mag.stop());
+    controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
+    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
+    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
