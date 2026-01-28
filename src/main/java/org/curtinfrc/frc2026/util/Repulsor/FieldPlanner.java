@@ -616,7 +616,6 @@ public class FieldPlanner {
 
     private static final double CLEAR_PUSH_MAX = 10.5;
 
-    // NEW: corner "conveyor" to remove inching (guarantees a minimum, stable tangential component)
     private static final double CORNER_CONVEY_RANGE_M = 0.95;
     private static final double CORNER_CONVEY_WCORNER_ON = 0.14;
     private static final double CORNER_CONVEY_SCALE = 6.2;

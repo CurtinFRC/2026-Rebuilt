@@ -262,7 +262,7 @@ public class Repulsor {
       enabled = ds.getConfigBool("force_controller_override");
     }
 
-    if (!enabled) {
+    if (enabled) {
       m_behaviourManager.stop();
       return;
     }
