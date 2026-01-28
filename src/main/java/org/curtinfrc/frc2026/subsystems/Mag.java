@@ -26,21 +26,18 @@ public class Mag extends SubsystemBase {
   }
 
   public Command moveAll(double volts) {
-    return intakeMagRoller.runMotor(volts);
+    return Commands.parallel(
+        indexerMagRoller.runMotor(volts),
+        middleMagRoller.runMotor(volts),
+        intakeMagRoller.runMotor(volts));
   }
 
   public Command store(double volts) {
-    return middleMagRoller.runMotor(volts);
+    return Commands.parallel(middleMagRoller.runMotor(volts), intakeMagRoller.runMotor(volts));
   }
 
   public Command stop() {
     return Commands.parallel(
         intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
   }
-  // public Command stop() {
-  //   return middleMagRoller.stop();
-  // }
-  // public Command stop() {
-  //   return indexerMagRoller.stop();
-  // }
 }

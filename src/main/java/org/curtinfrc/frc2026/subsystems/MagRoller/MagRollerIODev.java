@@ -67,7 +67,6 @@ public class MagRollerIODev implements MagRollerIO {
 
   @Override
   public void setVoltage(double volts) {
-    magMotor.set(volts);
-    // voltageRequest.withOutput(volts);
+    voltageRequest.withOutput(volts);
   }
 }
