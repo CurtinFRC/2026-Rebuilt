@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import java.util.function.Supplier;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
@@ -35,8 +36,8 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> hoodIO.setVoltage(0));
   }
 
-  public Command setHoodVoltage(double voltage) {
-    return run(() -> hoodIO.setVoltage(voltage));
+  public Command setHoodVoltage(Supplier<Double> voltage) {
+    return run(() -> hoodIO.setVoltage(voltage.get()));
   }
 
   public Command setShooterVoltage(double voltage) {

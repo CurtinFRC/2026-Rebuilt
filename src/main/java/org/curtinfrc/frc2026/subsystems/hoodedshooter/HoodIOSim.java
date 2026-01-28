@@ -3,13 +3,14 @@ package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 import static edu.wpi.first.units.Units.Volts;
 
 import com.ctre.phoenix6.sim.CANcoderSimState;
+import com.ctre.phoenix6.sim.ChassisReference;
 import com.ctre.phoenix6.sim.TalonFXSimState;
 import com.ctre.phoenix6.sim.TalonFXSimState.MotorType;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
-import edu.wpi.first.wpilibj.simulation.DCMotorSim;
+import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 
 public class HoodIOSim extends HoodIODev {
   private static final double D_T = 0.001;
@@ -18,7 +19,7 @@ public class HoodIOSim extends HoodIODev {
   private final TalonFXSimState motorSim;
   private final CANcoderSimState encoderSim;
   private final DCMotor motorType = DCMotor.getKrakenX44Foc(1);
-  private final DCMotorSim motorSimModel;
+  private final SingleJointedArmSim motorSimModel;
   private final Notifier simNotifier;
 
   public HoodIOSim() {
@@ -26,10 +27,20 @@ public class HoodIOSim extends HoodIODev {
 
     motorSim = motor.getSimState();
     motorSim.setMotorType(MotorType.KrakenX44);
+    motorSim.Orientation = ChassisReference.CounterClockwise_Positive;
     motorSimModel =
-        new DCMotorSim(
-            LinearSystemId.createDCMotorSystem(motorType, HOOD_JKG, GEAR_RATIO), motorType);
+        new SingleJointedArmSim(
+            LinearSystemId.createSingleJointedArmSystem(motorType, HOOD_JKG, GEAR_RATIO),
+            motorType,
+            GEAR_RATIO,
+            0.220259,
+            -100,
+            100,
+            true,
+            GRAVITY_POSITION_OFFSET);
+
     encoderSim = encoder.getSimState();
+    encoderSim.Orientation = ChassisReference.Clockwise_Positive;
 
     simNotifier = new Notifier(this::updateSim);
     simNotifier.startPeriodic(D_T);
@@ -42,8 +53,9 @@ public class HoodIOSim extends HoodIODev {
     motorSimModel.setInputVoltage(motorVolts);
     motorSimModel.update(D_T);
 
-    double motorRotations = motorSimModel.getAngularPositionRotations() * GEAR_RATIO;
-    double motorRPS = motorSimModel.getAngularVelocityRPM() * GEAR_RATIO / 60;
+    double motorRotations =
+        Math.toDegrees(motorSimModel.getAngleRads()) / 360 * GEAR_RATIO - GRAVITY_POSITION_OFFSET;
+    double motorRPS = Math.toDegrees(motorSimModel.getVelocityRadPerSec()) / 360 * GEAR_RATIO;
 
     motorSim.setRawRotorPosition(motorRotations);
     motorSim.setRotorVelocity(motorRPS);

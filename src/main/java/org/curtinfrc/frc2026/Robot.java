@@ -205,6 +205,9 @@ public class Robot extends LoggedRobot {
         .leftBumper()
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.25, 15))
         .onFalse(hoodedShooter.setShooterVoltage(0));
+
+    // hoodedShooter.setDefaultCommand(hoodedShooter.setHoodVoltage(() -> controller.getLeftY() *
+    // 5));
   }
 
   /** This function is called periodically during all modes. */
