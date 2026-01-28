@@ -19,6 +19,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
 
 public final class Rebuilt2026 implements FieldDefinition {
   private static final double CORNER_CHAMFER = 0;
@@ -126,10 +127,10 @@ public final class Rebuilt2026 implements FieldDefinition {
     double maxRangeY = 0.38;
     double maxRangeX = 0.22;
     return List.of(
-        // new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) - 3.648981,
-        // Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY),
-        // new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) + 3.648981,
-        // Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY)
+        new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) - 3.648981,
+        Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY),
+        new RectangleObstacle(new Translation2d((FIELD_LENGTH / 2) + 3.648981,
+        Constants.FIELD_WIDTH / 2), 0.5929315, 5.711800, 3, maxRangeX, maxRangeY)
         );
   }
   // @Override // TRENCH + BUMP

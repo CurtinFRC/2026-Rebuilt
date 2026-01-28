@@ -266,7 +266,7 @@ public class Repulsor {
       m_behaviourManager.stop();
       return;
     }
-    
+
     m_behaviourManager.update(
         new BehaviourContext(
             this,
