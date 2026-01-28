@@ -1,4 +1,4 @@
-package org.curtinfrc.frc2026.Subsystem.Intake;
+package org.curtinfrc.frc2026.Subsystem;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
@@ -16,6 +16,7 @@ import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
+import org.curtinfrc.frc2026.Subsystem.IntakeIO.IntakeIOInputs;
 
 public class IntakeIODev implements IntakeIO {
   private final TalonFX motor = new TalonFX(46);
