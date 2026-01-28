@@ -17,7 +17,7 @@ import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
-public class IntakeIOdev implements IntakeIO {
+public class IntakeIODev implements IntakeIO {
   private final TalonFX motor = new TalonFX(46);
 
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
@@ -38,7 +38,7 @@ public class IntakeIOdev implements IntakeIO {
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
 
-  public IntakeIOdev() {
+  public IntakeIODev() {
 
     var slot0Configs = new Slot0Configs();
 

@@ -13,13 +13,13 @@ public class Intake extends SubsystemBase {
   }
 
   // These variables are used for the voltage and velocity//
-  private final double stopMotor = 0;
+  private static final double STOP_MOTOR_VOLTAGE = 0;
   // consume means intake//
-  private final double consumeVel = 8;
+  private final double CONSUME_VEL_RPS = 8;
   // vel means velocity//
-  private final double consumeVolts = 8;
-  private final double idleVolts = 2;
-  private final double idleVel = 2;
+  private static final double CONSUME_VOLTS = 8;
+  private static final double IDLE_VOLTS = 2;
+  private static final double IDLE_VEL_RPS = 2;
 
   @Override
   public void periodic() {
@@ -28,7 +28,7 @@ public class Intake extends SubsystemBase {
   }
 
   public Command Stop() {
-    return run(() -> io.setVoltage(stopMotor)).withName("stop");
+    return run(() -> io.setVoltage(STOP_MOTOR_VOLTAGE)).withName("stop");
   }
 
   public Command RawControlConsume() {
@@ -40,10 +40,10 @@ public class Intake extends SubsystemBase {
   }
 
   public Command ControlConsume() {
-    return run(() -> io.setVelocity(consumeVel)).withName("consumeVel");
+    return run(() -> io.setVelocity(CONSUME_VEL_RPS)).withName("consumeVel");
   }
 
   public Command Idle() {
-    return run(() -> io.setVelocity(idleVel)).withName("idleVel");
+    return run(() -> io.setVelocity(IDLE_VEL_RPS)).withName("idleVel");
   }
 }
