@@ -114,7 +114,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          mag = new Mag(new MagRollerIODev(22), new MagRollerIODev(20), new MagRollerIODev(15));
+          mag = new Mag(new MagRollerIODev(Constants.intakeMagRollerMotorID), new MagRollerIODev(Constants.middleMagRollerMotorID), new MagRollerIODev(Constants.indexerMagRollerMotorID));
         }
         case SIM -> {
           drive =
@@ -147,17 +147,15 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
-    // mag.setDefaultCommand(mag.stop());
-
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
-    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop()); // only one working
-    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller.x().whileTrue(mag.store(5)).onFalse(mag.stop());
+    controller.a().whileTrue(mag.spinIndexer(5)).onFalse(mag.stop()); 
+    controller.b().whileTrue(mag.moveAll(5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */

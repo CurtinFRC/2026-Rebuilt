@@ -49,9 +49,7 @@ public class MagRollerIODev implements MagRollerIO {
     // Setting update frequency
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, angle, angularVelocity);
 
-    // Setting update frequency (which is slowed down) for variables which do not
-    // have an update
-    // frequency
+    // Setting update frequency (which is slowed down) for variables which do not have an update frequency
     magMotor.optimizeBusUtilization();
 
     PhoenixUtil.registerSignals(false, voltage, current, angularVelocity, angle);
