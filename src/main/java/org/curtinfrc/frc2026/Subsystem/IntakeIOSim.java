@@ -1,4 +1,4 @@
-package org.curtinfrc.frc2026.Subsystem.Intake;
+package org.curtinfrc.frc2026.Subsystem;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.system.plant.DCMotor;

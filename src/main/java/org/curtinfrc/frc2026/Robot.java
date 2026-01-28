@@ -17,9 +17,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import org.curtinfrc.frc2026.Subsystem.Intake.Intake;
-import org.curtinfrc.frc2026.Subsystem.Intake.IntakeIOSim;
-import org.curtinfrc.frc2026.Subsystem.Intake.IntakeIOdev;
+import org.curtinfrc.frc2026.Subsystem.Intake;
+import org.curtinfrc.frc2026.Subsystem.IntakeIODev;
+import org.curtinfrc.frc2026.Subsystem.IntakeIOSim;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -74,7 +74,6 @@ public class Robot extends LoggedRobot {
       }
       case SIM -> {
         Logger.addDataReceiver(new NT4Publisher());
-        intake = new Intake(new IntakeIOSim());
       }
 
       case REPLAY -> {
@@ -118,8 +117,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-
-          intake = new Intake(new IntakeIOdev());
+          intake = new Intake(new IntakeIODev());
         }
         case SIM -> {
           drive =
@@ -152,14 +150,14 @@ public class Robot extends LoggedRobot {
     DriverStation.silenceJoystickConnectionWarning(true);
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
-    // intake.setDefaultCommand(intake.RawIdle());
+
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller.a().whileTrue(intake.RawControlConsume()).onFalse(intake.RawIdle());
+    controller.y().whileTrue(intake.RawControlConsume()).onFalse(intake.RawIdle());
   }
 
   /** This function is called periodically during all modes. */
