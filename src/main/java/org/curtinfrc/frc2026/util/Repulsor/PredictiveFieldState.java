@@ -708,6 +708,19 @@ public final class PredictiveFieldState {
     final java.util.function.Predicate<Translation2d> inShootBand =
         (pt) -> {
           if (pt == null) return true;
+          edu.wpi.first.wpilibj.DriverStation.Alliance alliance =
+              edu.wpi.first.wpilibj.DriverStation.getAlliance().get();
+
+          if (alliance == edu.wpi.first.wpilibj.DriverStation.Alliance.Blue) {
+            double x = pt.getX();
+            double y = pt.getY();
+            if (x > SHOOT_X_END_BAND_M) return true;
+          } else {
+            double x = pt.getX();
+            double y = pt.getY();
+            if (x < (Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M + BAND_WIDTH_M)) return true;
+          }
+
           double x = pt.getX();
           double y = pt.getY();
           return xLeftBand.within(x)

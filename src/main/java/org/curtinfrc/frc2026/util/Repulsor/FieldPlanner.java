@@ -36,7 +36,7 @@ public class FieldPlanner {
   private static final double FORCE_THROUGH_GOAL_DIST = 2.0;
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   private static final double CORNER_CHAMFER = 0;
-  public static final double GOAL_STRENGTH = 1.2;
+  public static final double GOAL_STRENGTH = 2.2;
 
   private static final class ClearMemo {
     Boolean toGoalDyn;
@@ -586,12 +586,26 @@ public class FieldPlanner {
     private static final double EDGE_TEAR_RANGE_M = 1.55;
     private static final double EDGE_TEAR_END_TAPER_M = 0.42;
     private static final double EDGE_TEAR_CORNER_SUPPRESS = 0.22;
-    private static final double EDGE_TEAR_BLEND = 0.55;
+    private static final double EDGE_TEAR_BLEND = 0.70;
+    private static final double EDGE_TEAR_CORNER_MIN = 0.30;
+
+    private static final double EDGE_CONVEY_RANGE_M = 0.65;
+    private static final double EDGE_CONVEY_SCALE = 4.6;
+    private static final double EDGE_CONVEY_SOFTEN = 0.24;
+    private static final double EDGE_CONVEY_MIN_FRAC = 0.40;
+    private static final double EDGE_CONVEY_CORNER_SUPPRESS = 0.55;
+
+    private static final double TEARDROP_EDGE_OFFSET_MIN = 0.18;
+    private static final double TEARDROP_EDGE_OFFSET_EXTRA = 0.52;
+    private static final double TEARDROP_EDGE_OFFSET_MAX = 0.50;
+    private static final double TEARDROP_GOAL_BIAS = 0.65;
+    private static final double TEARDROP_OUTWARD_DOT_MIN = 0.12;
+    private static final double TEARDROP_SHORT_ALIGN_M = 0.10;
 
     private static final double CORNER_HANDOFF_WCORNER_ON = 0.28;
     private static final double CORNER_HANDOFF_WCORNER_FULL = 0.70;
 
-    private static final double CORNER_HANDOFF_TEAR_SUPPRESS_MAX = 0.96;
+    private static final double CORNER_HANDOFF_TEAR_SUPPRESS_MAX = 0.65;
 
     private static final double CORNER_HANDOFF_PUSH_SCALE = 2.1;
     private static final double CORNER_HANDOFF_TANGENT_SCALE = 3.6;
@@ -616,11 +630,11 @@ public class FieldPlanner {
 
     private static final double CLEAR_PUSH_MAX = 10.5;
 
-    private static final double CORNER_CONVEY_RANGE_M = 0.95;
-    private static final double CORNER_CONVEY_WCORNER_ON = 0.14;
+    private static final double CORNER_CONVEY_RANGE_M = 1.25;
+    private static final double CORNER_CONVEY_WCORNER_ON = 0.08;
     private static final double CORNER_CONVEY_SCALE = 6.2;
     private static final double CORNER_CONVEY_SOFTEN = 0.28;
-    private static final double CORNER_CONVEY_MIN_FRAC = 0.38;
+    private static final double CORNER_CONVEY_MIN_FRAC = 0.50;
     private static final double CORNER_CONVEY_MAX = 14.0;
 
     private int commitDir = 0;
@@ -639,6 +653,8 @@ public class FieldPlanner {
     private final FlowTeardrop tearB_CCW;
     private final FlowTeardrop tearB_CW;
     private final boolean longAxisX;
+    private final int shortSignA;
+    private final int shortSignB;
 
     private final class FlowTeardrop {
       final Translation2d loc;
@@ -674,7 +690,7 @@ public class FieldPlanner {
         return a + (b - a) * t;
       }
 
-      Translation2d forceVec(Translation2d position) {
+      Translation2d forceVec(Translation2d position, Rotation2d tailDirOverride) {
         final double tiny = EPS;
 
         Translation2d posToLoc = position.minus(loc);
@@ -689,7 +705,8 @@ public class FieldPlanner {
           outwardsForce = posToLoc.div(distPosLoc).times(mag);
         }
 
-        Translation2d positionRel = position.minus(loc).rotateBy(tailDirWorld.unaryMinus());
+        Rotation2d tailDir = (tailDirOverride == null) ? tailDirWorld : tailDirOverride;
+        Translation2d positionRel = position.minus(loc).rotateBy(tailDir.unaryMinus());
         double distanceAlongLine = positionRel.getX();
         double distanceScalar =
             (Math.abs(tailLength) > tiny) ? (distanceAlongLine / tailLength) : 0.0;
@@ -719,7 +736,7 @@ public class FieldPlanner {
                     * (lateralWeight * lateralWeight)
                     * (secondaryMaxRange - distanceToLine);
 
-            Translation2d tailU = new Translation2d(1.0, tailDirWorld);
+            Translation2d tailU = new Translation2d(1.0, tailDir);
             tailForce = tailU.times(tailMag);
           }
         }
@@ -897,24 +914,24 @@ public class FieldPlanner {
       if (isCornerOrHandoffLocked()) return;
 
       double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
-      if (now > commitUntilSec) {
+      boolean nearCorner =
+          (commitCornerWorld != null)
+              && (pos.getDistance(commitCornerWorld) <= CORNER_RANGE_M + COMMIT_CLEAR_HYST_M);
+      if (!nearCorner && now > commitUntilSec) {
         commitDir = 0;
         commitCornerWorld = null;
         return;
       }
       double pad = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
       Translation2d[] polyExp = expandedCorners(pad);
-      if (!segmentIntersectsPolygon(pos, goal, polyExp)) {
+      if (!nearCorner && !segmentIntersectsPolygon(pos, goal, polyExp)) {
         commitDir = 0;
         commitCornerWorld = null;
         return;
       }
-      if (commitCornerWorld != null) {
-        double d = pos.getDistance(commitCornerWorld);
-        if (d > CORNER_RANGE_M + COMMIT_CLEAR_HYST_M) {
-          commitDir = 0;
-          commitCornerWorld = null;
-        }
+      if (!nearCorner && commitCornerWorld != null) {
+        commitDir = 0;
+        commitCornerWorld = null;
       }
     }
 
@@ -946,7 +963,8 @@ public class FieldPlanner {
         Translation2d pos,
         Translation2d goal,
         double wCorner,
-        boolean occluding) {
+        boolean occluding,
+        double edgeDist) {
 
       if (!occluding) return sum;
       double n = sum.getNorm();
@@ -969,9 +987,7 @@ public class FieldPlanner {
         if (commitDir == 0) setCommitDir(impliedDirFromGeometry(pos, goal), false, null);
         Translation2d latU = commitLateralFromGoal(gU);
         double need = clamp01((-parDot) / Math.max(EPS, allowedOpp));
-        double dC = pos.getDistance(center);
-        double diag = Math.hypot(halfX, halfY);
-        double d = Math.max(0.12, dC - diag);
+        double d = Math.max(0.12, edgeDist);
         double lateralMag =
             (strength * TUG_LATERAL_SCALE) * wCorner * (TUG_LATERAL_BASE + need) / (0.35 + d * d);
         perp = perp.plus(latU.times(lateralMag));
@@ -1032,10 +1048,120 @@ public class FieldPlanner {
       return sum;
     }
 
+    private Translation2d applyEdgeConveyor(
+        Translation2d sum,
+        Translation2d pLocal,
+        Translation2d gLocal,
+        double ax,
+        double ay,
+        double edgeDist,
+        double wCorner) {
+
+      if (edgeDist >= EDGE_CONVEY_RANGE_M) return sum;
+
+      double wEdge = smooth01(1.0 - (edgeDist / Math.max(EPS, EDGE_CONVEY_RANGE_M)));
+      double wNoCorner =
+          smooth01(clamp01((EDGE_CONVEY_CORNER_SUPPRESS - wCorner) / EDGE_CONVEY_CORNER_SUPPRESS));
+      double w = wEdge * wNoCorner;
+      if (w < 1e-6) return sum;
+
+      Translation2d tanLocal;
+      if (ax >= ay) {
+        double dir = signWithFallback(pLocal.getY(), 1.0);
+        tanLocal = new Translation2d(0.0, dir);
+      } else {
+        double dir = signWithFallback(pLocal.getX(), 1.0);
+        tanLocal = new Translation2d(dir, 0.0);
+      }
+
+      Translation2d tanWorld = tanLocal.rotateBy(rot);
+      double tanN = tanWorld.getNorm();
+      if (tanN < EPS) return sum;
+      tanWorld = tanWorld.div(tanN);
+
+      double k = (strength * EDGE_CONVEY_SCALE) * w / (EDGE_CONVEY_SOFTEN + edgeDist * edgeDist);
+      double minAlong = k * EDGE_CONVEY_MIN_FRAC;
+
+      double along = dot(sum, tanWorld);
+      if (along < minAlong) {
+        sum = sum.plus(tanWorld.times(minAlong - along));
+      }
+
+      return sum;
+    }
+
     private int shortSignFromCornerLocal(Translation2d cornerLocal) {
       double s = longAxisX ? Math.signum(cornerLocal.getY()) : Math.signum(cornerLocal.getX());
       if (s == 0.0) s = 1.0;
       return (s >= 0.0) ? 1 : -1;
+    }
+
+    private static int signWithFallback(double primary, double fallback) {
+      double s = Math.signum(primary);
+      if (s == 0.0) s = Math.signum(fallback);
+      if (s == 0.0) s = 1.0;
+      return (s >= 0.0) ? 1 : -1;
+    }
+
+    private Rotation2d teardropTailDir(
+        int goalSideSign,
+        int teardropSideSign,
+        Translation2d teardropLocWorld,
+        Translation2d goalWorld,
+        Translation2d gLocal,
+        Translation2d pLocal) {
+      double gLong = longAxisX ? gLocal.getX() : gLocal.getY();
+      double pLong = longAxisX ? pLocal.getX() : pLocal.getY();
+      int longSign;
+      if (commitDir != 0) {
+        if (longAxisX) {
+          longSign = (commitDir > 0) ? -teardropSideSign : teardropSideSign;
+        } else {
+          longSign = (commitDir > 0) ? teardropSideSign : -teardropSideSign;
+        }
+      } else {
+        longSign = signWithFallback(pLong, gLong);
+      }
+      Translation2d longAxisLocal =
+          longAxisX ? new Translation2d(longSign, 0.0) : new Translation2d(0.0, longSign);
+      Translation2d longAxisWorld = longAxisLocal.rotateBy(rot);
+      double longAxisN = longAxisWorld.getNorm();
+      Translation2d longAxisU =
+          (longAxisN > EPS) ? longAxisWorld.div(longAxisN) : Translation2d.kZero;
+      Rotation2d longAxisDir = (longAxisN > EPS) ? longAxisWorld.getAngle() : Rotation2d.kZero;
+
+      Rotation2d baseDir;
+      if (goalSideSign == teardropSideSign) {
+        Translation2d toGoal = goalWorld.minus(teardropLocWorld);
+        if (toGoal.getNorm() > EPS) baseDir = toGoal.getAngle();
+        else baseDir = longAxisDir;
+      } else {
+        baseDir = longAxisDir;
+      }
+
+      Translation2d outwardLocal =
+          longAxisX
+              ? new Translation2d(0.0, teardropSideSign)
+              : new Translation2d(teardropSideSign, 0.0);
+      Translation2d outwardWorld = outwardLocal.rotateBy(rot);
+      double outN = outwardWorld.getNorm();
+      if (outN < EPS) return baseDir;
+      Translation2d outwardU = outwardWorld.div(outN);
+
+      Translation2d cornerU = outwardU;
+      Translation2d cornerVec = outwardU.plus(longAxisU);
+      double cornerN = cornerVec.getNorm();
+      if (cornerN > EPS) cornerU = cornerVec.div(cornerN);
+
+      Translation2d flowU = cornerU;
+      double flowN = flowU.getNorm();
+      if (flowN < EPS) {
+        if (longAxisU.getNorm() > EPS) flowU = longAxisU;
+        else flowU = outwardU;
+      }
+
+      if (flowU.getNorm() < EPS) return baseDir;
+      return flowU.getAngle();
     }
 
     private boolean goalPastShortSide(Translation2d pLocal, Translation2d gLocal, int shortSign) {
@@ -1318,8 +1444,9 @@ public class FieldPlanner {
 
       double wNoCorner =
           smooth01(clamp01((EDGE_TEAR_CORNER_SUPPRESS - wCorner) / EDGE_TEAR_CORNER_SUPPRESS));
+      double cornerBlend = EDGE_TEAR_CORNER_MIN + (1.0 - EDGE_TEAR_CORNER_MIN) * wNoCorner;
 
-      return wD * wEnd * wNoCorner;
+      return wD * wEnd * cornerBlend;
     }
 
     public RectangleObstacle(
@@ -1343,10 +1470,27 @@ public class FieldPlanner {
       double longHalf = longAxisX ? this.halfX : this.halfY;
       double shortHalf = longAxisX ? this.halfY : this.halfX;
 
+      double maxR = Math.max(this.maxRangeX, this.maxRangeY);
+      double primaryMaxRange = Math.max(0.20, Math.min(0.75, maxR + 0.10));
+      double primaryRadius = Math.max(0.08, Math.min(0.30, shortHalf * 0.55 + 0.05));
+      double tailLenParam = Math.max(0.55, longHalf * 1.15);
+
+      double primaryStrength = strength * 0.20;
+      double tailStrength = strength * 0.85;
+
+      double edgeOffset =
+          Math.max(
+              TEARDROP_EDGE_OFFSET_MIN,
+              Math.min(TEARDROP_EDGE_OFFSET_MAX, primaryRadius + TEARDROP_EDGE_OFFSET_EXTRA));
+
       Translation2d locALocal =
-          longAxisX ? new Translation2d(0.0, this.halfY) : new Translation2d(this.halfX, 0.0);
+          longAxisX
+              ? new Translation2d(0.0, this.halfY + edgeOffset)
+              : new Translation2d(this.halfX + edgeOffset, 0.0);
       Translation2d locBLocal =
-          longAxisX ? new Translation2d(0.0, -this.halfY) : new Translation2d(-this.halfX, 0.0);
+          longAxisX
+              ? new Translation2d(0.0, -this.halfY - edgeOffset)
+              : new Translation2d(-this.halfX - edgeOffset, 0.0);
 
       Translation2d locAWorld = locALocal.rotateBy(this.rot).plus(this.center);
       Translation2d locBWorld = locBLocal.rotateBy(this.rot).plus(this.center);
@@ -1369,14 +1513,6 @@ public class FieldPlanner {
       Rotation2d dirA_CW_W = tA_CW_L.rotateBy(this.rot).getAngle();
       Rotation2d dirB_CCW_W = tB_CCW_L.rotateBy(this.rot).getAngle();
       Rotation2d dirB_CW_W = tB_CW_L.rotateBy(this.rot).getAngle();
-
-      double maxR = Math.max(this.maxRangeX, this.maxRangeY);
-      double primaryMaxRange = Math.max(0.20, Math.min(0.75, maxR + 0.10));
-      double primaryRadius = Math.max(0.08, Math.min(0.30, shortHalf * 0.55 + 0.05));
-      double tailLenParam = Math.max(0.55, longHalf * 1.15);
-
-      double primaryStrength = strength * 0.20;
-      double tailStrength = strength * 0.85;
 
       this.tearA_CCW =
           new FlowTeardrop(
@@ -1414,6 +1550,11 @@ public class FieldPlanner {
               primaryRadius,
               tailStrength,
               tailLenParam);
+
+      double aShort = longAxisX ? locALocal.getY() : locALocal.getX();
+      double bShort = longAxisX ? locBLocal.getY() : locBLocal.getX();
+      this.shortSignA = (aShort >= 0.0) ? 1 : -1;
+      this.shortSignB = (bShort >= 0.0) ? 1 : -1;
     }
 
     public RectangleObstacle(
@@ -1455,14 +1596,15 @@ public class FieldPlanner {
 
       double ax = inside ? 0.0 : Math.abs(dx);
       double ay = inside ? 0.0 : Math.abs(dy);
+      double edgeDist = Math.hypot(ax, ay);
 
       Translation2d[] poly = corners();
       boolean occludes = segmentIntersectsPolygon(position, target, poly);
 
       if (!inside && (ax > maxRangeX || ay > maxRangeY) && !occludes) return new Force();
 
-      double diag = Math.hypot(halfX, halfY);
-      double falloffMeters = Math.max(EPS, Math.max(maxRangeX, maxRangeY) + diag + 0.35);
+      double shortHalf = Math.min(halfX, halfY);
+      double falloffMeters = Math.max(EPS, Math.max(maxRangeX, maxRangeY) + shortHalf + 0.35);
 
       Translation2d awayLocal;
       double effectiveDistMeters;
@@ -1523,15 +1665,14 @@ public class FieldPlanner {
       Translation2d escapeWorld = Translation2d.kZero;
 
       double engageR = Math.max(0.9, falloffMeters + 0.65);
-      double distC = position.getDistance(center);
 
-      boolean nearObstacle = distC <= Math.max(1.25, falloffMeters + 0.95);
+      boolean nearObstacle = edgeDist <= Math.max(1.25, falloffMeters + 0.95);
 
       double padForTug = Math.max(0.55, Math.min(2.0, Math.max(maxRangeX, maxRangeY) * 0.85));
       Translation2d[] polyExpForTug = expandedCorners(padForTug);
       boolean occludesExpForTug = segmentIntersectsPolygon(position, target, polyExpForTug);
 
-      if (distC <= engageR) {
+      if (edgeDist <= engageR) {
         Translation2d outwardW = position.minus(center);
         double outN = outwardW.getNorm();
         if (outN < EPS) outwardW = new Translation2d(1.0, 0.0);
@@ -1548,7 +1689,7 @@ public class FieldPlanner {
         Translation2d chosenT =
             chooseTangentPolyWithWalls(position, target, outwardWU, tCW, tCCW, polyExpForTug);
 
-        double d = Math.max(0.12, distC - diag);
+        double d = Math.max(0.12, edgeDist);
         double w = smooth01(1.0 - (d / engageR));
 
         double swirlMag = (strength * 6.8) / (0.30 + d * d);
@@ -1643,17 +1784,22 @@ public class FieldPlanner {
       Translation2d tearVec = Translation2d.kZero;
       Translation2d handoff = Translation2d.kZero;
 
-      boolean edgeCase = !inside && nearObstacle && (occludes || occludesExpForTug);
+      boolean edgeCase =
+          !inside
+              && nearObstacle
+              && (occludes || occludesExpForTug || wCorner > CORNER_CONVEY_WCORNER_ON);
       if (edgeCase && !handoffActive) {
         double wEdge = edgeTeardropWeight(pLocal, wCorner);
         if (wEdge > 1e-6) {
-          int flowDir = (commitDir != 0) ? commitDir : impliedDirFromGeometry(position, target);
-          boolean ccw = flowDir > 0;
+          double gShort = longAxisX ? gLocal.getY() : gLocal.getX();
+          double pShort = longAxisX ? pLocal.getY() : pLocal.getX();
+          int goalSide = signWithFallback(gShort, pShort);
 
-          Translation2d vA = (ccw ? tearA_CCW : tearA_CW).forceVec(position);
-          Translation2d vB = (ccw ? tearB_CCW : tearB_CW).forceVec(position);
+          int robotSide = signWithFallback(pShort, gShort);
 
-          Translation2d v = vA.plus(vB);
+          FlowTeardrop tear = (robotSide == shortSignA) ? tearA_CCW : tearB_CCW;
+          Rotation2d dir = teardropTailDir(goalSide, robotSide, tear.loc, target, gLocal, pLocal);
+          Translation2d v = tear.forceVec(position, dir);
           tearVec = v.times(EDGE_TEAR_BLEND * wEdge);
         }
       }
@@ -1703,14 +1849,17 @@ public class FieldPlanner {
 
       Translation2d sum =
           primaryWorld
-              .plus(escapeWorld)
+              // .plus(escapeWorld)
               .plus(cornerBoost)
               .plus(tearVec)
               .plus(handoff)
               .plus(clearPush);
 
+      sum = applyEdgeConveyor(sum, pLocal, gLocal, ax, ay, edgeDist, wCorner);
+
       // NEW: apply stable corner conveyor BEFORE anti-tug to prevent oscillatory inching
-      if (enforceClear && wCorner > CORNER_CONVEY_WCORNER_ON) {
+      boolean cornerConvey = (enforceClear || nearObstacle) && wCorner > CORNER_CONVEY_WCORNER_ON;
+      if (cornerConvey) {
         sum =
             applyCornerConveyor(
                 sum,
@@ -1724,7 +1873,7 @@ public class FieldPlanner {
 
       boolean tugCase = nearObstacle && wCorner > 0.04 && (occludes || occludesExpForTug);
       if (tugCase) {
-        sum = applyAntiTug(sum, position, target, wCorner, true);
+        sum = applyAntiTug(sum, position, target, wCorner, true, edgeDist);
       }
 
       double sumN = sum.getNorm();
@@ -1733,22 +1882,29 @@ public class FieldPlanner {
       if (gN > EPS) {
         Translation2d gU = g.div(gN);
         double engageR2 = Math.max(1.25, falloffMeters + 0.95);
-        boolean cornerOrNear = (wCorner > 0.02) || (distC <= engageR2);
+        boolean cornerOrNear = (wCorner > 0.02) || (edgeDist <= engageR2);
 
         if (cornerOrNear) {
-          if (sumN > EPS) {
-            double align = dot(sum.div(sumN), gU);
-            if (align < 0.25) {
-              double d = Math.max(0.18, distC - diag);
+          double pushScale = 1.0;
+          if (occludes || occludesExpForTug) {
+            pushScale =
+                smooth01(clamp01((wCorner - 0.18) / Math.max(EPS, 0.32)));
+          }
+          if (pushScale > 1e-6) {
+            if (sumN > EPS) {
+              double align = dot(sum.div(sumN), gU);
+              if (align < 0.25) {
+                double d = Math.max(0.18, edgeDist);
+                double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
+                sum = sum.plus(gU.times(pushThroughMag * pushScale * (0.25 - align)));
+                sumN = sum.getNorm();
+              }
+            } else {
+              double d = Math.max(0.18, edgeDist);
               double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
-              sum = sum.plus(gU.times(pushThroughMag * (0.25 - align)));
+              sum = sum.plus(gU.times(pushThroughMag * pushScale));
               sumN = sum.getNorm();
             }
-          } else {
-            double d = Math.max(0.18, distC - diag);
-            double pushThroughMag = (strength * 2.6) / (0.85 + d * d);
-            sum = sum.plus(gU.times(pushThroughMag));
-            sumN = sum.getNorm();
           }
         }
       }
