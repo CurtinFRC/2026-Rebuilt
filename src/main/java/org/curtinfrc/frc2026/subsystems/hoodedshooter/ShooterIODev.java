@@ -45,7 +45,7 @@ public class ShooterIODev implements ShooterIO {
           .withMotorOutput(
               new MotorOutputConfigs()
                   .withNeutralMode(NeutralModeValue.Brake)
-                  .withInverted(InvertedValue.CounterClockwise_Positive))
+                  .withInverted(InvertedValue.Clockwise_Positive))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
@@ -67,8 +67,8 @@ public class ShooterIODev implements ShooterIO {
     tryUntilOk(5, () -> followerMotor3.getConfigurator().apply(sharedMotorConfig));
 
     followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
-    followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
-    followerMotor3.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
+    followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
+    followerMotor3.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
 
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, acceleration, voltage, current);
     leaderMotor.optimizeBusUtilization();
