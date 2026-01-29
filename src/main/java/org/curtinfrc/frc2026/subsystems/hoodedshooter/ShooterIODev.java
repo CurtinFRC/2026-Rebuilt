@@ -49,8 +49,7 @@ public class ShooterIODev implements ShooterIO {
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
-          .withSlot0(
-              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV));
+          .withSlot0(new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV));
 
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();

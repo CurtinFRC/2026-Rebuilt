@@ -24,12 +24,17 @@ public class HoodedShooter extends SubsystemBase {
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
     this.hoodIO = hoodIO;
     this.shooterIO = shooterIO;
-    
+
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
-    this.hoodMotorTempAlert = new Alert("Hood motor temperature above 60°C.", AlertType.kWarning); // change
+    this.hoodMotorTempAlert =
+        new Alert("Hood motor temperature above 60°C.", AlertType.kWarning); // change
     for (int motor = 0; motor < 4; motor++) {
-      this.shooterMotorDisconnectedAlerts[motor] = new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
-      this.shooterMotorTempAlerts[motor] = new Alert("Shooter motor " + String.valueOf(motor) + " temperature above 60°C.", AlertType.kWarning);
+      this.shooterMotorDisconnectedAlerts[motor] =
+          new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
+      this.shooterMotorTempAlerts[motor] =
+          new Alert(
+              "Shooter motor " + String.valueOf(motor) + " temperature above 60°C.",
+              AlertType.kWarning);
     }
   }
 
