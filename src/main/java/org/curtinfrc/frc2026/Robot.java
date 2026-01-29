@@ -21,6 +21,7 @@ import java.util.Set;
 import org.curtinfrc.frc2026.Subsystem.Intake;
 import org.curtinfrc.frc2026.Subsystem.IntakeIODev;
 import org.curtinfrc.frc2026.Subsystem.IntakeIOSim;
+import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -110,10 +111,10 @@ public class Robot extends LoggedRobot {
           drive =
               new Drive(
                   new GyroIOPigeon2(),
-                  new ModuleIOTalonFX(TunerConstants.FrontLeft),
-                  new ModuleIOTalonFX(TunerConstants.FrontRight),
-                  new ModuleIOTalonFX(TunerConstants.BackLeft),
-                  new ModuleIOTalonFX(TunerConstants.BackRight));
+                  new ModuleIOTalonFX(DevTunerConstants.FrontLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.FrontRight),
+                  new ModuleIOTalonFX(DevTunerConstants.BackLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.BackRight));
           vision =
               new Vision(
                   drive::addVisionMeasurement,
