@@ -27,7 +27,8 @@ public class MagRoller extends SubsystemBase {
     return run(() -> io.setVoltage(volts));
   }
 
-  public Command stayAtCurrentPosition(double position) {
-    return run(() -> io.setPosition(position));
+  public Command stayAtCurrentPosition() {
+    double currentPosition = io.getPosition();
+    return run(() -> io.setPosition(currentPosition));
   }
 }

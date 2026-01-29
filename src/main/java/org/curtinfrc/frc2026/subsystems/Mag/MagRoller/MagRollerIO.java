@@ -15,5 +15,9 @@ public interface MagRollerIO {
 
   public default void updateInputs(MagRollerIOInputs inputs) {}
 
+  public default double getPosition() {
+    return 0;
+  }
+
   public default void setPosition(double position) {}
 }
