@@ -200,14 +200,11 @@ public class Robot extends LoggedRobot {
     controller
         .rightBumper()
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.25, 15))
-        .onFalse(hoodedShooter.setShooterVoltage(0));
+        .onFalse(hoodedShooter.stopHoodedShooter());
     controller
         .leftBumper()
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.25, 15))
-        .onFalse(hoodedShooter.setShooterVoltage(0));
-
-    // hoodedShooter.setDefaultCommand(hoodedShooter.setHoodVoltage(() -> controller.getLeftY() *
-    // 5));
+        .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
   /** This function is called periodically during all modes. */

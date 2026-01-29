@@ -29,11 +29,11 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID4 = 29;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double K_P = 0.0;
-  private static final double K_I = 0.0;
-  private static final double K_D = 0.0;
-  private static final double K_S = 0.0;
-  private static final double K_V = 0.125;
+  private static final double KP = 0.0;
+  private static final double KI = 0.0;
+  private static final double KD = 0.0;
+  private static final double KS = 0.0;
+  private static final double KV = 0.125;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
@@ -50,7 +50,7 @@ public class ShooterIODev implements ShooterIO {
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
           .withSlot0(
-              new Slot0Configs().withKP(K_P).withKI(K_I).withKD(K_D).withKS(K_S).withKV(K_V));
+              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV));
 
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();

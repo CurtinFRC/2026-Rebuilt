@@ -11,9 +11,10 @@ import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
+import edu.wpi.first.math.util.Units;
 
 public class HoodIOSim extends HoodIODev {
-  private static final double D_T = 0.001;
+  private static final double DT = 0.001;
   private static final double HOOD_JKG = 0.00816;
 
   private final TalonFXSimState motorSim;
@@ -34,7 +35,7 @@ public class HoodIOSim extends HoodIODev {
             motorType,
             GEAR_RATIO,
             0.220259,
-            -100,
+            -100, // fix
             100,
             true,
             GRAVITY_POSITION_OFFSET);
@@ -43,7 +44,7 @@ public class HoodIOSim extends HoodIODev {
     encoderSim.Orientation = ChassisReference.Clockwise_Positive;
 
     simNotifier = new Notifier(this::updateSim);
-    simNotifier.startPeriodic(D_T);
+    simNotifier.startPeriodic(DT);
   }
 
   public void updateSim() {
@@ -51,11 +52,11 @@ public class HoodIOSim extends HoodIODev {
 
     double motorVolts = motorSim.getMotorVoltageMeasure().in(Volts);
     motorSimModel.setInputVoltage(motorVolts);
-    motorSimModel.update(D_T);
+    motorSimModel.update(DT);
 
-    double motorRotations =
-        Math.toDegrees(motorSimModel.getAngleRads()) / 360 * GEAR_RATIO - GRAVITY_POSITION_OFFSET;
-    double motorRPS = Math.toDegrees(motorSimModel.getVelocityRadPerSec()) / 360 * GEAR_RATIO;
+    double motorRotations = 
+        Units.radiansToRotations(motorSimModel.getAngleRads()) * GEAR_RATIO - GRAVITY_POSITION_OFFSET;
+    double motorRPS = Units.radiansToRotations(motorSimModel.getVelocityRadPerSec()) * GEAR_RATIO;
 
     motorSim.setRawRotorPosition(motorRotations);
     motorSim.setRotorVelocity(motorRPS);

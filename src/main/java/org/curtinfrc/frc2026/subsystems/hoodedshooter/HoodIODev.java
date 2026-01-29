@@ -32,24 +32,25 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
   public static final int ENCODER_ID = 21;
+
   public static final double GEAR_RATIO = 2.67;
   public static final double ENCODER_MAGNET_OFFSET = -0.0585;
   public static final double FORWARD_LIMIT_ROTATIONS = 1.575;
   public static final double REVERSE_LIMIT_ROTATIONS = 0;
+  public static final double STOWED_OUT_POSITION_THRESHOLD = 0.75;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.08686111111;
+  public static final double KP = 20.0;
+  public static final double KI = 0.0;
+  public static final double KD = 0.0;
+  public static final double KS_STOWED = 0.0;
+  public static final double KS_OUT = 0.0;
+  public static final double KV = 0.0; // temp
+  public static final double KA = 0.0;
+  public static final double KG = 0.0;
 
-  public static final double K_P = 20.0;
-  public static final double K_I = 0.0;
-  public static final double K_D = 0.0;
-  public static final double K_S_STOWED = 0.0;
-  public static final double K_S_OUT = 0.0;
-  public static final double K_V = 0.0; // temp
-  public static final double K_A = 0.0;
-  public static final double K_G = 0.0;
-
-  public static final double MOTION_MAGIC_CRUISE_VELOCITY = 2700;
-  public static final double MOTION_MAGIC_ACCLERATION = 16;
+  public static final double MM_CRUISE_VELOCITY = 2700;
+  public static final double MM_ACCLERATION = 16;
 
   protected final TalonFX motor = new TalonFX(MOTOR_ID);
   private final TalonFXConfiguration motorConfig =
@@ -73,30 +74,30 @@ public class HoodIODev implements HoodIO {
                   .withReverseSoftLimitEnable(true))
           .withSlot0(
               new Slot0Configs()
-                  .withKP(K_P)
-                  .withKI(K_I)
-                  .withKD(K_D)
-                  .withKS(K_S_STOWED)
-                  .withKV(K_V)
-                  .withKA(K_A)
-                  .withKG(K_G)
+                  .withKP(KP)
+                  .withKI(KI)
+                  .withKD(KD)
+                  .withKS(KS_STOWED)
+                  .withKV(KV)
+                  .withKA(KA)
+                  .withKG(KG)
                   .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
                   .withGravityType(GravityTypeValue.Arm_Cosine))
           .withSlot1(
               new Slot1Configs()
-                  .withKP(K_P)
-                  .withKI(K_I)
-                  .withKD(K_D)
-                  .withKS(K_S_OUT)
-                  .withKV(K_V)
-                  .withKA(K_A)
-                  .withKG(K_G)
+                  .withKP(KP)
+                  .withKI(KI)
+                  .withKD(KD)
+                  .withKS(KS_OUT)
+                  .withKV(KV)
+                  .withKA(KA)
+                  .withKG(KG)
                   .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
                   .withGravityType(GravityTypeValue.Arm_Cosine))
           .withMotionMagic(
               new MotionMagicConfigs()
-                  .withMotionMagicAcceleration(MOTION_MAGIC_ACCLERATION)
-                  .withMotionMagicCruiseVelocity(MOTION_MAGIC_CRUISE_VELOCITY));
+                  .withMotionMagicAcceleration(MM_ACCLERATION)
+                  .withMotionMagicCruiseVelocity(MM_CRUISE_VELOCITY));
 
   protected final CANcoder encoder = new CANcoder(ENCODER_ID);
   private final CANcoderConfiguration encoderConfig =
@@ -115,12 +116,8 @@ public class HoodIODev implements HoodIO {
 
   private final VoltageOut voltageRequest =
       new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
-  // .withLimitForwardMotion(true)
-  // .withLimitReverseMotion(true);
   private final MotionMagicVoltage positionRequest =
       new MotionMagicVoltage(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
-  // .withLimitForwardMotion(true)
-  // .withLimitReverseMotion(true);
 
   public HoodIODev() {
     tryUntilOk(5, () -> motor.getConfigurator().apply(motorConfig));
@@ -152,7 +149,7 @@ public class HoodIODev implements HoodIO {
   @Override
   public void setPosition(double position) {
     var request = positionRequest.withPosition(position);
-    if (this.position.getValueAsDouble() > 0.75) {
+    if (this.position.getValueAsDouble() > STOWED_OUT_POSITION_THRESHOLD) {
       request.withSlot(1);
     } else {
       request.withSlot(0);
