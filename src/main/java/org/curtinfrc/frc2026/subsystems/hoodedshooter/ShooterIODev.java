@@ -16,6 +16,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
+import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularAcceleration;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
@@ -30,11 +31,12 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID3 = 29;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.0;
+  private static final double KP = 0.00076245;
   private static final double KI = 0.0;
   private static final double KD = 0.0;
-  private static final double KS = 0.0;
-  private static final double KV = 0.125;
+  private static final double KS = 0.24152;
+  private static final double KV = 0.12173;
+  private static final double KA = 0.015427;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
@@ -44,17 +46,20 @@ public class ShooterIODev implements ShooterIO {
       new TalonFXConfiguration()
           .withMotorOutput(
               new MotorOutputConfigs()
-                  .withNeutralMode(NeutralModeValue.Brake)
+                  .withNeutralMode(NeutralModeValue.Coast)
                   .withInverted(InvertedValue.Clockwise_Positive))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
-          .withSlot0(new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV));
+          .withSlot0(
+              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA));
 
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();
   private final StatusSignal<AngularVelocity> velocity = leaderMotor.getVelocity();
   private final StatusSignal<AngularAcceleration> acceleration = leaderMotor.getAcceleration();
+  private final StatusSignal<Angle> position = leaderMotor.getPosition();
+
   private final List<StatusSignal<Temperature>> motorTemperatures =
       List.of(
           leaderMotor.getDeviceTemp(),
@@ -69,7 +74,7 @@ public class ShooterIODev implements ShooterIO {
     tryUntilOk(5, () -> followerMotor1.getConfigurator().apply(sharedMotorConfig));
     tryUntilOk(5, () -> followerMotor2.getConfigurator().apply(sharedMotorConfig));
 
-    followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
+    followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
     followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
 
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, acceleration, voltage, current);
@@ -79,6 +84,8 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
+    inputs.motorTemperatures = new double[3];
+    inputs.motorsConnected = new boolean[3];
     for (int motor = 0; motor < 3; motor++) {
       inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
       inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
@@ -86,6 +93,7 @@ public class ShooterIODev implements ShooterIO {
 
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
+    inputs.positionRotations = position.getValueAsDouble();
     inputs.velocityMetresPerSecond = convertRPSToVelocity(velocity.getValueAsDouble());
     inputs.accelerationMetresPerSecondPerSecond =
         convertRPSToVelocity(acceleration.getValueAsDouble());
@@ -93,6 +101,11 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void setVoltage(double voltage) {
+    leaderMotor.setControl(voltageRequest.withOutput(voltage));
+  }
+
+  @Override
+  public void setVoltageV(Voltage voltage) {
     leaderMotor.setControl(voltageRequest.withOutput(voltage));
   }
 

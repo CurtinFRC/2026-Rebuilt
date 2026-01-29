@@ -36,19 +36,19 @@ public class HoodIODev implements HoodIO {
 
   public static final double GEAR_RATIO = 2.67;
   public static final double ENCODER_MAGNET_OFFSET = -0.0585;
-  public static final double FORWARD_LIMIT_ROTATIONS = 1.575;
+  public static final double FORWARD_LIMIT_ROTATIONS = 1.5;
   public static final double REVERSE_LIMIT_ROTATIONS = 0;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.75;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.08686111111;
   public static final double KP = 20.0;
   public static final double KI = 0.0;
-  public static final double KD = 0.0;
-  public static final double KS_STOWED = 0.0;
-  public static final double KS_OUT = 0.0;
-  public static final double KV = 0.0; // temp
+  public static final double KD = 0.25;
+  public static final double KS_STOWED = 0.60;
+  public static final double KS_OUT = 0.20;
+  public static final double KV = 0.12; // temp
   public static final double KA = 0.0;
-  public static final double KG = 0.0;
+  public static final double KG = 0.80;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
   public static final double MM_ACCLERATION = 16;
@@ -153,6 +153,11 @@ public class HoodIODev implements HoodIO {
   @Override
   public void setVoltage(double volts) {
     motor.setControl(voltageRequest.withOutput(volts));
+  }
+
+  @Override
+  public void setVoltageV(Voltage voltage) {
+    motor.setControl(voltageRequest.withOutput(voltage));
   }
 
   @Override

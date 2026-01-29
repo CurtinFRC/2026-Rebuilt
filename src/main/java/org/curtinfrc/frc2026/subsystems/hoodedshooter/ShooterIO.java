@@ -1,5 +1,6 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
+import edu.wpi.first.units.measure.Voltage;
 import org.littletonrobotics.junction.AutoLog;
 
 public interface ShooterIO {
@@ -11,11 +12,14 @@ public interface ShooterIO {
     public double currentAmps;
     public double velocityMetresPerSecond;
     public double accelerationMetresPerSecondPerSecond;
+    public double positionRotations;
   }
 
   public default void updateInputs(ShooterIOInputs inputs) {}
 
   public default void setVoltage(double voltage) {}
+
+  public default void setVoltageV(Voltage voltage) {}
 
   public default void setVelocity(double velocity) {}
 }

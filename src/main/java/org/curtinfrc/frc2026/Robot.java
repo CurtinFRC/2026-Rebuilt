@@ -199,11 +199,11 @@ public class Robot extends LoggedRobot {
     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
     controller
         .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.25, 15))
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.4, 25))
         .onFalse(hoodedShooter.stopHoodedShooter());
     controller
         .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.25, 15))
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.1, 25))
         .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
@@ -233,7 +233,15 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {}
+  public void autonomousInit() {
+    // CommandScheduler.getInstance()
+    //     .schedule(
+    //         hoodedShooter
+    //             .sysIdDynamicForward()
+    //             .andThen(hoodedShooter.sysIdDynamicBackward())
+    //             .andThen(hoodedShooter.sysIdQuasistaticForward())
+    //             .andThen(hoodedShooter.sysIdQuasistaticBackward()));
+  }
 
   /** This function is called periodically during autonomous. */
   @Override
