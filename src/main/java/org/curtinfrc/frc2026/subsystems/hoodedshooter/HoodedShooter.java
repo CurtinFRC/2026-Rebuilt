@@ -18,8 +18,8 @@ public class HoodedShooter extends SubsystemBase {
 
   private final Alert hoodMotorDisconnectedAlert;
   private final Alert hoodMotorTempAlert;
-  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
-  private final Alert[] shooterMotorTempAlerts = new Alert[3];
+  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[4];
+  private final Alert[] shooterMotorTempAlerts = new Alert[4];
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
     this.hoodIO = hoodIO;
@@ -49,8 +49,8 @@ public class HoodedShooter extends SubsystemBase {
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
     for (int motor = 0; motor < 4; motor++) {
-      shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorConnected[motor]);
-      shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperature[motor] > 60);
+      shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
+      shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);
     }
   }
 

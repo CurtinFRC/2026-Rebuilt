@@ -19,7 +19,9 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 import edu.wpi.first.units.measure.AngularAcceleration;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
+import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
+import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIODev implements ShooterIO {
@@ -55,6 +57,12 @@ public class ShooterIODev implements ShooterIO {
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();
   private final StatusSignal<AngularVelocity> velocity = leaderMotor.getVelocity();
   private final StatusSignal<AngularAcceleration> acceleration = leaderMotor.getAcceleration();
+  private final List<StatusSignal<Temperature>> motorTemperatures =
+      List.of(
+          leaderMotor.getDeviceTemp(),
+          followerMotor1.getDeviceTemp(),
+          followerMotor2.getDeviceTemp(),
+          followerMotor3.getDeviceTemp());
 
   final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
   final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
@@ -76,6 +84,11 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
+    for (int motor = 0; motor < 4; motor++) {
+      inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
+      inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
+    }
+
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.velocityMetresPerSecond = convertRPSToVelocity(velocity.getValueAsDouble());

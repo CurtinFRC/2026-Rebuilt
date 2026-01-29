@@ -26,6 +26,7 @@ import com.ctre.phoenix6.signals.SensorDirectionValue;
 import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
+import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
@@ -113,6 +114,7 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<Current> current = motor.getStatorCurrent();
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Angle> absolutePosition = encoder.getAbsolutePosition();
+  private final StatusSignal<Temperature> temperature = motor.getDeviceTemp();
 
   private final VoltageOut voltageRequest =
       new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
@@ -134,6 +136,13 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void updateInputs(HoodIOInputs inputs) {
+    inputs.motorConnected =
+        position.getStatus().isOK()
+            && velocity.getStatus().isOK()
+            && current.getStatus().isOK()
+            && voltage.getStatus().isOK()
+            && temperature.getStatus().isOK();
+    inputs.motorTemperature = temperature.getValueAsDouble();
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
