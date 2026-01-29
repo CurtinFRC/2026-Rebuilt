@@ -43,8 +43,8 @@ public class Mag extends SubsystemBase {
     return Commands.parallel(
         intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
   }
-public Command holdIndexerCommand() {
-  return indexerMagRoller.stayAtCurrentPosition();
-}
-  
+
+  public Command holdIndexerCommand() {
+    return indexerMagRoller.stayAtCurrentPosition();
+  }
 }
