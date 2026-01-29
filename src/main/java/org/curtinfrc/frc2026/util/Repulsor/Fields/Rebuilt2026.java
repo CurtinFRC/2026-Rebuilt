@@ -9,6 +9,7 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.HorizontalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.SquareObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.VerticalObstacle;
@@ -125,22 +126,23 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> fieldObstacles() {
     double maxRangeY = 0.1;
-    double maxRangeX = 1;
+    double maxRangeX = 3;
     return List.of(
         new RectangleObstacle(
             new Translation2d((FIELD_LENGTH / 2) - 3.648981, Constants.FIELD_WIDTH / 2),
             0.5929315,
             5.711800,
-            3,
+            4,
             maxRangeX,
             maxRangeY),
         new RectangleObstacle(
             new Translation2d((FIELD_LENGTH / 2) + 3.648981, Constants.FIELD_WIDTH / 2),
             0.5929315,
             5.711800,
-            3,
+            4,
             maxRangeX,
-            maxRangeY));
+            maxRangeY)
+        );
   }
 
   // @Override // TRENCH + BUMP

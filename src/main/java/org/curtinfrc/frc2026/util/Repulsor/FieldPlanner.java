@@ -1887,8 +1887,7 @@ public class FieldPlanner {
         if (cornerOrNear) {
           double pushScale = 1.0;
           if (occludes || occludesExpForTug) {
-            pushScale =
-                smooth01(clamp01((wCorner - 0.18) / Math.max(EPS, 0.32)));
+            pushScale = smooth01(clamp01((wCorner - 0.18) / Math.max(EPS, 0.32)));
           }
           if (pushScale > 1e-6) {
             if (sumN > EPS) {
