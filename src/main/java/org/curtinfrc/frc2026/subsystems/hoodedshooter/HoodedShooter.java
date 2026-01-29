@@ -31,24 +31,11 @@ public class HoodedShooter extends SubsystemBase {
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
   private final Alert[] shooterMotorTempAlerts = new Alert[3];
 
-  private final MutVoltage m_appliedVoltage = Volts.mutable(0);
-  private final MutAngle m_angle = Radians.mutable(0);
-  private final MutAngularVelocity m_velocity = RadiansPerSecond.mutable(0);
+  private final MutVoltage appliedVoltageMut = Volts.mutable(0);
+  private final MutAngle angleRadiansMut = Radians.mutable(0);
+  private final MutAngularVelocity angularVelocityRadiansMut = RadiansPerSecond.mutable(0);
 
-  private final SysIdRoutine m_sysIdRoutine;
-  public static final double FORWARD_LIMIT = HoodIODev.FORWARD_LIMIT_ROTATIONS;
-  public static final double REVERSE_LIMIT = HoodIODev.REVERSE_LIMIT_ROTATIONS;
-
-  // Small buffer so we stop *before* slamming into the limit
-  public static final double LIMIT_MARGIN = 0.02; // rotations
-
-  public boolean atForwardLimit() {
-    return hoodInputs.positionRotations >= (FORWARD_LIMIT - LIMIT_MARGIN);
-  }
-
-  public boolean atReverseLimit() {
-    return hoodInputs.positionRotations <= (REVERSE_LIMIT + LIMIT_MARGIN);
-  }
+  private final SysIdRoutine sysIdRoutineShooter;
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
     this.hoodIO = hoodIO;
@@ -66,44 +53,24 @@ public class HoodedShooter extends SubsystemBase {
               AlertType.kWarning);
     }
 
-    // m_sysIdRoutine =
-    //     new SysIdRoutine(
-    //         // Empty config defaults to 1 volt/second ramp rate and 7 volt step voltage.
-    //         new SysIdRoutine.Config(),
-    //         new SysIdRoutine.Mechanism(
-    //             shooterIO::setVoltageV,
-    //             log -> {
-    //               // Record a frame for the shooter motor.
-    //               log.motor("shooter-wheel")
-    //                   .voltage(m_appliedVoltage.mut_replace(shooterInputs.appliedVolts, Volts))
-    //                   .angularPosition(
-    //                       m_angle.mut_replace(shooterInputs.positionRotations, Rotations))
-    //                   .angularVelocity(
-    //                       m_velocity.mut_replace(
-    //                           shooterInputs.velocityMetresPerSecond
-    //                               / (HoodedShooter.WHEEL_DIAMETER * Math.PI),
-    //                           RotationsPerSecond));
-    //             },
-    //             this,
-    //             "shooter"));
-
-    m_sysIdRoutine =
+    sysIdRoutineShooter =
         new SysIdRoutine(
-            // Empty config defaults to 1 volt/second ramp rate and 7 volt step voltage.
             new SysIdRoutine.Config(),
             new SysIdRoutine.Mechanism(
-                hoodIO::setVoltageV,
+                shooterIO::setVoltageV,
                 log -> {
-                  // Record a frame for the shooter motor.
-                  log.motor("hood")
-                      .voltage(m_appliedVoltage.mut_replace(hoodInputs.appliedVolts, Volts))
-                      .angularPosition(m_angle.mut_replace(hoodInputs.positionRotations, Rotations))
+                  log.motor("shooter")
+                      .voltage(appliedVoltageMut.mut_replace(shooterInputs.appliedVolts, Volts))
+                      .angularPosition(
+                          angleRadiansMut.mut_replace(shooterInputs.positionRotations, Rotations))
                       .angularVelocity(
-                          m_velocity.mut_replace(
-                              hoodInputs.angularVelocityRotationsPerSecond, RotationsPerSecond));
+                          angularVelocityRadiansMut.mut_replace(
+                              shooterInputs.velocityMetresPerSecond
+                                  / (HoodedShooter.WHEEL_DIAMETER * Math.PI),
+                              RotationsPerSecond));
                 },
                 this,
-                "hood"));
+                "shooter"));
   }
 
   @Override
@@ -146,27 +113,6 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> shooterIO.setVelocity(velocity));
   }
 
-  public Command sysIdQuasistaticForward() {
-    return m_sysIdRoutine.quasistatic(SysIdRoutine.Direction.kForward).until(this::atForwardLimit);
-  }
-
-  public Command sysIdQuasistaticBackward() {
-    return m_sysIdRoutine.quasistatic(SysIdRoutine.Direction.kForward).until(this::atReverseLimit);
-  }
-
-  /**
-   * Returns a command that will execute a dynamic test in the given direction.
-   *
-   * @param direction The direction (forward or reverse) to run the test in
-   */
-  public Command sysIdDynamicForward() {
-    return m_sysIdRoutine.dynamic(SysIdRoutine.Direction.kForward).until(this::atForwardLimit);
-  }
-
-  public Command sysIdDynamicBackward() {
-    return m_sysIdRoutine.dynamic(SysIdRoutine.Direction.kForward).until(this::atReverseLimit);
-  }
-
   public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
     return run(
         () -> {
@@ -181,5 +127,21 @@ public class HoodedShooter extends SubsystemBase {
           hoodIO.setVoltage(0);
           shooterIO.setVoltage(0);
         });
+  }
+
+  public Command sysIdQuasistaticForward() {
+    return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kForward);
+  }
+
+  public Command sysIdQuasistaticBackward() {
+    return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kReverse);
+  }
+
+  public Command sysIdDynamicForward() {
+    return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kForward);
+  }
+
+  public Command sysIdDynamicBackward() {
+    return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kReverse);
   }
 }
