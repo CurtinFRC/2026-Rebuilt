@@ -15,7 +15,7 @@ public class ShooterIOSim extends ShooterIODev {
   private static final double SHOOTER_JKG = 0.0035;
 
   private final TalonFXSimState motorSim;
-  private final DCMotor motorType = DCMotor.getKrakenX60Foc(4);
+  private final DCMotor motorType = DCMotor.getKrakenX60Foc(3);
   private final DCMotorSim motorSimModel;
   private final Notifier simNotifier;
 

@@ -18,8 +18,8 @@ public class HoodedShooter extends SubsystemBase {
 
   private final Alert hoodMotorDisconnectedAlert;
   private final Alert hoodMotorTempAlert;
-  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[4];
-  private final Alert[] shooterMotorTempAlerts = new Alert[4];
+  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
+  private final Alert[] shooterMotorTempAlerts = new Alert[3];
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
     this.hoodIO = hoodIO;
@@ -28,7 +28,7 @@ public class HoodedShooter extends SubsystemBase {
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
         new Alert("Hood motor temperature above 60°C.", AlertType.kWarning); // change
-    for (int motor = 0; motor < 4; motor++) {
+    for (int motor = 0; motor < 3; motor++) {
       this.shooterMotorDisconnectedAlerts[motor] =
           new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
       this.shooterMotorTempAlerts[motor] =
@@ -48,7 +48,7 @@ public class HoodedShooter extends SubsystemBase {
     // Update alerts
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
-    for (int motor = 0; motor < 4; motor++) {
+    for (int motor = 0; motor < 3; motor++) {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
       shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);
     }

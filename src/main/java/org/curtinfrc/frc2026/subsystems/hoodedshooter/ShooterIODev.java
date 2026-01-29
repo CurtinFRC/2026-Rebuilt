@@ -26,9 +26,8 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIODev implements ShooterIO {
   public static final int ID1 = 18;
-  public static final int ID2 = 16;
-  public static final int ID3 = 19;
-  public static final int ID4 = 29;
+  public static final int ID2 = 19;
+  public static final int ID3 = 29;
 
   public static final double GEAR_RATIO = 1.0;
   private static final double KP = 0.0;
@@ -40,7 +39,6 @@ public class ShooterIODev implements ShooterIO {
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
   protected final TalonFX followerMotor2 = new TalonFX(ID3);
-  protected final TalonFX followerMotor3 = new TalonFX(ID4);
 
   private final TalonFXConfiguration sharedMotorConfig =
       new TalonFXConfiguration()
@@ -61,8 +59,7 @@ public class ShooterIODev implements ShooterIO {
       List.of(
           leaderMotor.getDeviceTemp(),
           followerMotor1.getDeviceTemp(),
-          followerMotor2.getDeviceTemp(),
-          followerMotor3.getDeviceTemp());
+          followerMotor2.getDeviceTemp());
 
   final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
   final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
@@ -71,11 +68,9 @@ public class ShooterIODev implements ShooterIO {
     tryUntilOk(5, () -> leaderMotor.getConfigurator().apply(sharedMotorConfig));
     tryUntilOk(5, () -> followerMotor1.getConfigurator().apply(sharedMotorConfig));
     tryUntilOk(5, () -> followerMotor2.getConfigurator().apply(sharedMotorConfig));
-    tryUntilOk(5, () -> followerMotor3.getConfigurator().apply(sharedMotorConfig));
 
     followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
     followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
-    followerMotor3.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
 
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, acceleration, voltage, current);
     leaderMotor.optimizeBusUtilization();
@@ -84,7 +79,7 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
-    for (int motor = 0; motor < 4; motor++) {
+    for (int motor = 0; motor < 3; motor++) {
       inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
       inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
     }
