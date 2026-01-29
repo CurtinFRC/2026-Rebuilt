@@ -111,10 +111,10 @@ public class Robot extends LoggedRobot {
           drive =
               new Drive(
                   new GyroIOPigeon2(),
-                  new ModuleIOTalonFX(TunerConstants.FrontLeft),
-                  new ModuleIOTalonFX(TunerConstants.FrontRight),
-                  new ModuleIOTalonFX(TunerConstants.BackLeft),
-                  new ModuleIOTalonFX(TunerConstants.BackRight));
+                  new ModuleIOTalonFX(DevTunerConstants.FrontLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.FrontRight),
+                  new ModuleIOTalonFX(DevTunerConstants.BackLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.BackRight));
           vision =
               new Vision(
                   drive::addVisionMeasurement,
