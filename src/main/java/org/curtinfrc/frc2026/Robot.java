@@ -175,14 +175,14 @@ public class Robot extends LoggedRobot {
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(0.5),
-                mag.store(0.5),
+                mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
-    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+
     /*controller
-    .rightBumper()
+    .b()
     .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
   }
