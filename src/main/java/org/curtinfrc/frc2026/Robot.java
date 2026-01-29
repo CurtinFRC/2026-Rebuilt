@@ -11,6 +11,7 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import java.util.ArrayList;
@@ -18,9 +19,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import org.curtinfrc.frc2026.Subsystem.Intake;
-import org.curtinfrc.frc2026.Subsystem.IntakeIODev;
-import org.curtinfrc.frc2026.Subsystem.IntakeIOSim;
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -29,8 +27,11 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
-import org.curtinfrc.frc2026.subsystems.Mag;
-import org.curtinfrc.frc2026.subsystems.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
+import org.curtinfrc.frc2026.subsystems.Mag.Mag;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -169,10 +170,21 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller.y().whileTrue(intake.RawControlConsume()).onFalse(intake.RawIdle());
-    controller.x().whileTrue(mag.store(0.5)).onFalse(mag.stop());
-    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
-    controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller
+        .leftTrigger()
+        .whileTrue(
+            Commands.parallel(
+                intake.RawControlConsume(0.5),
+                mag.store(0.7),
+                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+
+    /*controller
+    .b()
+    .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
+    .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
   }
 
   /** This function is called periodically during all modes. */
