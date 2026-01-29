@@ -170,16 +170,16 @@ public class Robot extends LoggedRobot {
             () -> -controller.getRightX()));
 
     controller
-        .x()
+        .leftTrigger()
         .whileTrue(Commands.parallel(intake.RawControlConsume(0.5), mag.store(0.5)))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.a().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
+    controller.rightTrigger().whileTrue(mag.spinIndexer(0.5)).onFalse(mag.stop());
     controller.b().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
-    controller
+    /*controller
         .rightBumper()
         .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
   }
 
   /** This function is called periodically during all modes. */
