@@ -15,7 +15,7 @@ import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 
 public class HoodIOSim extends HoodIODev {
   private static final double DT = 0.001;
-  private static final double HOOD_JKG = 0.00816;
+  private static final double HOOD_JKG = 0.00816; // fix
 
   private final TalonFXSimState motorSim;
   private final CANcoderSimState encoderSim;

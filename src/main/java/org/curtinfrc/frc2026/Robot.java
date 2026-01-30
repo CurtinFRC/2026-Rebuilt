@@ -186,20 +186,25 @@ public class Robot extends LoggedRobot {
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(0.5),
+                intake.RawControlConsume(1.0),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+
+    controller
+        .a()
+        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
     controller
         .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.4, 25))
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
         .onFalse(hoodedShooter.stopHoodedShooter());
     controller
         .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.1, 25))
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2))
         .onFalse(hoodedShooter.stopHoodedShooter());
   }
 

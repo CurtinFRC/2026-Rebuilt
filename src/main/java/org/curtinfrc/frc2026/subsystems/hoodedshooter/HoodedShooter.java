@@ -36,6 +36,7 @@ public class HoodedShooter extends SubsystemBase {
   private final MutAngularVelocity angularVelocityRadiansMut = RadiansPerSecond.mutable(0);
 
   private final SysIdRoutine sysIdRoutineShooter;
+  private final SysIdRoutine sysIdRoutineHood;
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
     this.hoodIO = hoodIO;
@@ -71,6 +72,23 @@ public class HoodedShooter extends SubsystemBase {
                 },
                 this,
                 "shooter"));
+
+    sysIdRoutineHood =
+        new SysIdRoutine(
+            new SysIdRoutine.Config(),
+            new SysIdRoutine.Mechanism(
+                hoodIO::setVoltageV,
+                log -> {
+                  log.motor("hood")
+                      .voltage(appliedVoltageMut.mut_replace(hoodInputs.appliedVolts, Volts))
+                      .angularPosition(
+                          angleRadiansMut.mut_replace(hoodInputs.positionRotations, Rotations))
+                      .angularVelocity(
+                          angularVelocityRadiansMut.mut_replace(
+                              hoodInputs.angularVelocityRotationsPerSecond, RotationsPerSecond));
+                },
+                this,
+                "hood"));
   }
 
   @Override
@@ -129,19 +147,36 @@ public class HoodedShooter extends SubsystemBase {
         });
   }
 
-  public Command sysIdQuasistaticForward() {
+  public Command shooterSysIdQuasistaticForward() {
     return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kForward);
   }
 
-  public Command sysIdQuasistaticBackward() {
+  public Command shooterSysIdQuasistaticBackward() {
     return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kReverse);
   }
 
-  public Command sysIdDynamicForward() {
+  public Command shooterSysIdDynamicForward() {
     return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kForward);
   }
 
-  public Command sysIdDynamicBackward() {
+  public Command shooterSysIdDynamicBackward() {
     return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kReverse);
+  }
+
+  // do not use
+  public Command hoodSysIdQuasistaticForward() {
+    return sysIdRoutineHood.quasistatic(SysIdRoutine.Direction.kForward);
+  }
+
+  public Command hoodSysIdQuasistaticBackward() {
+    return sysIdRoutineHood.quasistatic(SysIdRoutine.Direction.kReverse);
+  }
+
+  public Command hoodSysIdDynamicForward() {
+    return sysIdRoutineHood.dynamic(SysIdRoutine.Direction.kForward);
+  }
+
+  public Command hoodSysIdDynamicBackward() {
+    return sysIdRoutineHood.dynamic(SysIdRoutine.Direction.kReverse);
   }
 }
