@@ -16,6 +16,8 @@ import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 public class HoodIOSim extends HoodIODev {
   private static final double DT = 0.001;
   private static final double HOOD_JKG = 0.00816; // fix
+  private static final double HOOD_MIN_POSITION_ROTATIONS = 0;
+  private static final double HOOD_MAX_POSITION_ROTATIONS = 1.5;
 
   private final TalonFXSimState motorSim;
   private final CANcoderSimState encoderSim;
@@ -35,8 +37,8 @@ public class HoodIOSim extends HoodIODev {
             motorType,
             GEAR_RATIO,
             0.220259,
-            -100, // fix
-            100,
+            Math.toRadians(HOOD_MIN_POSITION_ROTATIONS * 360),
+            Math.toRadians(HOOD_MAX_POSITION_ROTATIONS * 360),
             true,
             GRAVITY_POSITION_OFFSET);
 

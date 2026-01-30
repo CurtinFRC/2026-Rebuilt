@@ -38,9 +38,12 @@ public class HoodedShooter extends SubsystemBase {
   private final SysIdRoutine sysIdRoutineShooter;
   private final SysIdRoutine sysIdRoutineHood;
 
-  private boolean hoodSoftLimited() {
-    return hoodInputs.positionRotations > HoodIODev.FORWARD_LIMIT_ROTATIONS
-        || hoodInputs.positionRotations < HoodIODev.REVERSE_LIMIT_ROTATIONS;
+  private boolean hoodSoftLimitedForward() {
+    return hoodInputs.positionRotations > HoodIODev.FORWARD_LIMIT_ROTATIONS - 0.1;
+  }
+
+  private boolean hoodSoftLimitedReverse() {
+    return hoodInputs.positionRotations < HoodIODev.REVERSE_LIMIT_ROTATIONS + 0.1;
   }
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
@@ -172,20 +175,24 @@ public class HoodedShooter extends SubsystemBase {
   public Command hoodSysIdQuasistaticForward() {
     return sysIdRoutineHood
         .quasistatic(SysIdRoutine.Direction.kForward)
-        .until(() -> hoodSoftLimited());
+        .until(() -> hoodSoftLimitedForward());
   }
 
   public Command hoodSysIdQuasistaticBackward() {
     return sysIdRoutineHood
         .quasistatic(SysIdRoutine.Direction.kReverse)
-        .until(() -> hoodSoftLimited());
+        .until(() -> hoodSoftLimitedReverse());
   }
 
   public Command hoodSysIdDynamicForward() {
-    return sysIdRoutineHood.dynamic(SysIdRoutine.Direction.kForward).until(() -> hoodSoftLimited());
+    return sysIdRoutineHood
+        .dynamic(SysIdRoutine.Direction.kForward)
+        .until(() -> hoodSoftLimitedForward());
   }
 
   public Command hoodSysIdDynamicBackward() {
-    return sysIdRoutineHood.dynamic(SysIdRoutine.Direction.kReverse).until(() -> hoodSoftLimited());
+    return sysIdRoutineHood
+        .dynamic(SysIdRoutine.Direction.kReverse)
+        .until(() -> hoodSoftLimitedReverse());
   }
 }
