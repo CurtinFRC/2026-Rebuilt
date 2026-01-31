@@ -8,7 +8,9 @@ public final class Constants {
   public static final int middleMagRollerMotorID = 20;
   public static final int indexerMagRollerMotorID = 15;
 
-  public static final RobotType robotType = RobotType.DEV;
+  // Current robot the code is being deployed on, DEV/COMP
+  public static final RobotType currentRobot = RobotType.DEV;
+  public static final RobotType robotType = RobotBase.isSimulation() ? RobotType.SIM : currentRobot;
 
   public static final Mode getMode() {
     return switch (robotType) {
