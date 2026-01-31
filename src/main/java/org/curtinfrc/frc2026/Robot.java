@@ -31,7 +31,9 @@ import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRoller;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -56,6 +58,11 @@ public class Robot extends LoggedRobot {
   private Vision vision;
   private Intake intake;
   private Mag mag;
+
+  private MagRoller roller1;
+  private MagRoller roller2;
+  private MagRoller roller3;
+
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -147,6 +154,11 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
           intake = new Intake(new IntakeIOSim());
+
+          // roller1 = new MagRoller(new MagRollerIOSim(3.0));
+          // roller2 = new MagRoller(new MagRollerIOSim(9.6));
+          // roller3 = new MagRoller(new MagRollerIOSim(3.0));
+          mag = new Mag(new MagRollerIOSim(3), new MagRollerIOSim(9.6), new MagRollerIOSim(3));
         }
       }
     } else {
@@ -158,6 +170,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -174,17 +187,15 @@ public class Robot extends LoggedRobot {
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(0.5),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
+                intake.RawControlConsume(0.5), mag.store(0.7), mag.holdIndexerCommand()))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
     controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
 
-    /*controller
-    .b()
-    .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
-    .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
+    controller
+        .b()
+        .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
   }
 
   /** This function is called periodically during all modes. */

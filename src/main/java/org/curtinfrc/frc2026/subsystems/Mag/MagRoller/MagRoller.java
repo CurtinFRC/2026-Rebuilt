@@ -6,6 +6,7 @@ import org.littletonrobotics.junction.Logger;
 
 public class MagRoller extends SubsystemBase {
   private final MagRollerIO io;
+  private double currentPosition = 0;
 
   private final MagRollerIOInputsAutoLogged inputs = new MagRollerIOInputsAutoLogged();
 
@@ -16,7 +17,7 @@ public class MagRoller extends SubsystemBase {
   @Override
   public void periodic() {
     io.updateInputs(inputs);
-    Logger.processInputs("Intake", inputs);
+    Logger.processInputs("Mag", inputs);
   }
 
   public Command stop() {
@@ -28,7 +29,7 @@ public class MagRoller extends SubsystemBase {
   }
 
   public Command stayAtCurrentPosition() {
-    double currentPosition = io.getPosition();
-    return run(() -> io.setPosition(currentPosition));
+    return runOnce(() -> currentPosition = io.getPosition())
+        .andThen(run(() -> io.setPosition(currentPosition)));
   }
 }

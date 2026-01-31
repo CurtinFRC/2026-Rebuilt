@@ -3,10 +3,9 @@ package org.curtinfrc.frc2026.subsystems.Mag;
 import com.ctre.phoenix6.controls.PositionVoltage;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
-import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.*;
 
-public class Mag extends SubsystemBase {
+public class Mag {
 
   private MagRoller intakeMagRoller;
   private MagRoller middleMagRoller;
@@ -18,10 +17,6 @@ public class Mag extends SubsystemBase {
     intakeMagRoller = new MagRoller(roller1);
     middleMagRoller = new MagRoller(roller2);
     indexerMagRoller = new MagRoller(roller3);
-  }
-
-  public void initDefaultCommand() {
-    setDefaultCommand(stop());
   }
 
   public Command spinIndexer(double volts) {

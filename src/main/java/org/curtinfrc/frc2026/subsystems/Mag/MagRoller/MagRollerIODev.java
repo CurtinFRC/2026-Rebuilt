@@ -20,7 +20,7 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class MagRollerIODev implements MagRollerIO {
 
-  private final TalonFX magMotor;
+  protected final TalonFX magMotor;
 
   private final StatusSignal<Voltage> voltage;
   private final StatusSignal<AngularVelocity> angularVelocity;
@@ -28,7 +28,13 @@ public class MagRollerIODev implements MagRollerIO {
   private final StatusSignal<Current> current;
   private static final CurrentLimitsConfigs currentLimits =
       new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
+
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
+  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
+
+  private static final double KP = 2.4;
+  private static final double KI = 0;
+  private static final double KD = 0;
 
   public MagRollerIODev(int motorID, InvertedValue inverted) {
 
@@ -38,12 +44,6 @@ public class MagRollerIODev implements MagRollerIO {
     angle = magMotor.getPosition();
     current = magMotor.getStatorCurrent();
 
-    Slot0Configs slot0Configs = new Slot0Configs();
-    slot0Configs.kP = 2.4; // An error of 1 rotation results in 2.4 V output
-    slot0Configs.kI = 0; // no output for integrated error
-    slot0Configs.kD = 0; // A velocity of 1 rps results in 0.1 V output
-
-    magMotor.getConfigurator().apply(slot0Configs);
     tryUntilOk(
         5,
         () ->
@@ -52,7 +52,8 @@ public class MagRollerIODev implements MagRollerIO {
                 .apply(
                     new TalonFXConfiguration()
                         .withMotorOutput(new MotorOutputConfigs().withInverted(inverted))
-                        .withCurrentLimits(currentLimits)));
+                        .withCurrentLimits(currentLimits)
+                        .withSlot0(new Slot0Configs().withKP(KP).withKI(KI).withKD(KD))));
 
     // Setting update frequency
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, angle, angularVelocity);
@@ -74,10 +75,8 @@ public class MagRollerIODev implements MagRollerIO {
 
   @Override
   public void setVoltage(double volts) {
-    magMotor.set(volts);
+    magMotor.setControl(voltageRequest.withOutput(12.0));
   }
-
-  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
 
   @Override
   public void setPosition(double position) {
