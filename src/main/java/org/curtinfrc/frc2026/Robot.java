@@ -31,7 +31,15 @@ import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -56,6 +64,7 @@ public class Robot extends LoggedRobot {
   private Vision vision;
   private Intake intake;
   private Mag mag;
+  private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -107,6 +116,7 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
         }
         case DEV -> {
           drive =
@@ -131,6 +141,7 @@ public class Robot extends LoggedRobot {
                       Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
         }
         case SIM -> {
           drive =
@@ -146,7 +157,9 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+          mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
+          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
         }
       }
     } else {
@@ -158,6 +171,8 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
+      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -174,17 +189,27 @@ public class Robot extends LoggedRobot {
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(0.5),
+                intake.RawControlConsume(1.0),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
 
-    /*controller
-    .b()
-    .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
-    .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));*/
+    controller
+        .a()
+        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    controller
+        .rightBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+        .onFalse(hoodedShooter.stopHoodedShooter());
+    controller
+        .leftBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
+        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+        .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
   /** This function is called periodically during all modes. */
@@ -213,7 +238,15 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {}
+  public void autonomousInit() {
+    // CommandScheduler.getInstance()
+    //     .schedule(
+    //         hoodedShooter
+    //             .hoodSysIdDynamicForward()
+    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
+    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
+    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
+  }
 
   /** This function is called periodically during autonomous. */
   @Override
