@@ -1397,7 +1397,7 @@ public class FieldTracker {
               && collectValid.test(snap.p)) {
             best =
                 new PredictiveFieldState.PointCandidate(
-                    snap.p,
+                    snap.p, new Rotation2d(),
                     robotPos.getDistance(snap.p) / Math.max(0.1, cap),
                     0.0,
                     0.0,
@@ -2001,7 +2001,7 @@ public class FieldTracker {
         Logger.recordOutput("collect_intent_ally", best.allyIntent);
       }
 
-      return new Pose2d(desiredDriveTarget, robotPoseBlue.getRotation());
+      return new Pose2d(desiredDriveTarget, best != null ? best.rotation : Rotation2d.kZero);
     }
 
     clearCollectSticky();
