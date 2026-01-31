@@ -361,7 +361,7 @@ public class AutoPathBehaviour extends Behaviour {
               }
 
               ctx.repulsor.setCurrentGoal(sp);
-              ctx.planner.setGoal(goalPose);
+              ctx.planner.setRequestedGoal(goalPose);
 
               double distToGoal = robotPose.getTranslation().getDistance(goalPose.getTranslation());
               long nowNs = System.nanoTime();

@@ -63,7 +63,7 @@ public final class DefenseBehaviour extends Behaviour {
 
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
               ctx.repulsor.setCurrentGoal(sp);
-              ctx.planner.setGoal(goalPose);
+              ctx.planner.setRequestedGoal(goalPose);
 
               RepulsorSample sample =
                   ctx.planner.calculate(

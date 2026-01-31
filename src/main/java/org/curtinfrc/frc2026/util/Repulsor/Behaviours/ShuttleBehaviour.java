@@ -64,7 +64,7 @@ public final class ShuttleBehaviour extends Behaviour {
 
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
               ctx.repulsor.setCurrentGoal(sp);
-              ctx.planner.setGoal(goalPose);
+              ctx.planner.setRequestedGoal(goalPose);
 
               double cap = speedCap != null ? Math.max(0.25, speedCap.get()) : 3.5;
 

@@ -37,6 +37,13 @@ public class FieldPlanner {
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   private static final double CORNER_CHAMFER = 0;
   public static final double GOAL_STRENGTH = 2.2;
+  private static final double STAGED_CENTER_BAND_M = 1.2;
+  private static final double STAGED_REACH_DIST_M = 0.6;
+  private static final double STAGED_RESTAGE_DIST_M = 1.2;
+  private static final double STAGED_SAME_GOAL_POS_M = 0.05;
+  private static final double STAGED_SAME_GOAL_ROT_DEG = 5.0;
+  private static final double STAGED_MAX_SEC = 2.0;
+  private GatedAttractorObstacle stagedGate = null;
 
   private static final class ClearMemo {
     Boolean toGoalDyn;
@@ -86,6 +93,7 @@ public class FieldPlanner {
   private final ObstacleProvider obstacleProvider;
   private final List<Obstacle> fieldObstacles;
   private final List<Obstacle> walls;
+  private final List<GatedAttractorObstacle> gatedAttractors = new ArrayList<>();
 
   public ObstacleProvider getObstacleProvider() {
     return obstacleProvider;
@@ -111,6 +119,11 @@ public class FieldPlanner {
         obstacleProvider == null ? new DefaultObstacleProvider() : obstacleProvider;
     this.fieldObstacles = new ArrayList<>(this.obstacleProvider.fieldObstacles());
     this.walls = new ArrayList<>(this.obstacleProvider.walls());
+    for (Obstacle obs : this.fieldObstacles) {
+      if (obs instanceof GatedAttractorObstacle gated) {
+        gatedAttractors.add(gated);
+      }
+    }
 
     for (int i = 0; i < ARROWS_SIZE; i++) arrows.add(new Pose2d());
     String prefix = System.getenv("REACTIVE_BYPASS_ID");
@@ -586,6 +599,7 @@ public class FieldPlanner {
     public final Rotation2d rot;
     public final double maxRangeX;
     public final double maxRangeY;
+    private final boolean flowAssist;
 
     private static final double X_AXIS_ANGLE_BIAS_RAD = Math.toRadians(18.0);
 
@@ -1150,6 +1164,10 @@ public class FieldPlanner {
         Translation2d goalWorld,
         Translation2d gLocal,
         Translation2d pLocal) {
+      if (goalSideSign != teardropSideSign) {
+        return wallSideDir(teardropLocWorld);
+      }
+
       double gLong = longAxisX ? gLocal.getX() : gLocal.getY();
       double pLong = longAxisX ? pLocal.getX() : pLocal.getY();
       int longSign;
@@ -1202,6 +1220,15 @@ public class FieldPlanner {
 
       if (flowU.getNorm() < EPS) return baseDir;
       return flowU.getAngle();
+    }
+
+    private static Rotation2d wallSideDir(Translation2d locWorld) {
+      double y = locWorld.getY();
+      double distLow = y;
+      double distHigh = Constants.FIELD_WIDTH - y;
+      double sign = (distLow <= distHigh) ? -1.0 : 1.0;
+      Translation2d dir = new Translation2d(0.0, sign);
+      return dir.getAngle();
     }
 
     private boolean goalPastShortSide(Translation2d pLocal, Translation2d gLocal, int shortSign) {
@@ -1496,7 +1523,8 @@ public class FieldPlanner {
         Rotation2d rot,
         double strength,
         double maxRangeX,
-        double maxRangeY) {
+        double maxRangeY,
+        boolean flowAssist) {
       super(strength, true);
       this.center = center;
       this.halfX = Math.max(0.0, widthMeters * 0.5);
@@ -1504,6 +1532,7 @@ public class FieldPlanner {
       this.rot = (rot == null) ? Rotation2d.kZero : rot;
       this.maxRangeX = Math.max(0.0, maxRangeX);
       this.maxRangeY = Math.max(0.0, maxRangeY);
+      this.flowAssist = flowAssist;
 
       this.longAxisX = this.halfX >= this.halfY;
 
@@ -1601,10 +1630,11 @@ public class FieldPlanner {
         Translation2d center,
         double widthMeters,
         double heightMeters,
+        Rotation2d rot,
         double strength,
         double maxRangeX,
         double maxRangeY) {
-      this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRangeX, maxRangeY);
+      this(center, widthMeters, heightMeters, rot, strength, maxRangeX, maxRangeY, true);
     }
 
     public RectangleObstacle(
@@ -1612,8 +1642,35 @@ public class FieldPlanner {
         double widthMeters,
         double heightMeters,
         double strength,
-        double maxRange) {
-      this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRange, maxRange);
+        double maxRangeX,
+        double maxRangeY) {
+      this(
+          center,
+          widthMeters,
+          heightMeters,
+          Rotation2d.kZero,
+          strength,
+          maxRangeX,
+          maxRangeY,
+          true);
+    }
+
+    public static RectangleObstacle simple(
+        Translation2d center,
+        double widthMeters,
+        double heightMeters,
+        double strength,
+        double maxRangeX,
+        double maxRangeY) {
+      return new RectangleObstacle(
+          center,
+          widthMeters,
+          heightMeters,
+          Rotation2d.kZero,
+          strength,
+          maxRangeX,
+          maxRangeY,
+          false);
     }
 
     @Override
@@ -1700,6 +1757,22 @@ public class FieldPlanner {
         double n = Math.max(EPS, awayWorld.getNorm());
         awayWorldU = awayWorld.div(n);
         primaryWorld = awayWorldU.times(Math.abs(mag));
+      }
+
+      if (!flowAssist) {
+        Translation2d sum = primaryWorld;
+
+        boolean veryClose = (edgeDist < 0.35) || inside;
+        if (veryClose) {
+          sum =
+              sum.plus(
+                  edgeClearancePush(
+                      position, poly, awayWorldU, DESIRED_EDGE_CLEAR_M, strength, 1.4, 0.28));
+        }
+
+        double n = sum.getNorm();
+        if (n < EPS) return new Force();
+        return new Force(n, sum.getAngle());
       }
 
       Translation2d escapeWorld = Translation2d.kZero;
@@ -1834,11 +1907,11 @@ public class FieldPlanner {
           double gShort = longAxisX ? gLocal.getY() : gLocal.getX();
           double pShort = longAxisX ? pLocal.getY() : pLocal.getX();
           int goalSide = signWithFallback(gShort, pShort);
+          int teardropSide = -goalSide;
 
-          int robotSide = signWithFallback(pShort, gShort);
-
-          FlowTeardrop tear = (robotSide == shortSignA) ? tearA_CCW : tearB_CCW;
-          Rotation2d dir = teardropTailDir(goalSide, robotSide, tear.loc, target, gLocal, pLocal);
+          FlowTeardrop tear = (teardropSide == shortSignA) ? tearA_CCW : tearB_CCW;
+          Rotation2d dir =
+              teardropTailDir(goalSide, teardropSide, tear.loc, target, gLocal, pLocal);
           Translation2d v = tear.forceVec(position, dir);
           tearVec = v.times(EDGE_TEAR_BLEND * wEdge);
         }
@@ -2697,6 +2770,10 @@ public class FieldPlanner {
   }
 
   private Pose2d goal = Pose2d.kZero;
+  private Pose2d requestedGoal = Pose2d.kZero;
+  private Translation2d stagedAttractor = null;
+  private Translation2d lastStagedPoint = null;
+  private boolean stagedComplete = false;
 
   private static final int ARROWS_X = RobotBase.isSimulation() ? 40 : 0;
   private static final int ARROWS_Y = RobotBase.isSimulation() ? 20 : 0;
@@ -2846,11 +2923,37 @@ public class FieldPlanner {
     }
   }
 
-  public void setGoal(Pose2d goal) {
-    this.goal = goal;
+  public void setRequestedGoal(Pose2d requested) {
+    boolean same = isPoseNear(this.requestedGoal, requested);
+    this.requestedGoal = requested;
+
+    if (!same) {
+      this.stagedAttractor = null;
+      this.lastStagedPoint = null;
+      this.stagedComplete = false;
+    }
+
     lastChosenSetpoint = Optional.empty();
-    Logger.recordOutput("Repulsor/Setpoint", goal);
+    Logger.recordOutput("Repulsor/RequestedGoal", requested);
   }
+
+  private void setActiveGoal(Pose2d active) {
+    this.goal = active;
+    Logger.recordOutput("Repulsor/Goal/Active", active);
+  }
+
+  // public void setGoal(Pose2d goal) {
+  //   boolean sameGoal = isPoseNear(this.requestedGoal, goal);
+  //   this.goal = goal;
+  //   this.requestedGoal = goal;
+  //   if (!sameGoal) {
+  //     this.stagedAttractor = null;
+  //     this.lastStagedPoint = null;
+  //     this.stagedComplete = false;
+  //   }
+  //   lastChosenSetpoint = Optional.empty();
+  //   Logger.recordOutput("Repulsor/Setpoint", goal);
+  // }
 
   public Optional<Distance> getErr() {
     return currentErr;
@@ -2895,8 +2998,11 @@ public class FieldPlanner {
 
     var dsBase = RepulsorDriverStation.getInstance();
     if (dsBase instanceof NtRepulsorDriverStation ds) {
-      ds.forcedGoalPose("main").ifPresent(this::setGoal);
+      ds.forcedGoalPose("main").ifPresent(this::setRequestedGoal);
     }
+
+    updateStagedGoal(curTrans);
+    distToGoal = curTrans.getDistance(goal.getTranslation());
 
     ClearMemo memo = new ClearMemo();
 
@@ -2982,7 +3088,7 @@ public class FieldPlanner {
                   true);
 
           if (clear) {
-            setGoal(altGoal);
+            setActiveGoal(altGoal);
             lastChosenSetpoint = Optional.of(sp);
             Logger.recordOutput("Repulsor/Reroute/Chosen", altGoal);
             pathBlocked = false;
@@ -3128,5 +3234,129 @@ public class FieldPlanner {
     var out = lastChosenSetpoint;
     lastChosenSetpoint = Optional.empty();
     return out;
+  }
+
+  private static int sideSignXBand(double x, double band) {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+    double b = Math.max(0.0, band);
+    if (x < mid - b) return -1;
+    if (x > mid + b) return 1;
+    return 0;
+  }
+
+  private static boolean isPoseNear(Pose2d a, Pose2d b) {
+    if (a == null || b == null) return false;
+    if (a.getTranslation().getDistance(b.getTranslation()) > STAGED_SAME_GOAL_POS_M) return false;
+    double rotDeg =
+        Math.abs(
+            MathUtil.angleModulus(a.getRotation().getRadians() - b.getRotation().getRadians()));
+    return rotDeg <= Math.toRadians(STAGED_SAME_GOAL_ROT_DEG);
+  }
+
+  private boolean shouldStageThroughAttractor(Translation2d pos, Translation2d target) {
+    int goalSide = sideSignXBand(target.getX(), STAGED_CENTER_BAND_M);
+    int robotSide = sideSignXBand(pos.getX(), STAGED_CENTER_BAND_M);
+    if (goalSide == 0 && robotSide != 0) return true;
+    if (goalSide != 0 && robotSide == 0) return true;
+    return goalSide != 0 && robotSide != 0 && goalSide != robotSide;
+  }
+
+  private Translation2d chooseStagingAttractor(Translation2d pos, Translation2d target) {
+    if (gatedAttractors.isEmpty()) return null;
+
+    GatedAttractorObstacle bestGate = null;
+    Translation2d best = null;
+    double bestScore = Double.POSITIVE_INFINITY;
+
+    for (GatedAttractorObstacle gate : gatedAttractors) {
+      Translation2d pullTo = stagingPullPoint(gate, pos, target);
+      if (pullTo == null) continue;
+
+      double score = pos.getDistance(pullTo) + pullTo.getDistance(target);
+      if (score < bestScore) {
+        bestScore = score;
+        best = pullTo;
+        bestGate = gate;
+      }
+    }
+
+    stagedGate = bestGate;
+    return best;
+  }
+
+  private Translation2d stagingPullPoint(
+      GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
+
+    if (gate == null) return null;
+    Translation2d center = gate.center;
+    if (center == null) return null;
+
+    if (gate.gatePoly == null || gate.bypassPoint == null) return center;
+    if (pos == null || target == null) return center;
+
+    if (segmentIntersectsPolygonOuter(pos, target, gate.gatePoly)) {
+      return gate.bypassPoint;
+    }
+    return center;
+  }
+
+  private void updateStagedGoal(Translation2d curPos) {
+    if (gatedAttractors.isEmpty()) {
+      goal = requestedGoal;
+      stagedAttractor = null;
+      stagedGate = null; // add
+      lastStagedPoint = null;
+      return;
+    }
+
+    boolean shouldStage = shouldStageThroughAttractor(curPos, requestedGoal.getTranslation());
+
+    if (shouldStage && stagedAttractor == null && !stagedComplete) {
+      Translation2d pick = chooseStagingAttractor(curPos, requestedGoal.getTranslation());
+      if (pick != null && curPos.getDistance(pick) > STAGED_REACH_DIST_M) {
+        stagedAttractor = pick;
+        lastStagedPoint = pick;
+        Pose2d staged = new Pose2d(pick, requestedGoal.getRotation());
+        setActiveGoal(staged);
+        Logger.recordOutput("Repulsor/StagedGoal", staged);
+        return;
+      }
+    }
+
+    if (stagedAttractor != null) {
+      Translation2d target = requestedGoal.getTranslation();
+
+      Translation2d liveTarget =
+          (stagedGate != null) ? stagingPullPoint(stagedGate, curPos, target) : stagedAttractor;
+
+      if (liveTarget == null) liveTarget = stagedAttractor;
+
+      if (curPos.getDistance(liveTarget) <= STAGED_REACH_DIST_M) {
+        stagedAttractor = null;
+        stagedGate = null;
+        goal = requestedGoal;
+        stagedComplete = true;
+        Logger.recordOutput("Repulsor/StagedGoal", goal);
+      } else {
+        if (liveTarget.getDistance(stagedAttractor) > 0.02) { // small hysteresis
+          stagedAttractor = liveTarget;
+          goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+          Logger.recordOutput("Repulsor/StagedGoal", goal);
+        }
+      }
+      return;
+    }
+
+    if (stagedComplete) {
+      goal = requestedGoal;
+      return;
+    }
+
+    if (!shouldStage) {
+      goal = requestedGoal;
+      return;
+    }
+
+    goal = requestedGoal;
   }
 }

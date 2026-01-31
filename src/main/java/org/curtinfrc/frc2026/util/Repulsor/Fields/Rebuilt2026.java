@@ -28,7 +28,7 @@ public final class Rebuilt2026 implements FieldDefinition {
   private static final double GRID_Z_MIN_M = -0.05;
   private static final double GRID_Z_MAX_M = 0.35;
 
-  private static final double GRID_CELL_M = 0.75; // ~250-ish per alliance over full field
+  private static final double GRID_CELL_M = 0.75; 
   private static final double GRID_REGION_HALF_X_M = Constants.FIELD_LENGTH * 0.5;
   private static final double GRID_REGION_HALF_Y_M = Constants.FIELD_WIDTH * 0.5;
 
@@ -125,8 +125,8 @@ public final class Rebuilt2026 implements FieldDefinition {
 
   @Override
   public List<Obstacle> fieldObstacles() {
-    double maxRangeY = 0.1;
-    double maxRangeX = 3;
+    // double maxRangeY = 1;
+    // double maxRangeX = 1.2;
 
     double rectWidth = 0.5929315;
     double rectHeight = 5.711800;
@@ -140,10 +140,16 @@ public final class Rebuilt2026 implements FieldDefinition {
     double gapTopY = Constants.FIELD_WIDTH - (gapHeight * 0.5);
     double gapBottomY = gapHeight * 0.5;
 
-    double biasStrength = 3;
-    double biasRange = Math.max(0.6, Math.min(1.4, gapHeight * 0.85));
-    double bypassStrengthScale = 2.2;
-    double bypassRange = Math.max(biasRange, 1.0);
+    double rectStrength = 2.0;
+    double rectRangeX = 1.2;
+    double rectRangeY = 1.0;
+
+    double biasStrength = 0.6;
+    double biasRange = 1.2;
+
+    double bypassStrengthScale = 1.2;
+    double bypassRange = 1.4;
+
     double edgeOffset = 0.06;
 
     double rectHalfX = rectWidth * 0.5;
@@ -162,17 +168,44 @@ public final class Rebuilt2026 implements FieldDefinition {
           new Translation2d(rightRectX - rectHalfX, rectCy + rectHalfY)
         };
 
+    double leftInsideX = leftRectX + rectHalfX + edgeOffset;
+    double rightInsideX = rightRectX - rectHalfX - edgeOffset;
+
+    double sidePullDx = 1.0;
+
+    double leftPullXIn = leftRectX + sidePullDx;
+    double leftPullXOut = leftRectX - sidePullDx;
+
+    double rightPullXIn = rightRectX - sidePullDx;
+    double rightPullXOut = rightRectX + sidePullDx;
+
+    double sideBiasStrength = biasStrength * 0.55;
+    double sideBiasRange = biasRange * 0.95;
+
+    double sideBypassStrengthScale = bypassStrengthScale * 0.85;
+    double sideBypassRange = bypassRange * 0.95;
+
     return List.of(
         new RectangleObstacle(
-            new Translation2d(leftRectX, rectCy), rectWidth, rectHeight, 4, maxRangeX, maxRangeY),
+            new Translation2d(leftRectX, rectCy),
+            rectWidth,
+            rectHeight,
+            rectStrength,
+            rectRangeX,
+            rectRangeY),
         new RectangleObstacle(
-            new Translation2d(rightRectX, rectCy), rectWidth, rectHeight, 4, maxRangeX, maxRangeY),
+            new Translation2d(rightRectX, rectCy),
+            rectWidth,
+            rectHeight,
+            rectStrength,
+            rectRangeX,
+            rectRangeY),
         new GatedAttractorObstacle(
             new Translation2d(leftRectX, gapTopY),
             biasStrength,
             biasRange,
             leftGate,
-            new Translation2d(leftRectX, rectCy + rectHalfY + edgeOffset),
+            new Translation2d(leftInsideX, gapTopY),
             bypassStrengthScale,
             bypassRange),
         new GatedAttractorObstacle(
@@ -180,7 +213,7 @@ public final class Rebuilt2026 implements FieldDefinition {
             biasStrength,
             biasRange,
             leftGate,
-            new Translation2d(leftRectX, rectCy - rectHalfY - edgeOffset),
+            new Translation2d(leftInsideX, gapBottomY),
             bypassStrengthScale,
             bypassRange),
         new GatedAttractorObstacle(
@@ -188,7 +221,7 @@ public final class Rebuilt2026 implements FieldDefinition {
             biasStrength,
             biasRange,
             rightGate,
-            new Translation2d(rightRectX, rectCy + rectHalfY + edgeOffset),
+            new Translation2d(rightInsideX, gapTopY),
             bypassStrengthScale,
             bypassRange),
         new GatedAttractorObstacle(
@@ -196,9 +229,76 @@ public final class Rebuilt2026 implements FieldDefinition {
             biasStrength,
             biasRange,
             rightGate,
-            new Translation2d(rightRectX, rectCy - rectHalfY - edgeOffset),
+            new Translation2d(rightInsideX, gapBottomY),
             bypassStrengthScale,
-            bypassRange));
+            bypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(leftPullXIn, gapTopY),
+            sideBiasStrength,
+            sideBiasRange,
+            leftGate,
+            new Translation2d(leftInsideX, gapTopY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(leftPullXOut, gapTopY),
+            sideBiasStrength,
+            sideBiasRange,
+            leftGate,
+            new Translation2d(leftInsideX, gapTopY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+
+        new GatedAttractorObstacle(
+            new Translation2d(leftPullXIn, gapBottomY),
+            sideBiasStrength,
+            sideBiasRange,
+            leftGate,
+            new Translation2d(leftInsideX, gapBottomY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(leftPullXOut, gapBottomY),
+            sideBiasStrength,
+            sideBiasRange,
+            leftGate,
+            new Translation2d(leftInsideX, gapBottomY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+
+        new GatedAttractorObstacle(
+            new Translation2d(rightPullXIn, gapTopY),
+            sideBiasStrength,
+            sideBiasRange,
+            rightGate,
+            new Translation2d(rightInsideX, gapTopY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(rightPullXOut, gapTopY),
+            sideBiasStrength,
+            sideBiasRange,
+            rightGate,
+            new Translation2d(rightInsideX, gapTopY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+
+        new GatedAttractorObstacle(
+            new Translation2d(rightPullXIn, gapBottomY),
+            sideBiasStrength,
+            sideBiasRange,
+            rightGate,
+            new Translation2d(rightInsideX, gapBottomY),
+            sideBypassStrengthScale,
+            sideBypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(rightPullXOut, gapBottomY),
+            sideBiasStrength,
+            sideBiasRange,
+            rightGate,
+            new Translation2d(rightInsideX, gapBottomY),
+            sideBypassStrengthScale,
+            sideBypassRange));
   }
 
   // @Override // TRENCH + BUMP
@@ -245,8 +345,8 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> walls() {
     return List.of(
-        new HorizontalObstacle(0.0, 1, true),
-        new HorizontalObstacle(Constants.FIELD_WIDTH, 1, false),
+        new HorizontalObstacle(0.0, 2, true),
+        new HorizontalObstacle(Constants.FIELD_WIDTH, 2, false),
         new VerticalObstacle(0.0, 2, true),
         new VerticalObstacle(Constants.FIELD_LENGTH, 2, false));
   }
