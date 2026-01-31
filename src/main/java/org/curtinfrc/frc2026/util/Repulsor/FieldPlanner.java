@@ -38,7 +38,7 @@ public class FieldPlanner {
   private static final double CORNER_CHAMFER = 0;
   public static final double GOAL_STRENGTH = 2.2;
   private static final double STAGED_CENTER_BAND_M = 1.2;
-  private static final double STAGED_REACH_DIST_M = 0.6;
+  private static final double STAGED_REACH_DIST_M = 0.2;
   private static final double STAGED_RESTAGE_DIST_M = 1.2;
   private static final double STAGED_SAME_GOAL_POS_M = 0.05;
   private static final double STAGED_SAME_GOAL_ROT_DEG = 5.0;
@@ -121,7 +121,9 @@ public class FieldPlanner {
     this.walls = new ArrayList<>(this.obstacleProvider.walls());
     for (Obstacle obs : this.fieldObstacles) {
       if (obs instanceof GatedAttractorObstacle gated) {
-        gatedAttractors.add(gated);
+        if (gated.waypoint) {
+          gatedAttractors.add(gated);
+        }
       }
     }
 
@@ -589,6 +591,60 @@ public class FieldPlanner {
         if (r < tt[1]) tt[1] = r;
       }
       return true;
+    }
+  }
+
+  public static class CorridorCenterlineRail extends Obstacle {
+    private final double xCenter;
+    private final double xHalfWindow;
+    private final double yCenter;
+    private final double yHalfWidth;
+    private final double maxForce;
+
+    public CorridorCenterlineRail(
+        double xCenter,
+        double xHalfWindow,
+        double yCenter,
+        double yHalfWidth,
+        double strength,
+        double maxForce) {
+      super(strength, true);
+      this.xCenter = xCenter;
+      this.xHalfWindow = Math.max(0.05, xHalfWindow);
+      this.yCenter = yCenter;
+      this.yHalfWidth = Math.max(0.10, yHalfWidth);
+      this.maxForce = Math.max(0.1, maxForce);
+    }
+
+    private static double clamp01(double x) {
+      return Math.max(0.0, Math.min(1.0, x));
+    }
+
+    private static double smooth01(double x) {
+      x = clamp01(x);
+      return x * x * (3.0 - 2.0 * x);
+    }
+
+    @Override
+    public Force getForceAtPosition(Translation2d position, Translation2d target) {
+      double dx = Math.abs(position.getX() - xCenter);
+      if (dx >= xHalfWindow) return new Force();
+
+      double wx = smooth01(1.0 - (dx / xHalfWindow));
+
+      double ey = position.getY() - yCenter;
+
+      double e = ey / yHalfWidth;
+
+      double f = -strength * wx * (e) / (0.35 + e * e);
+
+      if (f > maxForce) f = maxForce;
+      if (f < -maxForce) f = -maxForce;
+
+      Translation2d v = new Translation2d(0.0, f);
+      double n = v.getNorm();
+      if (n < 1e-9) return new Force();
+      return new Force(n, v.getAngle());
     }
   }
 
@@ -2448,17 +2504,20 @@ public class FieldPlanner {
     public final Translation2d center;
     public final double maxRange;
     public final double soften;
+    public final boolean waypoint;
 
-    public AttractorObstacle(Translation2d center, double strength, double maxRange) {
-      this(center, strength, maxRange, 0.18);
+    public AttractorObstacle(
+        Translation2d center, double strength, double maxRange, boolean waypoint) {
+      this(center, strength, maxRange, 0.18, waypoint);
     }
 
     public AttractorObstacle(
-        Translation2d center, double strength, double maxRange, double soften) {
+        Translation2d center, double strength, double maxRange, double soften, boolean waypoint) {
       super(strength, true);
       this.center = center;
       this.maxRange = Math.max(0.0, maxRange);
       this.soften = Math.max(1e-6, soften);
+      this.waypoint = waypoint;
     }
 
     @Override
@@ -2491,6 +2550,7 @@ public class FieldPlanner {
     public final Translation2d bypassPoint;
     public final double bypassStrengthScale;
     public final double bypassRange;
+    public final boolean waypoint;
 
     public GatedAttractorObstacle(
         Translation2d center,
@@ -2508,7 +2568,8 @@ public class FieldPlanner {
           bypassPoint,
           bypassStrengthScale,
           bypassRange,
-          0.18);
+          0.18,
+          false);
     }
 
     public GatedAttractorObstacle(
@@ -2519,7 +2580,29 @@ public class FieldPlanner {
         Translation2d bypassPoint,
         double bypassStrengthScale,
         double bypassRange,
-        double soften) {
+        boolean waypoint) {
+      this(
+          center,
+          strength,
+          maxRange,
+          gatePoly,
+          bypassPoint,
+          bypassStrengthScale,
+          bypassRange,
+          0.18,
+          waypoint);
+    }
+
+    public GatedAttractorObstacle(
+        Translation2d center,
+        double strength,
+        double maxRange,
+        Translation2d[] gatePoly,
+        Translation2d bypassPoint,
+        double bypassStrengthScale,
+        double bypassRange,
+        double soften,
+        boolean waypoint) {
       super(strength, true);
       this.center = center;
       this.maxRange = Math.max(0.0, maxRange);
@@ -2528,6 +2611,7 @@ public class FieldPlanner {
       this.bypassStrengthScale = Math.max(1.0, bypassStrengthScale);
       this.bypassRange = Math.max(0.0, bypassRange);
       this.soften = Math.max(1e-6, soften);
+      this.waypoint = waypoint;
     }
 
     @Override
@@ -3236,6 +3320,50 @@ public class FieldPlanner {
     return out;
   }
 
+  private static final double STAGED_GATE_PAD_M = 0.25; // tune: 0.15 - 0.40
+
+  private static Translation2d polyCentroid(Translation2d[] poly) {
+    if (poly == null || poly.length == 0) return null;
+    double sx = 0.0, sy = 0.0;
+    for (Translation2d p : poly) {
+      sx += p.getX();
+      sy += p.getY();
+    }
+    return new Translation2d(sx / poly.length, sy / poly.length);
+  }
+
+  private static Translation2d[] expandPoly(Translation2d[] poly, double pad) {
+    if (poly == null || poly.length == 0) return poly;
+    if (pad <= 1e-9) return poly;
+
+    Translation2d c = polyCentroid(poly);
+    if (c == null) return poly;
+
+    Translation2d[] out = new Translation2d[poly.length];
+    for (int i = 0; i < poly.length; i++) {
+      Translation2d v = poly[i].minus(c);
+      double n = v.getNorm();
+      if (n < 1e-9) {
+        out[i] = poly[i];
+      } else {
+        Translation2d u = v.div(n);
+        out[i] = c.plus(u.times(n + pad));
+      }
+    }
+    return out;
+  }
+
+  private GatedAttractorObstacle firstOccludingGate(Translation2d pos, Translation2d target) {
+    if (gatedAttractors.isEmpty() || pos == null || target == null) return null;
+
+    for (GatedAttractorObstacle gate : gatedAttractors) {
+      if (gate == null || gate.gatePoly == null) continue;
+      Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
+      if (segmentIntersectsPolygonOuter(pos, target, poly)) return gate;
+    }
+    return null;
+  }
+
   private static int sideSignXBand(double x, double band) {
     double mid = Constants.FIELD_LENGTH * 0.5;
     double b = Math.max(0.0, band);
@@ -3261,7 +3389,9 @@ public class FieldPlanner {
     return goalSide != 0 && robotSide != 0 && goalSide != robotSide;
   }
 
-  private Translation2d chooseStagingAttractor(Translation2d pos, Translation2d target) {
+  private Translation2d chooseStagingAttractor(
+      Translation2d pos, Translation2d target, GatedAttractorObstacle preferredGate) {
+
     if (gatedAttractors.isEmpty()) return null;
 
     GatedAttractorObstacle bestGate = null;
@@ -3269,10 +3399,14 @@ public class FieldPlanner {
     double bestScore = Double.POSITIVE_INFINITY;
 
     for (GatedAttractorObstacle gate : gatedAttractors) {
+      if (gate == null) continue;
+
+      double prefPenalty = (preferredGate != null && gate != preferredGate) ? 2.0 : 0.0;
+
       Translation2d pullTo = stagingPullPoint(gate, pos, target);
       if (pullTo == null) continue;
 
-      double score = pos.getDistance(pullTo) + pullTo.getDistance(target);
+      double score = pos.getDistance(pullTo) + pullTo.getDistance(target) + prefPenalty;
       if (score < bestScore) {
         bestScore = score;
         best = pullTo;
@@ -3294,7 +3428,8 @@ public class FieldPlanner {
     if (gate.gatePoly == null || gate.bypassPoint == null) return center;
     if (pos == null || target == null) return center;
 
-    if (segmentIntersectsPolygonOuter(pos, target, gate.gatePoly)) {
+    Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
+    if (segmentIntersectsPolygonOuter(pos, target, poly)) {
       return gate.bypassPoint;
     }
     return center;
@@ -3309,10 +3444,13 @@ public class FieldPlanner {
       return;
     }
 
-    boolean shouldStage = shouldStageThroughAttractor(curPos, requestedGoal.getTranslation());
+    Translation2d reqT = requestedGoal.getTranslation();
+    GatedAttractorObstacle occluding = firstOccludingGate(curPos, reqT);
+
+    boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || (occluding != null);
 
     if (shouldStage && stagedAttractor == null && !stagedComplete) {
-      Translation2d pick = chooseStagingAttractor(curPos, requestedGoal.getTranslation());
+      Translation2d pick = chooseStagingAttractor(curPos, reqT, occluding);
       if (pick != null && curPos.getDistance(pick) > STAGED_REACH_DIST_M) {
         stagedAttractor = pick;
         lastStagedPoint = pick;

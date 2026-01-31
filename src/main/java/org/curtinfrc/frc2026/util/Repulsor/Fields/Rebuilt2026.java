@@ -8,6 +8,7 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.CorridorCenterlineRail;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.GatedAttractorObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.HorizontalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
@@ -28,7 +29,7 @@ public final class Rebuilt2026 implements FieldDefinition {
   private static final double GRID_Z_MIN_M = -0.05;
   private static final double GRID_Z_MAX_M = 0.35;
 
-  private static final double GRID_CELL_M = 0.75; 
+  private static final double GRID_CELL_M = 0.75;
   private static final double GRID_REGION_HALF_X_M = Constants.FIELD_LENGTH * 0.5;
   private static final double GRID_REGION_HALF_Y_M = Constants.FIELD_WIDTH * 0.5;
 
@@ -173,17 +174,23 @@ public final class Rebuilt2026 implements FieldDefinition {
 
     double sidePullDx = 1.0;
 
-    double leftPullXIn = leftRectX + sidePullDx;
     double leftPullXOut = leftRectX - sidePullDx;
-
-    double rightPullXIn = rightRectX - sidePullDx;
     double rightPullXOut = rightRectX + sidePullDx;
 
-    double sideBiasStrength = biasStrength * 0.55;
-    double sideBiasRange = biasRange * 0.95;
+    double sideBiasStrength = biasStrength * 0.30;
+    double sideBiasRange = biasRange * 0.60;
 
-    double sideBypassStrengthScale = bypassStrengthScale * 0.85;
-    double sideBypassRange = bypassRange * 0.95;
+    double sideBypassStrengthScale = bypassStrengthScale * 0.65;
+    double sideBypassRange = bypassRange * 0.65;
+
+    double leftPullXIn = leftRectX + sidePullDx;
+
+    double rightPullXIn = rightRectX - sidePullDx;
+
+    double railXWindow = 1.2;
+    double corridorHalfWidthGuess = Math.max(0.22, gapHeight * 0.45);
+    double railStrength = 1.1;
+    double railMaxForce = 2.2;
 
     return List.of(
         new RectangleObstacle(
@@ -207,7 +214,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapTopY),
             bypassStrengthScale,
-            bypassRange),
+            bypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(leftRectX, gapBottomY),
             biasStrength,
@@ -215,7 +223,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapBottomY),
             bypassStrengthScale,
-            bypassRange),
+            bypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightRectX, gapTopY),
             biasStrength,
@@ -223,7 +232,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapTopY),
             bypassStrengthScale,
-            bypassRange),
+            bypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightRectX, gapBottomY),
             biasStrength,
@@ -231,7 +241,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapBottomY),
             bypassStrengthScale,
-            bypassRange),
+            bypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(leftPullXIn, gapTopY),
             sideBiasStrength,
@@ -248,7 +259,6 @@ public final class Rebuilt2026 implements FieldDefinition {
             new Translation2d(leftInsideX, gapTopY),
             sideBypassStrengthScale,
             sideBypassRange),
-
         new GatedAttractorObstacle(
             new Translation2d(leftPullXIn, gapBottomY),
             sideBiasStrength,
@@ -265,7 +275,6 @@ public final class Rebuilt2026 implements FieldDefinition {
             new Translation2d(leftInsideX, gapBottomY),
             sideBypassStrengthScale,
             sideBypassRange),
-
         new GatedAttractorObstacle(
             new Translation2d(rightPullXIn, gapTopY),
             sideBiasStrength,
@@ -282,7 +291,6 @@ public final class Rebuilt2026 implements FieldDefinition {
             new Translation2d(rightInsideX, gapTopY),
             sideBypassStrengthScale,
             sideBypassRange),
-
         new GatedAttractorObstacle(
             new Translation2d(rightPullXIn, gapBottomY),
             sideBiasStrength,
@@ -298,7 +306,20 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapBottomY),
             sideBypassStrengthScale,
-            sideBypassRange));
+            sideBypassRange),
+        new CorridorCenterlineRail(
+            leftRectX, railXWindow, gapTopY, corridorHalfWidthGuess, railStrength, railMaxForce),
+        new CorridorCenterlineRail(
+            leftRectX, railXWindow, gapBottomY, corridorHalfWidthGuess, railStrength, railMaxForce),
+        new CorridorCenterlineRail(
+            rightRectX, railXWindow, gapTopY, corridorHalfWidthGuess, railStrength, railMaxForce),
+        new CorridorCenterlineRail(
+            rightRectX,
+            railXWindow,
+            gapBottomY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce));
   }
 
   // @Override // TRENCH + BUMP
