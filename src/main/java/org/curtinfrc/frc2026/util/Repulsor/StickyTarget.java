@@ -17,52 +17,52 @@ public final class StickyTarget<T> {
   private final double maxStaleSec;
   private final double switchBackCooldownSec;
 
-  private static final double FORCE_SWITCH_STILL_SEC = 0.20;
-  private static final double FORCE_SWITCH_FLICKER_SEC = 0.30;
+  private static final double FORCE_SWITCH_STILL_SEC = 0.10;
+  private static final double FORCE_SWITCH_FLICKER_SEC = 0.20;
 
-  private static final double STICKY_INVALID_DEBOUNCE_SEC = 0.65;
+  private static final double STICKY_INVALID_DEBOUNCE_SEC = 0.35;
 
-  private static final double BASE_HARD_LOCK_SEC = 0.55;
-  private static final double HARD_LOCK_PER_M_SEC = 0.36;
-  private static final double HARD_LOCK_MAX_SEC = 2.60;
+  private static final double BASE_HARD_LOCK_SEC = 0.25;
+  private static final double HARD_LOCK_PER_M_SEC = 0.18;
+  private static final double HARD_LOCK_MAX_SEC = 1.20;
 
-  private static final double EARLY_SWITCH_MULT = 2.25;
-  private static final double SWITCH_BACK_EPS_MIN = 0.65;
+  private static final double EARLY_SWITCH_MULT = 1.25;
+  private static final double SWITCH_BACK_EPS_MIN = 0.35;
 
   private double pingPeriodEmaSec = 0.0;
 
   private static final double PINGPONG_EMA_ALPHA = 0.35;
 
-  private static final double PINGPONG_WINDOW_MIN_SEC = 0.80;
-  private static final double PINGPONG_WINDOW_MAX_SEC = 3.10;
+  private static final double PINGPONG_WINDOW_MIN_SEC = 0.50;
+  private static final double PINGPONG_WINDOW_MAX_SEC = 2.10;
 
-  private static final double PINGPONG_BLOCK_MIN_SEC = 1.10;
-  private static final double PINGPONG_BLOCK_MAX_SEC = 3.80;
+  private static final double PINGPONG_BLOCK_MIN_SEC = 0.60;
+  private static final double PINGPONG_BLOCK_MAX_SEC = 2.20;
 
-  private static final double PINGPONG_WINDOW_BASE_SEC = 0.85;
-  private static final double PINGPONG_WINDOW_PER_M_SEC = 0.75;
+  private static final double PINGPONG_WINDOW_BASE_SEC = 0.60;
+  private static final double PINGPONG_WINDOW_PER_M_SEC = 0.45;
 
-  private static final double PINGPONG_BLOCK_BASE_SEC = 1.10;
-  private static final double PINGPONG_BLOCK_PER_M_SEC = 0.70;
+  private static final double PINGPONG_BLOCK_BASE_SEC = 0.70;
+  private static final double PINGPONG_BLOCK_PER_M_SEC = 0.45;
 
-  private static final double MIN_SWITCH_STABLE_SEC = 0.12;
-  private static final double FLICKER_DELTA_SEC = 0.12;
-  private static final double FLICKER_RESET_STABLE_SEC = 0.24;
+  private static final double MIN_SWITCH_STABLE_SEC = 0.05;
+  private static final double FLICKER_DELTA_SEC = 0.10;
+  private static final double FLICKER_RESET_STABLE_SEC = 0.18;
 
-  private static final double BEST_VALID_DEBOUNCE_SEC = 0.14;
-  private static final double BEST_MISSING_DEBOUNCE_SEC = 0.18;
-  private static final double BEST_MISSING_DROP_SEC = 0.62;
+  private static final double BEST_VALID_DEBOUNCE_SEC = 0.06;
+  private static final double BEST_MISSING_DEBOUNCE_SEC = 0.10;
+  private static final double BEST_MISSING_DROP_SEC = 0.40;
 
-  private static final double DEFAULT_SEEN_TIMEOUT_SEC = 0.70;
+  private static final double DEFAULT_SEEN_TIMEOUT_SEC = 0.45;
 
   private static final double CANON_EVICT_SEC = 5.0;
   private static final int CANON_MAX = 28;
 
-  private static final double FLICKER_FREEZE_EXTEND_SEC = 0.55;
-  private static final double HARD_LOCK_OVERRIDE_MULT = 3.15;
+  private static final double FLICKER_FREEZE_EXTEND_SEC = 0.30;
+  private static final double HARD_LOCK_OVERRIDE_MULT = 2.00;
 
-  private static final double CLOSE_PAIR_DIST_ADD = 0.25;
-  private static final double CLOSE_PAIR_REQ_MULT = 1.40;
+  private static final double CLOSE_PAIR_DIST_ADD = 0.15;
+  private static final double CLOSE_PAIR_REQ_MULT = 1.15;
 
   private T lastOut;
   private double lastOutChangeSec = -1e9;
