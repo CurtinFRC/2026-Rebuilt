@@ -12,11 +12,11 @@ public final class Constants {
   public static final RobotType currentRobot = RobotType.DEV;
   public static final RobotType robotType = RobotBase.isSimulation() ? RobotType.SIM : currentRobot;
 
-  public static Mode getMode() {
-    if (RobotBase.isSimulation()) {
-      return Mode.SIM;
-    }
-    return RobotBase.isReal() ? Mode.REAL : Mode.REPLAY;
+  public static final Mode getMode() {
+    return switch (robotType) {
+      case COMP, DEV -> RobotBase.isReal() ? Mode.REAL : Mode.REPLAY;
+      case SIM -> Mode.SIM;
+    };
   }
 
   public static enum Mode {
