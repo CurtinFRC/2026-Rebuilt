@@ -350,6 +350,15 @@ public class FieldTracker {
     return x;
   }
 
+  private Pose2d fallbackCollectPose(Pose2d robotPoseBlue) {
+    Translation2d p = collectStickyDriveTarget != null ? collectStickyDriveTarget : collectStickyPoint;
+    if (p == null && lastBest != null) p = lastBest.point;
+    if (p == null && robotPoseBlue != null) p = robotPoseBlue.getTranslation();
+    if (p == null) p = new Translation2d();
+    Rotation2d rot = robotPoseBlue != null ? robotPoseBlue.getRotation() : new Rotation2d();
+    return new Pose2d(p, rot);
+  }
+
   private volatile Translation2d collectStickyPoint = null;
   private volatile double collectStickyScore = -1e18;
   private volatile long collectStickyTsNs = 0L;
@@ -1072,8 +1081,7 @@ public class FieldTracker {
 
       if (pts == null || pts.length == 0) {
         clearCollectSticky();
-        return new Pose2d(
-            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+        return fallbackCollectPose(robotPoseBlue);
       }
 
       final double FORBID_MARGIN_M = 0.6;
@@ -1214,8 +1222,7 @@ public class FieldTracker {
       Translation2d[] usePts = ok.toArray(new Translation2d[0]);
       if (usePts.length == 0) {
         clearCollectSticky();
-        return new Pose2d(
-            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+        return fallbackCollectPose(robotPoseBlue);
       }
 
       Translation2d robotPos = robotPoseBlue.getTranslation();
@@ -1375,6 +1382,15 @@ public class FieldTracker {
             return footprintHasFuel.test(p);
           };
 
+      java.util.function.Predicate<Translation2d> collectValidRelaxed =
+          p -> {
+            PredictiveFieldState.CollectProbe pr = probe.apply(p);
+            if (pr == null) return false;
+            if (pr.count < 1 || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75))
+              return false;
+            return footprintHasFuel.test(p);
+          };
+
       java.util.function.Function<Translation2d, Double> collectUnits =
           p -> {
             PredictiveFieldState.CollectProbe pr = probe.apply(p);
@@ -1456,10 +1472,12 @@ public class FieldTracker {
       Translation2d rawCandidate = (best != null ? best.point : null);
       Logger.recordOutput("best1", rawCandidate);
       Logger.recordOutput("collectValid", collectValid.test(rawCandidate));
+      Logger.recordOutput("collectValidRelaxed", collectValidRelaxed.test(rawCandidate));
 
       if (rawCandidate == null || !collectValid.test(rawCandidate)) {
         Translation2d fallback = null;
         double bestU = 0.0;
+        boolean anyStrict = false;
         for (Translation2d p : usePts) {
           if (p == null) continue;
           PredictiveFieldState.CollectProbe pr = probe.apply(p);
@@ -1468,25 +1486,49 @@ public class FieldTracker {
               || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) continue;
           if (!hasNearFuel.test(p)) continue;
           if (!footprintHasFuel.test(p)) continue;
+          anyStrict = true;
           double u = pr.units;
           if (u > bestU) {
             bestU = u;
             fallback = p;
           }
         }
-        if (fallback == null || !collectValid.test(fallback)) {
-          Translation2d near =
-              predictor.nearestCollectResource(robotPos, COLLECT_SNAP_TO_NEAREST_FUEL_M);
-          if (near != null && footprintHasFuel.test(near)) {
-            fallback = near;
+        if (fallback == null && !anyStrict) {
+          for (Translation2d p : usePts) {
+            if (p == null) continue;
+            PredictiveFieldState.CollectProbe pr = probe.apply(p);
+            if (pr == null
+                || pr.count < 1
+                || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) continue;
+            if (!footprintHasFuel.test(p)) continue;
+            double u = pr.units;
+            if (u > bestU) {
+              bestU = u;
+              fallback = p;
+            }
           }
         }
         if (fallback == null || !collectValid.test(fallback)) {
+          Translation2d near =
+              predictor.nearestCollectResource(robotPos, COLLECT_SNAP_TO_NEAREST_FUEL_M);
+          if (near != null && collectValidRelaxed.test(near)) {
+            fallback = near;
+          }
+        }
+        if (fallback == null || !collectValidRelaxed.test(fallback)) {
+          Translation2d lastBestPoint = (lastBest != null) ? lastBest.point : null;
+          if (lastBestPoint != null && collectValidRelaxed.test(lastBestPoint)) {
+            fallback = lastBestPoint;
+          }
+        }
+        if (fallback == null || !collectValidRelaxed.test(fallback)) {
+          if (rawCandidate != null && collectValidRelaxed.test(rawCandidate)) {
+            fallback = rawCandidate;
+          }
+        }
+        if (fallback == null || !collectValidRelaxed.test(fallback)) {
           clearCollectSticky();
-          return new Pose2d(
-              Constants.FIELD_LENGTH * 0.5,
-              Constants.FIELD_WIDTH * 0.5,
-              robotPoseBlue.getRotation());
+          return new Pose2d(robotPos, robotPoseBlue.getRotation());
         }
         rawCandidate = fallback;
       }
@@ -1735,8 +1777,7 @@ public class FieldTracker {
 
       if (desiredCollectPoint == null) {
         clearCollectSticky();
-        return new Pose2d(
-            Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+        return fallbackCollectPose(robotPoseBlue);
       }
       Translation2d desiredDriveTarget = collectStickyDriveTarget;
 
@@ -1965,10 +2006,7 @@ public class FieldTracker {
           } else {
             // Give up and reset sticky to safe center fallback
             clearCollectSticky();
-            return new Pose2d(
-                Constants.FIELD_LENGTH * 0.5,
-                Constants.FIELD_WIDTH * 0.5,
-                robotPoseBlue.getRotation());
+            return fallbackCollectPose(robotPoseBlue);
           }
         }
       }
@@ -2086,8 +2124,7 @@ public class FieldTracker {
     }
 
     clearCollectSticky();
-    return new Pose2d(
-        Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
+    return fallbackCollectPose(robotPoseBlue);
   }
 
   private Translation2d forceDriveTargetOntoFuel(
