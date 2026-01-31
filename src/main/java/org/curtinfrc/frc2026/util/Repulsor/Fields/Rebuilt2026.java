@@ -145,7 +145,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double rectRangeX = 1.2;
     double rectRangeY = 1.0;
 
-    double biasStrength = 0.6;
+    double biasStrength = 0.1;
     double biasRange = 1.2;
 
     double bypassStrengthScale = 1.2;
@@ -177,7 +177,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double leftPullXOut = leftRectX - sidePullDx;
     double rightPullXOut = rightRectX + sidePullDx;
 
-    double sideBiasStrength = biasStrength * 0.30;
+    double sideBiasStrength = biasStrength * 0.50;
     double sideBiasRange = biasRange * 0.60;
 
     double sideBypassStrengthScale = bypassStrengthScale * 0.65;

@@ -3463,7 +3463,7 @@ private GatedAttractorObstacle firstOccludingGateAlongSegment(Translation2d pos,
     return goalSide != 0 && robotSide != 0 && goalSide != robotSide;
   }
 
-private Translation2d stagingPullPoint(
+  private Translation2d stagingPullPoint(
     GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
 
   if (gate == null) return null;
@@ -3473,16 +3473,34 @@ private Translation2d stagingPullPoint(
   if (gate.gatePoly == null || gate.bypassPoint == null) return center;
   if (pos == null || target == null) return center;
 
-  if (gate == stagedGate && stagedUsingBypass) return gate.bypassPoint;
+  if (gate == stagedGate && stagedUsingBypass) {
+    Translation2d inside = gate.bypassPoint;
+    Translation2d outside = new Translation2d(2.0 * center.getX() - inside.getX(), inside.getY());
+
+    boolean targetOnRight = target.getX() > center.getX();
+    boolean insideOnRight = inside.getX() > center.getX();
+
+    if (targetOnRight) return insideOnRight ? inside : outside;
+    return insideOnRight ? outside : inside;
+  }
 
   Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
   if (segmentIntersectsPolygonOuter(pos, target, poly)) {
-    return gate.bypassPoint;
+    Translation2d inside = gate.bypassPoint;
+    Translation2d outside = new Translation2d(2.0 * center.getX() - inside.getX(), inside.getY());
+
+    boolean targetOnRight = target.getX() > center.getX();
+    boolean insideOnRight = inside.getX() > center.getX();
+
+    if (targetOnRight) return insideOnRight ? inside : outside;
+    return insideOnRight ? outside : inside;
   }
+
   return center;
 }
 
-private GatedAttractorObstacle chooseBestGateByScore(Translation2d pos, Translation2d target) {
+
+  private GatedAttractorObstacle chooseBestGateByScore(Translation2d pos, Translation2d target) {
   GatedAttractorObstacle best = null;
   double bestScore = Double.POSITIVE_INFINITY;
 

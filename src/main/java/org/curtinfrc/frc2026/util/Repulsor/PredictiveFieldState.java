@@ -664,6 +664,7 @@ public final class PredictiveFieldState {
         new Translation2d(-0.18, 0.18),
         new Translation2d(-0.18, -0.18)
       };
+  private static final double COLLECT_KEEP_BONUS = 0.45;
 
   private Rotation2d currentCollectHeading = new Rotation2d();
   private Translation2d currentCollectTouch = null;
@@ -712,6 +713,12 @@ public final class PredictiveFieldState {
     }
     e.avgEvidence = (n > 0) ? (sumEv / n) : 0.0;
     return e;
+  }
+
+  private boolean footprintOk(
+      SpatialDyn dyn, Translation2d center, Rotation2d heading, double rCore, double minUnits) {
+    FootprintEval fp = evalFootprint(dyn, center, heading, rCore);
+    return fp.maxCount >= 1 && fp.sumUnits >= minUnits && fp.avgEvidence >= minUnits * 0.85;
   }
 
   public PointCandidate rankCollectNearest(
@@ -807,6 +814,7 @@ public final class PredictiveFieldState {
     double rJitter = jitterRadiusFor(cellM);
 
     double minHardUnits = Math.max(0.025, Math.min(COLLECT_FINE_MIN_UNITS, minUnits * 0.80));
+    double footprintMinUnits = Math.max(minHardUnits, minUnits * 0.95);
 
     if (lastReturnedCollect != null) {
       double now = Timer.getFPGATimestamp();
@@ -988,16 +996,16 @@ public final class PredictiveFieldState {
           e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
           e.score += e.banditBonus;
           e.score -= wallPenalty.applyAsDouble(fuelTouch);
-          e.score -= wallPenalty.applyAsDouble(p) * 0.6;
-          e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.15;
+          e.score -= wallPenalty.applyAsDouble(p) * 0.85;
+          e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.35;
           if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
           double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
-          e.score -= 0.55 * coreDistNorm;
+          e.score -= 0.85 * coreDistNorm;
           FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
-          if (fp.maxCount < 1 || fp.sumUnits < minHardUnits) continue;
-          double fpBonus = Math.min(1.4, 0.35 * fp.maxCount + 0.55 * fp.sumUnits);
+          if (fp.maxCount < 1 || fp.sumUnits < footprintMinUnits) continue;
+          double fpBonus = Math.min(2.0, 0.50 * fp.maxCount + 0.85 * fp.sumUnits);
           e.score += fpBonus;
-          if (fp.avgEvidence < minEv * 0.85) e.score -= 0.95;
+          if (fp.avgEvidence < minEv * 0.90) e.score -= 1.35;
 
           if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
           if (e.evidence < minEv) e.score -= 2.25;
@@ -1070,16 +1078,16 @@ public final class PredictiveFieldState {
               e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
               e.score += e.banditBonus;
               e.score -= wallPenalty.applyAsDouble(fuelTouch);
-              e.score -= wallPenalty.applyAsDouble(p) * 0.6;
-              e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.15;
+              e.score -= wallPenalty.applyAsDouble(p) * 0.85;
+              e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.35;
               if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
               double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
-              e.score -= 0.55 * coreDistNorm;
+              e.score -= 0.85 * coreDistNorm;
               FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
-              if (fp.maxCount < 1 || fp.sumUnits < minHardUnits) continue;
-              double fpBonus = Math.min(1.4, 0.35 * fp.maxCount + 0.55 * fp.sumUnits);
+              if (fp.maxCount < 1 || fp.sumUnits < footprintMinUnits) continue;
+              double fpBonus = Math.min(2.0, 0.50 * fp.maxCount + 0.85 * fp.sumUnits);
               e.score += fpBonus;
-              if (fp.avgEvidence < minEv * 0.85) e.score -= 0.95;
+              if (fp.avgEvidence < minEv * 0.90) e.score -= 1.35;
 
               if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
               if (e.evidence < minEv) e.score -= 2.25;
@@ -1182,7 +1190,8 @@ public final class PredictiveFieldState {
 
     double commitS = collectCommitWindow(currentCollectEta);
     double switchMargin =
-        COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta);
+        (COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta)) * 1.6
+            + 0.15;
 
     if (!escape && currentCollectTarget != null) {
       double age = now - currentCollectChosenTs;
@@ -1209,6 +1218,7 @@ public final class PredictiveFieldState {
               ourPos, cap, currentCollectTarget, goal, cellM, dyn, enemyIntent, allyIntent);
       curE.banditBonus = regionBanditBonus(dyn, curTouch, now);
       curE.score += curE.banditBonus;
+      curE.score += COLLECT_KEEP_BONUS;
 
       double curOnUnits = dyn.valueInSquare(curTouch, onHalf);
       int curOnCount = dyn.countResourcesWithin(curTouch, onR);
@@ -1316,6 +1326,17 @@ public final class PredictiveFieldState {
         currentCollectTouch =
             resolveCollectTouch(
                 dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
+      }
+
+      if (!footprintOk(dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
+        addDepletedMark(currentCollectTarget, 0.70, 1.85, DEPLETED_TTL_S, false);
+        addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+        recordRegionAttempt(dyn, currentCollectTarget, now, false);
+        currentCollectTarget = null;
+        currentCollectTouch = null;
+        collectArrivalTs = -1.0;
+        Logger.recordOutput("Repulsor/Collect/ChosenOffFootprint", 1.0);
+        return null;
       }
 
       Translation2d anchoredTouch =
