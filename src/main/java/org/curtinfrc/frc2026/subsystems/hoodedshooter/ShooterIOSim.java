@@ -33,7 +33,6 @@ public class ShooterIOSim extends ShooterIODev {
   }
 
   public void updateSim() {
-
     double motorVolts = motorSim.getMotorVoltageMeasure().in(Volts);
     motorSimModel.setInputVoltage(motorVolts);
     motorSimModel.update(DT);
