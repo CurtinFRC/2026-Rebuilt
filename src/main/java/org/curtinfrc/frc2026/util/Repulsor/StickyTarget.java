@@ -211,6 +211,29 @@ public final class StickyTarget<T> {
     }
   }
 
+  public void forceInvalidate() {
+    double now = Timer.getFPGATimestamp();
+    sticky = null;
+    candidate = null;
+    lastSticky = null;
+    lastSwitchSec = now;
+    stickySinceSec = -1e9;
+    stickyLastBestSeenSec = -1e9;
+    candidateSinceSec = -1e9;
+    bestMissingSinceSec = -1e9;
+    bestValidSinceSec = -1e9;
+    bestValidKey = null;
+    lastOut = null;
+    lastOutChangeSec = now;
+    hardLockUntilSec = -1e9;
+    pingA = null;
+    pingB = null;
+    pingSinceSec = -1e9;
+    pingBlockUntilSec = -1e9;
+    emaScore.clear();
+    lastSeenSec.clear();
+  }
+
   private double clampDt(double dt) {
     if (dt < 1e-3) return 1e-3;
     if (dt > 0.10) return 0.10;

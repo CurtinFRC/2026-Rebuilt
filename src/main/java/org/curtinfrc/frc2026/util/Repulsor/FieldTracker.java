@@ -1330,8 +1330,9 @@ public class FieldTracker {
           p -> {
             PredictiveFieldState.CollectProbe pr = probe.apply(p);
             if (pr == null) return false;
-            return pr.count >= 1
-                && pr.units >= Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75);
+            if (pr.count < 1
+                || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) return false;
+            return predictor.footprintHasFuel(p, COLLECT_CELL_M);
           };
 
       java.util.function.Function<Translation2d, Double> collectUnits =
@@ -1420,10 +1421,18 @@ public class FieldTracker {
         double bestU = 0.0;
         for (Translation2d p : usePts) {
           if (p == null) continue;
+          if (!predictor.footprintHasFuel(p, COLLECT_CELL_M)) continue;
           double u = collectUnits.apply(p);
           if (u > bestU) {
             bestU = u;
             fallback = p;
+          }
+        }
+        if (fallback == null || !collectValid.test(fallback)) {
+          Translation2d near =
+              predictor.nearestCollectResource(robotPos, COLLECT_SNAP_TO_NEAREST_FUEL_M);
+          if (near != null && predictor.footprintHasFuel(near, COLLECT_CELL_M)) {
+            fallback = near;
           }
         }
         if (fallback == null || !collectValid.test(fallback)) {
@@ -1505,9 +1514,17 @@ public class FieldTracker {
       bestCandidate = canonicalizeCollectPoint(bestCandidate, usePts);
 
       double distToCand = robotPos.getDistance(bestCandidate);
+      double distToCur =
+          collectStickyPoint != null ? robotPos.getDistance(collectStickyPoint) : Double.NaN;
       double holdS = holdSForDist(distToCand);
       double keepMargin = switchMarginForDist(distToCand);
       double immediateDelta = Math.max(keepMargin * 1.85, keepMargin + 0.28);
+
+      if (Double.isFinite(distToCur) && distToCur - distToCand > 0.35) {
+        holdS = Math.min(holdS, 0.35);
+        keepMargin *= 0.70;
+        immediateDelta *= 0.70;
+      }
 
       if (robotInCenterBand) {
         holdS = Math.max(holdS, 0.85);
@@ -1529,6 +1546,7 @@ public class FieldTracker {
 
             if (centerF && p != 0 && q != 0 && p != q) extra += keepMarginF * 0.90 + 0.18;
             if (lockHalfF != 0 && q != 0 && q != lockHalfF) extra += keepMarginF * 0.55 + 0.10;
+            if (from.getDistance(to) <= 0.55) extra += keepMarginF * 1.15 + 0.12;
 
             return extra;
           };
@@ -1673,6 +1691,25 @@ public class FieldTracker {
       Translation2d desiredDriveTarget = collectStickyDriveTarget;
 
       if (!collectValid.test(desiredCollectPoint)) {
+        if (!predictor.footprintHasFuel(desiredCollectPoint, COLLECT_CELL_M)) {
+          predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 1.0);
+          clearCollectSticky();
+          collectStickySelector.forceInvalidate();
+          Logger.recordOutput("collect_sticky_invalid_footprint", 1.0);
+          Translation2d fallbackTarget =
+              (bestCandidate != null && collectValid.test(bestCandidate)) ? bestCandidate : null;
+          if (fallbackTarget != null) {
+            collectStickyPoint = fallbackTarget;
+            collectStickyScore = scoreResource.apply(fallbackTarget);
+            collectStickyTsNs = nowNs;
+            collectStickyInvalidSec = 0.0;
+            collectStickySelector.force(fallbackTarget);
+            desiredCollectPoint = fallbackTarget;
+          } else {
+            return holdPose.apply(
+                desiredDriveTarget != null ? desiredDriveTarget : robotPoseBlue.getTranslation());
+          }
+        }
         collectStickyInvalidSec += dt;
         Logger.recordOutput("collect_sticky_invalid_s", collectStickyInvalidSec);
 

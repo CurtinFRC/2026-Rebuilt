@@ -42,6 +42,23 @@ public final class PredictiveFieldState {
     return new CollectProbe(c, u);
   }
 
+  public boolean footprintHasFuel(Translation2d center, double cellM) {
+    if (center == null) return false;
+    SpatialDyn dyn = cachedDyn();
+    if (dyn == null || dyn.resources.isEmpty()) return false;
+    double rCore = coreRadiusFor(cellM);
+    double searchR = Math.max(0.70, rCore * 3.0);
+    Translation2d nearest = dyn.nearestResourceTo(center, searchR);
+    if (nearest == null) return false;
+    double minUnits =
+        Math.max(
+            0.02,
+            Math.min(COLLECT_FINE_MIN_UNITS, dynamicMinUnits(dyn.totalEvidence()) * 0.75));
+    Rotation2d base = face(center, nearest, Rotation2d.kZero);
+    HeadingPick pick = bestHeadingForFootprint(dyn, center, nearest, base, rCore, minUnits);
+    return pick != null;
+  }
+
   public void markCollectDepleted(Translation2d p, double cellM, double strength) {
     addDepletedMark(p, Math.max(0.10, cellM * 2.0), strength, DEPLETED_TTL_S, false);
   }
