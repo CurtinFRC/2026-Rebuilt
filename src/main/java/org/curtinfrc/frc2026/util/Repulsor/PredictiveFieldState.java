@@ -114,9 +114,11 @@ public final class PredictiveFieldState {
     public final double enemyIntent;
     public final double allyIntent;
     public final double score;
+    public final Rotation2d rotation;
 
     public PointCandidate(
         Translation2d point,
+        Rotation2d rot,
         double ourEtaS,
         double value,
         double enemyPressure,
@@ -132,6 +134,7 @@ public final class PredictiveFieldState {
       this.enemyIntent = enemyIntent;
       this.allyIntent = allyIntent;
       this.score = score;
+      this.rotation = rot;
     }
   }
 
@@ -1188,6 +1191,18 @@ public final class PredictiveFieldState {
                 ? false
                 : shouldEscapeCurrentCollect(ourPos, dyn, totalEv, minUnits, minCount, cellM));
 
+    if (currentCollectTarget != null
+        && !footprintOk(dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
+      addDepletedMark(currentCollectTarget, 0.70, 1.85, DEPLETED_TTL_S, false);
+      addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
+      recordRegionAttempt(dyn, currentCollectTarget, now, false);
+      currentCollectTarget = null;
+      currentCollectTouch = null;
+      collectArrivalTs = -1.0;
+      escape = true;
+      Logger.recordOutput("Repulsor/Collect/ChosenOffFootprintImmediate", 1.0);
+    }
+
     double commitS = collectCommitWindow(currentCollectEta);
     double switchMargin =
         (COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta)) * 1.6
@@ -1565,7 +1580,7 @@ public final class PredictiveFieldState {
     }
 
     return new PointCandidate(
-        currentCollectTarget,
+        currentCollectTarget, currentCollectHeading,
         finalE.eta,
         finalE.value,
         finalE.enemyPressure,
@@ -1813,7 +1828,7 @@ public final class PredictiveFieldState {
         Logger.recordOutput("Repulsor/Collect/ChosenEvidence", eUse.evidence);
 
         return new PointCandidate(
-            use,
+            use, new Rotation2d(),
             eUse.eta,
             eUse.value,
             eUse.enemyPressure,
@@ -1935,7 +1950,7 @@ public final class PredictiveFieldState {
     Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);
 
     return new PointCandidate(
-        bestP,
+        bestP, new Rotation2d(),
         bestE.eta,
         bestE.value,
         bestE.enemyPressure,
@@ -2924,6 +2939,11 @@ public final class PredictiveFieldState {
       double cellM) {
 
     if (currentCollectTarget == null || ourPos == null || dyn == null) return true;
+
+    double rCore = coreRadiusFor(cellM);
+    double footprintMinUnits = Math.max(0.025, Math.min(COLLECT_FINE_MIN_UNITS, minUnits * 0.80));
+    Rotation2d heading = currentCollectHeading != null ? currentCollectHeading : new Rotation2d();
+    if (!footprintOk(dyn, currentCollectTarget, heading, rCore, footprintMinUnits)) return true;
 
     CollectEval cur =
         evalCollectPoint(
