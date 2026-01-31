@@ -11,7 +11,6 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
-import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import java.util.ArrayList;
@@ -197,19 +196,19 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller
-        .leftTrigger()
-        .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(0.5), mag.store(0.7), mag.holdIndexerCommand()))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    // controller
+    //     .leftTrigger()
+    //     .whileTrue(
+    //         Commands.parallel(
+    //             intake.RawControlConsume(0.5), mag.store(0.7), mag.holdIndexerCommand()))
+    //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+    // controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
 
-    controller
-        .b()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    // controller
+    //     .b()
+    //     .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
+    //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
     controller
         .rightBumper()
@@ -220,6 +219,8 @@ public class Robot extends LoggedRobot {
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
+
+    controller.a().whileTrue(mag.runAtVelocity_RPS_PID(15)).onFalse(mag.runAtVelocity_RPS_PID(0));
   }
 
   /** This function is called periodically during all modes. */

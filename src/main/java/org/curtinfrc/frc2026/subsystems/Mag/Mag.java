@@ -14,9 +14,9 @@ public class Mag {
   final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
 
   public Mag(MagRollerIO roller1, MagRollerIO roller2, MagRollerIO roller3) {
-    intakeMagRoller = new MagRoller(roller1);
-    middleMagRoller = new MagRoller(roller2);
-    indexerMagRoller = new MagRoller(roller3);
+    intakeMagRoller = new MagRoller(roller1, "intakeMagRoller");
+    middleMagRoller = new MagRoller(roller2, "midMagRoller");
+    indexerMagRoller = new MagRoller(roller3, "indexerMagRoller");
   }
 
   public Command spinIndexer(double volts) {
@@ -41,5 +41,12 @@ public class Mag {
 
   public Command holdIndexerCommand() {
     return indexerMagRoller.stayAtCurrentPosition();
+  }
+
+  public Command runAtVelocity_RPS_PID(double velocityRPS) {
+    return Commands.parallel(
+        intakeMagRoller.runAtVelocityPID(velocityRPS),
+        middleMagRoller.runAtVelocityPID(velocityRPS),
+        indexerMagRoller.runAtVelocityPID(velocityRPS));
   }
 }

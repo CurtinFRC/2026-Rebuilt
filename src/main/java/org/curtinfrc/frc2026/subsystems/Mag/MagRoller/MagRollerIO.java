@@ -20,4 +20,6 @@ public interface MagRollerIO {
   }
 
   public default void setPosition(double position) {}
+
+  public default void setVelocityRPS(double targetVelocityRPS) {}
 }
