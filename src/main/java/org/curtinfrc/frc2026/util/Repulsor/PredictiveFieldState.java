@@ -652,6 +652,18 @@ public final class PredictiveFieldState {
   }
 
   private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.robotSquare(0.7);
+  private static final Translation2d[] COLLECT_FOOTPRINT_SAMPLES =
+      new Translation2d[] {
+        new Translation2d(0.0, 0.0),
+        new Translation2d(0.24, 0.0),
+        new Translation2d(-0.24, 0.0),
+        new Translation2d(0.0, 0.24),
+        new Translation2d(0.0, -0.24),
+        new Translation2d(0.18, 0.18),
+        new Translation2d(0.18, -0.18),
+        new Translation2d(-0.18, 0.18),
+        new Translation2d(-0.18, -0.18)
+      };
 
   private Rotation2d currentCollectHeading = new Rotation2d();
   private Translation2d currentCollectTouch = null;
@@ -674,6 +686,32 @@ public final class PredictiveFieldState {
         center.plus(
             COLLECT_INTAKE.supportPointRobotFrame(new Translation2d(1.0, 0.0)).rotateBy(heading));
     return enforceHardStopOnFuel(dyn, front, rCore, rSnap, rCentroid, 0.10);
+  }
+
+  private static final class FootprintEval {
+    int maxCount;
+    double sumUnits;
+    double avgEvidence;
+  }
+
+  private FootprintEval evalFootprint(
+      SpatialDyn dyn, Translation2d center, Rotation2d heading, double rCore) {
+    FootprintEval e = new FootprintEval();
+    if (dyn == null || center == null) return e;
+    double sumEv = 0.0;
+    int n = 0;
+    for (Translation2d sample : COLLECT_FOOTPRINT_SAMPLES) {
+      Translation2d field = center.plus(sample.rotateBy(heading));
+      int c = dyn.countResourcesWithin(field, Math.max(0.04, rCore));
+      double u = dyn.valueInSquare(field, Math.max(0.08, rCore));
+      double ev = dyn.evidenceMassWithin(field, EVIDENCE_R);
+      if (c > e.maxCount) e.maxCount = c;
+      e.sumUnits += u;
+      sumEv += ev;
+      n++;
+    }
+    e.avgEvidence = (n > 0) ? (sumEv / n) : 0.0;
+    return e;
   }
 
   public PointCandidate rankCollectNearest(
@@ -704,6 +742,15 @@ public final class PredictiveFieldState {
             * Math.max(
                 org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y);
     final double robotWallMargin = robotHalf + 0.03;
+    final double wallClearMin = robotWallMargin + 0.35;
+    final java.util.function.ToDoubleFunction<Translation2d> wallPenalty =
+        (pt) -> {
+          if (pt == null) return 0.0;
+          double d = wallDistance(pt);
+          if (d >= wallClearMin) return 0.0;
+          double t = (wallClearMin - d) / Math.max(1e-6, wallClearMin);
+          return 1.4 * t * t;
+        };
 
     final java.util.function.Predicate<Translation2d> inShootBand =
         (pt) -> {
@@ -808,6 +855,8 @@ public final class PredictiveFieldState {
               COLLECT_ACTIVITY_ALLY_W * radialDensity(allyMap, p, COLLECT_ACTIVITY_SIGMA)
                   + COLLECT_ACTIVITY_ENEMY_W * radialDensity(enemyMap, p, COLLECT_ACTIVITY_SIGMA)
                   + COLLECT_ACTIVITY_DYN_W * dyn.otherDensity(p, COLLECT_ACTIVITY_SIGMA));
+      double wallPen = wallPenalty.applyAsDouble(p);
+      int coarseCore = dyn.countResourcesWithin(p, Math.max(0.04, rCore));
 
       double evGate = ev < minEv ? -2.25 : 0.0;
       double coarseScore =
@@ -815,7 +864,9 @@ public final class PredictiveFieldState {
               - eta * 0.55
               - activity * 0.70
               - dep * DEPLETED_PEN_W
-              + evGate;
+              - wallPen
+              + evGate
+              + Math.min(0.6, 0.25 * coarseCore);
 
       coarseKey[i] = -coarseScore;
     }
@@ -936,6 +987,17 @@ public final class PredictiveFieldState {
           e.regionUnits = regionUnitsNear;
           e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
           e.score += e.banditBonus;
+          e.score -= wallPenalty.applyAsDouble(fuelTouch);
+          e.score -= wallPenalty.applyAsDouble(p) * 0.6;
+          e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.15;
+          if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
+          double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
+          e.score -= 0.55 * coreDistNorm;
+          FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
+          if (fp.maxCount < 1 || fp.sumUnits < minHardUnits) continue;
+          double fpBonus = Math.min(1.4, 0.35 * fp.maxCount + 0.55 * fp.sumUnits);
+          e.score += fpBonus;
+          if (fp.avgEvidence < minEv * 0.85) e.score -= 0.95;
 
           if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
           if (e.evidence < minEv) e.score -= 2.25;
@@ -1007,6 +1069,17 @@ public final class PredictiveFieldState {
               e.regionUnits = regionUnitsNear;
               e.banditBonus = regionBanditBonus(dyn, fuelTouch, now0);
               e.score += e.banditBonus;
+              e.score -= wallPenalty.applyAsDouble(fuelTouch);
+              e.score -= wallPenalty.applyAsDouble(p) * 0.6;
+              e.score -= depletedPenaltySoft(fuelTouch) * DEPLETED_PEN_W * 1.15;
+              if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
+              double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
+              e.score -= 0.55 * coreDistNorm;
+              FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
+              if (fp.maxCount < 1 || fp.sumUnits < minHardUnits) continue;
+              double fpBonus = Math.min(1.4, 0.35 * fp.maxCount + 0.55 * fp.sumUnits);
+              e.score += fpBonus;
+              if (fp.avgEvidence < minEv * 0.85) e.score -= 0.95;
 
               if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
               if (e.evidence < minEv) e.score -= 2.25;
@@ -2940,6 +3013,13 @@ public final class PredictiveFieldState {
 
   private static double clamp01(double x) {
     return Math.max(0.0, Math.min(1.0, x));
+  }
+
+  private static double wallDistance(Translation2d p) {
+    if (p == null) return 0.0;
+    double dx = Math.min(p.getX(), Constants.FIELD_LENGTH - p.getX());
+    double dy = Math.min(p.getY(), Constants.FIELD_WIDTH - p.getY());
+    return Math.min(dx, dy);
   }
 
   private static final class SpatialDyn {
