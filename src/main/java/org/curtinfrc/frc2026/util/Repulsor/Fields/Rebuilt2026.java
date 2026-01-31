@@ -8,8 +8,8 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.GatedAttractorObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.HorizontalObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.SquareObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.VerticalObstacle;
@@ -127,22 +127,78 @@ public final class Rebuilt2026 implements FieldDefinition {
   public List<Obstacle> fieldObstacles() {
     double maxRangeY = 0.1;
     double maxRangeX = 3;
+
+    double rectWidth = 0.5929315;
+    double rectHeight = 5.711800;
+    double rectHalfY = rectHeight * 0.5;
+
+    double leftRectX = (FIELD_LENGTH / 2) - 3.648981;
+    double rightRectX = (FIELD_LENGTH / 2) + 3.648981;
+    double rectCy = Constants.FIELD_WIDTH / 2;
+
+    double gapHeight = Math.max(0.0, (Constants.FIELD_WIDTH * 0.5) - rectHalfY);
+    double gapTopY = Constants.FIELD_WIDTH - (gapHeight * 0.5);
+    double gapBottomY = gapHeight * 0.5;
+
+    double biasStrength = 3;
+    double biasRange = Math.max(0.6, Math.min(1.4, gapHeight * 0.85));
+    double bypassStrengthScale = 2.2;
+    double bypassRange = Math.max(biasRange, 1.0);
+    double edgeOffset = 0.06;
+
+    double rectHalfX = rectWidth * 0.5;
+    Translation2d[] leftGate =
+        new Translation2d[] {
+          new Translation2d(leftRectX - rectHalfX, rectCy - rectHalfY),
+          new Translation2d(leftRectX + rectHalfX, rectCy - rectHalfY),
+          new Translation2d(leftRectX + rectHalfX, rectCy + rectHalfY),
+          new Translation2d(leftRectX - rectHalfX, rectCy + rectHalfY)
+        };
+    Translation2d[] rightGate =
+        new Translation2d[] {
+          new Translation2d(rightRectX - rectHalfX, rectCy - rectHalfY),
+          new Translation2d(rightRectX + rectHalfX, rectCy - rectHalfY),
+          new Translation2d(rightRectX + rectHalfX, rectCy + rectHalfY),
+          new Translation2d(rightRectX - rectHalfX, rectCy + rectHalfY)
+        };
+
     return List.of(
         new RectangleObstacle(
-            new Translation2d((FIELD_LENGTH / 2) - 3.648981, Constants.FIELD_WIDTH / 2),
-            0.5929315,
-            5.711800,
-            4,
-            maxRangeX,
-            maxRangeY),
+            new Translation2d(leftRectX, rectCy), rectWidth, rectHeight, 4, maxRangeX, maxRangeY),
         new RectangleObstacle(
-            new Translation2d((FIELD_LENGTH / 2) + 3.648981, Constants.FIELD_WIDTH / 2),
-            0.5929315,
-            5.711800,
-            4,
-            maxRangeX,
-            maxRangeY)
-        );
+            new Translation2d(rightRectX, rectCy), rectWidth, rectHeight, 4, maxRangeX, maxRangeY),
+        new GatedAttractorObstacle(
+            new Translation2d(leftRectX, gapTopY),
+            biasStrength,
+            biasRange,
+            leftGate,
+            new Translation2d(leftRectX, rectCy + rectHalfY + edgeOffset),
+            bypassStrengthScale,
+            bypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(leftRectX, gapBottomY),
+            biasStrength,
+            biasRange,
+            leftGate,
+            new Translation2d(leftRectX, rectCy - rectHalfY - edgeOffset),
+            bypassStrengthScale,
+            bypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(rightRectX, gapTopY),
+            biasStrength,
+            biasRange,
+            rightGate,
+            new Translation2d(rightRectX, rectCy + rectHalfY + edgeOffset),
+            bypassStrengthScale,
+            bypassRange),
+        new GatedAttractorObstacle(
+            new Translation2d(rightRectX, gapBottomY),
+            biasStrength,
+            biasRange,
+            rightGate,
+            new Translation2d(rightRectX, rectCy - rectHalfY - edgeOffset),
+            bypassStrengthScale,
+            bypassRange));
   }
 
   // @Override // TRENCH + BUMP
