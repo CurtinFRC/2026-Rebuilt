@@ -1,5 +1,7 @@
 package org.curtinfrc.frc2026;
 
+import org.curtinfrc.frc2026.Constants.RobotType;
+
 import edu.wpi.first.wpilibj.RobotBase;
 
 public final class Constants {
@@ -18,7 +20,7 @@ public final class Constants {
     }
     return RobotBase.isReal() ? Mode.REAL : Mode.REPLAY;
   }
-
+  
   public static enum Mode {
     REAL,
     SIM,
