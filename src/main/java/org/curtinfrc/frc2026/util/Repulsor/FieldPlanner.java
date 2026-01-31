@@ -3320,131 +3320,136 @@ public class FieldPlanner {
     return out;
   }
 
-  private static final double STAGED_REACH_ENTER_M = 0.35; 
-private static final double STAGED_REACH_EXIT_M  = 0.55; 
-private static final int    STAGED_REACH_TICKS   = 3;    
-private int stagedReachTicks = 0;
+  private static final double STAGED_REACH_ENTER_M = 0.35;
+  private static final double STAGED_REACH_EXIT_M = 0.55;
+  private static final int STAGED_REACH_TICKS = 3;
+  private int stagedReachTicks = 0;
 
-private static final int STAGED_MAX_TICKS = 40;
-private int stagedModeTicks = 0;
-private boolean stagedGatePassed = false;
+  private static final int STAGED_MAX_TICKS = 40;
+  private int stagedModeTicks = 0;
+  private boolean stagedGatePassed = false;
 
-private static final double STAGED_LANE_WEIGHT = 2.0;
-private static final double STAGED_PREF_GATE_PENALTY = 2.0;
+  private static final double STAGED_LANE_WEIGHT = 2.0;
+  private static final double STAGED_PREF_GATE_PENALTY = 2.0;
 
-private Translation2d stagedLatchedPull = null;
+  private Translation2d stagedLatchedPull = null;
 
-  private static final double STAGED_GATE_PAD_M = 0.25;   
-private static final double STAGED_PASSED_X_HYST_M = 0.35;
-private boolean stagedUsingBypass = false;
+  private static final double STAGED_GATE_PAD_M = 0.25;
+  private static final double STAGED_PASSED_X_HYST_M = 0.35;
+  private boolean stagedUsingBypass = false;
 
-private static Translation2d polyCentroid(Translation2d[] poly) {
-  if (poly == null || poly.length == 0) return null;
-  double sx = 0.0, sy = 0.0;
-  for (Translation2d p : poly) { sx += p.getX(); sy += p.getY(); }
-  return new Translation2d(sx / poly.length, sy / poly.length);
-}
-
-private static Translation2d[] expandPoly(Translation2d[] poly, double pad) {
-  if (poly == null || poly.length == 0) return poly;
-  if (pad <= 1e-9) return poly;
-
-  Translation2d c = polyCentroid(poly);
-  if (c == null) return poly;
-
-  Translation2d[] out = new Translation2d[poly.length];
-  for (int i = 0; i < poly.length; i++) {
-    Translation2d v = poly[i].minus(c);
-    double n = v.getNorm();
-    if (n < 1e-9) out[i] = poly[i];
-    else out[i] = c.plus(v.div(n).times(n + pad));
+  private static Translation2d polyCentroid(Translation2d[] poly) {
+    if (poly == null || poly.length == 0) return null;
+    double sx = 0.0, sy = 0.0;
+    for (Translation2d p : poly) {
+      sx += p.getX();
+      sy += p.getY();
+    }
+    return new Translation2d(sx / poly.length, sy / poly.length);
   }
-  return out;
-}
 
-private static double firstIntersectionT(Translation2d a, Translation2d b, Translation2d[] poly) {
-  if (poly == null || poly.length < 3) return Double.POSITIVE_INFINITY;
+  private static Translation2d[] expandPoly(Translation2d[] poly, double pad) {
+    if (poly == null || poly.length == 0) return poly;
+    if (pad <= 1e-9) return poly;
 
-  if (FieldPlanner.isPointInPolygon(a, poly)) return 0.0;
+    Translation2d c = polyCentroid(poly);
+    if (c == null) return poly;
 
-  double bestT = Double.POSITIVE_INFINITY;
-  for (int i = 0; i < poly.length; i++) {
-    Translation2d c = poly[i];
-    Translation2d d = poly[(i + 1) % poly.length];
-    Double t = segmentIntersectionParam(a, b, c, d);
-    if (t != null && t >= 0.0 && t <= 1.0 && t < bestT) bestT = t;
+    Translation2d[] out = new Translation2d[poly.length];
+    for (int i = 0; i < poly.length; i++) {
+      Translation2d v = poly[i].minus(c);
+      double n = v.getNorm();
+      if (n < 1e-9) out[i] = poly[i];
+      else out[i] = c.plus(v.div(n).times(n + pad));
+    }
+    return out;
   }
-  return bestT;
-}
 
-private static Double segmentIntersectionParam(
-    Translation2d a, Translation2d b, Translation2d c, Translation2d d) {
+  private static double firstIntersectionT(Translation2d a, Translation2d b, Translation2d[] poly) {
+    if (poly == null || poly.length < 3) return Double.POSITIVE_INFINITY;
 
-  double ax = a.getX(), ay = a.getY();
-  double bx = b.getX(), by = b.getY();
-  double cx = c.getX(), cy = c.getY();
-  double dx = d.getX(), dy = d.getY();
+    if (FieldPlanner.isPointInPolygon(a, poly)) return 0.0;
 
-  double rpx = bx - ax;
-  double rpy = by - ay;
-  double spx = dx - cx;
-  double spy = dy - cy;
+    double bestT = Double.POSITIVE_INFINITY;
+    for (int i = 0; i < poly.length; i++) {
+      Translation2d c = poly[i];
+      Translation2d d = poly[(i + 1) % poly.length];
+      Double t = segmentIntersectionParam(a, b, c, d);
+      if (t != null && t >= 0.0 && t <= 1.0 && t < bestT) bestT = t;
+    }
+    return bestT;
+  }
 
-  double rxs = rpx * spy - rpy * spx;
-  double qpx = cx - ax;
-  double qpy = cy - ay;
+  private static Double segmentIntersectionParam(
+      Translation2d a, Translation2d b, Translation2d c, Translation2d d) {
 
-  double qpxr = qpx * rpy - qpy * rpx;
+    double ax = a.getX(), ay = a.getY();
+    double bx = b.getX(), by = b.getY();
+    double cx = c.getX(), cy = c.getY();
+    double dx = d.getX(), dy = d.getY();
 
-  double eps = 1e-9;
-  if (Math.abs(rxs) < eps) {
+    double rpx = bx - ax;
+    double rpy = by - ay;
+    double spx = dx - cx;
+    double spy = dy - cy;
+
+    double rxs = rpx * spy - rpy * spx;
+    double qpx = cx - ax;
+    double qpy = cy - ay;
+
+    double qpxr = qpx * rpy - qpy * rpx;
+
+    double eps = 1e-9;
+    if (Math.abs(rxs) < eps) {
+      return null;
+    }
+
+    double t = (qpx * spy - qpy * spx) / rxs;
+    double u = qpxr / rxs;
+
+    if (t >= -eps && t <= 1.0 + eps && u >= -eps && u <= 1.0 + eps) {
+      if (t < 0.0) t = 0.0;
+      if (t > 1.0) t = 1.0;
+      return t;
+    }
+
     return null;
   }
 
-  double t = (qpx * spy - qpy * spx) / rxs;
-  double u = qpxr / rxs;
-
-  if (t >= -eps && t <= 1.0 + eps && u >= -eps && u <= 1.0 + eps) {
-    if (t < 0.0) t = 0.0;
-    if (t > 1.0) t = 1.0;
-    return t;
+  private static boolean gateIsBehind(
+      Translation2d pos, Translation2d goal, GatedAttractorObstacle gate) {
+    if (pos == null || goal == null || gate == null || gate.center == null) return false;
+    double dir = Math.signum(goal.getX() - pos.getX());
+    if (dir == 0.0) return false;
+    double gx = gate.center.getX();
+    if (dir > 0.0) return pos.getX() > gx + STAGED_PASSED_X_HYST_M;
+    else return pos.getX() < gx - STAGED_PASSED_X_HYST_M;
   }
 
-  return null;
-}
+  private GatedAttractorObstacle firstOccludingGateAlongSegment(
+      Translation2d pos, Translation2d target) {
+    if (gatedAttractors.isEmpty() || pos == null || target == null) return null;
 
-private static boolean gateIsBehind(Translation2d pos, Translation2d goal, GatedAttractorObstacle gate) {
-  if (pos == null || goal == null || gate == null || gate.center == null) return false;
-  double dir = Math.signum(goal.getX() - pos.getX());
-  if (dir == 0.0) return false;
-  double gx = gate.center.getX();
-  if (dir > 0.0) return pos.getX() > gx + STAGED_PASSED_X_HYST_M;
-  else return pos.getX() < gx - STAGED_PASSED_X_HYST_M;
-}
+    GatedAttractorObstacle best = null;
+    double bestT = Double.POSITIVE_INFINITY;
 
-private GatedAttractorObstacle firstOccludingGateAlongSegment(Translation2d pos, Translation2d target) {
-  if (gatedAttractors.isEmpty() || pos == null || target == null) return null;
+    for (GatedAttractorObstacle gate : gatedAttractors) {
+      if (gate == null || gate.gatePoly == null) continue;
+      if (gateIsBehind(pos, target, gate)) continue;
 
-  GatedAttractorObstacle best = null;
-  double bestT = Double.POSITIVE_INFINITY;
+      Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
 
-  for (GatedAttractorObstacle gate : gatedAttractors) {
-    if (gate == null || gate.gatePoly == null) continue;
-    if (gateIsBehind(pos, target, gate)) continue;
+      if (!segmentIntersectsPolygonOuter(pos, target, poly)) continue;
 
-    Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
-
-    if (!segmentIntersectsPolygonOuter(pos, target, poly)) continue;
-
-    double t = firstIntersectionT(pos, target, poly);
-    if (t < bestT) {
-      bestT = t;
-      best = gate;
+      double t = firstIntersectionT(pos, target, poly);
+      if (t < bestT) {
+        bestT = t;
+        best = gate;
+      }
     }
-  }
 
-  return best;
-}
+    return best;
+  }
 
   private static int sideSignXBand(double x, double band) {
     double mid = Constants.FIELD_LENGTH * 0.5;
@@ -3471,149 +3476,94 @@ private GatedAttractorObstacle firstOccludingGateAlongSegment(Translation2d pos,
     return goalSide != 0 && robotSide != 0 && goalSide != robotSide;
   }
 
-  private Translation2d stagingPullPoint(GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
-  if (gate == null) return null;
-  Translation2d center = gate.center;
-  if (center == null) return null;
+  private Translation2d stagingPullPoint(
+      GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
+    if (gate == null) return null;
+    Translation2d center = gate.center;
+    if (center == null) return null;
 
-  if (gate.gatePoly == null || gate.bypassPoint == null) return center;
-  if (pos == null || target == null) return center;
+    if (gate.gatePoly == null || gate.bypassPoint == null) return center;
+    if (pos == null || target == null) return center;
 
-  if (gate == stagedGate && stagedLatchedPull != null) return stagedLatchedPull;
+    if (gate == stagedGate && stagedLatchedPull != null) return stagedLatchedPull;
 
-  Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
-  boolean hit = segmentIntersectsPolygonOuter(pos, target, poly);
+    Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
+    boolean hit = segmentIntersectsPolygonOuter(pos, target, poly);
 
-  Translation2d inside = gate.bypassPoint;
-  Translation2d outside = new Translation2d(2.0 * center.getX() - inside.getX(), inside.getY());
+    Translation2d inside = gate.bypassPoint;
+    Translation2d outside = new Translation2d(2.0 * center.getX() - inside.getX(), inside.getY());
 
-  boolean targetOnRight = target.getX() > center.getX();
-  boolean insideOnRight = inside.getX() > center.getX();
+    boolean targetOnRight = target.getX() > center.getX();
+    boolean insideOnRight = inside.getX() > center.getX();
 
-  Translation2d pick =
-      hit
-          ? (targetOnRight ? (insideOnRight ? inside : outside) : (insideOnRight ? outside : inside))
-          : center;
+    Translation2d pick =
+        hit
+            ? (targetOnRight
+                ? (insideOnRight ? inside : outside)
+                : (insideOnRight ? outside : inside))
+            : center;
 
-  if (gate == stagedGate) stagedLatchedPull = pick;
-  return pick;
-}
-
-private GatedAttractorObstacle chooseBestGateByScore(
-    Translation2d pos, Translation2d target, GatedAttractorObstacle preferredGate) {
-
-  GatedAttractorObstacle best = null;
-  double bestScore = Double.POSITIVE_INFINITY;
-
-  double laneY = 0.5 * (pos.getY() + target.getY());
-
-  for (GatedAttractorObstacle gate : gatedAttractors) {
-    if (gate == null) continue;
-    if (gateIsBehind(pos, target, gate)) continue;
-
-    Translation2d pullTo = stagingPullPoint(gate, pos, target);
-    if (pullTo == null) continue;
-
-    double prefPenalty = (preferredGate != null && gate != preferredGate) ? STAGED_PREF_GATE_PENALTY : 0.0;
-    double lanePenalty = STAGED_LANE_WEIGHT * Math.abs(gate.center.getY() - laneY);
-
-    double score = pos.getDistance(pullTo) + pullTo.getDistance(target) + prefPenalty + lanePenalty;
-
-    if (score < bestScore) {
-      bestScore = score;
-      best = gate;
-    }
+    if (gate == stagedGate) stagedLatchedPull = pick;
+    return pick;
   }
 
-  return best;
-}
+  private GatedAttractorObstacle chooseBestGateByScore(
+      Translation2d pos, Translation2d target, GatedAttractorObstacle preferredGate) {
 
-private void updateStagedGoal(Translation2d curPos) {
-  if (gatedAttractors.isEmpty()) {
-    goal = requestedGoal;
-    stagedAttractor = null;
-    stagedGate = null;
-    stagedUsingBypass = false;
-    stagedGatePassed = false;
-    stagedLatchedPull = null;
-    lastStagedPoint = null;
-    stagedComplete = false;
-    stagedReachTicks = 0;
-    stagedModeTicks = 0;
-    return;
-  }
+    GatedAttractorObstacle best = null;
+    double bestScore = Double.POSITIVE_INFINITY;
 
-  Translation2d reqT = requestedGoal.getTranslation();
-  GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
+    double laneY = 0.5 * (pos.getY() + target.getY());
 
-  boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || (firstBlock != null);
+    for (GatedAttractorObstacle gate : gatedAttractors) {
+      if (gate == null) continue;
+      if (gateIsBehind(pos, target, gate)) continue;
 
-  if (shouldStage && stagedAttractor == null) {
-    GatedAttractorObstacle gateToUse =
-        (firstBlock != null) ? firstBlock : chooseBestGateByScore(curPos, reqT, null);
+      Translation2d pullTo = stagingPullPoint(gate, pos, target);
+      if (pullTo == null) continue;
 
-    if (gateToUse != null) {
-      stagedGate = gateToUse;
-      stagedLatchedPull = null;
+      double prefPenalty =
+          (preferredGate != null && gate != preferredGate) ? STAGED_PREF_GATE_PENALTY : 0.0;
+      double lanePenalty = STAGED_LANE_WEIGHT * Math.abs(gate.center.getY() - laneY);
 
-      stagedUsingBypass =
-          (stagedGate.gatePoly != null && stagedGate.bypassPoint != null)
-              && segmentIntersectsPolygonOuter(
-                  curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
+      double score =
+          pos.getDistance(pullTo) + pullTo.getDistance(target) + prefPenalty + lanePenalty;
 
-      Translation2d pick = stagingPullPoint(stagedGate, curPos, reqT);
-
-      if (pick != null && curPos.getDistance(pick) > STAGED_REACH_EXIT_M) {
-        stagedAttractor = pick;
-        lastStagedPoint = pick;
-        stagedReachTicks = 0;
-        stagedModeTicks = 0;
-        stagedGatePassed = false;
-        stagedComplete = false;
-
-        Pose2d staged = new Pose2d(pick, requestedGoal.getRotation());
-        setActiveGoal(staged);
-        Logger.recordOutput("Repulsor/StagedGoal", staged);
-        return;
-      } else {
-        stagedAttractor = null;
-        stagedGate = null;
-        stagedUsingBypass = false;
-        stagedGatePassed = false;
-        stagedLatchedPull = null;
-        stagedReachTicks = 0;
-        stagedModeTicks = 0;
+      if (score < bestScore) {
+        bestScore = score;
+        best = gate;
       }
     }
+
+    return best;
   }
 
-  if (stagedAttractor != null) {
-    stagedModeTicks++;
-
-    Translation2d liveTarget =
-        (stagedGate != null) ? stagingPullPoint(stagedGate, curPos, reqT) : stagedAttractor;
-    if (liveTarget == null) liveTarget = stagedAttractor;
-
-    double d = curPos.getDistance(liveTarget);
-
-    if (d <= STAGED_REACH_ENTER_M) stagedReachTicks++;
-    else if (d >= STAGED_REACH_EXIT_M) stagedReachTicks = 0;
-
-    boolean reached = stagedReachTicks >= STAGED_REACH_TICKS;
-
-    if (stagedGate != null) {
-      stagedGatePassed = stagedGatePassed || gateIsBehind(curPos, reqT, stagedGate);
+  private void updateStagedGoal(Translation2d curPos) {
+    if (gatedAttractors.isEmpty()) {
+      goal = requestedGoal;
+      stagedAttractor = null;
+      stagedGate = null;
+      stagedUsingBypass = false;
+      stagedGatePassed = false;
+      stagedLatchedPull = null;
+      lastStagedPoint = null;
+      stagedComplete = false;
+      stagedReachTicks = 0;
+      stagedModeTicks = 0;
+      return;
     }
 
-    boolean gateCleared = stagedGatePassed;
+    Translation2d reqT = requestedGoal.getTranslation();
+    GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
 
-    if (stagedModeTicks >= STAGED_MAX_TICKS) {
-      GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT);
-      if (nowFirst == null || stagedGatePassed) {
-        reached = true;
-        gateCleared = true;
-      } else if (stagedGate != null && nowFirst != stagedGate) {
-        stagedGate = nowFirst;
+    boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || (firstBlock != null);
+
+    if (shouldStage && stagedAttractor == null) {
+      GatedAttractorObstacle gateToUse =
+          (firstBlock != null) ? firstBlock : chooseBestGateByScore(curPos, reqT, null);
+
+      if (gateToUse != null) {
+        stagedGate = gateToUse;
         stagedLatchedPull = null;
 
         stagedUsingBypass =
@@ -3621,49 +3571,108 @@ private void updateStagedGoal(Translation2d curPos) {
                 && segmentIntersectsPolygonOuter(
                     curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
 
-        Translation2d repick = stagingPullPoint(stagedGate, curPos, reqT);
-        if (repick != null) {
-          stagedAttractor = repick;
-          lastStagedPoint = repick;
+        Translation2d pick = stagingPullPoint(stagedGate, curPos, reqT);
+
+        if (pick != null && curPos.getDistance(pick) > STAGED_REACH_EXIT_M) {
+          stagedAttractor = pick;
+          lastStagedPoint = pick;
           stagedReachTicks = 0;
           stagedModeTicks = 0;
           stagedGatePassed = false;
-          goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-          Logger.recordOutput("Repulsor/StagedGoal", goal);
+          stagedComplete = false;
+
+          Pose2d staged = new Pose2d(pick, requestedGoal.getRotation());
+          setActiveGoal(staged);
+          Logger.recordOutput("Repulsor/StagedGoal", staged);
           return;
+        } else {
+          stagedAttractor = null;
+          stagedGate = null;
+          stagedUsingBypass = false;
+          stagedGatePassed = false;
+          stagedLatchedPull = null;
+          stagedReachTicks = 0;
+          stagedModeTicks = 0;
         }
       }
     }
 
-    if (reached && gateCleared) {
-      stagedAttractor = null;
-      stagedGate = null;
-      stagedUsingBypass = false;
-      stagedGatePassed = false;
-      stagedLatchedPull = null;
-      lastStagedPoint = null;
-      stagedReachTicks = 0;
-      stagedModeTicks = 0;
-      stagedComplete = true;
+    if (stagedAttractor != null) {
+      stagedModeTicks++;
 
-      goal = requestedGoal;
-      Logger.recordOutput("Repulsor/StagedGoal", goal);
+      Translation2d liveTarget =
+          (stagedGate != null) ? stagingPullPoint(stagedGate, curPos, reqT) : stagedAttractor;
+      if (liveTarget == null) liveTarget = stagedAttractor;
+
+      double d = curPos.getDistance(liveTarget);
+
+      if (d <= STAGED_REACH_ENTER_M) stagedReachTicks++;
+      else if (d >= STAGED_REACH_EXIT_M) stagedReachTicks = 0;
+
+      boolean reached = stagedReachTicks >= STAGED_REACH_TICKS;
+
+      if (stagedGate != null) {
+        stagedGatePassed = stagedGatePassed || gateIsBehind(curPos, reqT, stagedGate);
+      }
+
+      boolean gateCleared = stagedGatePassed;
+
+      if (stagedModeTicks >= STAGED_MAX_TICKS) {
+        GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT);
+        if (nowFirst == null || stagedGatePassed) {
+          reached = true;
+          gateCleared = true;
+        } else if (stagedGate != null && nowFirst != stagedGate) {
+          stagedGate = nowFirst;
+          stagedLatchedPull = null;
+
+          stagedUsingBypass =
+              (stagedGate.gatePoly != null && stagedGate.bypassPoint != null)
+                  && segmentIntersectsPolygonOuter(
+                      curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
+
+          Translation2d repick = stagingPullPoint(stagedGate, curPos, reqT);
+          if (repick != null) {
+            stagedAttractor = repick;
+            lastStagedPoint = repick;
+            stagedReachTicks = 0;
+            stagedModeTicks = 0;
+            stagedGatePassed = false;
+            goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+            Logger.recordOutput("Repulsor/StagedGoal", goal);
+            return;
+          }
+        }
+      }
+
+      if (reached && gateCleared) {
+        stagedAttractor = null;
+        stagedGate = null;
+        stagedUsingBypass = false;
+        stagedGatePassed = false;
+        stagedLatchedPull = null;
+        lastStagedPoint = null;
+        stagedReachTicks = 0;
+        stagedModeTicks = 0;
+        stagedComplete = true;
+
+        goal = requestedGoal;
+        Logger.recordOutput("Repulsor/StagedGoal", goal);
+        return;
+      }
+
+      if (liveTarget.getDistance(stagedAttractor) > 0.02) {
+        stagedAttractor = liveTarget;
+        goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+        Logger.recordOutput("Repulsor/StagedGoal", goal);
+      } else {
+        goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+        Logger.recordOutput("Repulsor/StagedGoal", goal);
+      }
+
       return;
     }
 
-    if (liveTarget.getDistance(stagedAttractor) > 0.02) {
-      stagedAttractor = liveTarget;
-      goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-      Logger.recordOutput("Repulsor/StagedGoal", goal);
-    } else {
-      goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-      Logger.recordOutput("Repulsor/StagedGoal", goal);
-    }
-
-    return;
+    goal = requestedGoal;
   }
-
-  goal = requestedGoal;
-}
-
 }

@@ -46,17 +46,29 @@ public final class PredictiveFieldState {
     if (center == null) return false;
     SpatialDyn dyn = cachedDyn();
     if (dyn == null || dyn.resources.isEmpty()) return false;
+    if (dyn != lastFootprintDyn) {
+      footprintCache.clear();
+      lastFootprintDyn = dyn;
+    }
+    long key = footprintKey(center, cellM);
+    Boolean cached = footprintCache.get(key);
+    if (cached != null) return cached;
     double rCore = coreRadiusFor(cellM);
     double searchR = Math.max(0.70, rCore * 3.0);
     Translation2d nearest = dyn.nearestResourceTo(center, searchR);
-    if (nearest == null) return false;
+    if (nearest == null) {
+      footprintCache.put(key, false);
+      return false;
+    }
     double minUnits =
         Math.max(
-            0.02,
-            Math.min(COLLECT_FINE_MIN_UNITS, dynamicMinUnits(dyn.totalEvidence()) * 0.75));
+            0.02, Math.min(COLLECT_FINE_MIN_UNITS, dynamicMinUnits(dyn.totalEvidence()) * 0.75));
     Rotation2d base = face(center, nearest, Rotation2d.kZero);
     HeadingPick pick = bestHeadingForFootprint(dyn, center, nearest, base, rCore, minUnits);
-    return pick != null;
+    boolean ok = pick != null;
+    if (footprintCache.size() > 2048) footprintCache.clear();
+    footprintCache.put(key, ok);
+    return ok;
   }
 
   public void markCollectDepleted(Translation2d p, double cellM, double strength) {
@@ -289,6 +301,8 @@ public final class PredictiveFieldState {
   private volatile SpatialDyn lastDyn = null;
   private volatile int specsVersion = 0;
   private volatile int lastDynSpecsVersion = -1;
+  private volatile SpatialDyn lastFootprintDyn = null;
+  private final HashMap<Long, Boolean> footprintCache = new HashMap<>(512);
 
   private void ensureScratch(int n) {
     if (scratchLogits.length < n)
@@ -713,32 +727,44 @@ public final class PredictiveFieldState {
     int maxCount;
     double sumUnits;
     double avgEvidence;
+    boolean hasEvidence;
   }
 
   private FootprintEval evalFootprint(
       SpatialDyn dyn, Translation2d center, Rotation2d heading, double rCore) {
     FootprintEval e = new FootprintEval();
     if (dyn == null || center == null) return e;
-    double sumEv = 0.0;
-    int n = 0;
     for (Translation2d sample : COLLECT_FOOTPRINT_SAMPLES) {
       Translation2d field = center.plus(sample.rotateBy(heading));
       int c = dyn.countResourcesWithin(field, Math.max(0.04, rCore));
       double u = dyn.valueInSquare(field, Math.max(0.08, rCore));
-      double ev = dyn.evidenceMassWithin(field, EVIDENCE_R);
       if (c > e.maxCount) e.maxCount = c;
       e.sumUnits += u;
+    }
+    return e;
+  }
+
+  private void fillFootprintEvidence(
+      SpatialDyn dyn, Translation2d center, Rotation2d heading, FootprintEval e) {
+    if (e == null || e.hasEvidence || dyn == null || center == null) return;
+    double sumEv = 0.0;
+    int n = 0;
+    for (Translation2d sample : COLLECT_FOOTPRINT_SAMPLES) {
+      Translation2d field = center.plus(sample.rotateBy(heading));
+      double ev = dyn.evidenceMassWithin(field, EVIDENCE_R);
       sumEv += ev;
       n++;
     }
     e.avgEvidence = (n > 0) ? (sumEv / n) : 0.0;
-    return e;
+    e.hasEvidence = true;
   }
 
   private boolean footprintOk(
       SpatialDyn dyn, Translation2d center, Rotation2d heading, double rCore, double minUnits) {
     FootprintEval fp = evalFootprint(dyn, center, heading, rCore);
-    return fp.maxCount >= 1 && fp.sumUnits >= minUnits && fp.avgEvidence >= minUnits * 0.85;
+    if (fp.maxCount < 1 || fp.sumUnits < minUnits) return false;
+    fillFootprintEvidence(dyn, center, heading, fp);
+    return fp.avgEvidence >= minUnits * 0.85;
   }
 
   private static final class HeadingPick {
@@ -774,11 +800,32 @@ public final class PredictiveFieldState {
           || (fp.maxCount == best.eval.maxCount && fp.sumUnits > best.eval.sumUnits)
           || (fp.maxCount == best.eval.maxCount
               && Math.abs(fp.sumUnits - best.eval.sumUnits) <= 1e-6
-              && fp.avgEvidence > best.eval.avgEvidence)) {
+              && compareFootprintEvidence(dyn, p, h, fp, best))) {
         best = new HeadingPick(p, h, fp);
       }
     }
+    if (best != null) {
+      fillFootprintEvidence(dyn, best.center, best.heading, best.eval);
+    }
     return best;
+  }
+
+  private boolean compareFootprintEvidence(
+      SpatialDyn dyn, Translation2d p, Rotation2d h, FootprintEval fp, HeadingPick best) {
+    if (best == null) return true;
+    fillFootprintEvidence(dyn, p, h, fp);
+    fillFootprintEvidence(dyn, best.center, best.heading, best.eval);
+    return fp.avgEvidence > best.eval.avgEvidence;
+  }
+
+  private static long footprintKey(Translation2d center, double cellM) {
+    long kx = Math.round(center.getX() * 1000.0);
+    long ky = Math.round(center.getY() * 1000.0);
+    long kc = Math.round(cellM * 1000.0);
+    long key = kx * 0x9E3779B97F4A7C15L;
+    key ^= Long.rotateLeft(ky * 0xC2B2AE3D27D4EB4FL, 1);
+    key ^= Long.rotateLeft(kc * 0x165667B19E3779F9L, 2);
+    return key;
   }
 
   public PointCandidate rankCollectNearest(
@@ -1252,7 +1299,8 @@ public final class PredictiveFieldState {
                 : shouldEscapeCurrentCollect(ourPos, dyn, totalEv, minUnits, minCount, cellM));
 
     if (currentCollectTarget != null
-        && !footprintOk(dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
+        && !footprintOk(
+            dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
       addDepletedMark(currentCollectTarget, 0.70, 1.85, DEPLETED_TTL_S, false);
       addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
       recordRegionAttempt(dyn, currentCollectTarget, now, false);
@@ -1403,7 +1451,8 @@ public final class PredictiveFieldState {
                 dyn, currentCollectTarget, currentCollectHeading, rCore, rSnap, rCentroid);
       }
 
-      if (!footprintOk(dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
+      if (!footprintOk(
+          dyn, currentCollectTarget, currentCollectHeading, rCore, footprintMinUnits)) {
         addDepletedMark(currentCollectTarget, 0.70, 1.85, DEPLETED_TTL_S, false);
         addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);
         recordRegionAttempt(dyn, currentCollectTarget, now, false);
@@ -1640,7 +1689,8 @@ public final class PredictiveFieldState {
     }
 
     return new PointCandidate(
-        currentCollectTarget, currentCollectHeading,
+        currentCollectTarget,
+        currentCollectHeading,
         finalE.eta,
         finalE.value,
         finalE.enemyPressure,
@@ -1888,7 +1938,8 @@ public final class PredictiveFieldState {
         Logger.recordOutput("Repulsor/Collect/ChosenEvidence", eUse.evidence);
 
         return new PointCandidate(
-            use, new Rotation2d(),
+            use,
+            new Rotation2d(),
             eUse.eta,
             eUse.value,
             eUse.enemyPressure,
@@ -2010,7 +2061,8 @@ public final class PredictiveFieldState {
     Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);
 
     return new PointCandidate(
-        bestP, new Rotation2d(),
+        bestP,
+        new Rotation2d(),
         bestE.eta,
         bestE.value,
         bestE.enemyPressure,
