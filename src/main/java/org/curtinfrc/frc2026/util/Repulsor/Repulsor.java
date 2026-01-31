@@ -323,7 +323,7 @@ public class Repulsor {
                   Pose2d robotPose = m_drive.getPose();
                   List<? extends FieldPlanner.Obstacle> dyn = m_visionPlanner.getObstacles();
                   Pose2d goalPose = effective.get(ctxFor(robotPose, dyn));
-                  m_planner.setGoal(goalPose);
+                  m_planner.setRequestedGoal(goalPose);
 
                   RepulsorSample sample =
                       m_planner.calculate(
@@ -346,7 +346,7 @@ public class Repulsor {
                             activeRef.set(sp);
                             m_currentGoal = sp;
                             Pose2d g = sp.get(ctxFor(robotPose, dyn));
-                            m_planner.setGoal(g);
+                            m_planner.setRequestedGoal(g);
                           });
 
                   m_drive.runVelocity(
