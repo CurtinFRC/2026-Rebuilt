@@ -10,8 +10,7 @@ public final class Constants {
 
   // Current robot the code is being deployed on, DEV/COMP
   public static final RobotType currentRobot = RobotType.DEV;
-  public static final RobotType robotType =
-      RobotBase.isSimulation() ? RobotType.SIM : currentRobot;
+  public static final RobotType robotType = RobotBase.isSimulation() ? RobotType.SIM : currentRobot;
 
   public static Mode getMode() {
     if (RobotBase.isSimulation()) {
