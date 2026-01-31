@@ -1857,18 +1857,12 @@ public class FieldTracker {
       desiredDriveTarget = clampToFieldRobotSafe.apply(desiredDriveTarget);
 
       if (inForbidden.test(desiredDriveTarget) || violatesWall.test(desiredDriveTarget)) {
-        // Try to recover instead of immediately abandoning: first attempt a gentle nudge
-        // out of the forbidden band, then a stronger side-escape toward the nearest
-        // safe x position. Only if both fail do we clear sticky and fallback to center.
         Translation2d escape = nudgeOutOfForbidden.apply(desiredDriveTarget);
         escape = clampToFieldRobotSafe.apply(escape);
         if (!inForbidden.test(escape) && !violatesWall.test(escape)) {
           desiredDriveTarget = escape;
           collectStickyDriveTarget = escape;
         } else {
-          // Stronger fallback: pick a point outside the nearest forbidden band on the
-          // same side of the field as the robot, offset by a safe margin.
-          // reuse midX from outer scope
           double escapeX;
           double safePad = 0.60; // meters to push outside the band
           if (robotPos.getX() < midX) {

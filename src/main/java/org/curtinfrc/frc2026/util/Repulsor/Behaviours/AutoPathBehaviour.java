@@ -545,11 +545,11 @@ public class AutoPathBehaviour extends Behaviour {
               robotPoseBlue.getRotation());
     }
 
-    Rotation2d locked =
-        (lastCollectBluePose != null)
-            ? lastCollectBluePose.getRotation()
-            : robotPoseBlue.getRotation();
-    nextBlue = new Pose2d(nextBlue.getTranslation(), locked);
+    // Rotation2d locked =
+    //     (lastCollectBluePose != null)
+    //         ? lastCollectBluePose.getRotation()
+    //         : robotPoseBlue.getRotation();
+    nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
 
     lastCollectBluePose = nextBlue;
     collectBluePoseRef.set(nextBlue);

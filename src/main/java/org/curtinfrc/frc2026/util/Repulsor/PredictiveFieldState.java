@@ -724,6 +724,46 @@ public final class PredictiveFieldState {
     return fp.maxCount >= 1 && fp.sumUnits >= minUnits && fp.avgEvidence >= minUnits * 0.85;
   }
 
+  private static final class HeadingPick {
+    final Translation2d center;
+    final Rotation2d heading;
+    final FootprintEval eval;
+
+    HeadingPick(Translation2d center, Rotation2d heading, FootprintEval eval) {
+      this.center = center;
+      this.heading = heading;
+      this.eval = eval;
+    }
+  }
+
+  private HeadingPick bestHeadingForFootprint(
+      SpatialDyn dyn,
+      Translation2d desiredCenter,
+      Translation2d fuelTouch,
+      Rotation2d baseHeading,
+      double rCore,
+      double minUnits) {
+    if (dyn == null || desiredCenter == null || fuelTouch == null) return null;
+    double[] deg = new double[] {-60, -40, -20, 0, 20, 40, 60};
+    HeadingPick best = null;
+    for (double d : deg) {
+      Rotation2d h = baseHeading.plus(Rotation2d.fromDegrees(d));
+      Translation2d p =
+          COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(desiredCenter, h, fuelTouch);
+      FootprintEval fp = evalFootprint(dyn, p, h, rCore);
+      if (fp.maxCount < 1 || fp.sumUnits < minUnits) continue;
+      if (best == null
+          || fp.maxCount > best.eval.maxCount
+          || (fp.maxCount == best.eval.maxCount && fp.sumUnits > best.eval.sumUnits)
+          || (fp.maxCount == best.eval.maxCount
+              && Math.abs(fp.sumUnits - best.eval.sumUnits) <= 1e-6
+              && fp.avgEvidence > best.eval.avgEvidence)) {
+        best = new HeadingPick(p, h, fp);
+      }
+    }
+    return best;
+  }
+
   public PointCandidate rankCollectNearest(
       Translation2d ourPos,
       double ourSpeedCap,
@@ -980,10 +1020,12 @@ public final class PredictiveFieldState {
           int cCore = dyn.countResourcesWithin(fuelTouch, rCore);
           if (cCore < 1) continue;
 
-          Rotation2d heading = face(p0, fuelTouch, new Rotation2d());
-          Translation2d p =
-              COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(p0, heading, fuelTouch);
-          if (inShootBand.test(p)) continue;
+          Rotation2d baseHeading = face(p0, fuelTouch, new Rotation2d());
+          HeadingPick pick =
+              bestHeadingForFootprint(dyn, p0, fuelTouch, baseHeading, rCore, footprintMinUnits);
+          if (pick == null || inShootBand.test(pick.center)) continue;
+          Rotation2d heading = pick.heading;
+          Translation2d p = pick.center;
 
           CollectEval e =
               evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
@@ -1004,8 +1046,7 @@ public final class PredictiveFieldState {
           if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
           double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
           e.score -= 0.85 * coreDistNorm;
-          FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
-          if (fp.maxCount < 1 || fp.sumUnits < footprintMinUnits) continue;
+          FootprintEval fp = pick.eval;
           double fpBonus = Math.min(2.0, 0.50 * fp.maxCount + 0.85 * fp.sumUnits);
           e.score += fpBonus;
           if (fp.avgEvidence < minEv * 0.90) e.score -= 1.35;
@@ -1062,10 +1103,13 @@ public final class PredictiveFieldState {
               double evHard = dyn.evidenceMassWithin(fuelTouch, EVIDENCE_R);
               if (fuelOn < minHardUnits || cOn < 1 || evHard < minEv) continue;
 
-              Rotation2d heading = face(p0, fuelTouch, new Rotation2d());
-              Translation2d p =
-                  COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(p0, heading, fuelTouch);
-              if (inShootBand.test(p)) continue;
+              Rotation2d baseHeading = face(p0, fuelTouch, new Rotation2d());
+              HeadingPick pick =
+                  bestHeadingForFootprint(
+                      dyn, p0, fuelTouch, baseHeading, rCore, footprintMinUnits);
+              if (pick == null || inShootBand.test(pick.center)) continue;
+              Rotation2d heading = pick.heading;
+              Translation2d p = pick.center;
 
               CollectEval e =
                   evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
@@ -1086,8 +1130,7 @@ public final class PredictiveFieldState {
               if (e.coreCount > 1) e.score += Math.min(0.6, 0.2 * (e.coreCount - 1));
               double coreDistNorm = Math.min(1.0, e.coreDist / Math.max(0.05, rCore));
               e.score -= 0.85 * coreDistNorm;
-              FootprintEval fp = evalFootprint(dyn, p, heading, rCore);
-              if (fp.maxCount < 1 || fp.sumUnits < footprintMinUnits) continue;
+              FootprintEval fp = pick.eval;
               double fpBonus = Math.min(2.0, 0.50 * fp.maxCount + 0.85 * fp.sumUnits);
               e.score += fpBonus;
               if (fp.avgEvidence < minEv * 0.90) e.score -= 1.35;
