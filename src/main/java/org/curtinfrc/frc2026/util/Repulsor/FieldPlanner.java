@@ -120,7 +120,7 @@ public class FieldPlanner {
     } else {
       logName = "ReactiveBypassLog.csv";
     }
-    bypass.enableLogging(logName);
+    // bypass.enableLogging(logName);
   }
 
   private static double clamp01(double x) {
@@ -130,6 +130,46 @@ public class FieldPlanner {
   private static double smooth01(double x) {
     x = clamp01(x);
     return x * x * (3.0 - 2.0 * x);
+  }
+
+  private static boolean segmentIntersectsPolygonOuter(
+      Translation2d a, Translation2d b, Translation2d[] poly) {
+    if (isPointInPolygon(a, poly) || isPointInPolygon(b, poly)) return true;
+    for (int i = 0; i < poly.length; i++) {
+      Translation2d c = poly[i];
+      Translation2d d = poly[(i + 1) % poly.length];
+      if (segmentsIntersectOuter(a, b, c, d)) return true;
+    }
+    return false;
+  }
+
+  private static double orientOuter(Translation2d a, Translation2d b, Translation2d c) {
+    return (b.getX() - a.getX()) * (c.getY() - a.getY())
+        - (b.getY() - a.getY()) * (c.getX() - a.getX());
+  }
+
+  private static boolean onSegOuter(Translation2d a, Translation2d b, Translation2d p) {
+    return p.getX() >= Math.min(a.getX(), b.getX()) - 1e-9
+        && p.getX() <= Math.max(a.getX(), b.getX()) + 1e-9
+        && p.getY() >= Math.min(a.getY(), b.getY()) - 1e-9
+        && p.getY() <= Math.max(a.getY(), b.getY()) + 1e-9;
+  }
+
+  private static boolean segmentsIntersectOuter(
+      Translation2d a, Translation2d b, Translation2d c, Translation2d d) {
+    double o1 = orientOuter(a, b, c);
+    double o2 = orientOuter(a, b, d);
+    double o3 = orientOuter(c, d, a);
+    double o4 = orientOuter(c, d, b);
+
+    if ((o1 > 0) != (o2 > 0) && (o3 > 0) != (o4 > 0)) return true;
+
+    if (Math.abs(o1) < 1e-9 && onSegOuter(a, b, c)) return true;
+    if (Math.abs(o2) < 1e-9 && onSegOuter(a, b, d)) return true;
+    if (Math.abs(o3) < 1e-9 && onSegOuter(c, d, a)) return true;
+    if (Math.abs(o4) < 1e-9 && onSegOuter(c, d, b)) return true;
+
+    return false;
   }
 
   public static Translation2d[] robotRect(
@@ -2327,6 +2367,126 @@ public class FieldPlanner {
     @Override
     public boolean intersectsRectangle(Translation2d[] rectCorners) {
       for (Translation2d a : rectCorners) if (Math.abs(a.getX() - x) < 0.1) return true;
+      return false;
+    }
+  }
+
+  public static class AttractorObstacle extends Obstacle {
+    public final Translation2d center;
+    public final double maxRange;
+    public final double soften;
+
+    public AttractorObstacle(Translation2d center, double strength, double maxRange) {
+      this(center, strength, maxRange, 0.18);
+    }
+
+    public AttractorObstacle(
+        Translation2d center, double strength, double maxRange, double soften) {
+      super(strength, true);
+      this.center = center;
+      this.maxRange = Math.max(0.0, maxRange);
+      this.soften = Math.max(1e-6, soften);
+    }
+
+    @Override
+    public Force getForceAtPosition(Translation2d position, Translation2d target) {
+      double dist = position.getDistance(center);
+      if (dist < EPS || dist > maxRange) return new Force();
+
+      double magBase = strength / (soften + dist * dist);
+      double magFalloff = strength / (soften + maxRange * maxRange);
+      double mag = Math.max(magBase - magFalloff, 0.0);
+      if (mag < EPS) return new Force();
+
+      Translation2d toward = center.minus(position);
+      if (toward.getNorm() < EPS) return new Force();
+
+      return new Force(mag, toward.getAngle());
+    }
+
+    @Override
+    public boolean intersectsRectangle(Translation2d[] rectCorners) {
+      return false;
+    }
+  }
+
+  public static class GatedAttractorObstacle extends Obstacle {
+    public final Translation2d center;
+    public final double maxRange;
+    public final double soften;
+    public final Translation2d[] gatePoly;
+    public final Translation2d bypassPoint;
+    public final double bypassStrengthScale;
+    public final double bypassRange;
+
+    public GatedAttractorObstacle(
+        Translation2d center,
+        double strength,
+        double maxRange,
+        Translation2d[] gatePoly,
+        Translation2d bypassPoint,
+        double bypassStrengthScale,
+        double bypassRange) {
+      this(
+          center,
+          strength,
+          maxRange,
+          gatePoly,
+          bypassPoint,
+          bypassStrengthScale,
+          bypassRange,
+          0.18);
+    }
+
+    public GatedAttractorObstacle(
+        Translation2d center,
+        double strength,
+        double maxRange,
+        Translation2d[] gatePoly,
+        Translation2d bypassPoint,
+        double bypassStrengthScale,
+        double bypassRange,
+        double soften) {
+      super(strength, true);
+      this.center = center;
+      this.maxRange = Math.max(0.0, maxRange);
+      this.gatePoly = gatePoly;
+      this.bypassPoint = bypassPoint;
+      this.bypassStrengthScale = Math.max(1.0, bypassStrengthScale);
+      this.bypassRange = Math.max(0.0, bypassRange);
+      this.soften = Math.max(1e-6, soften);
+    }
+
+    @Override
+    public Force getForceAtPosition(Translation2d position, Translation2d target) {
+      Translation2d pullTo = center;
+      double range = maxRange;
+      double strengthScale = 1.0;
+
+      if (gatePoly != null
+          && bypassPoint != null
+          && segmentIntersectsPolygonOuter(position, center, gatePoly)) {
+        pullTo = bypassPoint;
+        range = bypassRange;
+        strengthScale = bypassStrengthScale;
+      }
+
+      double dist = position.getDistance(pullTo);
+      if (dist < EPS || dist > range) return new Force();
+
+      double magBase = (strength * strengthScale) / (soften + dist * dist);
+      double magFalloff = (strength * strengthScale) / (soften + range * range);
+      double mag = Math.max(magBase - magFalloff, 0.0);
+      if (mag < EPS) return new Force();
+
+      Translation2d toward = pullTo.minus(position);
+      if (toward.getNorm() < EPS) return new Force();
+
+      return new Force(mag, toward.getAngle());
+    }
+
+    @Override
+    public boolean intersectsRectangle(Translation2d[] rectCorners) {
       return false;
     }
   }
