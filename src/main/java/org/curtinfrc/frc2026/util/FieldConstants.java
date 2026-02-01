@@ -13,12 +13,8 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.util.Units;
-import edu.wpi.first.wpilibj.Filesystem;
 import java.io.IOException;
 import java.nio.file.Path;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import org.curtinfrc.frc2026.Constants;
 
 /**
  * Contains information for location of field element and other useful reference points.
@@ -308,12 +304,19 @@ public class FieldConstants {
         new Translation2d(0, AprilTagLayoutType.OFFICIAL.getLayout().getTagPose(29).get().getY());
   }
 
-  @RequiredArgsConstructor
   public enum FieldType {
     ANDYMARK("andymark"),
     WELDED("welded");
 
-    @Getter private final String jsonFolder;
+    private final String jsonFolder;
+
+    private FieldType(String jsonFolder) {
+      this.jsonFolder = jsonFolder;
+    }
+
+    public String getJsonFolder() {
+      return jsonFolder;
+    }
   }
 
   public enum AprilTagLayoutType {
@@ -334,19 +337,13 @@ public class FieldConstants {
           if (layout == null) {
             try {
               Path p =
-                  Constants.disabledHal
-                      ? Path.of(
-                          "src",
-                          "main",
-                          "deploy",
-                          "apriltags",
-                          fieldType.getJsonFolder(),
-                          name + ".json")
-                      : Path.of(
-                          Filesystem.getDeployDirectory().getPath(),
-                          "apriltags",
-                          fieldType.getJsonFolder(),
-                          name + ".json");
+                  Path.of(
+                      "src",
+                      "main",
+                      "deploy",
+                      "apriltags",
+                      fieldType.getJsonFolder(),
+                      name + ".json");
               layout = new AprilTagFieldLayout(p);
               layoutString = new ObjectMapper().writeValueAsString(layout);
             } catch (IOException e) {
