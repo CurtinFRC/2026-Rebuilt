@@ -10,8 +10,6 @@ public final class Constants {
 
   public static final RobotType robotType = RobotType.DEV;
 
-  public static final boolean disabledHal = true; // not too sure
-
   public static final Mode getMode() {
     return switch (robotType) {
       case COMP, DEV -> RobotBase.isReal() ? Mode.REAL : Mode.REPLAY;
