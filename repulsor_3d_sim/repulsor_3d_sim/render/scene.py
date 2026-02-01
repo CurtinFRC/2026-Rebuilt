@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from typing import Optional
 
@@ -10,6 +11,7 @@ from pyglet.gl import (
     GL_CULL_FACE,
     GL_DEPTH_BUFFER_BIT,
     GL_LINES,
+    GL_QUADS,
     glClear,
     glDisable,
     glEnable,
@@ -20,7 +22,14 @@ from pyglet.gl import (
     glPushMatrix,
     glScalef,
     glTranslatef,
+    glTexCoord2f,
+    glTexParameteri,
+    glBindTexture,
     glVertex3f,
+    GL_LINEAR,
+    GL_TEXTURE_2D,
+    GL_TEXTURE_MAG_FILTER,
+    GL_TEXTURE_MIN_FILTER,
 )
 
 from repulsor_3d_sim.config import ViewerConfig
@@ -55,7 +64,7 @@ class SceneRenderer:
         self._col_fuel = (1.0, 0.95, 0.15, 0.95)
         self._col_truth_fuel = (0.15, 0.95, 0.35, 0.70)
         self._col_other = (1.0, 0.15, 0.15, 0.85)
-        self._col_us = (0.35, 0.35, 0.38, 0.75)
+        self._col_us = (1, 0.27, 0, 0.75)
         self._col_cam = (0.20, 0.75, 1.0, 0.85)
         self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
         self._col_cam_ray_ok = (0.20, 0.95, 0.35, 0.55)
@@ -63,6 +72,14 @@ class SceneRenderer:
 
         self.show_camera_debug = bool(getattr(cfg, "show_camera_debug", True))
         self.show_truth_fuel = bool(getattr(cfg, "show_truth_fuel", True))
+        self.show_field_image = bool(getattr(cfg, "show_field_image", True))
+
+        self._field_image_path = str(getattr(cfg, "field_image_path", "") or "")
+        self._field_image_alpha = float(getattr(cfg, "field_image_alpha", 0.92))
+        self._field_image_flip_x = bool(getattr(cfg, "field_image_flip_x", False))
+        self._field_image_flip_y = bool(getattr(cfg, "field_image_flip_y", False))
+        self._field_tex = self._load_field_texture(self._field_image_path)
+        self._field_uvs = self._build_tex_uvs(self._field_tex)
 
         self._last_cap_t = 0.0
         self._last_cap_s = ""
@@ -87,6 +104,8 @@ class SceneRenderer:
         set_matrices(proj, view)
 
         draw_grid(self._field_length, self._field_width, self._field_z, step=1.0)
+        if self.show_field_image and self._field_tex is not None:
+            self._draw_field_image()
         draw_axes((0.0, 0.0, self._field_z), scale=1.0)
 
         if snap is not None:
@@ -117,6 +136,79 @@ class SceneRenderer:
             glScalef(r, r, r)
             draw_mesh(sphere, col)
             glPopMatrix()
+
+    def _load_field_texture(self, path: str):
+        if not path:
+            return None
+        candidates = [path]
+        if not os.path.isabs(path):
+            base_pkg = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            base_root = os.path.abspath(os.path.join(base_pkg, ".."))
+            candidates.append(os.path.join(base_pkg, path))
+            candidates.append(os.path.join(base_root, path))
+        for p in candidates:
+            if os.path.isfile(p):
+                try:
+                    img = pyglet.image.load(p)
+                    tex = img.get_texture()
+                    glBindTexture(tex.target, tex.id)
+                    glTexParameteri(tex.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+                    glTexParameteri(tex.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+                    glBindTexture(tex.target, 0)
+                    return tex
+                except Exception:
+                    return None
+        return None
+
+    def _build_tex_uvs(self, tex):
+        if tex is None:
+            return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        tc = getattr(tex, "tex_coords", None)
+        if not tc or len(tc) < 8:
+            return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        uvs = [(tc[i], tc[i + 1]) for i in range(0, 12, 3)]
+        if len(uvs) != 4:
+            return [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        if self._field_image_flip_x or self._field_image_flip_y:
+            us = [u for u, _v in uvs]
+            vs = [_v for _u, _v in uvs]
+            umin, umax = min(us), max(us)
+            vmin, vmax = min(vs), max(vs)
+            out = []
+            for u, v in uvs:
+                if self._field_image_flip_x:
+                    u = umin + (umax - u)
+                if self._field_image_flip_y:
+                    v = vmin + (vmax - v)
+                out.append((u, v))
+            return out
+        return uvs
+
+    def _draw_field_image(self):
+        tex = self._field_tex
+        if tex is None:
+            return
+        z = self._field_z + 0.001
+        fl = self._field_length
+        fw = self._field_width
+        alpha = max(0.0, min(1.0, self._field_image_alpha))
+        glEnable(GL_TEXTURE_2D)
+        glBindTexture(tex.target, tex.id)
+        glColor4f(1.0, 1.0, 1.0, alpha)
+        glBegin(GL_QUADS)
+        uvs = self._field_uvs
+        # (0,0) -> (fl,0) -> (fl,fw) -> (0,fw)
+        glTexCoord2f(uvs[0][0], uvs[0][1])
+        glVertex3f(0.0, 0.0, z)
+        glTexCoord2f(uvs[1][0], uvs[1][1])
+        glVertex3f(fl, 0.0, z)
+        glTexCoord2f(uvs[2][0], uvs[2][1])
+        glVertex3f(fl, fw, z)
+        glTexCoord2f(uvs[3][0], uvs[3][1])
+        glVertex3f(0.0, fw, z)
+        glEnd()
+        glBindTexture(tex.target, 0)
+        glDisable(GL_TEXTURE_2D)
 
     def _draw_truth_fuel(self, snap: WorldSnapshot):
         truth = snap.truth

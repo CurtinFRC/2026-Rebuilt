@@ -46,6 +46,11 @@ class ViewerConfig:
     truth_socket_host: str
     truth_socket_port: int
     truth_socket_enabled: bool
+    field_image_path: str
+    show_field_image: bool
+    field_image_alpha: float
+    field_image_flip_x: bool
+    field_image_flip_y: bool
     window_w: int
     window_h: int
     fps: int
@@ -78,6 +83,11 @@ def load_config() -> ViewerConfig:
         truth_socket_host=_s("TRUTH_SOCKET_HOST", "127.0.0.1"),
         truth_socket_port=_i("TRUTH_SOCKET_PORT", 5809),
         truth_socket_enabled=_b("TRUTH_SOCKET_ENABLED", True),
+        field_image_path=_s("FIELD_IMAGE_PATH", "field.png"),
+        show_field_image=_b("SHOW_FIELD_IMAGE", True),
+        field_image_alpha=_f("FIELD_IMAGE_ALPHA", 0.92),
+        field_image_flip_x=_b("FIELD_IMAGE_FLIP_X", False),
+        field_image_flip_y=_b("FIELD_IMAGE_FLIP_Y", False),
         window_w=_i("WINDOW_W", 1280),
         window_h=_i("WINDOW_H", 720),
         fps=_i("FPS", 60),
