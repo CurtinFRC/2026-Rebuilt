@@ -1,6 +1,7 @@
 # repulsor_sim/providers/mock_provider.py
 from __future__ import annotations
 import math
+import os
 import random
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
@@ -26,6 +27,82 @@ def _box_muller(rng: random.Random) -> float:
     u1 = max(1e-12, rng.random())
     u2 = rng.random()
     return math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+
+def _wrap_rad(a: float) -> float:
+    while a > math.pi:
+        a -= 2.0 * math.pi
+    while a < -math.pi:
+        a += 2.0 * math.pi
+    return a
+
+def _deg2rad(d: float) -> float:
+    return d * math.pi / 180.0
+
+@dataclass
+class _Camera:
+    name: str
+    x: float
+    y: float
+    z: float
+    roll: float
+    pitch: float
+    yaw: float
+    hfov_rad: float
+    vfov_rad: float
+    min_range: float
+    max_range: float
+    update_hz: float
+    noise_xy: float
+    noise_z: float
+    dropout: float
+    next_update_s: float = 0.0
+
+@dataclass
+class _Detected:
+    oid: str
+    class_id: int
+    x: float
+    y: float
+    z: float
+    score: float
+
+@dataclass
+class _TrackedWorld:
+    obj: WorldObject
+    last_seen_s: float
+    last_update_s: float
+
+@dataclass
+class _TrackedObstacle:
+    obs: VisionObstacle
+    last_seen_s: float
+    last_update_s: float
+
+@dataclass(frozen=True)
+class CameraConfig:
+    # ROBOT-RELATIVE camera pose (meters, degrees).
+    name: str
+    x: float
+    y: float
+    z: float
+    yaw_deg: float
+    pitch_deg: float
+    roll_deg: float = 0.0
+    hfov_deg: float = 95.0
+    vfov_deg: float = 60.0
+    min_range: float = 0.2
+    max_range: float = 9.0
+    update_hz: float = 15.0
+    noise_xy: float = 0.05
+    noise_z: float = 0.03
+    dropout: float = 0.04
+
+CAMERAS: List[CameraConfig] = [ # 0.705, 0.730
+    CameraConfig(name="cam_front", x=0.35, y=0.00, z=1.35, yaw_deg=0.0,   pitch_deg=-12.0),
+    CameraConfig(name="cam_back",  x=-0.35,y=0.00, z=1.35, yaw_deg=180.0, pitch_deg=-12.0),
+    CameraConfig(name="cam_left",  x=0.00, y=0.36, z=1.35, yaw_deg=90.0,  pitch_deg=-12.0),
+    CameraConfig(name="cam_right", x=0.00, y=-0.36,z=1.35, yaw_deg=-90.0, pitch_deg=-12.0),
+]
 
 @dataclass
 class _FuelObj:
@@ -67,10 +144,20 @@ class MockProvider(RepulsorProvider):
         self._piece_sub = None
 
         self._forbidden: List[Tuple[float, float, float, float]] = []
+        self._cams: List[_Camera] = []
+        self._tracked_objects: Dict[str, _TrackedWorld] = {}
+        self._tracked_obstacles: Dict[str, _TrackedObstacle] = {}
+        self._obj_publish_hz = 10.0
+        self._obs_publish_hz = 10.0
+        self._obj_publish_period_s = 0.1
+        self._obs_publish_period_s = 0.1
+        self._visibility_timeout_s = 0.45
+        self.last_piece_count = 0
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
-        self.rng = random.Random()
+        seed = int(getattr(cfg, "seed", 1337))
+        self.rng = random.Random(seed)
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -84,6 +171,14 @@ class MockProvider(RepulsorProvider):
         self.ny = int(math.floor((self.y1 - self.y0) / cfg.grid_cell_m))
 
         self._forbidden = self._build_forbidden_regions()
+        self._cams = self._build_cameras()
+        self._tracked_objects.clear()
+        self._tracked_obstacles.clear()
+        self._obj_publish_hz = float(os.getenv("MOCK_VISION_OBJ_HZ", "10"))
+        self._obs_publish_hz = float(os.getenv("MOCK_VISION_OBS_HZ", "10"))
+        self._obj_publish_period_s = 1.0 / max(1e-6, self._obj_publish_hz)
+        self._obs_publish_period_s = 1.0 / max(1e-6, self._obs_publish_hz)
+        self._visibility_timeout_s = float(os.getenv("MOCK_VISION_TIMEOUT_S", "0.45"))
 
         self.cluster_centers = self._make_cluster_centers()
         self._regen_fuel()
@@ -100,6 +195,207 @@ class MockProvider(RepulsorProvider):
 
         self._frozen = True
 
+    def _build_cameras(self) -> List[_Camera]:
+        assert self.cfg is not None
+        cams: List[_Camera] = []
+
+        for c in CAMERAS:
+            cams.append(
+                _Camera(
+                    name=c.name,
+                    x=c.x,
+                    y=c.y,
+                    z=c.z,
+                    roll=_deg2rad(c.roll_deg),
+                    pitch=_deg2rad(c.pitch_deg),
+                    yaw=_deg2rad(c.yaw_deg),
+                    hfov_rad=_deg2rad(c.hfov_deg),
+                    vfov_rad=_deg2rad(c.vfov_deg),
+                    min_range=max(0.0, c.min_range),
+                    max_range=max(0.05, c.max_range),
+                    update_hz=max(1e-6, c.update_hz),
+                    noise_xy=max(0.0, c.noise_xy),
+                    noise_z=max(0.0, c.noise_z),
+                    dropout=_clamp(c.dropout, 0.0, 1.0),
+                )
+            )
+
+        if cams:
+            return cams
+
+        # Fallback if list is empty (robot-relative)
+        return [
+            _Camera(
+                name="cam_front",
+                x=0.35,
+                y=0.0,
+                z=1.35,
+                roll=0.0,
+                pitch=_deg2rad(-12.0),
+                yaw=_deg2rad(0.0),
+                hfov_rad=_deg2rad(95.0),
+                vfov_rad=_deg2rad(60.0),
+                min_range=0.2,
+                max_range=9.0,
+                update_hz=15.0,
+                noise_xy=0.05,
+                noise_z=0.03,
+                dropout=0.04,
+            ),
+            _Camera(
+                name="cam_back",
+                x=-0.35,
+                y=0.0,
+                z=1.35,
+                roll=0.0,
+                pitch=_deg2rad(-12.0),
+                yaw=_deg2rad(180.0),
+                hfov_rad=_deg2rad(95.0),
+                vfov_rad=_deg2rad(60.0),
+                min_range=0.2,
+                max_range=9.0,
+                update_hz=15.0,
+                noise_xy=0.05,
+                noise_z=0.03,
+                dropout=0.04,
+            ),
+        ]
+
+    def _detect_object(
+        self,
+        cam: _Camera,
+        obj: WorldObject,
+        cam_x: float,
+        cam_y: float,
+        cam_z: float,
+        cam_yaw: float,
+    ) -> _Detected | None:
+        assert self.rng is not None
+        dx = obj.x - cam_x
+        dy = obj.y - cam_y
+        dz = obj.z - cam_z
+        dist2 = dx * dx + dy * dy + dz * dz
+        if dist2 < (cam.min_range * cam.min_range) or dist2 > (cam.max_range * cam.max_range):
+            return None
+
+        horiz = math.hypot(dx, dy)
+        yaw_to = math.atan2(dy, dx)
+        pitch_to = math.atan2(dz, max(1e-9, horiz))
+        dyaw = _wrap_rad(yaw_to - cam_yaw)
+        dpitch = pitch_to - cam.pitch
+
+        if abs(dyaw) > cam.hfov_rad * 0.5 or abs(dpitch) > cam.vfov_rad * 0.5:
+            return None
+
+        if self.rng.random() < cam.dropout:
+            return None
+
+        dist = math.sqrt(dist2)
+        off_yaw = abs(dyaw) / max(1e-6, cam.hfov_rad * 0.5)
+        off_pitch = abs(dpitch) / max(1e-6, cam.vfov_rad * 0.5)
+        p = 1.0 - 0.45 * (dist / max(1e-6, cam.max_range)) - 0.20 * off_yaw - 0.20 * off_pitch
+        if self.rng.random() > _clamp(p, 0.0, 1.0):
+            return None
+
+        nx = obj.x + _box_muller(self.rng) * cam.noise_xy
+        ny = obj.y + _box_muller(self.rng) * cam.noise_xy
+        nz = obj.z + _box_muller(self.rng) * cam.noise_z
+
+        score = dist2 + (off_yaw * off_yaw + off_pitch * off_pitch) * dist2
+        return _Detected(oid=obj.oid, class_id=obj.class_id, x=nx, y=ny, z=nz, score=score)
+
+    def _simulate_vision(
+        self,
+        now_s: float,
+        objects: List[WorldObject],
+        robot_sizes: Dict[str, Tuple[float, float]],
+        robot_pose: Pose2d | None,
+    ) -> Tuple[List[WorldObject], List[VisionObstacle]]:
+        assert self.rng is not None
+
+        detections: Dict[str, _Detected] = {}
+        if robot_pose is None:
+            robot_x = 0.0
+            robot_y = 0.0
+            robot_yaw = 0.0
+        else:
+            robot_x = float(robot_pose.x)
+            robot_y = float(robot_pose.y)
+            robot_yaw = float(robot_pose.rotation().radians())
+        cos_r = math.cos(robot_yaw)
+        sin_r = math.sin(robot_yaw)
+
+        for cam in self._cams:
+            if now_s < cam.next_update_s:
+                continue
+            cam.next_update_s = now_s + (1.0 / max(1e-6, cam.update_hz))
+            cam_x = robot_x + cam.x * cos_r - cam.y * sin_r
+            cam_y = robot_y + cam.x * sin_r + cam.y * cos_r
+            cam_z = cam.z
+            cam_yaw = _wrap_rad(robot_yaw + cam.yaw)
+            for obj in objects:
+                det = self._detect_object(cam, obj, cam_x, cam_y, cam_z, cam_yaw)
+                if det is None:
+                    continue
+                prev = detections.get(det.oid)
+                if prev is None or det.score < prev.score:
+                    detections[det.oid] = det
+
+        # Update tracked world objects
+        for oid, det in detections.items():
+            tr = self._tracked_objects.get(oid)
+            if tr is None:
+                obj = WorldObject(oid=oid, class_id=det.class_id, x=det.x, y=det.y, z=det.z)
+                self._tracked_objects[oid] = _TrackedWorld(
+                    obj=obj, last_seen_s=now_s, last_update_s=now_s
+                )
+            else:
+                tr.last_seen_s = now_s
+                if now_s - tr.last_update_s >= self._obj_publish_period_s:
+                    tr.obj = WorldObject(
+                        oid=oid, class_id=det.class_id, x=det.x, y=det.y, z=det.z
+                    )
+                    tr.last_update_s = now_s
+
+        # Drop stale world objects
+        for oid in list(self._tracked_objects.keys()):
+            tr = self._tracked_objects[oid]
+            if now_s - tr.last_seen_s > self._visibility_timeout_s:
+                del self._tracked_objects[oid]
+
+        # Update tracked obstacles (robots only)
+        for oid, det in detections.items():
+            if det.class_id not in (CLASS_ROBOT_BLUE, CLASS_ROBOT_RED):
+                continue
+            sx, sy = robot_sizes.get(oid, (0.75, 0.75))
+            tr = self._tracked_obstacles.get(oid)
+            if tr is None:
+                obs = VisionObstacle(oid=oid, kind="robot", x=det.x, y=det.y, sx=sx, sy=sy)
+                self._tracked_obstacles[oid] = _TrackedObstacle(
+                    obs=obs, last_seen_s=now_s, last_update_s=now_s
+                )
+            else:
+                tr.last_seen_s = now_s
+                if now_s - tr.last_update_s >= self._obs_publish_period_s:
+                    tr.obs = VisionObstacle(oid=oid, kind="robot", x=det.x, y=det.y, sx=sx, sy=sy)
+                    tr.last_update_s = now_s
+
+        for oid in list(self._tracked_obstacles.keys()):
+            tr = self._tracked_obstacles[oid]
+            if now_s - tr.last_seen_s > self._visibility_timeout_s:
+                del self._tracked_obstacles[oid]
+
+        objs_out = [tr.obj for tr in self._tracked_objects.values()]
+        objs_out.sort(key=lambda o: o.oid)
+        if len(objs_out) > self.cfg.max_objects:
+            objs_out = objs_out[: self.cfg.max_objects]
+
+        obs_out = [tr.obs for tr in self._tracked_obstacles.values()]
+        obs_out.sort(key=lambda o: o.oid)
+        if len(obs_out) > self.cfg.max_obstacles:
+            obs_out = obs_out[: self.cfg.max_obstacles]
+
+        return objs_out, obs_out
 
     def _make_cluster_centers(self) -> List[Tuple[float, float, float]]:
         assert self.rng is not None
@@ -351,11 +647,18 @@ class MockProvider(RepulsorProvider):
         for fo in self.fuel.values():
             objs.append(WorldObject(oid=fo.oid, class_id=CLASS_FUEL, x=fo.x, y=fo.y, z=fo.z))
 
-        if len(objs) > self.cfg.max_objects:
-            objs = objs[: self.cfg.max_objects]
+        # include robots as world objects for vision dedupe and camera visibility
+        robot_sizes: Dict[str, Tuple[float, float]] = {}
+        for ro in self.robots:
+            objs.append(
+                WorldObject(oid=ro.oid, class_id=ro.class_id, x=ro.x, y=ro.y, z=0.0)
+            )
+            robot_sizes[ro.oid] = (ro.sx, ro.sy)
 
-        obstacles: List[VisionObstacle] = []
-        for ro in self.robots[: self.cfg.max_obstacles]:
-            obstacles.append(VisionObstacle(oid=ro.oid, kind="robot", x=ro.x, y=ro.y, sx=ro.sx, sy=ro.sy))
+        vis_objects, vis_obstacles = self._simulate_vision(now_s, objs, robot_sizes, pose)
 
-        return ProviderFrame(objects=objs, obstacles=obstacles, extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        return ProviderFrame(
+            objects=vis_objects,
+            obstacles=vis_obstacles,
+            extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        )
