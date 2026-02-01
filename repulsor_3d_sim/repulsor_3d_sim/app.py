@@ -200,6 +200,8 @@ class ViewerApp:
         self.renderer.show_camera_debug = self._show_camera_debug
         self._show_truth_fuel = bool(getattr(cfg, "show_truth_fuel", True))
         self.renderer.show_truth_fuel = self._show_truth_fuel
+        self._show_age_filtered_fuel = bool(getattr(cfg, "show_age_filtered_fuel", False))
+        self.renderer.show_age_filtered_fuel = self._show_age_filtered_fuel
 
         self._keys = key.KeyStateHandler()
         self.window.push_handlers(self._keys)
@@ -360,3 +362,6 @@ class ViewerApp:
         elif symbol == key.T:
             self._show_truth_fuel = not self._show_truth_fuel
             self.renderer.show_truth_fuel = self._show_truth_fuel
+        elif symbol == key.A:
+            self._show_age_filtered_fuel = not self._show_age_filtered_fuel
+            self.renderer.show_age_filtered_fuel = self._show_age_filtered_fuel

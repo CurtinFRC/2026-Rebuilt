@@ -12,12 +12,18 @@ from pyglet.gl import (
     GL_DEPTH_BUFFER_BIT,
     GL_LINES,
     GL_QUADS,
+    GL_MODELVIEW,
+    GL_PROJECTION,
+    GL_DEPTH_TEST,
     glClear,
     glDisable,
     glEnable,
     glBegin,
     glColor4f,
     glEnd,
+    glLoadIdentity,
+    glMatrixMode,
+    glOrtho,
     glPopMatrix,
     glPushMatrix,
     glScalef,
@@ -33,11 +39,55 @@ from pyglet.gl import (
 )
 
 from repulsor_3d_sim.config import ViewerConfig
-from repulsor_3d_sim.model import WorldSnapshot
+from repulsor_3d_sim.model import FieldVisionObject, WorldSnapshot
 from repulsor_3d_sim.render.camera import OrbitCamera
 from repulsor_3d_sim.render.glutil import init_gl, set_matrices, set_viewport
 from repulsor_3d_sim.render.primitives import draw_axes, draw_box, draw_grid, draw_mesh, make_sphere_mesh
 import trimesh
+
+_FONT_5X7 = {
+    " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+    "[": ["11100", "10000", "10000", "10000", "10000", "10000", "11100"],
+    "]": ["00111", "00001", "00001", "00001", "00001", "00001", "00111"],
+    ":": ["00000", "00100", "00100", "00000", "00100", "00100", "00000"],
+    "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+    "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "B": ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "F": ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+    "G": ["01111", "10000", "10000", "10011", "10001", "10001", "01111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "J": ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
+    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "Q": ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+    "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "V": ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+    "W": ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+    "X": ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+    "Z": ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
+}
 
 class SceneRenderer:
     def __init__(self, cfg: ViewerConfig):
@@ -73,6 +123,7 @@ class SceneRenderer:
         self.show_camera_debug = bool(getattr(cfg, "show_camera_debug", True))
         self.show_truth_fuel = bool(getattr(cfg, "show_truth_fuel", True))
         self.show_field_image = bool(getattr(cfg, "show_field_image", True))
+        self.show_age_filtered_fuel = bool(getattr(cfg, "show_age_filtered_fuel", False))
 
         self._field_image_path = str(getattr(cfg, "field_image_path", "") or "")
         self._field_image_alpha = float(getattr(cfg, "field_image_alpha", 0.92))
@@ -80,6 +131,11 @@ class SceneRenderer:
         self._field_image_flip_y = bool(getattr(cfg, "field_image_flip_y", False))
         self._field_tex = self._load_field_texture(self._field_image_path)
         self._field_uvs = self._build_tex_uvs(self._field_tex)
+
+        self._fuel_last_seen: dict[str, float] = {}
+        self._fuel_cache: dict[str, FieldVisionObject] = {}
+        self._age_decay = float(getattr(cfg, "collect_age_decay", 1.25))
+        self._age_hard_max = float(getattr(cfg, "resource_hard_max_age_s", 0.95))
 
         self._last_cap_t = 0.0
         self._last_cap_s = ""
@@ -118,6 +174,7 @@ class SceneRenderer:
                 self._draw_cameras(snap)
 
         glDisable(GL_CULL_FACE)
+        self._draw_overlay(window)
         self._update_caption(window, snap, connected)
 
     def _draw_fuel(self, snap: WorldSnapshot):
@@ -125,18 +182,52 @@ class SceneRenderer:
         if not fv:
             return
 
+        now = time.monotonic()
+        self._update_fuel_cache(fv, now)
+
         base_z = self._field_z
         r = self._fuel_r
         sphere = self.sphere
         col = self._col_fuel
 
+        if self.show_age_filtered_fuel:
+            for oid, o in self._fuel_cache.items():
+                age = now - self._fuel_last_seen.get(oid, now)
+                if age > self._age_hard_max:
+                    continue
+                w = math.exp(-self._age_decay * max(0.0, age))
+                scale = 0.35 + 0.65 * w
+                acol = (col[0] * scale, col[1] * scale, col[2] * scale, col[3] * scale)
+                glPushMatrix()
+                glTranslatef(float(o.x), float(o.y), base_z + float(o.z))
+                glScalef(r, r, r)
+                draw_mesh(sphere, acol)
+                glPopMatrix()
+            return
+
         for o in fv:
+            if getattr(o, "typ", "fuel").lower() != "fuel":
+                continue
             glPushMatrix()
             glTranslatef(float(o.x), float(o.y), base_z + float(o.z))
             glScalef(r, r, r)
             draw_mesh(sphere, col)
             glPopMatrix()
 
+    def _update_fuel_cache(self, fv, now_s: float) -> None:
+        for o in fv:
+            if o is None or getattr(o, "typ", "fuel").lower() != "fuel":
+                continue
+            self._fuel_cache[o.oid] = o
+            self._fuel_last_seen[o.oid] = now_s
+
+        if len(self._fuel_cache) < 1500:
+            return
+        ttl = max(1.5, self._age_hard_max * 3.0)
+        for oid in list(self._fuel_last_seen.keys()):
+            if now_s - self._fuel_last_seen.get(oid, now_s) > ttl:
+                self._fuel_last_seen.pop(oid, None)
+                self._fuel_cache.pop(oid, None)
     def _load_field_texture(self, path: str):
         if not path:
             return None
@@ -209,6 +300,66 @@ class SceneRenderer:
         glEnd()
         glBindTexture(tex.target, 0)
         glDisable(GL_TEXTURE_2D)
+
+    def _draw_overlay(self, window: pyglet.window.Window):
+        lines = [
+            f"[C] Camera debug: {'ON' if self.show_camera_debug else 'OFF'}",
+            f"[T] Truth fuel: {'ON' if self.show_truth_fuel else 'OFF'}",
+            f"[A] Age filter: {'ON' if self.show_age_filtered_fuel else 'OFF'}",
+            f"Field image: {'ON' if self.show_field_image else 'OFF'}",
+        ]
+        top = window.height - 10
+        scale = 2.0
+        line_h = 8.0 * scale
+
+        glDisable(GL_DEPTH_TEST)
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, window.width, 0, window.height, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glColor4f(0.92, 0.92, 0.92, 0.90)
+        y = float(top)
+        for text in lines:
+            self._draw_text(10.0, y, scale, text)
+            y -= line_h
+
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glEnable(GL_DEPTH_TEST)
+
+    def _draw_text(self, x: float, y: float, scale: float, text: str) -> None:
+        if not text:
+            return
+        sx = float(scale)
+        sy = float(scale)
+        cx = float(x)
+        cy = float(y)
+        spacing = 1.0 * sx
+        glBegin(GL_QUADS)
+        for ch in text.upper():
+            glyph = _FONT_5X7.get(ch)
+            if glyph is None:
+                cx += 6.0 * sx
+                continue
+            for row in range(7):
+                line = glyph[row]
+                for col in range(5):
+                    if line[col] != "1":
+                        continue
+                    px = cx + col * sx
+                    py = cy - row * sy
+                    glVertex3f(px, py - sy, 0.0)
+                    glVertex3f(px + sx, py - sy, 0.0)
+                    glVertex3f(px + sx, py, 0.0)
+                    glVertex3f(px, py, 0.0)
+            cx += 5.0 * sx + spacing
+        glEnd()
 
     def _draw_truth_fuel(self, snap: WorldSnapshot):
         truth = snap.truth

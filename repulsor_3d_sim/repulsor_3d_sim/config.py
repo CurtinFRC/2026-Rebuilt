@@ -51,6 +51,9 @@ class ViewerConfig:
     field_image_alpha: float
     field_image_flip_x: bool
     field_image_flip_y: bool
+    collect_age_decay: float
+    resource_hard_max_age_s: float
+    show_age_filtered_fuel: bool
     window_w: int
     window_h: int
     fps: int
@@ -88,6 +91,9 @@ def load_config() -> ViewerConfig:
         field_image_alpha=_f("FIELD_IMAGE_ALPHA", 0.92),
         field_image_flip_x=_b("FIELD_IMAGE_FLIP_X", False),
         field_image_flip_y=_b("FIELD_IMAGE_FLIP_Y", False),
+        collect_age_decay=_f("COLLECT_AGE_DECAY", 1.25),
+        resource_hard_max_age_s=_f("RESOURCE_HARD_MAX_AGE_S", 0.95),
+        show_age_filtered_fuel=_b("SHOW_AGE_FILTERED_FUEL", False),
         window_w=_i("WINDOW_W", 1280),
         window_h=_i("WINDOW_H", 720),
         fps=_i("FPS", 60),
