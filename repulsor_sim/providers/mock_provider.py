@@ -122,6 +122,18 @@ class _RobotObj:
     sx: float
     sy: float
 
+@dataclass
+class _ShotBall:
+    oid: str
+    x: float
+    y: float
+    z: float
+    vx: float
+    vy: float
+    vz: float
+    landed: bool
+    age_s: float = 0.0
+
 class MockProvider(RepulsorProvider):
     def __init__(self):
         self.cfg: Config | None = None
@@ -160,6 +172,19 @@ class MockProvider(RepulsorProvider):
         self._pickup_enabled = True
         self._pickup_front_only = True
         self._pickup_use_body = True
+        self._shots: List[_ShotBall] = []
+        self._shot_oid = 0
+        self._last_step_s = None
+        self._last_ext_piece = 0
+        self._shot_speed = 5.5
+        self._shot_pitch = _deg2rad(25.0)
+        self._shot_spread = _deg2rad(6.0)
+        self._shot_speed_jitter = 0.15
+        self._shot_pitch_jitter = _deg2rad(3.0)
+        self._shot_offset = (0.45, 0.0, 0.55)
+        self._shot_gravity = 9.81
+        self._shot_roll_decel = 1.4
+        self._shot_stop_speed = 0.15
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -169,6 +194,20 @@ class MockProvider(RepulsorProvider):
         self._pickup_enabled = os.getenv("MOCK_PICKUP_ENABLED", "1").strip() != "0"
         self._pickup_front_only = os.getenv("MOCK_PICKUP_FRONT_ONLY", "1").strip() != "0"
         self._pickup_use_body = os.getenv("MOCK_PICKUP_USE_BODY", "1").strip() != "0"
+        self._shot_speed = float(os.getenv("MOCK_SHOT_SPEED", "5.5"))
+        self._shot_pitch = _deg2rad(float(os.getenv("MOCK_SHOT_PITCH_DEG", "25.0")))
+        self._shot_spread = _deg2rad(float(os.getenv("MOCK_SHOT_SPREAD_DEG", "6.0")))
+        self._shot_speed_jitter = float(os.getenv("MOCK_SHOT_SPEED_JITTER", "0.15"))
+        self._shot_pitch_jitter = _deg2rad(float(os.getenv("MOCK_SHOT_PITCH_JITTER_DEG", "3.0")))
+        self._shot_gravity = float(os.getenv("MOCK_SHOT_GRAVITY", "9.81"))
+        self._shot_roll_decel = float(os.getenv("MOCK_SHOT_ROLL_DECEL", "1.4"))
+        self._shot_stop_speed = float(os.getenv("MOCK_SHOT_STOP_SPEED", "0.15"))
+        off_x = float(os.getenv("MOCK_SHOT_OFFSET_X", "0.45"))
+        off_y = float(os.getenv("MOCK_SHOT_OFFSET_Y", "0.0"))
+        off_z = float(os.getenv("MOCK_SHOT_OFFSET_Z", "0.55"))
+        self._shot_offset = (off_x, off_y, off_z)
+        self._shots.clear()
+        self._last_step_s = None
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -213,6 +252,7 @@ class MockProvider(RepulsorProvider):
         self._nt_inst = NetworkTableInstance.getDefault()
         self._piece_pub = self._nt_inst.getIntegerTopic("/PieceCount").publish()
         self._piece_sub = self._nt_inst.getIntegerTopic("/PieceCount").subscribe(0)
+        self._last_ext_piece = int(self._piece_sub.get())
 
         self.piece_count = 0
         self.last_piece_count = 0
@@ -587,42 +627,56 @@ class MockProvider(RepulsorProvider):
 
         self.fuel.clear()
         self._picked_up.clear()
-        counts = self._pick_counts_per_cell()
+        self._shots.clear()
         oid_num = 0
-        cell = float(self.cfg.grid_cell_m)
-        sigma = cell * 0.20
-        span = cell * 0.45
+        total = max(0, int(self._fuel_target_count))
+        if total <= 0:
+            return
 
-        for (ix, iy), n in counts.items():
-            cx, cy = self._cell_center(ix, iy)
-            for _ in range(n):
-                placed = False
-                x = cx
-                y = cy
+        desired_spacing = float(os.getenv("MOCK_FUEL_GRID_SPACING", "0.22"))
+        cols = int(math.ceil(math.sqrt(total)))
+        rows = int(math.ceil(total / max(1, cols)))
+        cols = max(1, cols)
+        rows = max(1, rows)
 
-                for _k in range(24):
-                    dx = _box_muller(self.rng) * sigma
-                    dy = _box_muller(self.rng) * sigma
-                    x = _clamp(cx + dx, self.x0, self.x1)
-                    y = _clamp(cy + dy, self.y0, self.y1)
-                    if not self._in_forbidden(x, y):
-                        placed = True
-                        break
+        max_span_x = max(0.5, (self.x1 - self.x0) - 1.0)
+        max_span_y = max(0.5, (self.y1 - self.y0) - 1.0)
+        spacing_x = max_span_x if cols <= 1 else max_span_x / max(1, cols - 1)
+        spacing_y = max_span_y if rows <= 1 else max_span_y / max(1, rows - 1)
+        spacing = max(0.06, min(desired_spacing, spacing_x, spacing_y))
 
-                if not placed:
-                    for _k in range(32):
-                        x = _clamp(cx + self.rng.uniform(-span, span), self.x0, self.x1)
-                        y = _clamp(cy + self.rng.uniform(-span, span), self.y0, self.y1)
-                        if not self._in_forbidden(x, y):
-                            placed = True
-                            break
+        width = spacing * (cols - 1)
+        height = spacing * (rows - 1)
+        start_x = self.cx - width * 0.5
+        start_y = self.cy - height * 0.5
 
-                if not placed:
-                    continue
+        jitter = float(os.getenv("MOCK_FUEL_GRID_JITTER", "0.02"))
+        jitter = max(0.0, jitter)
 
+        idx = 0
+        while idx < total and idx < cols * rows:
+            ix = idx % cols
+            iy = idx // cols
+            x = _clamp(start_x + ix * spacing + self.rng.uniform(-jitter, jitter), self.x0, self.x1)
+            y = _clamp(start_y + iy * spacing + self.rng.uniform(-jitter, jitter), self.y0, self.y1)
+            if not self._in_forbidden(x, y):
                 oid = f"fuel_{oid_num}"
                 oid_num += 1
                 self.fuel[oid] = _FuelObj(oid=oid, x=x, y=y, z=self.cfg.fuel_z_m)
+            idx += 1
+
+        while len(self.fuel) < total:
+            x = _clamp(
+                self.cx + self.rng.uniform(-width * 0.55, width * 0.55), self.x0, self.x1
+            )
+            y = _clamp(
+                self.cy + self.rng.uniform(-height * 0.55, height * 0.55), self.y0, self.y1
+            )
+            if self._in_forbidden(x, y):
+                continue
+            oid = f"fuel_{oid_num}"
+            oid_num += 1
+            self.fuel[oid] = _FuelObj(oid=oid, x=x, y=y, z=self.cfg.fuel_z_m)
 
     def _cell_center(self, ix: int, iy: int) -> Tuple[float, float]:
         assert self.cfg is not None
@@ -658,27 +712,116 @@ class MockProvider(RepulsorProvider):
         r = max(0.25, max(0.705, 0.730) * 0.5)
         return r * r
 
-    def _maybe_respawn_on_reset(self) -> None:
+    def _maybe_shoot(self, pose: Pose2d | None) -> None:
         assert self.cfg is not None
         assert self.rng is not None
+        if self._piece_sub is None:
+            return
         ext = int(self._piece_sub.get())
-        if self.piece_count > 0 and ext == 0:
-            if self._picked_up:
-                min_d2 = (max(self.cfg.grid_cell_m, 0.6) * 3.0) ** 2
-                for oid, fo in list(self._picked_up.items()):
-                    x = fo.x
-                    y = fo.y
-                    for _ in range(40):
-                        nx = self.rng.uniform(self.x0, self.x1)
-                        ny = self.rng.uniform(self.y0, self.y1)
-                        dx = nx - fo.x
-                        dy = ny - fo.y
-                        if dx * dx + dy * dy >= min_d2:
-                            x, y = nx, ny
-                            break
-                    self.fuel[oid] = _FuelObj(oid=oid, x=x, y=y, z=fo.z)
-                self._picked_up.clear()
+        if ext < 0:
+            ext = 0
+        if ext == 0 and self._last_ext_piece > 0 and self.piece_count > 0:
+            shots = max(0, self.piece_count)
+            for _ in range(shots):
+                self._spawn_shot(pose)
             self.piece_count = 0
+        self._last_ext_piece = ext
+
+    def _spawn_shot(self, pose: Pose2d | None) -> None:
+        assert self.cfg is not None
+        assert self.rng is not None
+
+        if self._picked_up:
+            oid, fo = self._picked_up.popitem()
+            oid_use = oid
+        else:
+            oid_use = f"shot_{self._shot_oid}"
+            self._shot_oid += 1
+
+        if pose is None:
+            rx = self.cx
+            ry = self.cy
+            yaw = 0.0
+        else:
+            rx = float(pose.x)
+            ry = float(pose.y)
+            yaw = float(pose.rotation().radians())
+
+        ox, oy, oz = self._shot_offset
+        cy = math.cos(yaw)
+        sy = math.sin(yaw)
+        sx = rx + ox * cy - oy * sy
+        syw = ry + ox * sy + oy * cy
+        sz = max(self.cfg.fuel_z_m, oz)
+
+        yaw_spread = yaw + (self.rng.uniform(-1.0, 1.0) * self._shot_spread)
+        pitch = self._shot_pitch + (self.rng.uniform(-1.0, 1.0) * self._shot_pitch_jitter)
+        speed = self._shot_speed * (1.0 + self.rng.uniform(-self._shot_speed_jitter, self._shot_speed_jitter))
+        speed = max(0.1, speed)
+        vxy = speed * math.cos(pitch)
+        vx = vxy * math.cos(yaw_spread)
+        vy = vxy * math.sin(yaw_spread)
+        vz = speed * math.sin(pitch)
+
+        self._shots.append(
+            _ShotBall(
+                oid=oid_use,
+                x=sx,
+                y=syw,
+                z=sz,
+                vx=vx,
+                vy=vy,
+                vz=vz,
+                landed=False,
+            )
+        )
+
+    def _update_shots(self, dt: float) -> None:
+        if not self._shots or dt <= 0.0:
+            return
+        assert self.cfg is not None
+        g = self._shot_gravity
+        ground_z = float(self.cfg.fuel_z_m)
+        roll_decel = max(0.0, self._shot_roll_decel)
+        stop_speed = max(0.01, self._shot_stop_speed)
+
+        remaining: List[_ShotBall] = []
+        for b in self._shots:
+            b.age_s += dt
+            if not b.landed:
+                b.vz -= g * dt
+                b.x += b.vx * dt
+                b.y += b.vy * dt
+                b.z += b.vz * dt
+                if b.z <= ground_z:
+                    b.z = ground_z
+                    b.vz = 0.0
+                    b.landed = True
+            else:
+                b.x += b.vx * dt
+                b.y += b.vy * dt
+                speed = math.hypot(b.vx, b.vy)
+                if speed > 1e-6:
+                    new_speed = max(0.0, speed - roll_decel * dt)
+                    if new_speed <= stop_speed:
+                        self.fuel[b.oid] = _FuelObj(oid=b.oid, x=b.x, y=b.y, z=ground_z)
+                        continue
+                    scale = new_speed / speed
+                    b.vx *= scale
+                    b.vy *= scale
+                else:
+                    self.fuel[b.oid] = _FuelObj(oid=b.oid, x=b.x, y=b.y, z=ground_z)
+                    continue
+
+            if b.x < self.x0 or b.x > self.x1:
+                b.x = _clamp(b.x, self.x0, self.x1)
+                b.vx = 0.0
+            if b.y < self.y0 or b.y > self.y1:
+                b.y = _clamp(b.y, self.y0, self.y1)
+                b.vy = 0.0
+            remaining.append(b)
+
+        self._shots = remaining
 
     def _pickup_half_extents(self) -> tuple[float, float]:
         assert self.cfg is not None
@@ -770,7 +913,13 @@ class MockProvider(RepulsorProvider):
     def step(self, now_s: float, pose: Pose2d) -> ProviderFrame:
         assert self.cfg is not None
 
-        self._maybe_respawn_on_reset()
+        if self._last_step_s is None:
+            self._last_step_s = now_s
+        dt = max(0.0, float(now_s - self._last_step_s))
+        self._last_step_s = now_s
+
+        self._maybe_shoot(pose)
+        self._update_shots(dt)
         if pose is not None:
             self._maybe_pickup(pose)
 
@@ -782,6 +931,10 @@ class MockProvider(RepulsorProvider):
         truth_objs: List[WorldObject] = []
         for fo in self.fuel.values():
             o = WorldObject(oid=fo.oid, class_id=CLASS_FUEL, x=fo.x, y=fo.y, z=fo.z)
+            objs.append(o)
+            truth_objs.append(o)
+        for b in self._shots:
+            o = WorldObject(oid=b.oid, class_id=CLASS_FUEL, x=b.x, y=b.y, z=b.z)
             objs.append(o)
             truth_objs.append(o)
 
