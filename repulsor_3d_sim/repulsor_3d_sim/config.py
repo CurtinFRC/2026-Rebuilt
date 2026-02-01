@@ -40,10 +40,12 @@ class ViewerConfig:
     nt_server: str
     nt_client_name: str
     fieldvision_path: str
-    fieldvision_truth_path: str
     repulsorvision_path: str
     pose_base_path: str
     pose_struct_key: str
+    truth_socket_host: str
+    truth_socket_port: int
+    truth_socket_enabled: bool
     window_w: int
     window_h: int
     fps: int
@@ -70,10 +72,12 @@ def load_config() -> ViewerConfig:
         nt_server=_s("NT_SERVER", "127.0.0.1"),
         nt_client_name=_s("NT_CLIENT_NAME", "repulsor_3d_sim"),
         fieldvision_path=_s("NT_FIELDVISION_PATH", "FieldVision/main"),
-        fieldvision_truth_path=_s("NT_FIELDVISION_TRUTH_PATH", "FieldVisionTruth/main"),
         repulsorvision_path=_s("NT_REPULSORVISION_PATH", "RepulsorVision"),
         pose_base_path=_s("NT_POSE_BASE_PATH", "AdvantageKit/RealOutputs/Odometry"),
         pose_struct_key=_s("NT_POSE_STRUCT_KEY", "Robot"),
+        truth_socket_host=_s("TRUTH_SOCKET_HOST", "127.0.0.1"),
+        truth_socket_port=_i("TRUTH_SOCKET_PORT", 5809),
+        truth_socket_enabled=_b("TRUTH_SOCKET_ENABLED", True),
         window_w=_i("WINDOW_W", 1280),
         window_h=_i("WINDOW_H", 720),
         fps=_i("FPS", 60),

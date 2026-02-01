@@ -91,7 +91,6 @@ class NT4Reader:
         self._ms = MultiSubscriber(self.inst, ["/"])
 
         self._fv_prefix = _topic_prefix(cfg.fieldvision_path)
-        self._fvt_prefix = _topic_prefix(cfg.fieldvision_truth_path)
         self._rv_prefix = _topic_prefix(cfg.repulsorvision_path)
 
         self._pose_prefix = _topic_prefix(cfg.pose_base_path)
@@ -107,7 +106,6 @@ class NT4Reader:
 
         self._fv_subs: Dict[str, _FVSubs] = {}
         self._rv_subs: Dict[str, _RVSubs] = {}
-        self._fvt_subs: Dict[str, _FVSubs] = {}
         self._cam_subs: Dict[str, _CamSubs] = {}
 
         self._connected_at: Optional[float] = None
@@ -134,7 +132,6 @@ class NT4Reader:
         self._last_discovery = now
 
         fv_topics = self.inst.getTopics(self._fv_prefix)
-        fvt_topics = self.inst.getTopics(self._fvt_prefix)
         rv_topics = self.inst.getTopics(self._rv_prefix)
         cam_topics = self.inst.getTopics(self._fv_prefix)
 
@@ -143,12 +140,6 @@ class NT4Reader:
             tid = _extract_id_from_topic(t.getName(), self._fv_prefix, "object_")
             if tid is not None:
                 fv_ids.add(tid)
-
-        fvt_ids: Set[str] = set()
-        for t in fvt_topics:
-            tid = _extract_id_from_topic(t.getName(), self._fvt_prefix, "object_")
-            if tid is not None:
-                fvt_ids.add(tid)
 
         rv_ids: Set[str] = set()
         for t in rv_topics:
@@ -178,21 +169,6 @@ class NT4Reader:
                 yaw=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/yaw")).subscribe(0.0),
             )
 
-        for oid in fvt_ids:
-            if oid in self._fvt_subs:
-                continue
-            base = f"object_{oid}"
-            base_topic = _join_topic(self._fvt_prefix, base)
-            self._fvt_subs[oid] = _FVSubs(
-                alive=self.inst.getBooleanTopic(base_topic).subscribe(False),
-                typ=self.inst.getStringTopic(_join_topic(self._fvt_prefix, base + "/type")).subscribe(""),
-                x=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/x")).subscribe(0.0),
-                y=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/y")).subscribe(0.0),
-                z=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/z")).subscribe(0.0),
-                roll=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/roll")).subscribe(0.0),
-                pitch=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/pitch")).subscribe(0.0),
-                yaw=self.inst.getDoubleTopic(_join_topic(self._fvt_prefix, base + "/yaw")).subscribe(0.0),
-            )
 
         for oid in rv_ids:
             if oid in self._rv_subs:
@@ -283,26 +259,6 @@ class NT4Reader:
             )
         return out
 
-    def read_fieldvision_truth(self) -> List[FieldVisionObject]:
-        self._discover_dynamic_topics()
-        out: List[FieldVisionObject] = []
-        for oid, s in sorted(self._fvt_subs.items(), key=lambda kv: kv[0]):
-            if not bool(s.alive.get()):
-                continue
-            out.append(
-                FieldVisionObject(
-                    str(oid),
-                    str(s.typ.get()),
-                    float(s.x.get()),
-                    float(s.y.get()),
-                    float(s.z.get()),
-                    float(s.roll.get()),
-                    float(s.pitch.get()),
-                    float(s.yaw.get()),
-                )
-            )
-        return out
-
     def read_cameras(self) -> List[CameraInfo]:
         self._discover_dynamic_topics()
         out: List[CameraInfo] = []
@@ -329,7 +285,7 @@ class NT4Reader:
         fv = self.read_fieldvision()
         rv = self.read_repulsorvision()
         cams = self.read_cameras()
-        truth = self.read_fieldvision_truth()
+        truth: List[FieldVisionObject] = []
         pose = self.read_pose2d()
         ex = self.read_extrinsics()
         return WorldSnapshot(fv, rv, cams, truth, pose, ex)

@@ -13,6 +13,7 @@ from repulsor_3d_sim.model import WorldSnapshot
 from repulsor_3d_sim.nt4 import NT4Reader
 from repulsor_3d_sim.render.camera import OrbitCamera
 from repulsor_3d_sim.render.scene import SceneRenderer
+from repulsor_3d_sim.truth_socket import TruthSocketReceiver
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -209,6 +210,10 @@ class ViewerApp:
 
         self._worker = _SnapshotWorker(self.reader, hz=float(cfg.fps) * 2.0)
         self._worker.start()
+        self._truth_receiver = None
+        if cfg.truth_socket_enabled:
+            self._truth_receiver = TruthSocketReceiver(cfg.truth_socket_host, cfg.truth_socket_port)
+            self._truth_receiver.start()
 
         self.last_snapshot: Optional[WorldSnapshot] = None
         self._render_snapshot: Optional[WorldSnapshot] = None
@@ -237,9 +242,16 @@ class ViewerApp:
             pyglet.app.run()
         finally:
             self._worker.stop()
+            if self._truth_receiver is not None:
+                self._truth_receiver.stop()
 
     def _tick(self, dt: float):
         snap, conn = self._worker.latest()
+        if snap is not None and self._truth_receiver is not None:
+            try:
+                snap.truth = self._truth_receiver.latest()
+            except Exception:
+                pass
         self.last_snapshot = snap
         self._last_connected = conn
 
