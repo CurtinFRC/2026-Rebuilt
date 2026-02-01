@@ -351,7 +351,8 @@ public class FieldTracker {
   }
 
   private Pose2d fallbackCollectPose(Pose2d robotPoseBlue) {
-    Translation2d p = collectStickyDriveTarget != null ? collectStickyDriveTarget : collectStickyPoint;
+    Translation2d p =
+        collectStickyDriveTarget != null ? collectStickyDriveTarget : collectStickyPoint;
     if (p == null && lastBest != null) p = lastBest.point;
     if (p == null && robotPoseBlue != null) p = robotPoseBlue.getTranslation();
     if (p == null) p = new Translation2d();
@@ -1331,13 +1332,21 @@ public class FieldTracker {
           new java.util.HashMap<>(512);
       java.util.HashMap<Long, Boolean> footprintCache = new java.util.HashMap<>(512);
       java.util.HashMap<Long, Boolean> nearFuelCache = new java.util.HashMap<>(512);
+      java.util.HashMap<Long, Boolean> validCache = new java.util.HashMap<>(512);
+      java.util.HashMap<Long, Boolean> validRelaxedCache = new java.util.HashMap<>(512);
+      java.util.HashMap<Long, Double> scoreCache = new java.util.HashMap<>(512);
+
+      java.util.function.ToLongFunction<Translation2d> pointKey =
+          p -> {
+            long kx = (long) Math.round(p.getX() * 1000.0);
+            long ky = (long) Math.round(p.getY() * 1000.0);
+            return (kx << 32) ^ (ky & 0xffffffffL);
+          };
 
       java.util.function.Function<Translation2d, PredictiveFieldState.CollectProbe> probe =
           p -> {
             if (p == null) return null;
-            long kx = (long) Math.round(p.getX() * 1000.0);
-            long ky = (long) Math.round(p.getY() * 1000.0);
-            long key = (kx << 32) ^ (ky & 0xffffffffL);
+            long key = pointKey.applyAsLong(p);
             if (probeCache.containsKey(key)) return probeCache.get(key);
             PredictiveFieldState.CollectProbe pr = predictor.probeCollect(p, 0.75);
             probeCache.put(key, pr);
@@ -1347,9 +1356,7 @@ public class FieldTracker {
       java.util.function.Predicate<Translation2d> footprintHasFuel =
           p -> {
             if (p == null) return false;
-            long kx = (long) Math.round(p.getX() * 1000.0);
-            long ky = (long) Math.round(p.getY() * 1000.0);
-            long key = (kx << 32) ^ (ky & 0xffffffffL);
+            long key = pointKey.applyAsLong(p);
             Boolean cached = footprintCache.get(key);
             if (cached != null) return cached;
             boolean ok1 = predictor.footprintHasFuel(p, COLLECT_CELL_M);
@@ -1361,9 +1368,7 @@ public class FieldTracker {
       java.util.function.Predicate<Translation2d> hasNearFuel =
           p -> {
             if (p == null) return false;
-            long kx = (long) Math.round(p.getX() * 1000.0);
-            long ky = (long) Math.round(p.getY() * 1000.0);
-            long key = (kx << 32) ^ (ky & 0xffffffffL);
+            long key = pointKey.applyAsLong(p);
             Boolean cached = nearFuelCache.get(key);
             if (cached != null) return cached;
             boolean ok1 = predictor.nearestCollectResource(p, COLLECT_VALID_NEAR_FUEL_M) != null;
@@ -1374,21 +1379,46 @@ public class FieldTracker {
 
       java.util.function.Predicate<Translation2d> collectValid =
           p -> {
+            if (p == null) return false;
+            long key = pointKey.applyAsLong(p);
+            Boolean cached = validCache.get(key);
+            if (cached != null) return cached;
             PredictiveFieldState.CollectProbe pr = probe.apply(p);
-            if (pr == null) return false;
-            if (pr.count < 1 || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75))
+            if (pr == null) {
+              validCache.put(key, false);
               return false;
-            if (!hasNearFuel.test(p)) return false;
-            return footprintHasFuel.test(p);
+            }
+            if (pr.count < 1 || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) {
+              validCache.put(key, false);
+              return false;
+            }
+            if (!hasNearFuel.test(p)) {
+              validCache.put(key, false);
+              return false;
+            }
+            boolean ok1 = footprintHasFuel.test(p);
+            validCache.put(key, ok1);
+            return ok1;
           };
 
       java.util.function.Predicate<Translation2d> collectValidRelaxed =
           p -> {
+            if (p == null) return false;
+            long key = pointKey.applyAsLong(p);
+            Boolean cached = validRelaxedCache.get(key);
+            if (cached != null) return cached;
             PredictiveFieldState.CollectProbe pr = probe.apply(p);
-            if (pr == null) return false;
-            if (pr.count < 1 || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75))
+            if (pr == null) {
+              validRelaxedCache.put(key, false);
               return false;
-            return footprintHasFuel.test(p);
+            }
+            if (pr.count < 1 || pr.units < Math.max(0.02, COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) {
+              validRelaxedCache.put(key, false);
+              return false;
+            }
+            boolean ok1 = footprintHasFuel.test(p);
+            validRelaxedCache.put(key, ok1);
+            return ok1;
           };
 
       java.util.function.Function<Translation2d, Double> collectUnits =
@@ -1540,9 +1570,15 @@ public class FieldTracker {
       java.util.function.Function<Translation2d, Double> scoreResource =
           p -> {
             if (p == null) return -1e18;
+            long key = pointKey.applyAsLong(p);
+            Double cached = scoreCache.get(key);
+            if (cached != null) return cached;
 
             // If the point has no fuel signal, treat as invalid-ish by score.
-            if (!collectValid.test(p)) return -1e18;
+            if (!collectValid.test(p)) {
+              scoreCache.put(key, -1e18);
+              return -1e18;
+            }
 
             double u = collectUnits.apply(p);
 
@@ -1557,7 +1593,9 @@ public class FieldTracker {
             double eta = robotPos.getDistance(d) / Math.max(0.2, cap);
 
             // Same shape as before.
-            return (u * 1.0) - (0.55 * eta);
+            double scoreV = (u * 1.0) - (0.55 * eta);
+            scoreCache.put(key, scoreV);
+            return scoreV;
           };
 
       /*
