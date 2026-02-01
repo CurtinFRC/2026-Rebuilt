@@ -222,6 +222,14 @@ public final class PredictiveFieldState {
   private static final double COLLECT_CELL_M = 0.10;
   private static final double COLLECT_NEAR_BONUS = 0.55;
   private static final double COLLECT_NEAR_DECAY = 1.35;
+  private static final double SHOOT_X_END_BAND_M = 12.5631260802;
+  private static final double BAND_WIDTH_M = 2.167294751;
+  private static final Interval<Double> X_LEFT_BAND =
+      Interval.closed(SHOOT_X_END_BAND_M - BAND_WIDTH_M, SHOOT_X_END_BAND_M);
+  private static final Interval<Double> X_RIGHT_BAND =
+      Interval.closed(
+          Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M,
+          Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M));
 
   private static final double COLLECT_CORE_R_MIN = 0.05;
   private static final double COLLECT_CORE_R_MAX = 0.12;
@@ -846,16 +854,6 @@ public final class PredictiveFieldState {
     SpatialDyn dyn = cachedDyn();
     if (dyn == null || dyn.resources.isEmpty()) return null;
 
-    final double SHOOT_X_END_BAND_M = 12.5631260802;
-    final double BAND_WIDTH_M = 2.167294751;
-
-    final Interval<Double> xLeftBand =
-        Interval.closed(SHOOT_X_END_BAND_M - BAND_WIDTH_M, SHOOT_X_END_BAND_M);
-    final Interval<Double> xRightBand =
-        Interval.closed(
-            Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M,
-            Constants.FIELD_LENGTH - (SHOOT_X_END_BAND_M - BAND_WIDTH_M));
-
     final double robotHalf =
         0.5
             * Math.max(
@@ -889,8 +887,8 @@ public final class PredictiveFieldState {
 
           double x = pt.getX();
           double y = pt.getY();
-          return xLeftBand.within(x)
-              || xRightBand.within(x)
+          return X_LEFT_BAND.within(x)
+              || X_RIGHT_BAND.within(x)
               || y < robotWallMargin
               || y > (Constants.FIELD_WIDTH - robotWallMargin);
         };
@@ -3177,6 +3175,12 @@ public final class PredictiveFieldState {
     return Math.min(dx, dy);
   }
 
+  private static boolean isInvalidFuelBand(Translation2d p) {
+    if (p == null) return false;
+    double x = p.getX();
+    return X_LEFT_BAND.within(x) || X_RIGHT_BAND.within(x);
+  }
+
   private static final class SpatialDyn {
     static long key(int cx, int cy) {
       return (((long) cx) << 32) ^ (cy & 0xffffffffL);
@@ -3224,6 +3228,7 @@ public final class PredictiveFieldState {
         if (!error() && o.ageS > RESOURCE_HARD_MAX_AGE_S) continue;
 
         String ty = o.type != null ? o.type.toLowerCase() : "unknown";
+        if ("fuel".equals(ty) && isInvalidFuelBand(o.pos)) continue;
         if (this.specs.containsKey(ty)) {
           res.add(o);
           addTo(resCells, o.pos, o);
