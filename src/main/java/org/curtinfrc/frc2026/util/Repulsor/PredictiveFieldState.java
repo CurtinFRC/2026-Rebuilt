@@ -222,6 +222,9 @@ public final class PredictiveFieldState {
   private static final double COLLECT_CELL_M = 0.10;
   private static final double COLLECT_NEAR_BONUS = 0.55;
   private static final double COLLECT_NEAR_DECAY = 1.35;
+  private static final double COLLECT_SPREAD_SCORE_R = 0.85;
+  private static final double COLLECT_SPREAD_MIN = 0.30;
+  private static final double COLLECT_SPREAD_MAX = 0.65;
   private static final double SHOOT_X_END_BAND_M = 12.5631260802;
   private static final double BAND_WIDTH_M = 2.167294751;
   private static final Interval<Double> X_LEFT_BAND =
@@ -2123,13 +2126,15 @@ public final class PredictiveFieldState {
     }
 
     if (gridPoints == null || gridPoints.length == 0) {
-      return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
+      return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
+          .toArray(new Translation2d[0]);
     }
 
     int nGrid = 0;
     for (Translation2d p : gridPoints) if (p != null) nGrid++;
     if (nGrid == 0) {
-      return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
+      return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
+          .toArray(new Translation2d[0]);
     }
 
     int K = Math.min(COLLECT_GRID_TOPK, Math.min(nGrid, COLLECT_GRID_FALLBACK_MAX));
@@ -2173,7 +2178,8 @@ public final class PredictiveFieldState {
       if (q != null) out.add(q);
     }
 
-    return dedupPoints(out, adaptiveDupSkip(dyn)).toArray(new Translation2d[0]);
+    return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
+        .toArray(new Translation2d[0]);
   }
 
   private ArrayList<Translation2d> dedupPoints(ArrayList<Translation2d> in, double dupSkipM) {
@@ -2198,10 +2204,60 @@ public final class PredictiveFieldState {
     return out;
   }
 
+  private ArrayList<Translation2d> spreadCollectPoints(ArrayList<Translation2d> in, SpatialDyn dyn) {
+    if (in == null || in.isEmpty()) return new ArrayList<>();
+    double sep = adaptiveCollectSeparation(dyn);
+    double d2 = sep * sep;
+    int n = in.size();
+    double[] score = new double[n];
+    for (int i = 0; i < n; i++) {
+      Translation2d p = in.get(i);
+      score[i] = (dyn != null && p != null) ? dyn.evidenceMassWithin(p, COLLECT_SPREAD_SCORE_R) : 0.0;
+    }
+
+    boolean[] blocked = new boolean[n];
+    ArrayList<Translation2d> out = new ArrayList<>(n);
+
+    for (;;) {
+      int bestI = -1;
+      double best = -1e18;
+      for (int i = 0; i < n; i++) {
+        if (blocked[i]) continue;
+        if (score[i] > best) {
+          best = score[i];
+          bestI = i;
+        }
+      }
+      if (bestI < 0) break;
+      Translation2d p = in.get(bestI);
+      if (p != null) out.add(p);
+      blocked[bestI] = true;
+      if (p == null) continue;
+      for (int j = 0; j < n; j++) {
+        if (blocked[j]) continue;
+        Translation2d q = in.get(j);
+        if (q == null) {
+          blocked[j] = true;
+          continue;
+        }
+        double dx = q.getX() - p.getX();
+        double dy = q.getY() - p.getY();
+        if (dx * dx + dy * dy <= d2) blocked[j] = true;
+      }
+    }
+    return out;
+  }
+
   private double adaptiveDupSkip(SpatialDyn dyn) {
     double total = dyn != null ? dyn.totalEvidence() : 0.0;
     double x = clamp01(total / 6.0);
     return lerp(0.18, 0.42, x);
+  }
+
+  private double adaptiveCollectSeparation(SpatialDyn dyn) {
+    double total = dyn != null ? dyn.totalEvidence() : 0.0;
+    double x = clamp01(total / 6.0);
+    return lerp(COLLECT_SPREAD_MIN, COLLECT_SPREAD_MAX, x);
   }
 
   private static final class ClusterAcc {

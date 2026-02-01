@@ -72,7 +72,7 @@ public class DriveTuningHeat extends DriveTuning {
   }
 
   @Override
-  public double baseStepMeters(double distanceMeters) {
+  public double baseStepMeters(double distanceMeters, boolean slowDown) {
     double d = Math.max(0.0, distanceMeters);
     if (d <= 0.0) {
       Logger.recordOutput("Repulsor/Speed", 0.0);
@@ -81,6 +81,10 @@ public class DriveTuningHeat extends DriveTuning {
       Logger.recordOutput("Repulsor/Heat", 0.0);
       Logger.recordOutput("Repulsor/VMaxHeat", 0.0);
       return 0.0;
+    }
+
+    if (!slowDown) {
+      return Math.min(baseMaxSpeed * dtSeconds(), d);
     }
 
     double dt = dtSeconds();

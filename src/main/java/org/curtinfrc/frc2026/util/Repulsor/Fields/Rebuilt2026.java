@@ -145,7 +145,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double rectRangeX = 1.2;
     double rectRangeY = 1.0;
 
-    double biasStrength = 0.1;
+    double biasStrength = 0.3;
     double biasRange = 1.2;
 
     double bypassStrengthScale = 1.2;
@@ -180,7 +180,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double sideBiasStrength = biasStrength * 0.50;
     double sideBiasRange = biasRange * 0.60;
 
-    double sideBypassStrengthScale = bypassStrengthScale * 0.65;
+    double sideBypassStrengthScale = bypassStrengthScale * 0.85;
     double sideBypassRange = bypassRange * 0.65;
 
     double leftPullXIn = leftRectX + sidePullDx;
@@ -189,7 +189,7 @@ public final class Rebuilt2026 implements FieldDefinition {
 
     double railXWindow = 1.2;
     double corridorHalfWidthGuess = Math.max(0.22, gapHeight * 0.45);
-    double railStrength = 1.1;
+    double railStrength = 2.1;
     double railMaxForce = 2.2;
 
     return List.of(

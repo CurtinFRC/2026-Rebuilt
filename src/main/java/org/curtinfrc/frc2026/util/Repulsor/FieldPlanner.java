@@ -3085,7 +3085,7 @@ public class FieldPlanner {
       ds.forcedGoalPose("main").ifPresent(this::setRequestedGoal);
     }
 
-    updateStagedGoal(curTrans);
+    boolean slowDown = updateStagedGoal(curTrans);
     distToGoal = curTrans.getDistance(goal.getTranslation());
 
     ClearMemo memo = new ClearMemo();
@@ -3242,7 +3242,7 @@ public class FieldPlanner {
     var dist = curTrans.getDistance(effectiveGoal.getTranslation());
 
     double stepSize_m =
-        driveTuning.stepSizeMeters(dist, obstacleForce.getNorm(), (cat == CategorySpec.kScore));
+        driveTuning.stepSizeMeters(dist, obstacleForce.getNorm(), (cat == CategorySpec.kScore), slowDown);
     var step = new Translation2d(stepSize_m, netForce.getAngle());
 
     if (step.getNorm() < 1e-3) {
@@ -3538,7 +3538,7 @@ public class FieldPlanner {
     return best;
   }
 
-  private void updateStagedGoal(Translation2d curPos) {
+  private boolean updateStagedGoal(Translation2d curPos) {
     if (gatedAttractors.isEmpty()) {
       goal = requestedGoal;
       stagedAttractor = null;
@@ -3550,7 +3550,7 @@ public class FieldPlanner {
       stagedComplete = false;
       stagedReachTicks = 0;
       stagedModeTicks = 0;
-      return;
+      return true;
     }
 
     Translation2d reqT = requestedGoal.getTranslation();
@@ -3584,7 +3584,7 @@ public class FieldPlanner {
           Pose2d staged = new Pose2d(pick, requestedGoal.getRotation());
           setActiveGoal(staged);
           Logger.recordOutput("Repulsor/StagedGoal", staged);
-          return;
+          return false;
         } else {
           stagedAttractor = null;
           stagedGate = null;
@@ -3640,7 +3640,7 @@ public class FieldPlanner {
             stagedGatePassed = false;
             goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
             Logger.recordOutput("Repulsor/StagedGoal", goal);
-            return;
+            return false;
           }
         }
       }
@@ -3658,7 +3658,7 @@ public class FieldPlanner {
 
         goal = requestedGoal;
         Logger.recordOutput("Repulsor/StagedGoal", goal);
-        return;
+        return true;
       }
 
       if (liveTarget.getDistance(stagedAttractor) > 0.02) {
@@ -3670,9 +3670,12 @@ public class FieldPlanner {
         Logger.recordOutput("Repulsor/StagedGoal", goal);
       }
 
-      return;
+      return false;
     }
 
     goal = requestedGoal;
+    return true;
   }
+
+
 }
