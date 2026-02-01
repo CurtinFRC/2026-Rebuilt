@@ -1,10 +1,13 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
+import edu.wpi.first.units.measure.Voltage;
 import org.littletonrobotics.junction.AutoLog;
 
 public interface HoodIO {
   @AutoLog
   public static class HoodIOInputs {
+    public boolean motorConnected;
+    public double motorTemperature;
     public double positionRotations;
     public double hoodPositionDegrees;
     public double encoderPositionRotations;
