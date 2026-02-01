@@ -94,7 +94,7 @@ class CameraConfig:
     min_range: float = 0
     max_range: float = 5.0
     update_hz: float = 15.0
-    noise_xy: float = 0#.05
+    noise_xy: float = 0#.01
     noise_z: float = 0#.03
     dropout: float = 0
 
@@ -158,6 +158,7 @@ class MockProvider(RepulsorProvider):
         self._fuel_target_count = 400
         self._pickup_enabled = True
         self._pickup_front_only = True
+        self._pickup_use_body = True
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -166,6 +167,7 @@ class MockProvider(RepulsorProvider):
         self._fuel_target_count = int(os.getenv("MOCK_FUEL_COUNT", "400"))
         self._pickup_enabled = os.getenv("MOCK_PICKUP_ENABLED", "1").strip() != "0"
         self._pickup_front_only = os.getenv("MOCK_PICKUP_FRONT_ONLY", "1").strip() != "0"
+        self._pickup_use_body = os.getenv("MOCK_PICKUP_USE_BODY", "1").strip() != "0"
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -700,6 +702,16 @@ class MockProvider(RepulsorProvider):
         # default: slightly forward
         return 0.6 * hx, 0.0
 
+    def _pickup_body_half_extents(self, hx: float, hy: float) -> tuple[float, float]:
+        bx = os.getenv("MOCK_PICKUP_BODY_HALF_X", "")
+        by = os.getenv("MOCK_PICKUP_BODY_HALF_Y", "")
+        if bx != "":
+            try:
+                return max(0.01, float(bx)), max(0.01, float(by)) if by != "" else hy
+            except ValueError:
+                return hx, hy
+        return hx, hy
+
     def _maybe_pickup(self, pose: Pose2d) -> None:
         assert self.cfg is not None
         if not self._pickup_enabled:
@@ -711,6 +723,7 @@ class MockProvider(RepulsorProvider):
         py = float(pose.y)
         hx, hy = self._pickup_half_extents()
         ox, oy = self._pickup_offsets(hx, hy)
+        bx, by = self._pickup_body_half_extents(hx, hy)
         yaw = float(pose.rotation().radians())
         cy = math.cos(yaw)
         sy = math.sin(yaw)
@@ -725,6 +738,15 @@ class MockProvider(RepulsorProvider):
             # world -> robot frame
             x_r = dxw * cy + dyw * sy
             y_r = -dxw * sy + dyw * cy
+
+            # body intersection (centered)
+            if self._pickup_use_body:
+                dx_b = max(abs(x_r) - bx, 0.0)
+                dy_b = max(abs(y_r) - by, 0.0)
+                if dx_b * dx_b + dy_b * dy_b <= r2:
+                    to_remove.append(oid)
+                    continue
+
             x_r -= ox
             y_r -= oy
             if self._pickup_front_only and x_r < 0.0:
