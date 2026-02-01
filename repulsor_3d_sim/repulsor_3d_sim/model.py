@@ -24,6 +24,19 @@ class RepulsorVisionObstacle:
     size_y: float
 
 @dataclass(frozen=True)
+class CameraInfo:
+    name: str
+    x: float
+    y: float
+    z: float
+    yaw_deg: float
+    pitch_deg: float
+    roll_deg: float
+    hfov_deg: float
+    vfov_deg: float
+    max_range: float
+
+@dataclass(frozen=True)
 class Pose2D:
     x: float
     y: float
@@ -33,5 +46,6 @@ class Pose2D:
 class WorldSnapshot:
     fieldvision: List[FieldVisionObject]
     repulsorvision: List[RepulsorVisionObstacle]
+    cameras: List[CameraInfo]
     pose: Optional[Pose2d]
     extrinsics: Tuple[float, float, float, float, float, float]

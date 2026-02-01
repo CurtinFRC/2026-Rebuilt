@@ -23,7 +23,7 @@ def main():
     while True:
         t0 = time.time()
         frame = provider.step(t0, nt.pose())
-        publish_fieldvision(fv, frame.objects, nt.pose())
+        publish_fieldvision(fv, frame.objects, frame.cameras, nt.pose())
         publish_repulsorvision(rv, frame.obstacles)
         nt.flush()
         NTClient.sleep_dt(dt - (time.time() - t0))
