@@ -131,8 +131,9 @@ public class ShooterIODev implements ShooterIO {
   @Override
   public void setVelocity(double velocity, BooleanSupplier useTorqueCurrentControl) {
     double rps = convertVelocityToRPS(velocity);
-    int slot = useTorqueCurrentControl.getAsBoolean() ? 1 : 0;
-    if (useTorqueCurrentControl.getAsBoolean()) {
+    boolean useTorqueCurrent = useTorqueCurrentControl.getAsBoolean();
+    int slot = useTorqueCurrent ? 1 : 0;
+    if (useTorqueCurrent) {
       leaderMotor.setControl(
           velocityTorqueCurrentRequest.withVelocity(rps).withSlot(slot).withFeedForward(70));
     } else {
