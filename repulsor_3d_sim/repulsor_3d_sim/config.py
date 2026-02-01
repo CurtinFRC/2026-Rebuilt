@@ -40,6 +40,7 @@ class ViewerConfig:
     nt_server: str
     nt_client_name: str
     fieldvision_path: str
+    fieldvision_truth_path: str
     repulsorvision_path: str
     pose_base_path: str
     pose_struct_key: str
@@ -60,12 +61,16 @@ class ViewerConfig:
     camera_pitch_deg: float
     camera_yaw_deg: float
     follow_robot: bool
+    show_camera_debug: bool
+    show_truth_fuel: bool
+    show_camera_debug: bool
 
 def load_config() -> ViewerConfig:
     return ViewerConfig(
         nt_server=_s("NT_SERVER", "127.0.0.1"),
         nt_client_name=_s("NT_CLIENT_NAME", "repulsor_3d_sim"),
         fieldvision_path=_s("NT_FIELDVISION_PATH", "FieldVision/main"),
+        fieldvision_truth_path=_s("NT_FIELDVISION_TRUTH_PATH", "FieldVisionTruth/main"),
         repulsorvision_path=_s("NT_REPULSORVISION_PATH", "RepulsorVision"),
         pose_base_path=_s("NT_POSE_BASE_PATH", "AdvantageKit/RealOutputs/Odometry"),
         pose_struct_key=_s("NT_POSE_STRUCT_KEY", "Robot"),
@@ -86,4 +91,6 @@ def load_config() -> ViewerConfig:
         camera_pitch_deg=_f("CAMERA_PITCH_DEG", 35.0),
         camera_yaw_deg=_f("CAMERA_YAW_DEG", 135.0),
         follow_robot=_b("FOLLOW_ROBOT", True),
+        show_camera_debug=_b("SHOW_CAMERA_DEBUG", True),
+        show_truth_fuel=_b("SHOW_TRUTH_FUEL", True),
     )

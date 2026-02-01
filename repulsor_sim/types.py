@@ -54,4 +54,5 @@ class ProviderFrame:
     objects: Sequence[WorldObject]
     obstacles: Sequence[VisionObstacle]
     cameras: Sequence[CameraInfo] = ()
+    truth_objects: Sequence[WorldObject] = ()
     extrinsics_xyzrpy: Optional[tuple[float, float, float, float, float, float]] = None

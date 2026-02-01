@@ -7,6 +7,7 @@ import os
 class Config:
     nt_server: str
     fieldvision_name: str
+    fieldvision_truth_path: str
     fps: float
     seed: int
 
@@ -30,6 +31,7 @@ class Config:
 def load_config() -> Config:
     nt_server = os.getenv("NT_SERVER", "localhost")
     fieldvision_name = os.getenv("FIELDVISION_NAME", "main")
+    fieldvision_truth_path = os.getenv("FIELDVISION_TRUTH_PATH", f"FieldVisionTruth/{fieldvision_name}")
     fps = float(os.getenv("FPS", "20"))
     seed = int(os.getenv("SEED", "1337"))
 
@@ -49,6 +51,7 @@ def load_config() -> Config:
     return Config(
         nt_server=nt_server,
         fieldvision_name=fieldvision_name,
+        fieldvision_truth_path=fieldvision_truth_path,
         fps=fps,
         seed=seed,
         field_length_m=field_length_m,

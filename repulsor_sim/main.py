@@ -5,6 +5,7 @@ from repulsor_sim.config import load_config
 from repulsor_sim.nt import NTClient
 from repulsor_sim.providers import make_provider
 from repulsor_sim.publishers.fieldvision import publish_fieldvision
+from repulsor_sim.publishers.fieldvision_truth import publish_fieldvision_truth
 from repulsor_sim.publishers.repulsorvision import publish_repulsorvision
 
 
@@ -13,6 +14,7 @@ def main():
     nt = NTClient(cfg)
 
     fv = nt.table("FieldVision/" + cfg.fieldvision_name)
+    fvt = nt.table(cfg.fieldvision_truth_path)
     rv = nt.table("RepulsorVision")
 
     provider_name = os.getenv("PROVIDER", "mock")
@@ -20,10 +22,12 @@ def main():
     provider.reset(cfg)
 
     dt = 1.0 / max(1e-6, cfg.fps)
+    truth_max_per_tick = int(os.getenv("TRUTH_MAX_PER_TICK", "12"))
     while True:
         t0 = time.time()
         frame = provider.step(t0, nt.pose())
         publish_fieldvision(fv, frame.objects, frame.cameras, nt.pose())
+        publish_fieldvision_truth(fvt, frame.truth_objects, max_per_tick=truth_max_per_tick)
         publish_repulsorvision(rv, frame.obstacles)
         nt.flush()
         NTClient.sleep_dt(dt - (time.time() - t0))

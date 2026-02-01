@@ -47,5 +47,6 @@ class WorldSnapshot:
     fieldvision: List[FieldVisionObject]
     repulsorvision: List[RepulsorVisionObstacle]
     cameras: List[CameraInfo]
+    truth: List[FieldVisionObject]
     pose: Optional[Pose2d]
     extrinsics: Tuple[float, float, float, float, float, float]

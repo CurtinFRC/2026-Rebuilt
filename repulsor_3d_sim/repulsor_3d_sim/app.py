@@ -195,6 +195,10 @@ class ViewerApp:
         )
 
         self.renderer = SceneRenderer(cfg)
+        self._show_camera_debug = bool(getattr(cfg, "show_camera_debug", True))
+        self.renderer.show_camera_debug = self._show_camera_debug
+        self._show_truth_fuel = bool(getattr(cfg, "show_truth_fuel", True))
+        self.renderer.show_truth_fuel = self._show_truth_fuel
 
         self._keys = key.KeyStateHandler()
         self.window.push_handlers(self._keys)
@@ -338,3 +342,9 @@ class ViewerApp:
             self.camera.distance = self.cfg.camera_distance_m
             self.camera.pitch_deg = self.cfg.camera_pitch_deg
             self.camera.yaw_deg = self.cfg.camera_yaw_deg
+        elif symbol == key.C:
+            self._show_camera_debug = not self._show_camera_debug
+            self.renderer.show_camera_debug = self._show_camera_debug
+        elif symbol == key.T:
+            self._show_truth_fuel = not self._show_truth_fuel
+            self.renderer.show_truth_fuel = self._show_truth_fuel

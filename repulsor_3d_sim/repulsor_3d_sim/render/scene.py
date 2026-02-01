@@ -53,10 +53,16 @@ class SceneRenderer:
         self._robot_h = float(cfg.robot_box_h_m)
 
         self._col_fuel = (1.0, 0.95, 0.15, 0.95)
+        self._col_truth_fuel = (0.15, 0.95, 0.35, 0.70)
         self._col_other = (1.0, 0.15, 0.15, 0.85)
         self._col_us = (0.35, 0.35, 0.38, 0.75)
         self._col_cam = (0.20, 0.75, 1.0, 0.85)
         self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
+        self._col_cam_ray_ok = (0.20, 0.95, 0.35, 0.55)
+        self._col_cam_ray_bad = (1.00, 0.25, 0.25, 0.40)
+
+        self.show_camera_debug = bool(getattr(cfg, "show_camera_debug", True))
+        self.show_truth_fuel = bool(getattr(cfg, "show_truth_fuel", True))
 
         self._last_cap_t = 0.0
         self._last_cap_s = ""
@@ -84,10 +90,13 @@ class SceneRenderer:
         draw_axes((0.0, 0.0, self._field_z), scale=1.0)
 
         if snap is not None:
+            if self.show_truth_fuel:
+                self._draw_truth_fuel(snap)
             self._draw_fuel(snap)
             self._draw_other_robots(snap)
             self._draw_us_robot(snap)
-            self._draw_cameras(snap)
+            if self.show_camera_debug:
+                self._draw_cameras(snap)
 
         glDisable(GL_CULL_FACE)
         self._update_caption(window, snap, connected)
@@ -103,6 +112,23 @@ class SceneRenderer:
         col = self._col_fuel
 
         for o in fv:
+            glPushMatrix()
+            glTranslatef(float(o.x), float(o.y), base_z + float(o.z))
+            glScalef(r, r, r)
+            draw_mesh(sphere, col)
+            glPopMatrix()
+
+    def _draw_truth_fuel(self, snap: WorldSnapshot):
+        truth = snap.truth
+        if not truth:
+            return
+
+        base_z = self._field_z
+        r = self._fuel_r * 0.85
+        sphere = self.sphere
+        col = self._col_truth_fuel
+
+        for o in truth:
             glPushMatrix()
             glTranslatef(float(o.x), float(o.y), base_z + float(o.z))
             glScalef(r, r, r)
@@ -142,16 +168,19 @@ class SceneRenderer:
         ry = float(pose.y)
         rz = float(self._field_z)
         yaw = float(pose.rotation().radians())
-        cy = math.cos(yaw)
-        sy = math.sin(yaw)
+        ry_cos = math.cos(yaw)
+        ry_sin = math.sin(yaw)
+
+        fv = snap.fieldvision
 
         for c in cams:
             # robot-relative -> world
-            cx = rx + c.x * cy - c.y * sy
-            cyw = ry + c.x * sy + c.y * cy
+            cx = rx + c.x * ry_cos - c.y * ry_sin
+            cyw = ry + c.x * ry_sin + c.y * ry_cos
             cz = rz + c.z
             yaw_world = yaw + math.radians(c.yaw_deg)
             pitch_world = math.radians(c.pitch_deg)
+            roll_world = math.radians(c.roll_deg)
             hfov = math.radians(max(1e-6, c.hfov_deg))
             vfov = math.radians(max(1e-6, c.vfov_deg))
             depth = max(0.2, float(c.max_range))
@@ -201,6 +230,50 @@ class SceneRenderer:
                 b = corners[(i + 1) % 4]
                 glVertex3f(a[0], a[1], a[2])
                 glVertex3f(b[0], b[1], b[2])
+            glEnd()
+
+            if not fv:
+                continue
+
+            # camera -> world object rays (debug)
+            cr = math.cos(roll_world)
+            sr = math.sin(roll_world)
+            # R = Rz(yaw) * Ry(pitch) * Rx(roll)
+            r00 = ch * cp
+            r01 = ch * sp * sr - sh * cr
+            r02 = ch * sp * cr + sh * sr
+            r10 = sh * cp
+            r11 = sh * sp * sr + ch * cr
+            r12 = sh * sp * cr - ch * sr
+            r20 = -sp
+            r21 = cp * sr
+            r22 = cp * cr
+
+            glBegin(GL_LINES)
+            for o in fv:
+                ox = float(o.x)
+                oy = float(o.y)
+                oz = rz + float(o.z)
+                dx = ox - cx
+                dy = oy - cyw
+                dz = oz - cz
+
+                x_cam = r00 * dx + r10 * dy + r20 * dz
+                y_cam = r01 * dx + r11 * dy + r21 * dz
+                z_cam = r02 * dx + r12 * dy + r22 * dz
+
+                if x_cam <= 1e-6:
+                    glColor4f(*self._col_cam_ray_bad)
+                else:
+                    dyaw = math.atan2(y_cam, x_cam)
+                    dpitch = math.atan2(z_cam, x_cam)
+                    if abs(dyaw) <= hfov * 0.5 and abs(dpitch) <= vfov * 0.5:
+                        glColor4f(*self._col_cam_ray_ok)
+                    else:
+                        glColor4f(*self._col_cam_ray_bad)
+
+                glVertex3f(cx, cyw, cz)
+                glVertex3f(ox, oy, oz)
             glEnd()
 
     def _update_caption(self, window: pyglet.window.Window, snap: Optional[WorldSnapshot], connected: bool):

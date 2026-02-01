@@ -91,18 +91,18 @@ class CameraConfig:
     roll_deg: float = 0.0
     hfov_deg: float = 95.0
     vfov_deg: float = 60.0
-    min_range: float = 0.2
-    max_range: float = 9.0
+    min_range: float = 0
+    max_range: float = 5.0
     update_hz: float = 15.0
-    noise_xy: float = 0.05
-    noise_z: float = 0.03
-    dropout: float = 0.04
+    noise_xy: float = 0#.05
+    noise_z: float = 0#.03
+    dropout: float = 0
 
 CAMERAS: List[CameraConfig] = [ # 0.705, 0.730
-    CameraConfig(name="cam_front", x=0.35, y=0.00, z=1.35, yaw_deg=0.0,   pitch_deg=-12.0),
-    CameraConfig(name="cam_back",  x=-0.35,y=0.00, z=1.35, yaw_deg=180.0, pitch_deg=-12.0),
-    CameraConfig(name="cam_left",  x=0.00, y=0.36, z=1.35, yaw_deg=90.0,  pitch_deg=-12.0),
-    CameraConfig(name="cam_right", x=0.00, y=-0.36,z=1.35, yaw_deg=-90.0, pitch_deg=-12.0),
+    CameraConfig(name="cam_front", x=0.35, y=0.00, z=0.5, yaw_deg=0.0,   pitch_deg=0),
+    CameraConfig(name="cam_back",  x=-0.35,y=0.00, z=0.5, yaw_deg=180.0, pitch_deg=0),
+    CameraConfig(name="cam_left",  x=0.00, y=0.36, z=0.5, yaw_deg=90.0,  pitch_deg=0),
+    CameraConfig(name="cam_right", x=0.00, y=-0.36,z=0.5, yaw_deg=-90.0, pitch_deg=0),
 ]
 
 @dataclass
@@ -155,11 +155,17 @@ class MockProvider(RepulsorProvider):
         self._visibility_timeout_s = 0.45
         self.last_piece_count = 0
         self._camera_infos: List[CameraInfo] = []
+        self._fuel_target_count = 400
+        self._pickup_enabled = True
+        self._pickup_front_only = True
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
         seed = int(getattr(cfg, "seed", 1337))
         self.rng = random.Random(seed)
+        self._fuel_target_count = int(os.getenv("MOCK_FUEL_COUNT", "400"))
+        self._pickup_enabled = os.getenv("MOCK_PICKUP_ENABLED", "1").strip() != "0"
+        self._pickup_front_only = os.getenv("MOCK_PICKUP_FRONT_ONLY", "1").strip() != "0"
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -285,7 +291,15 @@ class MockProvider(RepulsorProvider):
         cam_x: float,
         cam_y: float,
         cam_z: float,
-        cam_yaw: float,
+        r00: float,
+        r01: float,
+        r02: float,
+        r10: float,
+        r11: float,
+        r12: float,
+        r20: float,
+        r21: float,
+        r22: float,
     ) -> _Detected | None:
         assert self.rng is not None
         dx = obj.x - cam_x
@@ -295,11 +309,18 @@ class MockProvider(RepulsorProvider):
         if dist2 < (cam.min_range * cam.min_range) or dist2 > (cam.max_range * cam.max_range):
             return None
 
-        horiz = math.hypot(dx, dy)
-        yaw_to = math.atan2(dy, dx)
-        pitch_to = math.atan2(dz, max(1e-9, horiz))
-        dyaw = _wrap_rad(yaw_to - cam_yaw)
-        dpitch = pitch_to - cam.pitch
+        # # world -> camera frame (R^T * v_world)
+        x_cam = r00 * dx + r10 * dy + r20 * dz
+        y_cam = r01 * dx + r11 * dy + r21 * dz
+        z_cam = r02 * dx + r12 * dy + r22 * dz
+
+        if x_cam <= 1e-6:
+            return None
+
+        yaw_to = math.atan2(y_cam, x_cam)
+        pitch_to = math.atan2(z_cam, x_cam)
+        dyaw = _wrap_rad(yaw_to)
+        dpitch = pitch_to
 
         if abs(dyaw) > cam.hfov_rad * 0.5 or abs(dpitch) > cam.vfov_rad * 0.5:
             return None
@@ -350,8 +371,44 @@ class MockProvider(RepulsorProvider):
             cam_y = robot_y + cam.x * sin_r + cam.y * cos_r
             cam_z = cam.z
             cam_yaw = _wrap_rad(robot_yaw + cam.yaw)
+            # Pitch in config uses negative = down; flip to match math convention here.
+            cam_pitch = -cam.pitch
+            cam_roll = cam.roll
+
+            cyaw = math.cos(cam_yaw)
+            syaw = math.sin(cam_yaw)
+            cp = math.cos(cam_pitch)
+            sp = math.sin(cam_pitch)
+            cr = math.cos(cam_roll)
+            sr = math.sin(cam_roll)
+
+            # R = Rz(yaw) * Ry(pitch) * Rx(roll)
+            r00 = cyaw * cp
+            r01 = cyaw * sp * sr - syaw * cr
+            r02 = cyaw * sp * cr + syaw * sr
+            r10 = syaw * cp
+            r11 = syaw * sp * sr + cyaw * cr
+            r12 = syaw * sp * cr - cyaw * sr
+            r20 = -sp
+            r21 = cp * sr
+            r22 = cp * cr
             for obj in objects:
-                det = self._detect_object(cam, obj, cam_x, cam_y, cam_z, cam_yaw)
+                det = self._detect_object(
+                    cam,
+                    obj,
+                    cam_x,
+                    cam_y,
+                    cam_z,
+                    r00,
+                    r01,
+                    r02,
+                    r10,
+                    r11,
+                    r12,
+                    r20,
+                    r21,
+                    r22,
+                )
                 if det is None:
                     continue
                 prev = detections.get(det.oid)
@@ -374,7 +431,6 @@ class MockProvider(RepulsorProvider):
                     )
                     tr.last_update_s = now_s
 
-        # Drop stale world objects
         for oid in list(self._tracked_objects.keys()):
             tr = self._tracked_objects[oid]
             if now_s - tr.last_seen_s > self._visibility_timeout_s:
@@ -481,7 +537,7 @@ class MockProvider(RepulsorProvider):
                 scores.append((sc, ix, iy))
         scores.sort(reverse=True)
 
-        budget = min(self.cfg.max_objects, 1200)
+        budget = max(0, self._fuel_target_count)
         out: Dict[Tuple[int, int], int] = {}
 
         top = scores[: max(1, len(scores) // 6)]
@@ -492,7 +548,7 @@ class MockProvider(RepulsorProvider):
             assert self.cfg is not None
             assert self.rng is not None
             nonlocal budget
-            want = int(min(self.cfg.max_objects, 300) * frac)
+            want = int(self._fuel_target_count * frac)
             want = min(want, budget)
             if want <= 0 or not bucket:
                 return
@@ -511,6 +567,15 @@ class MockProvider(RepulsorProvider):
             alloc(mid, 1, 8, 0.30)
         if budget > 0:
             alloc(low, 0, 3, 0.10)
+        if budget > 0 and scores:
+            max_per_cell = 18
+            while budget > 0:
+                _, ix, iy = scores[self.rng.randrange(0, len(scores))]
+                n = out.get((ix, iy), 0)
+                if n >= max_per_cell:
+                    continue
+                out[(ix, iy)] = n + 1
+                budget -= 1
         return out
 
     def _regen_fuel(self) -> None:
@@ -614,28 +679,58 @@ class MockProvider(RepulsorProvider):
 
     def _pickup_half_extents(self) -> tuple[float, float]:
         assert self.cfg is not None
-        hx = float(getattr(self.cfg, "pickup_half_extent_x_m", 0.705 / 2))
-        hy = float(getattr(self.cfg, "pickup_half_extent_y_m", 0.73 / 2))
+        hx = float(
+            os.getenv("MOCK_PICKUP_HALF_X", getattr(self.cfg, "pickup_half_extent_x_m", 0.705 / 2))
+        )
+        hy = float(
+            os.getenv("MOCK_PICKUP_HALF_Y", getattr(self.cfg, "pickup_half_extent_y_m", 0.73 / 2))
+        )
         hx = max(0.01, hx)
         hy = max(0.01, hy)
         return hx, hy
 
+    def _pickup_offsets(self, hx: float, hy: float) -> tuple[float, float]:
+        ox = os.getenv("MOCK_PICKUP_OFFSET_X", "")
+        oy = os.getenv("MOCK_PICKUP_OFFSET_Y", "")
+        if ox != "":
+            try:
+                return float(ox), float(oy) if oy != "" else 0.0
+            except ValueError:
+                return 0.0, 0.0
+        # default: slightly forward
+        return 0.6 * hx, 0.0
+
     def _maybe_pickup(self, pose: Pose2d) -> None:
         assert self.cfg is not None
+        if not self._pickup_enabled:
+            return
         if not self.fuel or pose is None:
             return
 
         px = float(pose.x)
         py = float(pose.y)
         hx, hy = self._pickup_half_extents()
+        ox, oy = self._pickup_offsets(hx, hy)
+        yaw = float(pose.rotation().radians())
+        cy = math.cos(yaw)
+        sy = math.sin(yaw)
 
         r = float(getattr(self.cfg, "fuel_radius_m", 0.075))
         r2 = r * r
 
         to_remove: List[str] = []
         for oid, fo in self.fuel.items():
-            dx = max(abs(fo.x - px) - hx, 0.0)
-            dy = max(abs(fo.y - py) - hy, 0.0)
+            dxw = fo.x - px
+            dyw = fo.y - py
+            # world -> robot frame
+            x_r = dxw * cy + dyw * sy
+            y_r = -dxw * sy + dyw * cy
+            x_r -= ox
+            y_r -= oy
+            if self._pickup_front_only and x_r < 0.0:
+                continue
+            dx = max(abs(x_r) - hx, 0.0)
+            dy = max(abs(y_r) - hy, 0.0)
             if dx * dx + dy * dy <= r2:
                 to_remove.append(oid)
 
@@ -661,8 +756,11 @@ class MockProvider(RepulsorProvider):
             self._piece_pub.set(int(self.piece_count))
 
         objs: List[WorldObject] = []
+        truth_objs: List[WorldObject] = []
         for fo in self.fuel.values():
-            objs.append(WorldObject(oid=fo.oid, class_id=CLASS_FUEL, x=fo.x, y=fo.y, z=fo.z))
+            o = WorldObject(oid=fo.oid, class_id=CLASS_FUEL, x=fo.x, y=fo.y, z=fo.z)
+            objs.append(o)
+            truth_objs.append(o)
 
         # include robots as world objects for vision dedupe and camera visibility
         robot_sizes: Dict[str, Tuple[float, float]] = {}
@@ -678,5 +776,6 @@ class MockProvider(RepulsorProvider):
             objects=vis_objects,
             obstacles=vis_obstacles,
             cameras=self._camera_infos,
+            truth_objects=truth_objs,
             extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         )

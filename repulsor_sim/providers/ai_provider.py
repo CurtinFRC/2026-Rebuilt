@@ -14,5 +14,6 @@ class AIProvider(RepulsorProvider):
             objects=(),
             obstacles=(),
             cameras=(),
+            truth_objects=(),
             extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         )

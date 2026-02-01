@@ -708,7 +708,9 @@ public final class PredictiveFieldState {
 
   private static Rotation2d face(Translation2d from, Translation2d to, Rotation2d fallback) {
     Translation2d d = to.minus(from);
-    if (d.getNorm() < 1e-9) return fallback;
+    if (d.getNorm() < 1e-9
+        || (d.getMeasureX().baseUnitMagnitude() == 0 && d.getMeasureY().baseUnitMagnitude() == 0))
+      return fallback;
     return d.getAngle();
   }
 
