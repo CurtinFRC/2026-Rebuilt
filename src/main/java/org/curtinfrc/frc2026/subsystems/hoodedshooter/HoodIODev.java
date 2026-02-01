@@ -41,9 +41,9 @@ public class HoodIODev implements HoodIO {
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.4;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.08686111111;
-  public static final double KP = 25.0;
+  public static final double KP = 70.0;
   public static final double KI = 0.0;
-  public static final double KD = 0.25;
+  public static final double KD = 0.35;
   public static final double KS_STOWED = 0.60;
   public static final double KS_OUT = 0.20;
   public static final double KV = 0.15; // temp
