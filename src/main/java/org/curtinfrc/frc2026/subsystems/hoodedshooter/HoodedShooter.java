@@ -181,10 +181,6 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> hoodIO.setVoltage(voltage));
   }
 
-  public Command setHoodVoltage(double voltage) {
-    return run(() -> hoodIO.setVoltage(voltage));
-  }
-
   public Command stopHood() {
     return run(() -> hoodIO.setVoltage(0));
   }
