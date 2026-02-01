@@ -32,7 +32,7 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
-  public static final int ENCODER_ID = 17;
+  public static final int ENCODER_ID = 21;
 
   public static final double GEAR_RATIO = 2.67;
   public static final double ENCODER_MAGNET_OFFSET = -0.0585;
