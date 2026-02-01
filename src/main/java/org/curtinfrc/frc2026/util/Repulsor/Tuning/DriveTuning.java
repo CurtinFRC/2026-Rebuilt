@@ -9,14 +9,14 @@ public abstract class DriveTuning extends Tuning {
 
   public abstract double minStepMeters();
 
-  public abstract double baseStepMeters(double distanceMeters);
+  public abstract double baseStepMeters(double distanceMeters, boolean slowDown);
 
   public abstract double nearGoalScale(double distanceMeters);
 
   public abstract double scaleForTurning(double yawDeltaRad, boolean isScoring);
 
-  public double stepSizeMeters(double distanceMeters, double obstacleMag, boolean isScoring) {
-    double base = baseStepMeters(Math.max(0.0, distanceMeters));
+  public double stepSizeMeters(double distanceMeters, double obstacleMag, boolean isScoring, boolean slowDown) {
+    double base = baseStepMeters(Math.max(0.0, distanceMeters), slowDown);
     return base;
     // double near = nearGoalScale(distanceMeters);
     // double obs = 1.0 / (1.0 + obstacleMag);

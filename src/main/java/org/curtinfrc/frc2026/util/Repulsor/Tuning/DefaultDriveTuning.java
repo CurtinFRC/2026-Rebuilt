@@ -59,13 +59,17 @@ public class DefaultDriveTuning extends DriveTuning {
   // speed * dtSeconds(); }
 
   @Override
-  public double baseStepMeters(double distanceMeters) {
+  public double baseStepMeters(double distanceMeters, boolean slowDown) {
     double d = Math.max(0.0, distanceMeters);
     if (d <= 0.0) {
       Logger.recordOutput("Repulsor/Speed", 0.0);
       Logger.recordOutput("Repulsor/Remaining", 0.0);
       Logger.recordOutput("Repulsor/Step", 0.0);
       return 0.0;
+    }
+
+    if (!slowDown) {
+      return Math.min(maxSpeed * dtSeconds(), d);
     }
 
     double dt = dtSeconds();
