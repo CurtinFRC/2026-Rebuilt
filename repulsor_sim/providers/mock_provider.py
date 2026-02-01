@@ -89,8 +89,8 @@ class CameraConfig:
     yaw_deg: float
     pitch_deg: float
     roll_deg: float = 0.0
-    hfov_deg: float = 95.0
-    vfov_deg: float = 60.0
+    hfov_deg: float = 71
+    vfov_deg: float = 48
     min_range: float = 0
     max_range: float = 5.0
     update_hz: float = 15.0
@@ -98,11 +98,12 @@ class CameraConfig:
     noise_z: float = 0#.03
     dropout: float = 0
 
-CAMERAS: List[CameraConfig] = [ # 0.705, 0.730
-    CameraConfig(name="cam_front", x=0.35, y=0.00, z=0.5, yaw_deg=0.0,   pitch_deg=0),
-    CameraConfig(name="cam_back",  x=-0.35,y=0.00, z=0.5, yaw_deg=180.0, pitch_deg=0),
-    CameraConfig(name="cam_left",  x=0.00, y=0.36, z=0.5, yaw_deg=90.0,  pitch_deg=0),
-    CameraConfig(name="cam_right", x=0.00, y=-0.36,z=0.5, yaw_deg=-90.0, pitch_deg=0),
+CAMERAS: List[CameraConfig] = [
+    CameraConfig(name="cam_left_rear",  x=-0.25, y=0, z=0.5, yaw_deg=150.0,  pitch_deg=0),
+    CameraConfig(name="cam_left_front", x= 0.25, y=0, z=0.5, yaw_deg=30.0,   pitch_deg=0),
+
+    CameraConfig(name="cam_right_rear",  x=-0.25, y=-0.25, z=0.5, yaw_deg=-150.0, pitch_deg=0),
+    CameraConfig(name="cam_right_front", x= 0.25, y=-0.25, z=0.5, yaw_deg=-30.0,  pitch_deg=0),
 ]
 
 @dataclass
