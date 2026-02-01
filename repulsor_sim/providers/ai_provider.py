@@ -10,4 +10,9 @@ class AIProvider(RepulsorProvider):
         self.cfg = cfg
 
     def step(self, now_s: float, pose: Pose2d) -> ProviderFrame:
-        return ProviderFrame(objects=(), obstacles=(), extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+        return ProviderFrame(
+            objects=(),
+            obstacles=(),
+            cameras=(),
+            extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        )

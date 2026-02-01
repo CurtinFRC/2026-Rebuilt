@@ -4,7 +4,6 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -18,6 +17,10 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.littletonrobotics.junction.Logger;
 
 public final class PredictiveFieldState {
+
+  public static boolean error() {
+    return false;
+  }
 
   public static final class CollectProbe {
     public final int count;
@@ -2099,8 +2102,7 @@ public final class PredictiveFieldState {
         ResourceSpec s = dyn.specs.get(o.type.toLowerCase());
         if (s == null) continue;
 
-        double ageW =
-            RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+        double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         double w = Math.max(0.0, s.unitValue) * ageW;
 
         int worstI = 0;
@@ -2232,8 +2234,7 @@ public final class PredictiveFieldState {
         coarse.put(k, a);
       }
 
-      double ageW =
-          RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+      double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
       double w = Math.max(0.0, s.unitValue) * ageW;
 
       a.sx += o.pos.getX() * w;
@@ -2298,8 +2299,7 @@ public final class PredictiveFieldState {
         double d2 = dx * dx + dy * dy;
         if (d2 > rr2) continue;
 
-        double ageW =
-            RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+        double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         double w = Math.max(0.0, s.unitValue) * ageW;
 
         sx += o.pos.getX() * w;
@@ -2321,7 +2321,7 @@ public final class PredictiveFieldState {
   }
 
   private void sweepDepletedMarks() {
-    if (RobotBase.isSimulation()) return;
+    if (error()) return;
     if (depletedMarks.isEmpty()) return;
     double now = Timer.getFPGATimestamp();
     depletedMarks.removeIf(m -> now - m.t > m.ttl);
@@ -2332,7 +2332,7 @@ public final class PredictiveFieldState {
 
   private void addDepletedMark(
       Translation2d p, double radiusM, double strength, double ttlS, boolean merge) {
-    if (RobotBase.isSimulation()) return;
+    if (error()) return;
     if (p == null) return;
 
     double now = Timer.getFPGATimestamp();
@@ -2360,7 +2360,7 @@ public final class PredictiveFieldState {
 
   private void addDepletedRing(
       Translation2d p, double r0, double r1, double strength, double ttlS) {
-    if (RobotBase.isSimulation()) return;
+    if (error()) return;
     if (p == null) return;
     double now = Timer.getFPGATimestamp();
     depletedMarks.add(
@@ -2369,7 +2369,7 @@ public final class PredictiveFieldState {
   }
 
   private double depletedPenaltySoft(Translation2d p) {
-    if (RobotBase.isSimulation()) return 0.0;
+    if (error()) return 0.0;
     if (p == null || depletedMarks.isEmpty()) return 0.0;
 
     double now = Timer.getFPGATimestamp();
@@ -3219,7 +3219,7 @@ public final class PredictiveFieldState {
 
       for (DynamicObject o : this.all) {
         if (o == null || o.pos == null) continue;
-        if (!RobotBase.isSimulation() && o.ageS > RESOURCE_HARD_MAX_AGE_S) continue;
+        if (!error() && o.ageS > RESOURCE_HARD_MAX_AGE_S) continue;
 
         String ty = o.type != null ? o.type.toLowerCase() : "unknown";
         if (this.specs.containsKey(ty)) {
@@ -3281,8 +3281,7 @@ public final class PredictiveFieldState {
         if (o == null || o.pos == null || o.type == null) continue;
         ResourceSpec s = specs.get(o.type.toLowerCase());
         if (s == null) continue;
-        double ageW =
-            RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+        double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         sum += Math.max(0.0, s.unitValue) * ageW;
       }
       return Math.max(0.0, sum);
@@ -3304,8 +3303,7 @@ public final class PredictiveFieldState {
           ResourceSpec s = specs.get(o.type.toLowerCase());
           if (s == null) continue;
 
-          double ageW =
-              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+          double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
           sum += Math.max(0.0, s.unitValue) * ageW;
         }
       }
@@ -3331,7 +3329,7 @@ public final class PredictiveFieldState {
           double d2 = dx * dx + dy * dy;
 
           double age = Math.max(0.0, o.ageS);
-          double ageW = RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
+          double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
 
           double sigmaBase =
               Math.max(
@@ -3375,8 +3373,7 @@ public final class PredictiveFieldState {
           ResourceSpec s = specs.get(o.type.toLowerCase());
           if (s == null) continue;
 
-          double ageW =
-              RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+          double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
           sum += Math.max(0.0, s.unitValue) * ageW;
         }
       }
@@ -3406,7 +3403,7 @@ public final class PredictiveFieldState {
           if (d2 > rr2) continue;
 
           double age = Math.max(0.0, o.ageS);
-          double ageW = RobotBase.isSimulation() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
+          double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * age);
 
           double sigmaBase =
               Math.max(RESOURCE_SIGMA_MIN, Math.min(RESOURCE_SIGMA_ABS_MAX, s.sigmaM));

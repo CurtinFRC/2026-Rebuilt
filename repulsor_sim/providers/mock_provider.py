@@ -14,6 +14,7 @@ from repulsor_sim.types import (
     CLASS_FUEL,
     CLASS_ROBOT_BLUE,
     CLASS_ROBOT_RED,
+    CameraInfo,
     ProviderFrame,
     VisionObstacle,
     WorldObject,
@@ -153,6 +154,7 @@ class MockProvider(RepulsorProvider):
         self._obs_publish_period_s = 0.1
         self._visibility_timeout_s = 0.45
         self.last_piece_count = 0
+        self._camera_infos: List[CameraInfo] = []
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -172,6 +174,21 @@ class MockProvider(RepulsorProvider):
 
         self._forbidden = self._build_forbidden_regions()
         self._cams = self._build_cameras()
+        self._camera_infos = [
+            CameraInfo(
+                name=c.name,
+                x=float(c.x),
+                y=float(c.y),
+                z=float(c.z),
+                yaw_deg=float(c.yaw_deg),
+                pitch_deg=float(c.pitch_deg),
+                roll_deg=float(c.roll_deg),
+                hfov_deg=float(c.hfov_deg),
+                vfov_deg=float(c.vfov_deg),
+                max_range=float(c.max_range),
+            )
+            for c in CAMERAS
+        ]
         self._tracked_objects.clear()
         self._tracked_obstacles.clear()
         self._obj_publish_hz = float(os.getenv("MOCK_VISION_OBJ_HZ", "10"))
@@ -660,5 +677,6 @@ class MockProvider(RepulsorProvider):
         return ProviderFrame(
             objects=vis_objects,
             obstacles=vis_obstacles,
+            cameras=self._camera_infos,
             extrinsics_xyzrpy=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         )

@@ -9,13 +9,18 @@ from pyglet.gl import (
     GL_COLOR_BUFFER_BIT,
     GL_CULL_FACE,
     GL_DEPTH_BUFFER_BIT,
+    GL_LINES,
     glClear,
     glDisable,
     glEnable,
+    glBegin,
+    glColor4f,
+    glEnd,
     glPopMatrix,
     glPushMatrix,
     glScalef,
     glTranslatef,
+    glVertex3f,
 )
 
 from repulsor_3d_sim.config import ViewerConfig
@@ -50,6 +55,8 @@ class SceneRenderer:
         self._col_fuel = (1.0, 0.95, 0.15, 0.95)
         self._col_other = (1.0, 0.15, 0.15, 0.85)
         self._col_us = (0.35, 0.35, 0.38, 0.75)
+        self._col_cam = (0.20, 0.75, 1.0, 0.85)
+        self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
 
         self._last_cap_t = 0.0
         self._last_cap_s = ""
@@ -80,6 +87,7 @@ class SceneRenderer:
             self._draw_fuel(snap)
             self._draw_other_robots(snap)
             self._draw_us_robot(snap)
+            self._draw_cameras(snap)
 
         glDisable(GL_CULL_FACE)
         self._update_caption(window, snap, connected)
@@ -123,6 +131,77 @@ class SceneRenderer:
         cz = self._field_z + (self._robot_h * 0.5)
         yaw_deg = float(pose.rotation().degrees())
         draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_us)
+
+    def _draw_cameras(self, snap: WorldSnapshot):
+        pose = snap.pose
+        cams = snap.cameras if snap is not None else []
+        if pose is None or not cams:
+            return
+
+        rx = float(pose.x)
+        ry = float(pose.y)
+        rz = float(self._field_z)
+        yaw = float(pose.rotation().radians())
+        cy = math.cos(yaw)
+        sy = math.sin(yaw)
+
+        for c in cams:
+            # robot-relative -> world
+            cx = rx + c.x * cy - c.y * sy
+            cyw = ry + c.x * sy + c.y * cy
+            cz = rz + c.z
+            yaw_world = yaw + math.radians(c.yaw_deg)
+            pitch_world = math.radians(c.pitch_deg)
+            hfov = math.radians(max(1e-6, c.hfov_deg))
+            vfov = math.radians(max(1e-6, c.vfov_deg))
+            depth = max(0.2, float(c.max_range))
+
+            # camera marker
+            draw_box((cx, cyw, cz), (0.06, 0.06, 0.06), math.degrees(yaw_world), self._col_cam)
+
+            # draw frustum edges
+            ch = math.cos(yaw_world)
+            sh = math.sin(yaw_world)
+            cp = math.cos(pitch_world)
+            sp = math.sin(pitch_world)
+
+            forward = (cp * ch, cp * sh, sp)
+            right = (-sh, ch, 0.0)
+            up = (-sp * ch, -sp * sh, cp)
+
+            tan_h = math.tan(hfov * 0.5)
+            tan_v = math.tan(vfov * 0.5)
+
+            far_cx = cx + forward[0] * depth
+            far_cy = cyw + forward[1] * depth
+            far_cz = cz + forward[2] * depth
+
+            wx = right[0] * depth * tan_h
+            wy = right[1] * depth * tan_h
+            wz = right[2] * depth * tan_h
+            hx = up[0] * depth * tan_v
+            hy = up[1] * depth * tan_v
+            hz = up[2] * depth * tan_v
+
+            corners = [
+                (far_cx + wx + hx, far_cy + wy + hy, far_cz + wz + hz),
+                (far_cx + wx - hx, far_cy + wy - hy, far_cz + wz - hz),
+                (far_cx - wx - hx, far_cy - wy - hy, far_cz - wz - hz),
+                (far_cx - wx + hx, far_cy - wy + hy, far_cz - wz + hz),
+            ]
+
+            glColor4f(*self._col_cam_fov)
+            glBegin(GL_LINES)
+            for p in corners:
+                glVertex3f(cx, cyw, cz)
+                glVertex3f(p[0], p[1], p[2])
+            # far plane outline
+            for i in range(4):
+                a = corners[i]
+                b = corners[(i + 1) % 4]
+                glVertex3f(a[0], a[1], a[2])
+                glVertex3f(b[0], b[1], b[2])
+            glEnd()
 
     def _update_caption(self, window: pyglet.window.Window, snap: Optional[WorldSnapshot], connected: bool):
         now = time.monotonic()

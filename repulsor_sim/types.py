@@ -37,7 +37,21 @@ class VisionObstacle:
     sy: float
 
 @dataclass(frozen=True)
+class CameraInfo:
+    name: str
+    x: float
+    y: float
+    z: float
+    yaw_deg: float
+    pitch_deg: float
+    roll_deg: float
+    hfov_deg: float
+    vfov_deg: float
+    max_range: float
+
+@dataclass(frozen=True)
 class ProviderFrame:
     objects: Sequence[WorldObject]
     obstacles: Sequence[VisionObstacle]
+    cameras: Sequence[CameraInfo] = ()
     extrinsics_xyzrpy: Optional[tuple[float, float, float, float, float, float]] = None

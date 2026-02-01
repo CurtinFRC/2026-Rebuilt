@@ -9,7 +9,7 @@ from ntcore import MultiSubscriber, NetworkTableInstance
 from wpimath.geometry import Pose2d, Rotation2d
 
 from repulsor_3d_sim.config import ViewerConfig
-from repulsor_3d_sim.model import FieldVisionObject, Pose2D, RepulsorVisionObstacle, WorldSnapshot
+from repulsor_3d_sim.model import CameraInfo, FieldVisionObject, Pose2D, RepulsorVisionObstacle, WorldSnapshot
 
 
 def _norm_table_path(p: str) -> str:
@@ -66,6 +66,19 @@ class _RVSubs:
     sx: any
     sy: any
 
+@dataclass
+class _CamSubs:
+    alive: any
+    x: any
+    y: any
+    z: any
+    yaw_deg: any
+    pitch_deg: any
+    roll_deg: any
+    hfov_deg: any
+    vfov_deg: any
+    max_range: any
+
 
 class NT4Reader:
     def __init__(self, cfg: ViewerConfig):
@@ -93,6 +106,7 @@ class NT4Reader:
 
         self._fv_subs: Dict[str, _FVSubs] = {}
         self._rv_subs: Dict[str, _RVSubs] = {}
+        self._cam_subs: Dict[str, _CamSubs] = {}
 
         self._connected_at: Optional[float] = None
         self._last_connect_check = 0.0
@@ -119,6 +133,7 @@ class NT4Reader:
 
         fv_topics = self.inst.getTopics(self._fv_prefix)
         rv_topics = self.inst.getTopics(self._rv_prefix)
+        cam_topics = self.inst.getTopics(self._fv_prefix)
 
         fv_ids: Set[str] = set()
         for t in fv_topics:
@@ -131,6 +146,12 @@ class NT4Reader:
             tid = _extract_id_from_topic(t.getName(), self._rv_prefix, "obs_")
             if tid is not None:
                 rv_ids.add(tid)
+
+        cam_ids: Set[str] = set()
+        for t in cam_topics:
+            tid = _extract_id_from_topic(t.getName(), self._fv_prefix, "camera_")
+            if tid is not None:
+                cam_ids.add(tid)
 
         for oid in fv_ids:
             if oid in self._fv_subs:
@@ -160,6 +181,24 @@ class NT4Reader:
                 y=self.inst.getDoubleTopic(_join_topic(self._rv_prefix, base + "/y")).subscribe(0.0),
                 sx=self.inst.getDoubleTopic(_join_topic(self._rv_prefix, base + "/size_x")).subscribe(0.0),
                 sy=self.inst.getDoubleTopic(_join_topic(self._rv_prefix, base + "/size_y")).subscribe(0.0),
+            )
+
+        for name in cam_ids:
+            if name in self._cam_subs:
+                continue
+            base = f"camera_{name}"
+            base_topic = _join_topic(self._fv_prefix, base)
+            self._cam_subs[name] = _CamSubs(
+                alive=self.inst.getBooleanTopic(base_topic).subscribe(False),
+                x=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/x")).subscribe(0.0),
+                y=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/y")).subscribe(0.0),
+                z=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/z")).subscribe(0.0),
+                yaw_deg=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/yaw_deg")).subscribe(0.0),
+                pitch_deg=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/pitch_deg")).subscribe(0.0),
+                roll_deg=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/roll_deg")).subscribe(0.0),
+                hfov_deg=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/hfov_deg")).subscribe(0.0),
+                vfov_deg=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/vfov_deg")).subscribe(0.0),
+                max_range=self.inst.getDoubleTopic(_join_topic(self._fv_prefix, base + "/max_range")).subscribe(0.0),
             )
 
     def read_pose2d(self) -> Optional[Pose2d]:
@@ -219,9 +258,32 @@ class NT4Reader:
             )
         return out
 
+    def read_cameras(self) -> List[CameraInfo]:
+        self._discover_dynamic_topics()
+        out: List[CameraInfo] = []
+        for name, s in sorted(self._cam_subs.items(), key=lambda kv: kv[0]):
+            if not bool(s.alive.get()):
+                continue
+            out.append(
+                CameraInfo(
+                    name=str(name),
+                    x=float(s.x.get()),
+                    y=float(s.y.get()),
+                    z=float(s.z.get()),
+                    yaw_deg=float(s.yaw_deg.get()),
+                    pitch_deg=float(s.pitch_deg.get()),
+                    roll_deg=float(s.roll_deg.get()),
+                    hfov_deg=float(s.hfov_deg.get()),
+                    vfov_deg=float(s.vfov_deg.get()),
+                    max_range=float(s.max_range.get()),
+                )
+            )
+        return out
+
     def snapshot(self) -> WorldSnapshot:
         fv = self.read_fieldvision()
         rv = self.read_repulsorvision()
+        cams = self.read_cameras()
         pose = self.read_pose2d()
         ex = self.read_extrinsics()
-        return WorldSnapshot(fv, rv, pose, ex)
+        return WorldSnapshot(fv, rv, cams, pose, ex)
