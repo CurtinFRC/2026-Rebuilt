@@ -136,16 +136,16 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> shooterIO.setVoltage(0));
   }
 
-  public Command setShooterVelocity(double velocity, BooleanSupplier f) {
-    return run(() -> shooterIO.setVelocity(velocity, f));
+  public Command setShooterVelocity(double velocity, BooleanSupplier useTorqueCurrentControl) {
+    return run(() -> shooterIO.setVelocity(velocity, useTorqueCurrentControl));
   }
 
   public Command setHoodedShooterPositionAndVelocity(
-      double position, double velocity, BooleanSupplier f) {
+      double position, double velocity, BooleanSupplier useTorqueCurrentControl) {
     return run(
         () -> {
           hoodIO.setPosition(position);
-          shooterIO.setVelocity(velocity, f);
+          shooterIO.setVelocity(velocity, useTorqueCurrentControl);
         });
   }
 

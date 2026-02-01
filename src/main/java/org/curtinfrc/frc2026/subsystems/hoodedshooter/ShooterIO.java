@@ -22,5 +22,5 @@ public interface ShooterIO {
 
   public default void setVoltageV(Voltage voltage) {}
 
-  public default void setVelocity(double velocity, BooleanSupplier f) {}
+  public default void setVelocity(double velocity, BooleanSupplier useTorqueCurrentControl) {}
 }
