@@ -806,8 +806,7 @@ public class Setpoints {
         if (ctx == null || ctx.robotPose().isEmpty()) {
           Pose2d fakeRobot =
               new Pose2d(
-                  targetFieldPos.plus(new Translation2d(3.0, Rotation2d.kZero)),
-      Rotation2d.kZero);
+                  targetFieldPos.plus(new Translation2d(3.0, Rotation2d.kZero)), Rotation2d.kZero);
           return findValidAround(
               fakeRobot, targetFieldPos, 0.0, 0.0, List.of(), HUB_SIMPLE_RADIUS_M);
         }
@@ -978,8 +977,7 @@ public class Setpoints {
 
         if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
           out =
-              findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs,
-      HUB_SIMPLE_RADIUS_M);
+              findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
         }
         if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
           out = safeValidFallback(targetFieldPos, halfL, halfW, obs);
@@ -1007,7 +1005,6 @@ public class Setpoints {
 
         return out;
       }
-
 
       private static Translation2d hubAimpointFromAnchorTagBlueCached(int anchorTagId) {
         return HUB_AIMPOINT_BLUE_CACHE.computeIfAbsent(
