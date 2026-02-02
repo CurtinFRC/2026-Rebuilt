@@ -9,7 +9,7 @@ last_published_truth: dict[str, WorldObject] = {}
 def publish_fieldvision_truth(
     table,
     objects: Sequence[WorldObject],
-    max_per_tick: int = 12,
+    max_per_tick: int = 1000,
 ):
     """
     Publish at most `max_per_tick` changed/new ground-truth objects per call.

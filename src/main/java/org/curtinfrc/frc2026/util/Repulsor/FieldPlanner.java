@@ -37,7 +37,7 @@ public class FieldPlanner {
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   private static final double CORNER_CHAMFER = 0;
   public static final double GOAL_STRENGTH = 2.2;
-  private static final double STAGED_CENTER_BAND_M = 1.2;
+  private static final double STAGED_CENTER_BAND_M = 3.648981;
   private static final double STAGED_REACH_DIST_M = 0.2;
   private static final double STAGED_RESTAGE_DIST_M = 1.2;
   private static final double STAGED_SAME_GOAL_POS_M = 0.05;
@@ -3242,7 +3242,8 @@ public class FieldPlanner {
     var dist = curTrans.getDistance(effectiveGoal.getTranslation());
 
     double stepSize_m =
-        driveTuning.stepSizeMeters(dist, obstacleForce.getNorm(), (cat == CategorySpec.kScore), slowDown);
+        driveTuning.stepSizeMeters(
+            dist, obstacleForce.getNorm(), (cat == CategorySpec.kScore), slowDown);
     var step = new Translation2d(stepSize_m, netForce.getAngle());
 
     if (step.getNorm() < 1e-3) {
@@ -3676,6 +3677,4 @@ public class FieldPlanner {
     goal = requestedGoal;
     return true;
   }
-
-
 }

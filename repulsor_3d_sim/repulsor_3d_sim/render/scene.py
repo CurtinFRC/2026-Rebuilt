@@ -145,7 +145,7 @@ class SceneRenderer:
         self._h = int(max(1, h))
         set_viewport(self._w, self._h)
 
-    def draw(self, window: pyglet.window.Window, camera: OrbitCamera, snap: Optional[WorldSnapshot], connected: bool):
+    def draw(self, window: pyglet.window.Window, camera: OrbitCamera, snap: Optional[WorldSnapshot], connected: bool, nt4):
         w = int(max(1, window.width))
         h = int(max(1, window.height))
         if w != self._w or h != self._h:
@@ -174,7 +174,7 @@ class SceneRenderer:
                 self._draw_cameras(snap)
 
         glDisable(GL_CULL_FACE)
-        self._draw_overlay(window)
+        self._draw_overlay(window, nt4)
         self._update_caption(window, snap, connected)
 
     def _draw_fuel(self, snap: WorldSnapshot):
@@ -301,12 +301,13 @@ class SceneRenderer:
         glBindTexture(tex.target, 0)
         glDisable(GL_TEXTURE_2D)
 
-    def _draw_overlay(self, window: pyglet.window.Window):
+    def _draw_overlay(self, window: pyglet.window.Window, nt4):
         lines = [
             f"[C] Camera debug: {'ON' if self.show_camera_debug else 'OFF'}",
             f"[T] Truth fuel: {'ON' if self.show_truth_fuel else 'OFF'}",
             f"[A] Age filter: {'ON' if self.show_age_filtered_fuel else 'OFF'}",
             f"Field image: {'ON' if self.show_field_image else 'OFF'}",
+            f"Pieces: {int(nt4.pieces.get()) if nt4 else 'N/A'}",
         ]
         top = window.height - 10
         scale = 2.0

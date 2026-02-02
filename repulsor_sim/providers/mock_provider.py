@@ -133,6 +133,7 @@ class _ShotBall:
     vz: float
     landed: bool
     age_s: float = 0.0
+    roll_decel_scale: float = 1.0
 
 class MockProvider(RepulsorProvider):
     def __init__(self):
@@ -185,6 +186,17 @@ class MockProvider(RepulsorProvider):
         self._shot_gravity = 9.81
         self._shot_roll_decel = 1.4
         self._shot_stop_speed = 0.15
+        self._shot_air_drag = 0.12
+        self._shot_substep = 0.02
+        self._shot_hub_roll_speed = 1.8
+        self._shot_hub_roll_jitter = 0.15
+        self._shot_hub_roll_decel_scale = 0.45
+        self._shot_bump_strength = 0.08
+        self._shot_bounce = 0.35
+        self._shot_bump_transfer = 0.55
+        self._shot_bump_max = 2.2
+        self._shot_bump_max_per_step = 6
+        self._hub_rects: List[Tuple[float, float, float, float]] = []
 
     def reset(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -202,6 +214,16 @@ class MockProvider(RepulsorProvider):
         self._shot_gravity = float(os.getenv("MOCK_SHOT_GRAVITY", "9.81"))
         self._shot_roll_decel = float(os.getenv("MOCK_SHOT_ROLL_DECEL", "1.4"))
         self._shot_stop_speed = float(os.getenv("MOCK_SHOT_STOP_SPEED", "0.15"))
+        self._shot_air_drag = float(os.getenv("MOCK_SHOT_AIR_DRAG", "0.12"))
+        self._shot_substep = float(os.getenv("MOCK_SHOT_SUBSTEP", "0.02"))
+        self._shot_hub_roll_speed = float(os.getenv("MOCK_SHOT_HUB_ROLL_SPEED", "1.8"))
+        self._shot_hub_roll_jitter = float(os.getenv("MOCK_SHOT_HUB_ROLL_JITTER", "0.15"))
+        self._shot_hub_roll_decel_scale = float(os.getenv("MOCK_SHOT_HUB_ROLL_DECEL_SCALE", "0.45"))
+        self._shot_bump_strength = float(os.getenv("MOCK_SHOT_BUMP_STRENGTH", "0.08"))
+        self._shot_bounce = float(os.getenv("MOCK_SHOT_BOUNCE", "0.35"))
+        self._shot_bump_transfer = float(os.getenv("MOCK_SHOT_BUMP_TRANSFER", "0.55"))
+        self._shot_bump_max = float(os.getenv("MOCK_SHOT_BUMP_MAX", "2.2"))
+        self._shot_bump_max_per_step = int(os.getenv("MOCK_SHOT_BUMP_MAX_PER_STEP", "6"))
         off_x = float(os.getenv("MOCK_SHOT_OFFSET_X", "0.45"))
         off_y = float(os.getenv("MOCK_SHOT_OFFSET_Y", "0.0"))
         off_z = float(os.getenv("MOCK_SHOT_OFFSET_Z", "0.55"))
@@ -221,6 +243,18 @@ class MockProvider(RepulsorProvider):
         self.ny = int(math.floor((self.y1 - self.y0) / cfg.grid_cell_m))
 
         self._forbidden = self._build_forbidden_regions()
+        rect_width = float(os.getenv("MOCK_HUB_RECT_W", "0.5929315"))
+        rect_height = float(os.getenv("MOCK_HUB_RECT_H", "5.711800"))
+        rect_half_x = rect_width * 0.5
+        rect_half_y = rect_height * 0.5
+        hub_dx = float(os.getenv("MOCK_HUB_RECT_DX", "3.648981"))
+        rect_cy = float(os.getenv("MOCK_HUB_RECT_CY", str(self.cy)))
+        left_rect_x = (self.x1 * 0.5) - hub_dx
+        right_rect_x = (self.x1 * 0.5) + hub_dx
+        self._hub_rects = [
+            (left_rect_x, rect_cy, rect_half_x, rect_half_y),
+            (right_rect_x, rect_cy, rect_half_x, rect_half_y),
+        ]
         self._cams = self._build_cameras()
         self._camera_infos = [
             CameraInfo(
@@ -784,44 +818,154 @@ class MockProvider(RepulsorProvider):
         ground_z = float(self.cfg.fuel_z_m)
         roll_decel = max(0.0, self._shot_roll_decel)
         stop_speed = max(0.01, self._shot_stop_speed)
+        drag = max(0.0, self._shot_air_drag)
+        substep = max(0.004, self._shot_substep)
 
-        remaining: List[_ShotBall] = []
-        for b in self._shots:
-            b.age_s += dt
-            if not b.landed:
-                b.vz -= g * dt
-                b.x += b.vx * dt
-                b.y += b.vy * dt
-                b.z += b.vz * dt
-                if b.z <= ground_z:
-                    b.z = ground_z
-                    b.vz = 0.0
-                    b.landed = True
-            else:
-                b.x += b.vx * dt
-                b.y += b.vy * dt
-                speed = math.hypot(b.vx, b.vy)
-                if speed > 1e-6:
-                    new_speed = max(0.0, speed - roll_decel * dt)
-                    if new_speed <= stop_speed:
+        steps = int(math.ceil(dt / substep))
+        steps = max(1, steps)
+        step_dt = dt / steps
+
+        shots = self._shots
+        for _ in range(steps):
+            if not shots:
+                break
+            remaining: List[_ShotBall] = []
+            for b in shots:
+                b.age_s += step_dt
+                if not b.landed:
+                    if drag > 1e-9:
+                        d = math.exp(-drag * step_dt)
+                        b.vx *= d
+                        b.vy *= d
+                    b.vz -= g * step_dt
+                    b.x += b.vx * step_dt
+                    b.y += b.vy * step_dt
+                    b.z += b.vz * step_dt
+                    if self._snap_to_hub(b, ground_z):
+                        pass
+                    elif b.z <= ground_z:
+                        b.z = ground_z
+                        b.vz = 0.0
+                        b.landed = True
+                if b.landed:
+                    b.x += b.vx * step_dt
+                    b.y += b.vy * step_dt
+                    speed = math.hypot(b.vx, b.vy)
+                    if speed > 1e-6:
+                        decel = roll_decel * max(0.05, b.roll_decel_scale)
+                        new_speed = max(0.0, speed - decel * step_dt)
+                        if new_speed <= stop_speed:
+                            self.fuel[b.oid] = _FuelObj(oid=b.oid, x=b.x, y=b.y, z=ground_z)
+                            continue
+                        scale = new_speed / speed
+                        b.vx *= scale
+                        b.vy *= scale
+                    else:
                         self.fuel[b.oid] = _FuelObj(oid=b.oid, x=b.x, y=b.y, z=ground_z)
                         continue
-                    scale = new_speed / speed
-                    b.vx *= scale
-                    b.vy *= scale
-                else:
-                    self.fuel[b.oid] = _FuelObj(oid=b.oid, x=b.x, y=b.y, z=ground_z)
-                    continue
+                    self._bump_fuel_nearby(b, step_dt)
 
-            if b.x < self.x0 or b.x > self.x1:
-                b.x = _clamp(b.x, self.x0, self.x1)
-                b.vx = 0.0
-            if b.y < self.y0 or b.y > self.y1:
-                b.y = _clamp(b.y, self.y0, self.y1)
-                b.vy = 0.0
-            remaining.append(b)
+                if b.x < self.x0 or b.x > self.x1:
+                    b.x = _clamp(b.x, self.x0, self.x1)
+                    b.vx = 0.0
+                if b.y < self.y0 or b.y > self.y1:
+                    b.y = _clamp(b.y, self.y0, self.y1)
+                    b.vy = 0.0
+                remaining.append(b)
+            shots = remaining
 
-        self._shots = remaining
+        self._shots = shots
+
+    def _snap_to_hub(self, b: _ShotBall, ground_z: float) -> bool:
+        if not self._hub_rects:
+            return False
+        for cx, cy, hx, hy in self._hub_rects:
+            if abs(b.x - cx) <= hx and abs(b.y - cy) <= hy:
+                b.x = cx
+                b.y = cy
+                b.z = ground_z
+                b.vz = 0.0
+                b.landed = True
+                dx = self.cx - cx
+                dy = self.cy - cy
+                mag = math.hypot(dx, dy)
+                if mag < 1e-6:
+                    dx, dy = 1.0, 0.0
+                    mag = 1.0
+                jitter = 1.0 + self.rng.uniform(-self._shot_hub_roll_jitter, self._shot_hub_roll_jitter)
+                speed = max(0.05, self._shot_hub_roll_speed * jitter)
+                b.vx = dx / mag * speed
+                b.vy = dy / mag * speed
+                b.roll_decel_scale = self._shot_hub_roll_decel_scale
+                return True
+        return False
+
+    def _bump_fuel_nearby(self, b: _ShotBall, dt: float) -> None:
+        if not self.fuel or dt <= 0.0:
+            return
+        assert self.cfg is not None
+        r = float(getattr(self.cfg, "fuel_radius_m", 0.075))
+        bump_r = max(0.04, r * 2.1)
+        bump_r2 = bump_r * bump_r
+        strength = max(0.0, self._shot_bump_strength)
+        bounce = max(0.0, self._shot_bounce)
+        transfer = max(0.0, self._shot_bump_transfer)
+        max_speed = max(0.05, self._shot_bump_max)
+        max_per_step = max(1, self._shot_bump_max_per_step)
+        if strength <= 1e-9:
+            return
+        bx = b.x
+        by = b.y
+        new_shots: List[_ShotBall] = []
+        to_remove: List[str] = []
+        hits = 0
+        for oid, fo in list(self.fuel.items()):
+            dx = fo.x - bx
+            dy = fo.y - by
+            d2 = dx * dx + dy * dy
+            if d2 > bump_r2:
+                continue
+            d = math.sqrt(d2) if d2 > 1e-9 else 1e-6
+            nx = dx / d
+            ny = dy / d
+            push = (bump_r - d) * strength
+            if push > 0.0:
+                fo.x = _clamp(fo.x + nx * push, self.x0, self.x1)
+                fo.y = _clamp(fo.y + ny * push, self.y0, self.y1)
+
+            vn = b.vx * nx + b.vy * ny
+            if vn > 0.0:
+                b.vx -= (1.0 + bounce) * vn * nx
+                b.vy -= (1.0 + bounce) * vn * ny
+            else:
+                b.vx += nx * strength * 0.02
+                b.vy += ny * strength * 0.02
+
+            if transfer > 1e-6:
+                speed = min(max_speed, max(0.12, abs(vn) * transfer))
+                new_shots.append(
+                    _ShotBall(
+                        oid=oid,
+                        x=fo.x,
+                        y=fo.y,
+                        z=fo.z,
+                        vx=nx * speed,
+                        vy=ny * speed,
+                        vz=0.0,
+                        landed=True,
+                        roll_decel_scale=0.85,
+                    )
+                )
+                to_remove.append(oid)
+                hits += 1
+                if hits >= max_per_step:
+                    break
+
+        if to_remove:
+            for oid in to_remove:
+                self.fuel.pop(oid, None)
+        if new_shots:
+            self._shots.extend(new_shots)
 
     def _pickup_half_extents(self) -> tuple[float, float]:
         assert self.cfg is not None

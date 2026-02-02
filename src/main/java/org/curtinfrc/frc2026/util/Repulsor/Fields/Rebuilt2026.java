@@ -141,9 +141,9 @@ public final class Rebuilt2026 implements FieldDefinition {
     double gapTopY = Constants.FIELD_WIDTH - (gapHeight * 0.5);
     double gapBottomY = gapHeight * 0.5;
 
-    double rectStrength = 2.0;
+    double rectStrength = 2.5;
     double rectRangeX = 1.2;
-    double rectRangeY = 1.0;
+    double rectRangeY = 1.5;
 
     double biasStrength = 0.3;
     double biasRange = 1.2;
@@ -366,8 +366,8 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> walls() {
     return List.of(
-        new HorizontalObstacle(0.0, 2, true),
-        new HorizontalObstacle(Constants.FIELD_WIDTH, 2, false),
+        new HorizontalObstacle(0.0, 1, true),
+        new HorizontalObstacle(Constants.FIELD_WIDTH, 1, false),
         new VerticalObstacle(0.0, 2, true),
         new VerticalObstacle(Constants.FIELD_LENGTH, 2, false));
   }

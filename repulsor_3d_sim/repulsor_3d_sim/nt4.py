@@ -104,6 +104,7 @@ class NT4Reader:
         self._ep = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/pitch")).subscribe(0.0)
         self._eyaw = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/yaw")).subscribe(0.0)
 
+        self.pieces = self.inst.getDoubleTopic("/PieceCount").subscribe(0.0)
         self._fv_subs: Dict[str, _FVSubs] = {}
         self._rv_subs: Dict[str, _RVSubs] = {}
         self._cam_subs: Dict[str, _CamSubs] = {}

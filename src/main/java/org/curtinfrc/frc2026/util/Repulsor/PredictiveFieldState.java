@@ -205,7 +205,7 @@ public final class PredictiveFieldState {
   private static final double CAPACITY_GAIN = 0.35;
   private static final double HEADING_GAIN = 0.18;
 
-  private static final double COLLECT_VALUE_GAIN = 2.10;
+  private static final double COLLECT_VALUE_GAIN = 10.10;
   private static final double COLLECT_ETA_COST = 1.05;
   private static final double COLLECT_ENEMY_PRESS_COST = 1.15;
   private static final double COLLECT_ALLY_CONGEST_COST = 0.95;
@@ -218,9 +218,9 @@ public final class PredictiveFieldState {
   private static final double COLLECT_ACTIVITY_ALLY_W = 0.80;
   private static final double COLLECT_ACTIVITY_ENEMY_W = 0.55;
   private static final double COLLECT_ACTIVITY_DYN_W = 0.60;
-  private static final double COLLECT_REGION_SAMPLES_W = 0.70;
+  private static final double COLLECT_REGION_SAMPLES_W = 2.70;
   private static final double COLLECT_CELL_M = 0.10;
-  private static final double COLLECT_NEAR_BONUS = 0.55;
+  private static final double COLLECT_NEAR_BONUS = 0.85;
   private static final double COLLECT_NEAR_DECAY = 1.35;
   private static final double COLLECT_SPREAD_SCORE_R = 0.85;
   private static final double COLLECT_SPREAD_MIN = 0.30;
@@ -2204,7 +2204,8 @@ public final class PredictiveFieldState {
     return out;
   }
 
-  private ArrayList<Translation2d> spreadCollectPoints(ArrayList<Translation2d> in, SpatialDyn dyn) {
+  private ArrayList<Translation2d> spreadCollectPoints(
+      ArrayList<Translation2d> in, SpatialDyn dyn) {
     if (in == null || in.isEmpty()) return new ArrayList<>();
     double sep = adaptiveCollectSeparation(dyn);
     double d2 = sep * sep;
@@ -2212,13 +2213,14 @@ public final class PredictiveFieldState {
     double[] score = new double[n];
     for (int i = 0; i < n; i++) {
       Translation2d p = in.get(i);
-      score[i] = (dyn != null && p != null) ? dyn.evidenceMassWithin(p, COLLECT_SPREAD_SCORE_R) : 0.0;
+      score[i] =
+          (dyn != null && p != null) ? dyn.evidenceMassWithin(p, COLLECT_SPREAD_SCORE_R) : 0.0;
     }
 
     boolean[] blocked = new boolean[n];
     ArrayList<Translation2d> out = new ArrayList<>(n);
 
-    for (;;) {
+    for (; ; ) {
       int bestI = -1;
       double best = -1e18;
       for (int i = 0; i < n; i++) {

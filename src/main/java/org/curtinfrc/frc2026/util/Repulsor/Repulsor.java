@@ -22,6 +22,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourFlag;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourManager;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
@@ -166,6 +167,7 @@ public class Repulsor {
         new BehaviourManager()
             .add(new DefenseBehaviour(30, defenseGoalSup, () -> 2.8))
             .add(new ShuttleBehaviour(20, shuttleGoalSup, () -> 3.2))
+            .add(new TestBehaviour())
             .add(
                 new AutoPathBehaviour(
                     10,
