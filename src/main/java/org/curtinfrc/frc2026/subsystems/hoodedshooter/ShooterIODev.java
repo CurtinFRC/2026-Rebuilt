@@ -31,9 +31,9 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID3 = 29;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.00076245;
-  private static final double KI = 0.0;
-  private static final double KD = 0.1;
+  private static final double KP = 0.05;
+  private static final double KI = 0.001;
+  private static final double KD = 0.003;
   private static final double KS = 0.24152;
   private static final double KV = 0.12173;
   private static final double KA = 0.015427;
