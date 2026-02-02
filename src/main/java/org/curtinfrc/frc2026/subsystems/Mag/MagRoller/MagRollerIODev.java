@@ -8,6 +8,7 @@ import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.Slot1Configs;
+import com.ctre.phoenix6.configs.Slot2Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.PositionVoltage;
 import com.ctre.phoenix6.controls.VelocityVoltage;
@@ -34,16 +35,29 @@ public class MagRollerIODev implements MagRollerIO {
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
   final PositionVoltage Indexer_PID = new PositionVoltage(0).withSlot(0);
   final VelocityVoltage Store_Vel_PID = new VelocityVoltage(0).withSlot(1);
+  private final TalonFXConfiguration talonFXConfigs = new TalonFXConfiguration();
+  final VelocityVoltage Motion_Magic_Store_Vel_PID = new VelocityVoltage(0);
 
+  // indexer position PID variables
   private static final double POS_KP = 1.0;
   private static final double POS_KI = 0;
   private static final double POS_KD = 0;
 
+  // velocity PID for all magazine rollers
   private static final double VEL_KS = 0;
   private static final double VEL_KV = 0;
   private static final double VEL_KP = 0.5;
   private static final double VEL_KI = 0;
   private static final double VEL_KD = 0;
+
+  // Motion Magic PID for all magazine rollers
+  private static final double MAGIC_VEL_KS = 0;
+  private static final double MAGIC_VEL_KV = 0;
+  private static final double MAGIC_VEL_KP = .55;
+  private static final double MAGIC_VEL_KI = 0.24;
+  private static final double MAGIC_VEL_KD = 0;
+  private static final double MAGIC_VEL_ACCEL = 4;
+  private static final double MAGIC_VEL_JERK = 40;
 
   public MagRollerIODev(int motorID, InvertedValue inverted) {
 
@@ -53,11 +67,14 @@ public class MagRollerIODev implements MagRollerIO {
     angle = magMotor.getPosition();
     current = magMotor.getStatorCurrent();
 
-    Slot0Configs slot0Configs = new Slot0Configs();
-    slot0Configs.kP = 2.4; // An error of 1 rotation results in 2.4 V output
-    slot0Configs.kI = 0; // no output for integrated error
-    slot0Configs.kD = 0; // A velocity of 1 rps results in 0.1 V output
-    magMotor.getConfigurator().apply(slot0Configs);
+    var motionMagicConfigs = talonFXConfigs.MotionMagic;
+    motionMagicConfigs.MotionMagicAcceleration =
+        MAGIC_VEL_ACCEL; // Target acceleration of 400 rps/s (0.25 seconds to max)
+    motionMagicConfigs.MotionMagicJerk =
+        MAGIC_VEL_JERK; // Target jerk of 4000 rps/s/s (0.1 seconds)
+
+    // magMotor.getConfigurator().apply(talonFXConfigs);
+
     tryUntilOk(
         5,
         () ->
@@ -74,7 +91,15 @@ public class MagRollerIODev implements MagRollerIO {
                                 .withKI(VEL_KI)
                                 .withKD(VEL_KD)
                                 .withKS(VEL_KS)
-                                .withKV(VEL_KV))));
+                                .withKV(VEL_KV))
+                        .withSlot2(
+                            new Slot2Configs()
+                                .withKP(MAGIC_VEL_KP)
+                                .withKI(MAGIC_VEL_KI)
+                                .withKD(MAGIC_VEL_KD)
+                                .withKS(MAGIC_VEL_KS)
+                                .withKV(MAGIC_VEL_KV))
+                        .withMotionMagic(motionMagicConfigs)));
 
     // Setting update frequency
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, angle, angularVelocity);
@@ -96,7 +121,7 @@ public class MagRollerIODev implements MagRollerIO {
 
   @Override
   public void setVoltage(double volts) {
-    magMotor.setControl(voltageRequest.withOutput(12.0));
+    magMotor.setControl(voltageRequest.withOutput(volts));
   }
 
   @Override
@@ -111,6 +136,9 @@ public class MagRollerIODev implements MagRollerIO {
 
   @Override
   public void setVelocityRPS(double targetVelocityRPS) {
-    magMotor.setControl(Store_Vel_PID.withVelocity(targetVelocityRPS).withFeedForward(0.5));
+    magMotor.setControl(
+        Motion_Magic_Store_Vel_PID.withVelocity(targetVelocityRPS)
+            .withSlot(2)
+            .withFeedForward(3)); //
   }
 }
