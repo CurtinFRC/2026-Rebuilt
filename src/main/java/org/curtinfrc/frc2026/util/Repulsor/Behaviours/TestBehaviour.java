@@ -8,15 +8,13 @@ import java.util.EnumSet;
 import java.util.Optional;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.littletonrobotics.junction.Logger;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
 public final class TestBehaviour extends Behaviour {
-
-  private RepulsorSetpoint sp =
-      new RepulsorSetpoint(Setpoints.Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
 
   public TestBehaviour() {}
 
@@ -52,9 +50,19 @@ public final class TestBehaviour extends Behaviour {
             () -> {
               Pose2d robotPose = ctx.robotPose.get();
 
+              RepulsorSetpoint sp =
+                new RepulsorSetpoint(Setpoints.Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
+
               ctx.repulsor.setCurrentGoal(sp);
               ctx.planner.setRequestedGoal(goalPose);
+
+              Setpoints.Rebuilt2026.getHubShotSolution(makeCtx(ctx, robotPose))
+                  .ifPresent(
+                      sol -> {
+                        Logger.recordOutput("ShotSpeed", sol.launchSpeedMetersPerSecond());
+                        Logger.recordOutput("ShotAngle", sol.launchAngle().getDegrees());
+                      });
 
               RepulsorSample sample =
                   ctx.planner.calculate(

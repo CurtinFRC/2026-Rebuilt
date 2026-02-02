@@ -335,7 +335,7 @@ public class Setpoints {
   public static final class Rebuilt2026 {
     private Rebuilt2026() {}
 
-    public static final double HUB_OPENING_FRONT_EDGE_HEIGHT_M = 1.83;
+    public static final double HUB_OPENING_FRONT_EDGE_HEIGHT_M = 1.43;
     public static final double HUB_FACE_TO_AIMPOINT_METERS = 0.60;
     public static final String GAME_PIECE_ID_FUEL = "fuel";
 
@@ -506,8 +506,7 @@ public class Setpoints {
     }
 
     public static final DragShotPlanner.Constraints HUB_SHOT_CONSTRAINTS =
-        new DragShotPlanner.Constraints(
-            6.0, 26.0, 25.0, 80.0, DragShotPlanner.Constraints.ShotStyle.ARC);
+        new DragShotPlanner.Constraints(0, 30, 0, 45.0, DragShotPlanner.Constraints.ShotStyle.ARC);
 
     public static final int BLUE_HUB_ANCHOR_TAG_ID = 20;
     public static final int BLUE_OUTPOST_ANCHOR_TAG_ID = 13;
@@ -537,6 +536,31 @@ public class Setpoints {
     public static Translation2d hubAimpointForAlliance(Alliance alliance) {
       Translation2d blue = hubAimpointBlue();
       return alliance == Alliance.Red ? flipToRed(blue) : blue;
+    }
+
+    public static Optional<DragShotPlanner.ShotSolution> getHubShotSolution(SetpointContext ctx) {
+      if (ctx == null || ctx.robotPose().isEmpty()) {
+        return Optional.empty();
+      }
+
+      Translation2d target = hubAimpointForAlliance(currentAllianceOrBlue());
+      Pose2d pose = HubShootSetpoint.computeShootPose(ctx, target);
+
+      double releaseH = Math.max(0.0, ctx.shooterReleaseHeightMeters());
+      double halfL = Math.max(0.0, ctx.robotLengthMeters()) / 2.0;
+      double halfW = Math.max(0.0, ctx.robotWidthMeters()) / 2.0;
+
+      HubShotCacheKey key = hubKey(target, releaseH, halfL, halfW);
+      HubLastPoseCache state = HUB_LAST_POSE.get(key);
+      if (state == null || state.lastSolution == null) {
+        return Optional.empty();
+      }
+
+      Translation2d sp = state.lastSolution.shooterPosition();
+      if (pose.getTranslation().getDistance(sp) > 0.02) {
+        return Optional.empty();
+      }
+      return Optional.of(state.lastSolution);
     }
 
     private record HubShotCacheKey(
@@ -782,7 +806,8 @@ public class Setpoints {
         if (ctx == null || ctx.robotPose().isEmpty()) {
           Pose2d fakeRobot =
               new Pose2d(
-                  targetFieldPos.plus(new Translation2d(3.0, Rotation2d.kZero)), Rotation2d.kZero);
+                  targetFieldPos.plus(new Translation2d(3.0, Rotation2d.kZero)),
+      Rotation2d.kZero);
           return findValidAround(
               fakeRobot, targetFieldPos, 0.0, 0.0, List.of(), HUB_SIMPLE_RADIUS_M);
         }
@@ -953,7 +978,8 @@ public class Setpoints {
 
         if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
           out =
-              findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs, HUB_SIMPLE_RADIUS_M);
+              findFastValidPose(robotPose, targetFieldPos, halfL, halfW, obs,
+      HUB_SIMPLE_RADIUS_M);
         }
         if (!validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs)) {
           out = safeValidFallback(targetFieldPos, halfL, halfW, obs);
@@ -981,6 +1007,7 @@ public class Setpoints {
 
         return out;
       }
+
 
       private static Translation2d hubAimpointFromAnchorTagBlueCached(int anchorTagId) {
         return HUB_AIMPOINT_BLUE_CACHE.computeIfAbsent(

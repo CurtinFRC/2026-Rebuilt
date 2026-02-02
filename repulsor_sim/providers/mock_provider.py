@@ -743,7 +743,7 @@ class MockProvider(RepulsorProvider):
 
     def _pickup_radius2(self) -> float:
         assert self.cfg is not None
-        r = max(0.25, max(0.705, 0.730) * 0.5)
+        r = max(0.25, max(0.85) * 0.5)
         return r * r
 
     def _maybe_shoot(self, pose: Pose2d | None) -> None:
@@ -970,10 +970,10 @@ class MockProvider(RepulsorProvider):
     def _pickup_half_extents(self) -> tuple[float, float]:
         assert self.cfg is not None
         hx = float(
-            os.getenv("MOCK_PICKUP_HALF_X", getattr(self.cfg, "pickup_half_extent_x_m", 0.705 / 2))
+            os.getenv("MOCK_PICKUP_HALF_X", getattr(self.cfg, "pickup_half_extent_x_m", 0.85 / 2))
         )
         hy = float(
-            os.getenv("MOCK_PICKUP_HALF_Y", getattr(self.cfg, "pickup_half_extent_y_m", 0.73 / 2))
+            os.getenv("MOCK_PICKUP_HALF_Y", getattr(self.cfg, "pickup_half_extent_y_m", 0.85 / 2))
         )
         hx = max(0.01, hx)
         hy = max(0.01, hy)

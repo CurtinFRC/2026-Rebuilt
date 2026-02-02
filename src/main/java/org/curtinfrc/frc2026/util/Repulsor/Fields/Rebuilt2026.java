@@ -133,7 +133,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double rectHeight = 5.711800;
     double rectHalfY = rectHeight * 0.5;
 
-    double leftRectX = (FIELD_LENGTH / 2) - 3.648981;
+    double leftRectX = (FIELD_LENGTH / 2) - 3.648981; // 2.5 meters 34 degrees 16 ms
     double rightRectX = (FIELD_LENGTH / 2) + 3.648981;
     double rectCy = Constants.FIELD_WIDTH / 2;
 
