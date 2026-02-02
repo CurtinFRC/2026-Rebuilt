@@ -32,7 +32,7 @@ public class HoodedShooter extends SubsystemBase {
   public static final double HUB_AIMED_HEIGHT = HUB_HEIGHT + AIM_HEIGHT_OFFSET;
 
   public static final double WHEEL_DIAMETER = 0.101;
-  public static final double SHOOTER_TARGET_VELOCITY = 15;
+  public static final double SHOOTER_TARGET_VELOCITY = 20;
   public static final Transform3d SHOOTER_TRANSFORM =
       new Transform3d(0, 0, 1, new Rotation3d()); // Not confirmed
 
@@ -76,10 +76,10 @@ public class HoodedShooter extends SubsystemBase {
 
     // optimal horizontal velocities (to be tuned)
     DISTANCE_TO_OPTIMAL_VELOCITY.put(0.0, 0.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(1.0, 1.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(2.0, 2.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(3.0, 3.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(4.0, 4.0);
+    DISTANCE_TO_OPTIMAL_VELOCITY.put(1.0, 0.5);
+    DISTANCE_TO_OPTIMAL_VELOCITY.put(2.0, 1.0);
+    DISTANCE_TO_OPTIMAL_VELOCITY.put(3.0, 2.0);
+    DISTANCE_TO_OPTIMAL_VELOCITY.put(4.0, 3.0);
     DISTANCE_TO_OPTIMAL_VELOCITY.put(5.0, 5.0);
     DISTANCE_TO_OPTIMAL_VELOCITY.put(6.0, 6.0);
     DISTANCE_TO_OPTIMAL_VELOCITY.put(7.0, 7.0);
@@ -150,14 +150,7 @@ public class HoodedShooter extends SubsystemBase {
     }
   }
 
-  public double calculateHoodRotations() {
-    Pose3d shooterPose = new Pose3d(robotPose.get()).transformBy(SHOOTER_TRANSFORM);
-    double distanceLength =
-        Math.sqrt(
-            Math.pow((HUB_LOCATION.getX() - shooterPose.getX()), 2)
-                + Math.pow(
-                    (HUB_LOCATION.getY() - shooterPose.getY()),
-                    2)); // Distance from the robot to the bottom of the goal
+  public double calculateHoodRotations(double distanceLength) {
     Translation2d targetVector = new Translation2d(distanceLength, HUB_AIMED_HEIGHT);
 
     double initialVelocity = DISTANCE_TO_OPTIMAL_VELOCITY.get(targetVector.getNorm());
@@ -170,34 +163,19 @@ public class HoodedShooter extends SubsystemBase {
     return hoodAngle / 360;
   }
 
-  public double calculateHoodRotationsWithTrajectoryEquation() {
-    Pose3d shooterPose = new Pose3d(robotPose.get()).transformBy(SHOOTER_TRANSFORM);
-    double distanceLength =
-        Math.sqrt(
-            Math.pow((HUB_LOCATION.getX() - shooterPose.getX()), 2)
-                + Math.pow(
-                    (HUB_LOCATION.getY() - shooterPose.getY()),
-                    2)); // Distance from the robot to the bottom of the goal
-    double term =
-        Math.pow(SHOOTER_TARGET_VELOCITY, 4)
-            - 9.8
-                * (9.8 * Math.pow(distanceLength, 2)
-                    + 2
-                        * (HUB_AIMED_HEIGHT - shooterPose.getZ())
-                        * Math.pow(SHOOTER_TARGET_VELOCITY, 2));
-
-    double hoodAngle =
-        Math.toDegrees(
-            Math.atan2(
-                Math.pow(SHOOTER_TARGET_VELOCITY, 2) + Math.sqrt(term), 9.8 * distanceLength));
-
-    return hoodAngle / 360;
-  }
-
   public Command aimAtHub() { // this assumes that the robot is facing the target
     return run(
         () -> {
-          double hoodAngle = calculateHoodRotations();
+          Pose3d shooterPose = new Pose3d(robotPose.get()).transformBy(SHOOTER_TRANSFORM);
+          double distanceLength =
+              Math.sqrt(
+                  Math.pow((HUB_LOCATION.getX() - shooterPose.getX()), 2)
+                      + Math.pow(
+                          (HUB_LOCATION.getY() - shooterPose.getY()),
+                          2)); // Distance from the robot to the bottom of the goal
+
+          double hoodAngle = calculateHoodRotations(3.04833887);
+          hoodAngle = (-hoodAngle - 0.25 / HoodIODev.GEAR_RATIO);
           hoodIO.setPosition(hoodAngle);
         });
   }
