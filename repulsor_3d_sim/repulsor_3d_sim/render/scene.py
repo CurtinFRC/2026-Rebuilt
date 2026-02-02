@@ -12,6 +12,7 @@ from pyglet.gl import (
     GL_DEPTH_BUFFER_BIT,
     GL_LINES,
     GL_QUADS,
+    GL_TRIANGLES,
     GL_MODELVIEW,
     GL_PROJECTION,
     GL_DEPTH_TEST,
@@ -115,6 +116,7 @@ class SceneRenderer:
         self._col_truth_fuel = (0.15, 0.95, 0.35, 0.70)
         self._col_other = (1.0, 0.15, 0.15, 0.85)
         self._col_us = (1, 0.27, 0, 0.75)
+        self._col_heading = (1.0, 0.1, 0.1, 0.9)
         self._col_cam = (0.20, 0.75, 1.0, 0.85)
         self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
         self._col_cam_ray_ok = (0.20, 0.95, 0.35, 0.55)
@@ -401,6 +403,87 @@ class SceneRenderer:
         cz = self._field_z + (self._robot_h * 0.5)
         yaw_deg = float(pose.rotation().degrees())
         draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_us)
+        self._draw_robot_heading_arrow(cx, cy, yaw_deg)
+
+    def _draw_robot_heading_arrow(self, cx: float, cy: float, yaw_deg: float) -> None:
+        yaw_rad = math.radians(float(yaw_deg))
+        length = max(self._robot_l, self._robot_w) * 0.95
+        shaft_len = length * 0.60
+        head_len = length - shaft_len
+
+        base_w = max(0.07, min(self._robot_l, self._robot_w) * 0.28)
+        shaft_w = base_w
+        head_w = base_w * 1.9
+        height = max(0.04, self._robot_h * 0.28)
+
+        z0 = self._field_z + self._robot_h + 0.02
+        z1 = z0 + height
+
+        fx = math.cos(yaw_rad)
+        fy = math.sin(yaw_rad)
+
+        def _rot(x: float, y: float) -> tuple[float, float]:
+            return (float(cx) + x * fx - y * fy, float(cy) + x * fy + y * fx)
+
+        outline = [
+            (0.0, -shaft_w * 0.5),
+            (shaft_len, -shaft_w * 0.5),
+            (shaft_len, -head_w * 0.5),
+            (length, 0.0),
+            (shaft_len, head_w * 0.5),
+            (shaft_len, shaft_w * 0.5),
+            (0.0, shaft_w * 0.5),
+        ]
+
+        glDisable(GL_CULL_FACE)
+        glColor4f(*self._col_heading)
+
+        glBegin(GL_TRIANGLES)
+        # top face (z1)
+        ax, ay = _rot(0.0, -shaft_w * 0.5)
+        bx, by = _rot(shaft_len, -shaft_w * 0.5)
+        cx2, cy2 = _rot(shaft_len, shaft_w * 0.5)
+        dx, dy = _rot(0.0, shaft_w * 0.5)
+        glVertex3f(ax, ay, z1)
+        glVertex3f(bx, by, z1)
+        glVertex3f(cx2, cy2, z1)
+        glVertex3f(ax, ay, z1)
+        glVertex3f(cx2, cy2, z1)
+        glVertex3f(dx, dy, z1)
+
+        hx1, hy1 = _rot(shaft_len, -head_w * 0.5)
+        hx2, hy2 = _rot(shaft_len, head_w * 0.5)
+        tx, ty = _rot(length, 0.0)
+        glVertex3f(hx1, hy1, z1)
+        glVertex3f(tx, ty, z1)
+        glVertex3f(hx2, hy2, z1)
+
+        # bottom face (z0) - reverse winding
+        glVertex3f(ax, ay, z0)
+        glVertex3f(cx2, cy2, z0)
+        glVertex3f(bx, by, z0)
+        glVertex3f(ax, ay, z0)
+        glVertex3f(dx, dy, z0)
+        glVertex3f(cx2, cy2, z0)
+
+        glVertex3f(hx1, hy1, z0)
+        glVertex3f(hx2, hy2, z0)
+        glVertex3f(tx, ty, z0)
+        glEnd()
+
+        glBegin(GL_QUADS)
+        for i in range(len(outline)):
+            x0, y0 = outline[i]
+            x1, y1 = outline[(i + 1) % len(outline)]
+            r0x, r0y = _rot(x0, y0)
+            r1x, r1y = _rot(x1, y1)
+            glVertex3f(r0x, r0y, z0)
+            glVertex3f(r1x, r1y, z0)
+            glVertex3f(r1x, r1y, z1)
+            glVertex3f(r0x, r0y, z1)
+        glEnd()
+
+        glEnable(GL_CULL_FACE)
 
     def _draw_cameras(self, snap: WorldSnapshot):
         pose = snap.pose
