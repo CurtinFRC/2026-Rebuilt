@@ -234,7 +234,9 @@ public class Robot extends LoggedRobot {
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
-    drive.setPose(new Pose2d(15.391 - (Constants.ROBOT_X / 2), 3.84 + (Constants.ROBOT_Y / 2), new Rotation2d()));
+    drive.setPose(
+        new Pose2d(
+            15.391 - (Constants.ROBOT_X / 2), 3.84 + (Constants.ROBOT_Y / 2), new Rotation2d()));
 
     DriverStation.silenceJoystickConnectionWarning(true);
 
@@ -255,7 +257,6 @@ public class Robot extends LoggedRobot {
     hoodedShooter.setDefaultCommand(
         hoodedShooter.setHoodedShooterPositionAndVelocity(shotAngle.get() / 360, shotSpeed.get()));
 
-    
     // controller
     //     .leftTrigger()
     //     .whileTrue(

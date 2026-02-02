@@ -8,11 +8,11 @@ import java.util.EnumSet;
 import java.util.Optional;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.littletonrobotics.junction.Logger;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
+import org.littletonrobotics.junction.Logger;
 
 public final class TestBehaviour extends Behaviour {
 
@@ -51,7 +51,7 @@ public final class TestBehaviour extends Behaviour {
               Pose2d robotPose = ctx.robotPose.get();
 
               RepulsorSetpoint sp =
-                new RepulsorSetpoint(Setpoints.Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
+                  new RepulsorSetpoint(Setpoints.Rebuilt2026.HUB_SHOOT, HeightSetpoint.NET);
               Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
 
               ctx.repulsor.setCurrentGoal(sp);
