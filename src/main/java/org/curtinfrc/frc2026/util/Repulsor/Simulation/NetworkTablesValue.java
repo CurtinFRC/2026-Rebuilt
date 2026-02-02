@@ -35,6 +35,10 @@ public final class NetworkTablesValue<T> {
 
   private final Codec<T> codec;
 
+  public static String toAdvantageKit(String topicName) {
+    return "AdvantageKit/RealOutputs" + (topicName.startsWith("/") ? "" : "/") + topicName;
+  }
+
   public NetworkTablesValue(
       Codec<T> codec, NetworkTableInstance inst, String topicName, T initialValue) {
     this.codec = Objects.requireNonNull(codec, "codec");

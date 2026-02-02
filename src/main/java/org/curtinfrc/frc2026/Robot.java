@@ -92,6 +92,13 @@ public class Robot extends LoggedRobot {
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+  private final NetworkTablesValue<Double> shotAngle =
+      NetworkTablesValue.ofDouble(
+          NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotAngle"), 0.0);
+
+  private final NetworkTablesValue<Double> shotSpeed =
+      NetworkTablesValue.ofDouble(
+          NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotSpeed"), 0.0);
 
   // GateTelemetry telem = new GateTelemetry("/robot/gates");
 
@@ -203,8 +210,6 @@ public class Robot extends LoggedRobot {
                   new ModuleIOSim(TunerConstants.BackLeft),
                   new ModuleIOSim(TunerConstants.BackRight));
 
-          drive.setPose(new Pose2d(14, 4, new Rotation2d()));
-
           vision =
               new Vision(
                   drive::addVisionMeasurement,
@@ -229,11 +234,14 @@ public class Robot extends LoggedRobot {
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
+    drive.setPose(new Pose2d(15.391 - (Constants.ROBOT_X / 2), 3.84 + (Constants.ROBOT_Y / 2), new Rotation2d()));
+
     DriverStation.silenceJoystickConnectionWarning(true);
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     RepulsorDriverStationBootstrap.useDefaultNt();
+
     RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
     if (dsBase instanceof NtRepulsorDriverStation ds) {
       new Trigger(() -> ds.getConfigBool("force_controller_override"))
@@ -244,32 +252,36 @@ public class Robot extends LoggedRobot {
                   () -> -controller.getRightX()));
     }
 
-    controller
-        .leftTrigger()
-        .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(1.0),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    hoodedShooter.setDefaultCommand(
+        hoodedShooter.setHoodedShooterPositionAndVelocity(shotAngle.get() / 360, shotSpeed.get()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    
+    // controller
+    //     .leftTrigger()
+    //     .whileTrue(
+    //         Commands.parallel(
+    //             intake.RawControlConsume(1.0),
+    //             mag.store(0.7),
+    //             Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
+    //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    // controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
 
     controller
         .a()
         .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    RepulsorDriverStationBootstrap.useDefaultNt();
+    // controller
+    //     .rightBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .leftBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of
+    // hub
+    //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
   /** This function is called periodically during all modes. */
