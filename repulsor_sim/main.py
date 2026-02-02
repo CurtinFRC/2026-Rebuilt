@@ -24,11 +24,11 @@ def main():
     provider.reset(cfg)
 
     dt = 1.0 / max(1e-6, cfg.fps)
-    truth_max_per_tick = int(os.getenv("TRUTH_MAX_PER_TICK", "12"))
+    truth_max_per_tick = int(os.getenv("TRUTH_MAX_PER_TICK", "1000"))
     truth_socket_enabled = os.getenv("TRUTH_SOCKET_ENABLED", "1").strip() != "0"
     truth_socket_host = os.getenv("TRUTH_SOCKET_HOST", "127.0.0.1")
     truth_socket_port = int(os.getenv("TRUTH_SOCKET_PORT", "5809"))
-    truth_socket_hz = float(os.getenv("TRUTH_SOCKET_HZ", "10"))
+    truth_socket_hz = float(os.getenv("TRUTH_SOCKET_HZ", "1000"))
     truth_socket_decimals = int(os.getenv("TRUTH_SOCKET_DECIMALS", "3"))
     truth_sender = None
     if truth_socket_enabled:

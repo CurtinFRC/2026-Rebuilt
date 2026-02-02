@@ -307,7 +307,7 @@ class ViewerApp:
 
     def on_draw(self):
         self.window.clear()
-        self.renderer.draw(self.window, self.camera, self._render_snapshot, self._last_connected)
+        self.renderer.draw(self.window, self.camera, self._render_snapshot, self._last_connected, self.reader)
 
     def on_resize(self, width: int, height: int):
         self.renderer.resize(width, height)
