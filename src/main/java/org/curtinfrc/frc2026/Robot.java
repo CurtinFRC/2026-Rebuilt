@@ -214,15 +214,19 @@ public class Robot extends LoggedRobot {
         .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .rightBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .leftBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of
+    // hub
+    //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+
+    controller.leftBumper().whileTrue(hoodedShooter.aimAtHub());
+    controller.rightBumper().whileTrue(hoodedShooter.shoot()).onFalse(hoodedShooter.stopShooter());
   }
 
   /** This function is called periodically during all modes. */
