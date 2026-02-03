@@ -9,6 +9,7 @@ public interface MagRollerIO {
     public double currentAmps;
     public double positionRotations;
     public double angularVelocityRotationsPerMinute;
+    public double setPoint;
   }
 
   public default void setVoltage(double volts) {}

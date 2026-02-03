@@ -53,7 +53,7 @@ public class MagRollerIODev implements MagRollerIO {
   // Motion Magic PID for all magazine rollers
   private static final double MAGIC_VEL_KS = 0;
   private static final double MAGIC_VEL_KV = 0;
-  private static final double MAGIC_VEL_KP = .55;
+  private static final double MAGIC_VEL_KP = .4;
   private static final double MAGIC_VEL_KI = 0.24;
   private static final double MAGIC_VEL_KD = 0;
   private static final double MAGIC_VEL_ACCEL = 4;
@@ -117,6 +117,7 @@ public class MagRollerIODev implements MagRollerIO {
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = angle.getValueAsDouble();
     inputs.angularVelocityRotationsPerMinute = angularVelocity.getValueAsDouble();
+    inputs.setPoint = 67;
   }
 
   @Override
@@ -139,6 +140,6 @@ public class MagRollerIODev implements MagRollerIO {
     magMotor.setControl(
         Motion_Magic_Store_Vel_PID.withVelocity(targetVelocityRPS)
             .withSlot(2)
-            .withFeedForward(3)); //
+            .withFeedForward(7.7)); //
   }
 }

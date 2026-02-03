@@ -220,7 +220,7 @@ public class Robot extends LoggedRobot {
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
 
-    controller.a().whileTrue(mag.runAtVelocity_RPS_PID(15)).onFalse(mag.stop());
+    controller.a().whileTrue(mag.runAtVelocity_RPS_PID(67)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
