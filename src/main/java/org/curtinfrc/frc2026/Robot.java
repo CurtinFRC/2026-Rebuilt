@@ -11,6 +11,7 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import java.util.ArrayList;
@@ -220,7 +221,13 @@ public class Robot extends LoggedRobot {
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
 
-    controller.a().whileTrue(mag.runAtVelocity_RPS_PID(67)).onFalse(mag.stop());
+    controller.b().whileTrue(intake.runAtVelocityPID(15)).onFalse(intake.RawIdle());
+    controller
+        .a()
+        .whileTrue(Commands.parallel(intake.RawControlConsume(0.3), mag.runAtVelocity_RPS_PID(67)))
+        .onFalse(
+            Commands.parallel(mag.stop(), hoodedShooter.stopHoodedShooter(), intake.RawIdle()));
+    controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(.4, 15));
   }
 
   /** This function is called periodically during all modes. */

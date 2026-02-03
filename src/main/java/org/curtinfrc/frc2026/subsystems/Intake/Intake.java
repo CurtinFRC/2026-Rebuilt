@@ -46,4 +46,8 @@ public class Intake extends SubsystemBase {
   public Command Idle() {
     return run(() -> io.setVelocity(IDLE_VEL_RPS)).withName("idleVel");
   }
+
+  public Command runAtVelocityPID(double targetVelocityRPS) {
+    return run(() -> io.setVelocityRPS(targetVelocityRPS));
+  }
 }

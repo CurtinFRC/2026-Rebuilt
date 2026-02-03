@@ -5,7 +5,7 @@ import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
-import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.Slot2Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
@@ -27,29 +27,38 @@ public class IntakeIODev implements IntakeIO {
   private final StatusSignal<Current> current = motor.getStatorCurrent();
   private final StatusSignal<Angle> position = motor.getPosition();
   private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+  private static final CurrentLimitsConfigs currentLimits =
+      new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
 
-  private final VelocityVoltage m_request = new VelocityVoltage(0).withSlot(0);
+  final VelocityVoltage Intake_Vel_PID = new VelocityVoltage(0).withSlot(2);
 
-  private static final TalonFXConfiguration config =
-      new TalonFXConfiguration()
-          .withMotorOutput(
-              new MotorOutputConfigs()
-                  .withInverted(InvertedValue.CounterClockwise_Positive)
-                  .withNeutralMode(NeutralModeValue.Coast))
-          .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
+  private static final double VEL_KS = 0;
+  private static final double VEL_KV = 0;
+  private static final double VEL_KP = .4;
+  private static final double VEL_KI = 0.27;
+  private static final double VEL_KD = 0;
 
   public IntakeIODev() {
 
-    var slot0Configs = new Slot0Configs();
-
-    slot0Configs.kD = 0;
-    slot0Configs.kI = 0;
-    slot0Configs.kP = 0.01;
-
-    tryUntilOk(5, () -> motor.getConfigurator().apply(config));
-
-    motor.getConfigurator().apply(slot0Configs);
+    tryUntilOk(
+        5,
+        () ->
+            motor
+                .getConfigurator()
+                .apply(
+                    new TalonFXConfiguration()
+                        .withMotorOutput(
+                            new MotorOutputConfigs()
+                                .withInverted(InvertedValue.CounterClockwise_Positive)
+                                .withNeutralMode(NeutralModeValue.Coast))
+                        .withCurrentLimits(currentLimits)
+                        .withSlot2(
+                            new Slot2Configs()
+                                .withKP(VEL_KP)
+                                .withKI(VEL_KI)
+                                .withKD(VEL_KD)
+                                .withKS(VEL_KS)
+                                .withKV(VEL_KV))));
   }
 
   @Override
@@ -57,11 +66,7 @@ public class IntakeIODev implements IntakeIO {
     inputs.AppliedVoltage = voltage.getValueAsDouble();
     inputs.CurrentAmps = current.getValueAsDouble();
     inputs.angularVelocity = velocity.getValueAsDouble();
-  }
-
-  @Override
-  public void setVelocity(double Velocity) {
-    m_request.withVelocity(Velocity);
+    inputs.setPoint = 15;
   }
 
   @Override
@@ -69,5 +74,11 @@ public class IntakeIODev implements IntakeIO {
     // voltageRequest.withOutput(Volts);
     motor.set(Volts);
     System.out.println("running");
+  }
+
+  @Override
+  public void setVelocityRPS(double targetVelocityRPS) {
+    motor.setControl(
+        Intake_Vel_PID.withVelocity(targetVelocityRPS).withSlot(2).withFeedForward(8.1));
   }
 }

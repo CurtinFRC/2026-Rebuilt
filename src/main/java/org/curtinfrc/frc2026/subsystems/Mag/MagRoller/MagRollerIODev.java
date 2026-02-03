@@ -8,7 +8,6 @@ import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.Slot1Configs;
-import com.ctre.phoenix6.configs.Slot2Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.PositionVoltage;
 import com.ctre.phoenix6.controls.VelocityVoltage;
@@ -35,29 +34,17 @@ public class MagRollerIODev implements MagRollerIO {
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
   final PositionVoltage Indexer_PID = new PositionVoltage(0).withSlot(0);
   final VelocityVoltage Store_Vel_PID = new VelocityVoltage(0).withSlot(1);
-  private final TalonFXConfiguration talonFXConfigs = new TalonFXConfiguration();
-  final VelocityVoltage Motion_Magic_Store_Vel_PID = new VelocityVoltage(0);
 
   // indexer position PID variables
   private static final double POS_KP = 1.0;
   private static final double POS_KI = 0;
   private static final double POS_KD = 0;
 
-  // velocity PID for all magazine rollers
   private static final double VEL_KS = 0;
   private static final double VEL_KV = 0;
-  private static final double VEL_KP = 0.5;
-  private static final double VEL_KI = 0;
+  private static final double VEL_KP = .4;
+  private static final double VEL_KI = 0.27;
   private static final double VEL_KD = 0;
-
-  // Motion Magic PID for all magazine rollers
-  private static final double MAGIC_VEL_KS = 0;
-  private static final double MAGIC_VEL_KV = 0;
-  private static final double MAGIC_VEL_KP = .4;
-  private static final double MAGIC_VEL_KI = 0.27;
-  private static final double MAGIC_VEL_KD = 0;
-  private static final double MAGIC_VEL_ACCEL = 4;
-  private static final double MAGIC_VEL_JERK = 40;
 
   public MagRollerIODev(int motorID, InvertedValue inverted) {
 
@@ -66,12 +53,6 @@ public class MagRollerIODev implements MagRollerIO {
     angularVelocity = magMotor.getVelocity();
     angle = magMotor.getPosition();
     current = magMotor.getStatorCurrent();
-
-    var motionMagicConfigs = talonFXConfigs.MotionMagic;
-    motionMagicConfigs.MotionMagicAcceleration =
-        MAGIC_VEL_ACCEL; // Target acceleration of 400 rps/s (0.25 seconds to max)
-    motionMagicConfigs.MotionMagicJerk =
-        MAGIC_VEL_JERK; // Target jerk of 4000 rps/s/s (0.1 seconds)
 
     // magMotor.getConfigurator().apply(talonFXConfigs);
 
@@ -91,15 +72,7 @@ public class MagRollerIODev implements MagRollerIO {
                                 .withKI(VEL_KI)
                                 .withKD(VEL_KD)
                                 .withKS(VEL_KS)
-                                .withKV(VEL_KV))
-                        .withSlot2(
-                            new Slot2Configs()
-                                .withKP(MAGIC_VEL_KP)
-                                .withKI(MAGIC_VEL_KI)
-                                .withKD(MAGIC_VEL_KD)
-                                .withKS(MAGIC_VEL_KS)
-                                .withKV(MAGIC_VEL_KV))
-                        .withMotionMagic(motionMagicConfigs)));
+                                .withKV(VEL_KV))));
 
     // Setting update frequency
     BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, angle, angularVelocity);
@@ -138,8 +111,6 @@ public class MagRollerIODev implements MagRollerIO {
   @Override
   public void setVelocityRPS(double targetVelocityRPS) {
     magMotor.setControl(
-        Motion_Magic_Store_Vel_PID.withVelocity(targetVelocityRPS)
-            .withSlot(2)
-            .withFeedForward(8.1)); //
+        Store_Vel_PID.withVelocity(targetVelocityRPS).withSlot(1).withFeedForward(8.1)); //
   }
 }

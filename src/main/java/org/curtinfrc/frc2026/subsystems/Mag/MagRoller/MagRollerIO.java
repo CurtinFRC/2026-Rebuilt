@@ -5,11 +5,11 @@ import org.littletonrobotics.junction.AutoLog;
 public interface MagRollerIO {
   @AutoLog
   public static class MagRollerIOInputs {
-    public double appliedVolts;
-    public double currentAmps;
-    public double positionRotations;
-    public double angularVelocityRotationsPerMinute;
-    public double setPoint;
+    double appliedVolts;
+    double currentAmps;
+    double positionRotations;
+    double angularVelocityRotationsPerMinute;
+    double setPoint;
   }
 
   public default void setVoltage(double volts) {}
