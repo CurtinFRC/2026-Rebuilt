@@ -1,6 +1,7 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import org.curtinfrc.frc2026.sim.BallSim;
+import java.util.function.BooleanSupplier;
 import org.littletonrobotics.junction.AutoLog;
 
 public interface ShooterIO {
