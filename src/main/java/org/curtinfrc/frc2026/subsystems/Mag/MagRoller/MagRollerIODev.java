@@ -140,6 +140,6 @@ public class MagRollerIODev implements MagRollerIO {
     magMotor.setControl(
         Motion_Magic_Store_Vel_PID.withVelocity(targetVelocityRPS)
             .withSlot(2)
-            .withFeedForward(7.7)); //
+            .withFeedForward(8.1)); //
   }
 }
