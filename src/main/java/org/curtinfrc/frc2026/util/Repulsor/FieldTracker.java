@@ -1574,7 +1574,6 @@ public class FieldTracker {
             Double cached = scoreCache.get(key);
             if (cached != null) return cached;
 
-            // If the point has no fuel signal, treat as invalid-ish by score.
             if (!collectValid.test(p)) {
               scoreCache.put(key, -1e18);
               return -1e18;
@@ -1592,22 +1591,13 @@ public class FieldTracker {
 
             double eta = robotPos.getDistance(d) / Math.max(0.2, cap);
 
-            // Same shape as before.
             double scoreV = (u * 1.0) - (0.55 * eta);
             scoreCache.put(key, scoreV);
             return scoreV;
           };
 
-      /*
-       * Candidate override logic:
-       * - We can propose a "better" candidate (centroid or relock),
-       *   but we never FORCE the sticky point.
-       * - StickyTarget decides whether switching is warranted.
-       */
       Translation2d bestCandidate = rawCandidate;
 
-      // If we're near and seeing fuel around us, centroid can be a good short-range candidate.
-      // Use it as the BEST CANDIDATE (input), not as a forced sticky override.
       boolean allowCentroidCandidate =
           (robotPos.getDistance(rawCandidate) <= COLLECT_NEARBY_RADIUS_M)
               && (collectStickyStillSec < 0.20);
@@ -1618,15 +1608,12 @@ public class FieldTracker {
         c = clampToFieldRobotSafe.apply(c);
 
         if (!inForbidden.test(c) && !violatesWall.test(c) && collectValid.test(c)) {
-          // Only prefer centroid if it isn't catastrophically worse.
           double sc = scoreResource.apply(c);
           double sb = scoreResource.apply(bestCandidate);
           if (sc >= sb - 0.08) bestCandidate = c;
         }
       }
 
-      // Relock candidate (snap to nearest live fuel / centroid) is also just a candidate.
-      // We do NOT force() it into the sticky.
       Translation2d relockCand =
           relockCollectPointToLiveFuel(
               bestCandidate, clampToFieldRobotSafe, inForbidden, violatesWall, nudgeOutOfForbidden);
@@ -1749,8 +1736,6 @@ public class FieldTracker {
       prevSticky = collectStickyPoint;
       boolean switched = stickySwitched(prevSticky, selectedResource);
 
-      // Prevent rapid oscillation: if we just switched recently and the robot hasn't
-      // moved enough since that switch, prefer the previous sticky to avoid ping-pong.
       if (switched && collectStickyLastSwitchNs != 0L) {
         double sinceLastSwitchS = nowSFromNs(nowNs - collectStickyLastSwitchNs);
         double movedSinceLastSwitch =
@@ -1759,7 +1744,6 @@ public class FieldTracker {
                 : Double.POSITIVE_INFINITY;
         if (sinceLastSwitchS < COLLECT_SWITCH_COOLDOWN_S
             && movedSinceLastSwitch < COLLECT_SWITCH_MIN_MOVE_M) {
-          // revert to previous sticky and inform selector
           if (prevSticky != null) {
             selectedResource = prevSticky;
             collectStickySelector.force(prevSticky);
@@ -2042,7 +2026,6 @@ public class FieldTracker {
             desiredDriveTarget = escape2;
             collectStickyDriveTarget = escape2;
           } else {
-            // Give up and reset sticky to safe center fallback
             clearCollectSticky();
             return fallbackCollectPose(robotPoseBlue);
           }
