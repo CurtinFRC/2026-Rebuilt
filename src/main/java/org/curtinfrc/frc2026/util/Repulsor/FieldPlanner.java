@@ -2026,7 +2026,6 @@ public class FieldPlanner {
 
       sum = applyEdgeConveyor(sum, pLocal, gLocal, ax, ay, edgeDist, wCorner);
 
-      // NEW: apply stable corner conveyor BEFORE anti-tug to prevent oscillatory inching
       boolean cornerConvey = (enforceClear || nearObstacle) && wCorner > CORNER_CONVEY_WCORNER_ON;
       if (cornerConvey) {
         sum =
