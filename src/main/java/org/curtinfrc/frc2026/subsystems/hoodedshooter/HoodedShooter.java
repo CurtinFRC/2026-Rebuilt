@@ -14,6 +14,7 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import org.littletonrobotics.junction.Logger;
 
@@ -135,15 +136,16 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> shooterIO.setVoltage(0));
   }
 
-  public Command setShooterVelocity(double velocity) {
-    return run(() -> shooterIO.setVelocity(velocity));
+  public Command setShooterVelocity(double velocity, BooleanSupplier useFeedforward) {
+    return run(() -> shooterIO.setVelocity(velocity, useFeedforward));
   }
 
-  public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
+  public Command setHoodedShooterPositionAndVelocity(
+      double position, double velocity, BooleanSupplier useFeedforward) {
     return run(
         () -> {
           hoodIO.setPosition(position);
-          shooterIO.setVelocity(velocity);
+          shooterIO.setVelocity(velocity, useFeedforward);
         });
   }
 
