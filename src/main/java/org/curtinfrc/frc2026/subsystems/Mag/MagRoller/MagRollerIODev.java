@@ -54,7 +54,7 @@ public class MagRollerIODev implements MagRollerIO {
   private static final double MAGIC_VEL_KS = 0;
   private static final double MAGIC_VEL_KV = 0;
   private static final double MAGIC_VEL_KP = .4;
-  private static final double MAGIC_VEL_KI = 0.24;
+  private static final double MAGIC_VEL_KI = 0.27;
   private static final double MAGIC_VEL_KD = 0;
   private static final double MAGIC_VEL_ACCEL = 4;
   private static final double MAGIC_VEL_JERK = 40;
