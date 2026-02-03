@@ -204,5 +204,5 @@ vision/train/data
 **/**/__pycache__/
 # exclude all .venv folders anywhere in project
 **/.venv/
-**/__pycache__/
+**/**/__pycache__/
 *.ndjson
