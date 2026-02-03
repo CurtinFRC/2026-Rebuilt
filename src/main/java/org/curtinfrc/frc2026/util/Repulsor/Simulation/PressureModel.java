@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Interface for pressure or pneumatic effect models.
- */
+/** Interface for pressure or pneumatic effect models. */
 public interface PressureModel {
   /**
    * Updates the pressure model and returns the effort applied to the mechanism.

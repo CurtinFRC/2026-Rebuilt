@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Estimated PID gains from a simplified model.
- */
+/** Estimated PID gains from a simplified model. */
 public final class PidEstimate {
   private final double kP;
   private final double kI;

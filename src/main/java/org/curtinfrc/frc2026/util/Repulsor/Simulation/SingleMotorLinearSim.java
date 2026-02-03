@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Linear mechanism simulation for a single motor with a drum or pulley.
- */
+/** Linear mechanism simulation for a single motor with a drum or pulley. */
 public class SingleMotorLinearSim extends SimpleMechanismSim {
   private final double drumRadiusMeters;
 
@@ -15,7 +13,9 @@ public class SingleMotorLinearSim extends SimpleMechanismSim {
     super(
         params,
         params.getGearRatio() / Math.max(1e-6, params.getDrumRadiusMeters()),
-        params.getGearRatio() * params.getEfficiency() / Math.max(1e-6, params.getDrumRadiusMeters()));
+        params.getGearRatio()
+            * params.getEfficiency()
+            / Math.max(1e-6, params.getDrumRadiusMeters()));
     if (params.getDrumRadiusMeters() <= 0.0) {
       throw new IllegalArgumentException("drumRadiusMeters");
     }

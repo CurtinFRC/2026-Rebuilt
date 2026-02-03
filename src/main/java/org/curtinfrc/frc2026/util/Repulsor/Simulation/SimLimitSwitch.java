@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Simulated limit switch with configurable hysteresis.
- */
+/** Simulated limit switch with configurable hysteresis. */
 public final class SimLimitSwitch {
   private final double triggerPosition;
   private final boolean lowerLimit;

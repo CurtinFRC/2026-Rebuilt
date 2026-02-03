@@ -2,9 +2,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import edu.wpi.first.math.MathUtil;
 
-/**
- * Abstract base for mechanism simulations with friction, loads, and sensor support.
- */
+/** Abstract base for mechanism simulations with friction, loads, and sensor support. */
 public abstract class MechanismSimBase {
   private final MechanismSimState state = new MechanismSimState();
   private double effectiveInertia;
@@ -386,12 +384,7 @@ public abstract class MechanismSimBase {
     setPressureCommand(savedPressure);
 
     return new FeedforwardEstimate(
-        kS,
-        kV,
-        kA,
-        kG,
-        hasKg,
-        "Estimated from simulation, validate on hardware");
+        kS, kV, kA, kG, hasKg, "Estimated from simulation, validate on hardware");
   }
 
   /**

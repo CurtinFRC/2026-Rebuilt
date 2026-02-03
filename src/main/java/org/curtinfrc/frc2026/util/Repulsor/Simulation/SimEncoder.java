@@ -2,9 +2,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import java.util.Random;
 
-/**
- * Simulated incremental encoder with optional quantization and noise.
- */
+/** Simulated incremental encoder with optional quantization and noise. */
 public class SimEncoder {
   private final double countsPerUnit;
   private final double positionNoiseStdDev;
@@ -37,10 +35,7 @@ public class SimEncoder {
   }
 
   private SimEncoder(
-      double countsPerUnit,
-      double positionNoiseStdDev,
-      double velocityNoiseStdDev,
-      Random rng) {
+      double countsPerUnit, double positionNoiseStdDev, double velocityNoiseStdDev, Random rng) {
     this.countsPerUnit = countsPerUnit;
     this.positionNoiseStdDev = Math.max(0.0, positionNoiseStdDev);
     this.velocityNoiseStdDev = Math.max(0.0, velocityNoiseStdDev);

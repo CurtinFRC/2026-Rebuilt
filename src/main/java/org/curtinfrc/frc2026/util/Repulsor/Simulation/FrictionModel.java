@@ -94,7 +94,8 @@ public final class FrictionModel {
     if (absVelocity < stictionVelocity && Math.abs(effortWithoutFriction) < staticFriction) {
       return new FrictionResult(effortWithoutFriction, true);
     }
-    double sign = absVelocity > signEpsilon ? Math.signum(velocity) : Math.signum(effortWithoutFriction);
+    double sign =
+        absVelocity > signEpsilon ? Math.signum(velocity) : Math.signum(effortWithoutFriction);
     double stribeck = kineticFriction;
     if (stribeckVelocity > signEpsilon) {
       double ratio = absVelocity / stribeckVelocity;

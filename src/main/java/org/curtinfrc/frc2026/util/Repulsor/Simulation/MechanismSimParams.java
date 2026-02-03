@@ -3,9 +3,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 import edu.wpi.first.math.system.plant.DCMotor;
 import java.util.Objects;
 
-/**
- * Parameter set for mechanism simulations.
- */
+/** Parameter set for mechanism simulations. */
 public final class MechanismSimParams {
   private final DCMotor motor;
   private final double gearRatio;

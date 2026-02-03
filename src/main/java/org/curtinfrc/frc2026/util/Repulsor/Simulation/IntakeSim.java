@@ -2,9 +2,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import edu.wpi.first.math.MathUtil;
 
-/**
- * Roller intake simulation with a configurable contact load.
- */
+/** Roller intake simulation with a configurable contact load. */
 public final class IntakeSim extends SingleMotorRotarySim {
   private double contactTorque;
   private double contactVelocityScale;

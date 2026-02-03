@@ -2,9 +2,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import java.util.Arrays;
 
-/**
- * Configuration for feedforward estimation tests.
- */
+/** Configuration for feedforward estimation tests. */
 public final class FeedforwardTestConfig {
   private final double dtSeconds;
   private final double settleTimeSeconds;
@@ -21,7 +19,8 @@ public final class FeedforwardTestConfig {
     dtSeconds = builder.dtSeconds;
     settleTimeSeconds = builder.settleTimeSeconds;
     sampleTimeSeconds = builder.sampleTimeSeconds;
-    quasistaticVoltages = Arrays.copyOf(builder.quasistaticVoltages, builder.quasistaticVoltages.length);
+    quasistaticVoltages =
+        Arrays.copyOf(builder.quasistaticVoltages, builder.quasistaticVoltages.length);
     stepVoltage = builder.stepVoltage;
     stepDurationSeconds = builder.stepDurationSeconds;
     accelSampleTimeSeconds = builder.accelSampleTimeSeconds;
@@ -183,7 +182,9 @@ public final class FeedforwardTestConfig {
      */
     public Builder withQuasistaticVoltages(double[] quasistaticVoltages) {
       this.quasistaticVoltages =
-          quasistaticVoltages != null ? Arrays.copyOf(quasistaticVoltages, quasistaticVoltages.length) : new double[0];
+          quasistaticVoltages != null
+              ? Arrays.copyOf(quasistaticVoltages, quasistaticVoltages.length)
+              : new double[0];
       return this;
     }
 

@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Indexer or conveyor simulation with a constant load torque.
- */
+/** Indexer or conveyor simulation with a constant load torque. */
 public final class IndexerSim extends SingleMotorRotarySim {
   private double loadTorque;
 

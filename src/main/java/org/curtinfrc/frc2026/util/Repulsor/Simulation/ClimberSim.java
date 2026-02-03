@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Climber simulation based on a linear mechanism with gravity load.
- */
+/** Climber simulation based on a linear mechanism with gravity load. */
 public final class ClimberSim extends ElevatorSim {
   /**
    * Creates a climber simulation.

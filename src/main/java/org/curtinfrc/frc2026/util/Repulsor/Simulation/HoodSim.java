@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Hood simulation as a specialized arm model.
- */
+/** Hood simulation as a specialized arm model. */
 public final class HoodSim extends ArmSim {
   /**
    * Creates a hood simulation.

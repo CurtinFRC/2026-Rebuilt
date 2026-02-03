@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Elevator simulation with gravity and optional constant load.
- */
+/** Elevator simulation with gravity and optional constant load. */
 public class ElevatorSim extends SingleMotorLinearSim {
   private double massKg;
   private double gravityAccel;

@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Arm simulation with gravity torque based on angle.
- */
+/** Arm simulation with gravity torque based on angle. */
 public class ArmSim extends SingleMotorRotarySim {
   private double massKg;
   private double cgRadiusMeters;

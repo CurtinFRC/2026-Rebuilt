@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Configuration for hard travel limits with spring contact and impact restitution.
- */
+/** Configuration for hard travel limits with spring contact and impact restitution. */
 public final class HardStopConfig {
   private final double minPosition;
   private final double maxPosition;
@@ -43,12 +41,7 @@ public final class HardStopConfig {
    */
   public static HardStopConfig disabled() {
     return new HardStopConfig(
-        Double.NEGATIVE_INFINITY,
-        Double.POSITIVE_INFINITY,
-        0.0,
-        0.0,
-        0.0,
-        0.0);
+        Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0.0, 0.0, 0.0, 0.0);
   }
 
   /**

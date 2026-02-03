@@ -3,9 +3,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.system.plant.DCMotor;
 
-/**
- * Base class for single degree of freedom mechanisms driven by a DC motor.
- */
+/** Base class for single degree of freedom mechanisms driven by a DC motor. */
 public abstract class SimpleMechanismSim extends MechanismSimBase implements MechanismSimIO {
   private final DCMotor motor;
   private final double gearRatio;

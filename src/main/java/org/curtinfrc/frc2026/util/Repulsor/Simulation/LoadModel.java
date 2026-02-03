@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Functional interface for external load models.
- */
+/** Functional interface for external load models. */
 @FunctionalInterface
 public interface LoadModel {
   /**

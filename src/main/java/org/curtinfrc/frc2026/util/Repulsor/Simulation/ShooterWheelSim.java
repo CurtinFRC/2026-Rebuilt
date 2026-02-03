@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Shooter wheel simulation with aerodynamic drag.
- */
+/** Shooter wheel simulation with aerodynamic drag. */
 public final class ShooterWheelSim extends SingleMotorRotarySim {
   private double dragCoefficient;
 

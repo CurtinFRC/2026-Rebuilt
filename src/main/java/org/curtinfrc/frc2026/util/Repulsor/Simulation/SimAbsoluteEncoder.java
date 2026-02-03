@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Simulated absolute encoder with wrapping.
- */
+/** Simulated absolute encoder with wrapping. */
 public final class SimAbsoluteEncoder {
   private final SimEncoder encoder;
   private final double rangeMin;

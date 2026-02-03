@@ -2,9 +2,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import edu.wpi.first.math.util.Units;
 
-/**
- * Rotary mechanism simulation for a single motor.
- */
+/** Rotary mechanism simulation for a single motor. */
 public class SingleMotorRotarySim extends SimpleMechanismSim {
   /**
    * Creates a rotary simulation.
@@ -12,10 +10,7 @@ public class SingleMotorRotarySim extends SimpleMechanismSim {
    * @param params mechanism parameters
    */
   public SingleMotorRotarySim(MechanismSimParams params) {
-    super(
-        params,
-        params.getGearRatio(),
-        params.getGearRatio() * params.getEfficiency());
+    super(params, params.getGearRatio(), params.getGearRatio() * params.getEfficiency());
   }
 
   /**

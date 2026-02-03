@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Interface for subsystem IO layers that use a mechanism simulation.
- */
+/** Interface for subsystem IO layers that use a mechanism simulation. */
 public interface MechanismSimIO {
   /**
    * Sets the input voltage.

@@ -1,8 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
-/**
- * Estimated feedforward gains from simulation-based identification.
- */
+/** Estimated feedforward gains from simulation-based identification. */
 public final class FeedforwardEstimate {
   private final double kS;
   private final double kV;
