@@ -27,16 +27,12 @@ import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
   public static final Translation2d HUB_LOCATION = new Translation2d(12, 4);
-  public static final double HUB_HEIGHT = 1.83;
-  public static final double AIM_HEIGHT_OFFSET = 0.3; // Offset above the goal for the ball to fall
-  public static final double HUB_AIMED_HEIGHT = HUB_HEIGHT + AIM_HEIGHT_OFFSET;
-
   public static final double WHEEL_DIAMETER = 0.101;
-  public static final double SHOOTER_TARGET_VELOCITY = 20;
-  public static final Transform3d SHOOTER_TRANSFORM =
-      new Transform3d(0, 0, 1, new Rotation3d()); // Not confirmed
 
-  public static final InterpolatingDoubleTreeMap DISTANCE_TO_OPTIMAL_VELOCITY =
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
+      new InterpolatingDoubleTreeMap();
+
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE =
       new InterpolatingDoubleTreeMap();
 
   private final HoodIO hoodIO;
@@ -74,16 +70,15 @@ public class HoodedShooter extends SubsystemBase {
     this.hoodIO = hoodIO;
     this.robotPose = robotPose;
 
-    // optimal horizontal velocities (to be tuned)
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(0.0, 0.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(1.0, 0.5);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(2.0, 1.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(3.0, 2.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(4.0, 3.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(5.0, 5.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(6.0, 6.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(7.0, 7.0);
-    DISTANCE_TO_OPTIMAL_VELOCITY.put(8.0, 8.0);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.05, 0.0);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(2.035, 0.0);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(5.474, 0.0);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(4.0, 0.0);
+
+    DISTANCE_TO_HOOD_ANGLE.put(3.05, 0.0);
+    DISTANCE_TO_HOOD_ANGLE.put(2.035, 0.0);
+    DISTANCE_TO_HOOD_ANGLE.put(5.474, 0.0);
+    DISTANCE_TO_HOOD_ANGLE.put(4.0, 0.0);
 
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
@@ -150,45 +145,23 @@ public class HoodedShooter extends SubsystemBase {
     }
   }
 
-  public double calculateHoodRotations(double distanceLength) {
-    Translation2d targetVector = new Translation2d(distanceLength, HUB_AIMED_HEIGHT);
-
-    double initialVelocity = DISTANCE_TO_OPTIMAL_VELOCITY.get(targetVector.getNorm());
-    Translation2d shotVector = targetVector.div(distanceLength).times(initialVelocity);
-
-    double velocityHorizontal = shotVector.getNorm();
-    double ratioSpeed = Math.min((velocityHorizontal / SHOOTER_TARGET_VELOCITY), 1.0);
-    double hoodAngle = Math.toDegrees(Math.acos(ratioSpeed));
-
-    return hoodAngle / 360;
-  }
-
-  public Command aimAtHub() { // this assumes that the robot is facing the target
+  public Command shootAtHub() { // this assumes that the robot is facing the target
     return run(
         () -> {
-          Pose3d shooterPose = new Pose3d(robotPose.get()).transformBy(SHOOTER_TRANSFORM);
-          double distanceLength =
-              Math.sqrt(
-                  Math.pow((HUB_LOCATION.getX() - shooterPose.getX()), 2)
-                      + Math.pow(
-                          (HUB_LOCATION.getY() - shooterPose.getY()),
-                          2)); // Distance from the robot to the bottom of the goal
+          double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
-          double hoodAngle = calculateHoodRotations(3.04833887);
-          hoodAngle = (-hoodAngle - 0.25 / HoodIODev.GEAR_RATIO);
-          hoodIO.setPosition(hoodAngle);
-        });
-  }
+          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(3.04833887);
+          hoodAngle = (-20.0 / 360);
+          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(3.04833887);
+          hoodIO.setPosition(0.36);
+          shooterIO.setVelocity(20);
 
-  public Command shoot() {
-    return run(
-        () -> {
-          shooterIO.setVelocity(SHOOTER_TARGET_VELOCITY);
           ballSim =
               new BallSim(
-                  SHOOTER_TARGET_VELOCITY,
-                  new Rotation2d(Math.toRadians(hoodInputs.positionRotations * 360)),
-                  new Pose3d(robotPose.get()).transformBy(SHOOTER_TRANSFORM));
+                  shooterVelocity,
+                  Rotation2d.fromDegrees(89),
+                  new Pose3d(robotPose.get())
+                      .transformBy(new Transform3d(0.2, 0.0, 0.4, Rotation3d.kZero)));
         });
   }
 
