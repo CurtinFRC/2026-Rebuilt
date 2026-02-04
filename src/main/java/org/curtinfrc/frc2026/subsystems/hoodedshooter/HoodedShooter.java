@@ -151,7 +151,7 @@ public class HoodedShooter extends SubsystemBase {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
           double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(3.04833887);
-          hoodAngle = (-20.0 / 360);
+          hoodAngle = (0 / 360);
           double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(3.04833887);
           hoodIO.setPosition(0.36);
           shooterIO.setVelocity(20);

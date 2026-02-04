@@ -31,6 +31,7 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID3 = 29;
 
   public static final double GEAR_RATIO = 1.0;
+  private static final double EFFICIENCY = 0.85;
   private static final double KP = 0.05;
   private static final double KI = 0.001;
   private static final double KD = 0.003;
@@ -104,7 +105,7 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void setVelocity(double velocity) {
-    double rps = convertVelocityToRPS(velocity);
+    double rps = convertVelocityToRPS(velocity / EFFICIENCY);
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
 
