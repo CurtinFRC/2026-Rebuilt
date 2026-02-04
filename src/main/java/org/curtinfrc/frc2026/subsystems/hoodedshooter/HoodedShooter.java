@@ -56,11 +56,13 @@ public class HoodedShooter extends SubsystemBase {
   private final SysIdRoutine sysIdRoutineHood;
 
   private boolean hoodSoftLimitedForward() {
-    return hoodInputs.positionRotations > HoodIODev.FORWARD_LIMIT_ROTATIONS - 0.1;
+    return hoodInputs.positionRotations
+        > HoodIODev.FORWARD_LIMIT_ROTATIONS - HoodIODev.LIMIT_BUFFER_ROTATIONS;
   }
 
   private boolean hoodSoftLimitedReverse() {
-    return hoodInputs.positionRotations < HoodIODev.REVERSE_LIMIT_ROTATIONS + 0.1;
+    return hoodInputs.positionRotations
+        < HoodIODev.REVERSE_LIMIT_ROTATIONS + HoodIODev.LIMIT_BUFFER_ROTATIONS;
   }
 
   public BallSim ballSim = new BallSim(0.0, new Rotation2d(0.0), new Pose3d());
@@ -150,11 +152,11 @@ public class HoodedShooter extends SubsystemBase {
         () -> {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
-          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(3.04833887);
-          hoodAngle = (0 / 360);
+          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
+          hoodAngle = (90 / 360); // angle conversion to rotations
           double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(3.04833887);
-          hoodIO.setPosition(0.36);
-          shooterIO.setVelocity(20);
+          hoodIO.setPosition(hoodAngle);
+          // shooterIO.setVelocity(20);
 
           ballSim =
               new BallSim(
