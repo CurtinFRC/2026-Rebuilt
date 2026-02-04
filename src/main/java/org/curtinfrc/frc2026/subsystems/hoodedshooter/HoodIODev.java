@@ -35,6 +35,7 @@ public class HoodIODev implements HoodIO {
   public static final int ENCODER_ID = 21;
 
   public static final double GEAR_RATIO = 8.2; // 12:32 * 10:82
+  public static final double MOTOR_TO_SENSOR_RATIO = 2.66666667;
   public static final double FORWARD_LIMIT_ROTATIONS = 100;
   public static final double REVERSE_LIMIT_ROTATIONS = -100;
   public static final double LIMIT_BUFFER_ROTATIONS = 0.1;
@@ -67,6 +68,7 @@ public class HoodIODev implements HoodIO {
                   .withFeedbackRemoteSensorID(ENCODER_ID) // Ties encoder with motor
                   .withFeedbackSensorSource(
                       FeedbackSensorSourceValue.FusedCANcoder) // Ties encoder with motor
+                  .withRotorToSensorRatio(MOTOR_TO_SENSOR_RATIO)
                   .withSensorToMechanismRatio(GEAR_RATIO))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
@@ -116,7 +118,6 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
   private final StatusSignal<Current> current = motor.getStatorCurrent();
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
-  private final StatusSignal<Angle> absolutePosition = encoder.getAbsolutePosition();
   private final StatusSignal<Angle> encoderPosition = encoder.getPosition();
   private final StatusSignal<Temperature> temperature = motor.getDeviceTemp();
 
@@ -130,10 +131,9 @@ public class HoodIODev implements HoodIO {
     tryUntilOk(5, () -> encoder.getConfigurator().apply(encoderConfig));
 
     BaseStatusSignal.setUpdateFrequencyForAll(
-        50.0, velocity, voltage, current, position, absolutePosition, encoderPosition);
+        50.0, velocity, voltage, current, position, encoderPosition);
     motor.optimizeBusUtilization();
-    PhoenixUtil.registerSignals(
-        false, velocity, voltage, current, position, absolutePosition, encoderPosition);
+    PhoenixUtil.registerSignals(false, velocity, voltage, current, position, encoderPosition);
 
     // PhoenixUtil.refreshAll();
     // tryUntilOk(
@@ -154,12 +154,10 @@ public class HoodIODev implements HoodIO {
     inputs.motorTemperature = temperature.getValueAsDouble();
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
-    inputs.positionRotations = position.getValueAsDouble() * 360;
+    inputs.positionRotations = position.getValueAsDouble();
     inputs.hoodPositionDegrees =
         (encoderPosition.getValueAsDouble() * 360 / GEAR_RATIO) + ZERO_DEGREE_OFFSET;
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
-    inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
-    inputs.absolutePositionRotations = absolutePosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
   }
 
