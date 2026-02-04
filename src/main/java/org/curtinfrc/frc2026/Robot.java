@@ -227,7 +227,7 @@ public class Robot extends LoggedRobot {
         .whileTrue(Commands.parallel(intake.RawControlConsume(0.3), mag.runAtVelocity_RPS_PID(67)))
         .onFalse(
             Commands.parallel(mag.stop(), hoodedShooter.stopHoodedShooter(), intake.RawIdle()));
-    controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(.4, 15));
+    controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5));
   }
 
   /** This function is called periodically during all modes. */
