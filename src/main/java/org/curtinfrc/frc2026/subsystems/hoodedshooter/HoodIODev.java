@@ -34,15 +34,15 @@ public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
   public static final int ENCODER_ID = 21;
 
-  public static final double GEAR_RATIO = 3.555;
-  public static final double ENCODER_MAGNET_OFFSET = -0.052002;
-  public static final double FORWARD_LIMIT_ROTATIONS = 0.212158;
-  public static final double REVERSE_LIMIT_ROTATIONS = -0.3;
+  public static final double GEAR_RATIO = 1; // 12:32*10:82
+  public static final double ENCODER_MAGNET_OFFSET = 0;
+  public static final double FORWARD_LIMIT_ROTATIONS = 100;
+  public static final double REVERSE_LIMIT_ROTATIONS = -100;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.4;
-  public static final double ZERO_DEGREE_OFFSET = -0.30249;
+  public static final double ZERO_DEGREE_OFFSET = 0;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.08686111111;
-  public static final double KP = 25.0;
+  public static final double KP = 20.0;
   public static final double KI = 0.0;
   public static final double KD = 0.3;
   public static final double KS_STOWED = 0.60;
@@ -63,9 +63,8 @@ public class HoodIODev implements HoodIO {
                   .withInverted(InvertedValue.CounterClockwise_Positive))
           .withFeedback(
               new FeedbackConfigs()
-                  .withFeedbackRemoteSensorID(ENCODER_ID) // Ties encoder with motor
-                  .withFeedbackSensorSource(
-                      FeedbackSensorSourceValue.RotorSensor) // Ties encoder with motor
+                  .withFeedbackRemoteSensorID(ENCODER_ID)
+                  .withFeedbackSensorSource(FeedbackSensorSourceValue.RotorSensor)
                   .withSensorToMechanismRatio(GEAR_RATIO))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
@@ -109,7 +108,7 @@ public class HoodIODev implements HoodIO {
               new MagnetSensorConfigs()
                   .withAbsoluteSensorDiscontinuityPoint(0.5)
                   .withSensorDirection(SensorDirectionValue.Clockwise_Positive)
-                  .withMagnetOffset(0));
+                  .withMagnetOffset(ENCODER_MAGNET_OFFSET));
 
   private final StatusSignal<Angle> position = motor.getPosition();
   private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
@@ -132,8 +131,12 @@ public class HoodIODev implements HoodIO {
     motor.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, voltage, current, position, absolutePosition);
 
-    PhoenixUtil.refreshAll();
-    tryUntilOk(5, () -> motor.setPosition(absolutePosition.getValueAsDouble()));
+    // PhoenixUtil.refreshAll();
+    // tryUntilOk(
+    //     5,
+    //     () ->
+    //         motor.setPosition(
+    //             absolutePosition.getValueAsDouble() / GEAR_RATIO + ZERO_DEGREE_OFFSET));
   }
 
   @Override
