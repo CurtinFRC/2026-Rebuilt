@@ -99,11 +99,11 @@ class CameraConfig:
     dropout: float = 0
 
 CAMERAS: List[CameraConfig] = [
-    CameraConfig(name="cam_left_rear",  x=0, y=-0.25, z=0.5, yaw_deg=320.0,  pitch_deg=0),
-    CameraConfig(name="cam_left_front", x= 0, y=0.25, z=0.5, yaw_deg=30.0,   pitch_deg=0),
+    CameraConfig(name="cam_left_rear",  x=0, y=-0.25, z=0.5, yaw_deg=-90 + 45,  pitch_deg=0),
+    CameraConfig(name="cam_left_front", x= 0, y=0.25, z=0.5, yaw_deg=90 - 45,   pitch_deg=0),
 
-    CameraConfig(name="cam_right_rear",  x=-0.25, y=-0.25, z=0.5, yaw_deg=-110.0, pitch_deg=0),
-    CameraConfig(name="cam_right_front", x=-0.25, y=0.25, z=0.5, yaw_deg=110.0,  pitch_deg=0),
+    CameraConfig(name="cam_right_rear",  x=-0.25, y=-0.25, z=0.5, yaw_deg=-135, pitch_deg=0),
+    CameraConfig(name="cam_right_front", x=-0.25, y=0.25, z=0.5, yaw_deg=135,  pitch_deg=0),
 ]
 
 @dataclass

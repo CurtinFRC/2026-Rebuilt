@@ -1,6 +1,5 @@
 package org.curtinfrc.frc2026.util.Repulsor;
 
-import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -14,7 +13,6 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
-import org.littletonrobotics.junction.Logger;
 
 public final class PredictiveFieldState {
 
@@ -1278,7 +1276,7 @@ public final class PredictiveFieldState {
     }
 
     if (bestP == null || bestE == null || bestTouch == null || inShootBand.test(bestP)) {
-      Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
+      // Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
       return null;
     }
 
@@ -1314,7 +1312,7 @@ public final class PredictiveFieldState {
       currentCollectTouch = null;
       collectArrivalTs = -1.0;
       escape = true;
-      Logger.recordOutput("Repulsor/Collect/ChosenOffFootprintImmediate", 1.0);
+      // Logger.recordOutput("Repulsor/Collect/ChosenOffFootprintImmediate", 1.0);
     }
 
     double commitS = collectCommitWindow(currentCollectEta);
@@ -1338,7 +1336,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
         return null;
       }
 
@@ -1411,7 +1409,7 @@ public final class PredictiveFieldState {
       }
     } else {
       if (inShootBand.test(chosenPt) || inShootBand.test(chosenTouch)) {
-        Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/NoCandidate", 1.0);
         return null;
       }
 
@@ -1447,7 +1445,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenInShootBand", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenInShootBand", 1.0);
         return null;
       }
 
@@ -1465,7 +1463,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenOffFootprint", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenOffFootprint", 1.0);
         return null;
       }
 
@@ -1481,7 +1479,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCore", 1.0);
         return null;
       }
 
@@ -1499,7 +1497,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostSnap", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostSnap", 1.0);
         return null;
       }
     }
@@ -1540,7 +1538,7 @@ public final class PredictiveFieldState {
           collectArrivalTs = -1.0;
           lastReturnedCollect = null;
           lastReturnedCollectTs = 0.0;
-          Logger.recordOutput("Repulsor/Collect/ArrivalFailCore", 1.0);
+          // Logger.recordOutput("Repulsor/Collect/ArrivalFailCore", 1.0);
           return null;
         }
 
@@ -1560,7 +1558,7 @@ public final class PredictiveFieldState {
           collectArrivalTs = -1.0;
           lastReturnedCollect = null;
           lastReturnedCollectTs = 0.0;
-          Logger.recordOutput("Repulsor/Collect/ArrivalFail", 1.0);
+          // Logger.recordOutput("Repulsor/Collect/ArrivalFail", 1.0);
           return null;
         }
       }
@@ -1581,7 +1579,7 @@ public final class PredictiveFieldState {
       recordRegionAttempt(dyn, currentCollectTarget, now, false);
       currentCollectTarget = null;
       collectArrivalTs = -1.0;
-      Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+      // Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
       return null;
     }
 
@@ -1606,7 +1604,7 @@ public final class PredictiveFieldState {
           currentCollectTarget = null;
           currentCollectTouch = null;
           collectArrivalTs = -1.0;
-          Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostReanchor", 1.0);
+          // Logger.recordOutput("Repulsor/Collect/ChosenInShootBandPostReanchor", 1.0);
           return null;
         }
         finalOnUnits = dyn.valueInSquare(currentCollectTouch, onHalf);
@@ -1619,7 +1617,7 @@ public final class PredictiveFieldState {
         currentCollectTarget = null;
         currentCollectTouch = null;
         collectArrivalTs = -1.0;
-        Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
+        // Logger.recordOutput("Repulsor/Collect/ChosenOffFuel", 1.0);
         return null;
       }
     }
@@ -1633,7 +1631,7 @@ public final class PredictiveFieldState {
       currentCollectTarget = null;
       currentCollectTouch = null;
       collectArrivalTs = -1.0;
-      Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCoreFinal", 1.0);
+      // Logger.recordOutput("Repulsor/Collect/ChosenOffFuelCoreFinal", 1.0);
       return null;
     }
 
@@ -1661,37 +1659,37 @@ public final class PredictiveFieldState {
       currentCollectTarget = null;
       currentCollectTouch = null;
       collectArrivalTs = -1.0;
-      Logger.recordOutput("Repulsor/Collect/ChosenInvalid", 1.0);
+      // Logger.recordOutput("Repulsor/Collect/ChosenInvalid", 1.0);
       return null;
     }
 
     lastReturnedCollect = currentCollectTarget;
     lastReturnedCollectTs = now;
 
-    Logger.recordOutput(
-        "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, currentCollectHeading));
-    Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalE.units);
-    Logger.recordOutput("Repulsor/Collect/ChosenCount", finalE.count);
-    Logger.recordOutput("Repulsor/Collect/ChosenScore", finalE.score);
-    Logger.recordOutput("Repulsor/Collect/ChosenEta", finalE.eta);
-    Logger.recordOutput("Repulsor/Collect/ChosenEvidence", finalE.evidence);
-    Logger.recordOutput("Repulsor/Collect/ChosenDep", finalE.depleted);
-    Logger.recordOutput("Repulsor/Collect/ChosenAvoid", finalE.localAvoid);
-    Logger.recordOutput("Repulsor/Collect/ChosenEnemyP", finalE.enemyPressure);
-    Logger.recordOutput("Repulsor/Collect/ChosenAllyC", finalE.allyCongestion);
-    Logger.recordOutput("Repulsor/Collect/ChosenActivity", finalE.activity);
+    // Logger.recordOutput(
+    // "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, currentCollectHeading));
+    // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalE.units);
+    // Logger.recordOutput("Repulsor/Collect/ChosenCount", finalE.count);
+    // Logger.recordOutput("Repulsor/Collect/ChosenScore", finalE.score);
+    // Logger.recordOutput("Repulsor/Collect/ChosenEta", finalE.eta);
+    // Logger.recordOutput("Repulsor/Collect/ChosenEvidence", finalE.evidence);
+    // Logger.recordOutput("Repulsor/Collect/ChosenDep", finalE.depleted);
+    // Logger.recordOutput("Repulsor/Collect/ChosenAvoid", finalE.localAvoid);
+    // Logger.recordOutput("Repulsor/Collect/ChosenEnemyP", finalE.enemyPressure);
+    // Logger.recordOutput("Repulsor/Collect/ChosenAllyC", finalE.allyCongestion);
+    // Logger.recordOutput("Repulsor/Collect/ChosenActivity", finalE.activity);
 
     if (topN > 0) {
-      Logger.recordOutput("Repulsor/Collect/Top/Score", topScore);
-      Logger.recordOutput("Repulsor/Collect/Top/Eta", topEta);
-      Logger.recordOutput("Repulsor/Collect/Top/Units", topUnits);
-      Logger.recordOutput("Repulsor/Collect/Top/Region", topRegion);
-      Logger.recordOutput("Repulsor/Collect/Top/Dep", topDep);
-      Logger.recordOutput("Repulsor/Collect/Top/Avoid", topAvoid);
-      Logger.recordOutput("Repulsor/Collect/Top/EnemyP", topEP);
-      Logger.recordOutput("Repulsor/Collect/Top/AllyC", topAC);
-      Logger.recordOutput("Repulsor/Collect/Top/Activity", topAct);
-      Logger.recordOutput("Repulsor/Collect/Top/Evidence", topEv);
+      // Logger.recordOutput("Repulsor/Collect/Top/Score", topScore);
+      // Logger.recordOutput("Repulsor/Collect/Top/Eta", topEta);
+      // Logger.recordOutput("Repulsor/Collect/Top/Units", topUnits);
+      // Logger.recordOutput("Repulsor/Collect/Top/Region", topRegion);
+      // Logger.recordOutput("Repulsor/Collect/Top/Dep", topDep);
+      // Logger.recordOutput("Repulsor/Collect/Top/Avoid", topAvoid);
+      // Logger.recordOutput("Repulsor/Collect/Top/EnemyP", topEP);
+      // Logger.recordOutput("Repulsor/Collect/Top/AllyC", topAC);
+      // Logger.recordOutput("Repulsor/Collect/Top/Activity", topAct);
+      // Logger.recordOutput("Repulsor/Collect/Top/Evidence", topEv);
     }
 
     return new PointCandidate(
@@ -1936,12 +1934,12 @@ public final class PredictiveFieldState {
         lastReturnedCollect = use;
         lastReturnedCollectTs = now;
 
-        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
-        Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", eUse.units);
-        Logger.recordOutput("Repulsor/Collect/ChosenCount", eUse.count);
-        Logger.recordOutput("Repulsor/Collect/ChosenScore", eUse.score);
-        Logger.recordOutput("Repulsor/Collect/ChosenEta", eUse.eta);
-        Logger.recordOutput("Repulsor/Collect/ChosenEvidence", eUse.evidence);
+        // Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
+        // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", eUse.units);
+        // Logger.recordOutput("Repulsor/Collect/ChosenCount", eUse.count);
+        // Logger.recordOutput("Repulsor/Collect/ChosenScore", eUse.score);
+        // Logger.recordOutput("Repulsor/Collect/ChosenEta", eUse.eta);
+        // Logger.recordOutput("Repulsor/Collect/ChosenEvidence", eUse.evidence);
 
         return new PointCandidate(
             use,
@@ -2061,10 +2059,10 @@ public final class PredictiveFieldState {
     lastReturnedCollect = bestP;
     lastReturnedCollectTs = Timer.getFPGATimestamp();
 
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
-    Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", bestE.units);
-    Logger.recordOutput("Repulsor/Collect/ChosenCount", bestE.count);
-    Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);
+    // Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
+    // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", bestE.units);
+    // Logger.recordOutput("Repulsor/Collect/ChosenCount", bestE.count);
+    // Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);
 
     return new PointCandidate(
         bestP,

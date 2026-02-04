@@ -42,7 +42,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuningHeat;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
-import org.littletonrobotics.junction.Logger;
 
 public class Repulsor {
 
@@ -82,7 +81,7 @@ public class Repulsor {
   public boolean atSetpoint() {
     Optional<Distance> err = m_planner.getErr();
     if (err.isEmpty()) return false;
-    Logger.recordOutput("Repulsor/err", err.get());
+    // Logger.recordOutput("Repulsor/err", err.get());
     return err.isPresent() && err.get().lt(Meters.of(0.1));
   }
 

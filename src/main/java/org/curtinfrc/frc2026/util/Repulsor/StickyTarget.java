@@ -10,7 +10,6 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleBiFunction;
 import java.util.function.ToDoubleFunction;
-import org.littletonrobotics.junction.Logger;
 
 public final class StickyTarget<T> {
   private final double candidateStableSec;
@@ -558,19 +557,20 @@ public final class StickyTarget<T> {
     boolean stickySeenOk = sticky != null && seenRecently(now, sticky);
     boolean stickyOk = stickyGeomOk && stickySeenOk;
 
-    Logger.recordOutput("sticky_best_ok_raw", bestOkRaw);
-    Logger.recordOutput("sticky_best_ok_debounced", bestOkDebounced);
-    Logger.recordOutput("sticky_best_ok", bestOk);
-    Logger.recordOutput("sticky_seen_timeout_s", seenTimeoutSec);
-    Logger.recordOutput(
-        "sticky_best_missing_age_s",
-        bestMissingSinceSec > 0.0 ? (now - bestMissingSinceSec) : -1.0);
-    Logger.recordOutput("sticky_sticky_seen_age_s", sticky != null ? seenAge(now, sticky) : -1.0);
-    Logger.recordOutput("sticky_best_seen_age_s", best != null ? seenAge(now, best) : -1.0);
+    // Logger.recordOutput("sticky_best_ok_raw", bestOkRaw);
+    // Logger.recordOutput("sticky_best_ok_debounced", bestOkDebounced);
+    // Logger.recordOutput("sticky_best_ok", bestOk);
+    // Logger.recordOutput("sticky_seen_timeout_s", seenTimeoutSec);
+    // Logger.recordOutput(
+    // "sticky_best_missing_age_s",
+    // bestMissingSinceSec > 0.0 ? (now - bestMissingSinceSec) : -1.0);
+    // Logger.recordOutput("sticky_sticky_seen_age_s", sticky != null ? seenAge(now, sticky) :
+    // -1.0);
+    // Logger.recordOutput("sticky_best_seen_age_s", best != null ? seenAge(now, best) : -1.0);
 
-    Logger.recordOutput("bestOk", bestOk);
-    Logger.recordOutput("stickNull", sticky == null);
-    Logger.recordOutput("stickyOk", stickyOk);
+    // Logger.recordOutput("bestOk", bestOk);
+    // Logger.recordOutput("stickNull", sticky == null);
+    // Logger.recordOutput("stickyOk", stickyOk);
 
     if (!bestOk) {
       boolean brieflyMissing =
@@ -585,8 +585,8 @@ public final class StickyTarget<T> {
 
         double invalidAge = stickyInvalidSinceSec > 0.0 ? (now - stickyInvalidSinceSec) : 0.0;
 
-        Logger.recordOutput(
-            "sticky_invalid_age_s", stickyInvalidSinceSec > 0.0 ? invalidAge : -1.0);
+        // Logger.recordOutput(
+        // "sticky_invalid_age_s", stickyInvalidSinceSec > 0.0 ? invalidAge : -1.0);
 
         if (stickyGeomOk && stickySeenOk) {
           recordOut(now, sticky, distanceFn, idEps);
@@ -632,7 +632,7 @@ public final class StickyTarget<T> {
     if (sticky != null && (!stickyGeomOk || !stickySeenOk)) {
       if (stickyInvalidSinceSec < 0.0) stickyInvalidSinceSec = now;
       double invalidAge = now - stickyInvalidSinceSec;
-      Logger.recordOutput("sticky_invalid_age_s", invalidAge);
+      // Logger.recordOutput("sticky_invalid_age_s", invalidAge);
 
       if (invalidAge < STICKY_INVALID_DEBOUNCE_SEC) {
         recordOut(now, sticky, distanceFn, idEps);
@@ -846,40 +846,41 @@ public final class StickyTarget<T> {
       }
     }
 
-    Logger.recordOutput("sticky_hard_lock_until_s", hardLockUntilSec);
-    Logger.recordOutput("sticky_hard_locked", hardLocked);
-    Logger.recordOutput("flickerLong", flickerLong);
-    Logger.recordOutput("flickeringNow", flickeringNow);
-    Logger.recordOutput("stillLong", stillLong);
-    Logger.recordOutput("robotFlickerLong", robotFlickerLong);
-    Logger.recordOutput("advantage", advantage);
-    Logger.recordOutput("forceReq", forceReq);
-    Logger.recordOutput("immediateDelta", immediateDelta);
-    Logger.recordOutput("keepMargin", keepMargin);
-    Logger.recordOutput("candStableShort", candStableShort);
-    Logger.recordOutput("candStable", candStable);
-    Logger.recordOutput("bestStableEnough", bestStableEnough);
-    Logger.recordOutput("bestStableAge_s", bestStableAge);
-    Logger.recordOutput("switchBackBlocked", switchBackBlocked);
-    Logger.recordOutput("forceMoveOn", forceMoveOn);
-    Logger.recordOutput("holdPassed", holdPassed);
-    Logger.recordOutput("stickyStale", stickyStale);
-    Logger.recordOutput("forcedRefresh", forcedRefresh);
-    Logger.recordOutput("shouldSwitch", shouldSwitch);
-    Logger.recordOutput("ping_block_until_s", pingBlockUntilSec);
-    Logger.recordOutput("ping_blocked_now", pingBlock);
-    Logger.recordOutput("freezeOnFlicker", freezeOnFlicker);
-    Logger.recordOutput("eq_eps_used", idEps);
-    Logger.recordOutput("closePair", closePair);
-    Logger.recordOutput("pairDist", pairDist);
+    // Logger.recordOutput("sticky_hard_lock_until_s", hardLockUntilSec);
+    // Logger.recordOutput("sticky_hard_locked", hardLocked);
+    // Logger.recordOutput("flickerLong", flickerLong);
+    // Logger.recordOutput("flickeringNow", flickeringNow);
+    // Logger.recordOutput("stillLong", stillLong);
+    // Logger.recordOutput("robotFlickerLong", robotFlickerLong);
+    // Logger.recordOutput("advantage", advantage);
+    // Logger.recordOutput("forceReq", forceReq);
+    // Logger.recordOutput("immediateDelta", immediateDelta);
+    // Logger.recordOutput("keepMargin", keepMargin);
+    // Logger.recordOutput("candStableShort", candStableShort);
+    // Logger.recordOutput("candStable", candStable);
+    // Logger.recordOutput("bestStableEnough", bestStableEnough);
+    // Logger.recordOutput("bestStableAge_s", bestStableAge);
+    // Logger.recordOutput("switchBackBlocked", switchBackBlocked);
+    // Logger.recordOutput("forceMoveOn", forceMoveOn);
+    // Logger.recordOutput("holdPassed", holdPassed);
+    // Logger.recordOutput("stickyStale", stickyStale);
+    // Logger.recordOutput("forcedRefresh", forcedRefresh);
+    // Logger.recordOutput("shouldSwitch", shouldSwitch);
+    // Logger.recordOutput("ping_block_until_s", pingBlockUntilSec);
+    // Logger.recordOutput("ping_blocked_now", pingBlock);
+    // Logger.recordOutput("freezeOnFlicker", freezeOnFlicker);
+    // Logger.recordOutput("eq_eps_used", idEps);
+    // Logger.recordOutput("closePair", closePair);
+    // Logger.recordOutput("pairDist", pairDist);
 
-    Logger.recordOutput("sticky_best_hash", best != null ? best.hashCode() : 0);
-    Logger.recordOutput("sticky_sticky_hash", sticky != null ? sticky.hashCode() : 0);
-    Logger.recordOutput("sticky_candidate_hash", candidate != null ? candidate.hashCode() : 0);
-    Logger.recordOutput("sticky_lastSticky_hash", lastSticky != null ? lastSticky.hashCode() : 0);
-    Logger.recordOutput("sticky_best_sticky_dist_m", dist(best, sticky, distanceFn));
-    Logger.recordOutput("sticky_eq_best_sticky", eq(best, sticky, distanceFn, idEps));
-    Logger.recordOutput("sticky_same_eps", sameEps);
+    // Logger.recordOutput("sticky_best_hash", best != null ? best.hashCode() : 0);
+    // Logger.recordOutput("sticky_sticky_hash", sticky != null ? sticky.hashCode() : 0);
+    // Logger.recordOutput("sticky_candidate_hash", candidate != null ? candidate.hashCode() : 0);
+    // Logger.recordOutput("sticky_lastSticky_hash", lastSticky != null ? lastSticky.hashCode() :
+    // 0);
+    // Logger.recordOutput("sticky_best_sticky_dist_m", dist(best, sticky, distanceFn));
+    // Logger.recordOutput("sticky_eq_best_sticky", eq(best, sticky, distanceFn, idEps));
+    // Logger.recordOutput("sticky_same_eps", sameEps);
 
     if (shouldSwitch) {
       T out = commitSwitch(now, best, distanceFn, pingEps);
@@ -894,9 +895,9 @@ public final class StickyTarget<T> {
   private void recordOut(double now, T out, ToDoubleBiFunction<T, T> distanceFn, double sameEps) {
     boolean changed = !eqN(lastOut, out, distanceFn, sameEps);
     if (changed) lastOutChangeSec = now;
-    Logger.recordOutput("sticky_out_changed", changed);
-    Logger.recordOutput(
-        "sticky_out_changed_age_s", lastOutChangeSec > 0.0 ? (now - lastOutChangeSec) : -1.0);
+    // Logger.recordOutput("sticky_out_changed", changed);
+    // Logger.recordOutput(
+    // "sticky_out_changed_age_s", lastOutChangeSec > 0.0 ? (now - lastOutChangeSec) : -1.0);
     lastOut = out;
   }
 }

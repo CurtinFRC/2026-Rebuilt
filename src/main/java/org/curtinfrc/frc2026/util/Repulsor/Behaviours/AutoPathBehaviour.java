@@ -36,7 +36,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
-import org.littletonrobotics.junction.Logger;
 
 public class AutoPathBehaviour extends Behaviour {
   private final int prio;
@@ -288,7 +287,7 @@ public class AutoPathBehaviour extends Behaviour {
                     chooseCollect(
                         ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
 
-                Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
+                // Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
 
                 desired = (hp != null) ? hp : collectRoute;
               }
@@ -478,11 +477,11 @@ public class AutoPathBehaviour extends Behaviour {
                 }
               }
 
-              Logger.recordOutput("autopath_goal_x", goalPose.getX());
-              Logger.recordOutput("autopath_goal_y", goalPose.getY());
-              Logger.recordOutput("autopath_goal_theta", goalPose.getRotation().getRadians());
-              Logger.recordOutput("autopath_dist_to_goal", distToGoal);
-              Logger.recordOutput("autopath_shoot_lock", shootGoalLocked.get());
+              // Logger.recordOutput("autopath_goal_x", goalPose.getX());
+              // Logger.recordOutput("autopath_goal_y", goalPose.getY());
+              // Logger.recordOutput("autopath_goal_theta", goalPose.getRotation().getRadians());
+              // Logger.recordOutput("autopath_dist_to_goal", distToGoal);
+              // Logger.recordOutput("autopath_shoot_lock", shootGoalLocked.get());
 
               ctx.drive.runVelocity(
                   sample.asChassisSpeeds(

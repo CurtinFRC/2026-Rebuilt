@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Function;
-import org.littletonrobotics.junction.Logger;
 
 public class ReactiveBypass {
   public static class Config {
@@ -165,7 +164,7 @@ public class ReactiveBypass {
   }
 
   private void appendLogLine(String line) {
-    Logger.recordOutput("Repulsor/Bypass/LoggingEnabled", loggingEnabled);
+    // Logger.recordOutput("Repulsor/Bypass/LoggingEnabled", loggingEnabled);
     if (!loggingEnabled) return;
     try {
       Path path = Paths.get(logFilePath);

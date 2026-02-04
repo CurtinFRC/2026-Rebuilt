@@ -6,7 +6,6 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
-import org.littletonrobotics.junction.Logger;
 
 public class DriveTuningHeat extends DriveTuning {
   private double baseMaxSpeed = 5.14;
@@ -75,11 +74,11 @@ public class DriveTuningHeat extends DriveTuning {
   public double baseStepMeters(double distanceMeters, boolean slowDown) {
     double d = Math.max(0.0, distanceMeters);
     if (d <= 0.0) {
-      Logger.recordOutput("Repulsor/Speed", 0.0);
-      Logger.recordOutput("Repulsor/Remaining", 0.0);
-      Logger.recordOutput("Repulsor/Step", 0.0);
-      Logger.recordOutput("Repulsor/Heat", 0.0);
-      Logger.recordOutput("Repulsor/VMaxHeat", 0.0);
+      // Logger.recordOutput("Repulsor/Speed", 0.0);
+      // Logger.recordOutput("Repulsor/Remaining", 0.0);
+      // Logger.recordOutput("Repulsor/Step", 0.0);
+      // Logger.recordOutput("Repulsor/Heat", 0.0);
+      // Logger.recordOutput("Repulsor/VMaxHeat", 0.0);
       return 0.0;
     }
 
@@ -130,11 +129,11 @@ public class DriveTuningHeat extends DriveTuning {
       step = d;
     }
 
-    Logger.recordOutput("Repulsor/Speed", v);
-    Logger.recordOutput("Repulsor/Remaining", d);
-    Logger.recordOutput("Repulsor/Step", step);
-    Logger.recordOutput("Repulsor/Heat", heat);
-    Logger.recordOutput("Repulsor/VMaxHeat", vMaxHeat);
+    // Logger.recordOutput("Repulsor/Speed", v);
+    // Logger.recordOutput("Repulsor/Remaining", d);
+    // Logger.recordOutput("Repulsor/Step", step);
+    // Logger.recordOutput("Repulsor/Heat", heat);
+    // Logger.recordOutput("Repulsor/VMaxHeat", vMaxHeat);
 
     return step;
   }

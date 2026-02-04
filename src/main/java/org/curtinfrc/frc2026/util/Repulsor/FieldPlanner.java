@@ -29,7 +29,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultDriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultTurnTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.TurnTuning;
-import org.littletonrobotics.junction.Logger;
 
 public class FieldPlanner {
   private static final double EPS = 1e-9;
@@ -2917,7 +2916,7 @@ public class FieldPlanner {
         }
       }
     }
-    Logger.recordOutput("Repulsor/Arrows", arrows.toArray(new Pose2d[0]));
+    // Logger.recordOutput("Repulsor/Arrows", arrows.toArray(new Pose2d[0]));
   }
 
   public ArrayList<Pose2d> getArrows() {
@@ -3017,12 +3016,12 @@ public class FieldPlanner {
     }
 
     lastChosenSetpoint = Optional.empty();
-    Logger.recordOutput("Repulsor/RequestedGoal", requested);
+    // Logger.recordOutput("Repulsor/RequestedGoal", requested);
   }
 
   private void setActiveGoal(Pose2d active) {
     this.goal = active;
-    Logger.recordOutput("Repulsor/Goal/Active", active);
+    // Logger.recordOutput("Repulsor/Goal/Active", active);
   }
 
   // public void setGoal(Pose2d goal) {
@@ -3035,7 +3034,7 @@ public class FieldPlanner {
   //     this.stagedComplete = false;
   //   }
   //   lastChosenSetpoint = Optional.empty();
-  //   Logger.recordOutput("Repulsor/Setpoint", goal);
+  //   // Logger.recordOutput("Repulsor/Setpoint", goal);
   // }
 
   public Optional<Distance> getErr() {
@@ -3122,11 +3121,11 @@ public class FieldPlanner {
     if (!suppressFallback) {
       if (!forceThrough
           && ExtraPathing.robotIntersects(curTrans, robot_x, robot_y, dynamicObstacles)) {
-        Logger.recordOutput("Repulsor/Encapsulated", true);
+        // Logger.recordOutput("Repulsor/Encapsulated", true);
         currentErr = Optional.of(Meters.of(curTrans.getDistance(goal.getTranslation())));
         return new RepulsorSample(curTrans, 0, 0, Radians.of(pose.getRotation().getRadians()));
       } else {
-        Logger.recordOutput("Repulsor/Encapsulated", false);
+        // Logger.recordOutput("Repulsor/Encapsulated", false);
       }
 
       boolean pathBlocked = false;
@@ -3173,14 +3172,14 @@ public class FieldPlanner {
           if (clear) {
             setActiveGoal(altGoal);
             lastChosenSetpoint = Optional.of(sp);
-            Logger.recordOutput("Repulsor/Reroute/Chosen", altGoal);
+            // Logger.recordOutput("Repulsor/Reroute/Chosen", altGoal);
             pathBlocked = false;
             break;
           }
         }
 
         if (pathBlocked) {
-          Logger.recordOutput("Repulsor/Reroute/Chosen", "None_StayStill");
+          // Logger.recordOutput("Repulsor/Reroute/Chosen", "None_StayStill");
           return new RepulsorSample(curTrans, 0, 0, Radians.of(pose.getRotation().getRadians()));
         }
       }
@@ -3198,12 +3197,12 @@ public class FieldPlanner {
     }
 
     if (fallback.isPresent() && fallback.get().within(err)) {
-      Logger.recordOutput("Repulsor/Fallback/Engaged", true);
+      // Logger.recordOutput("Repulsor/Fallback/Engaged", true);
       var speeds = fallback.get().calculate(curTrans, goal.getTranslation());
       return new RepulsorSample(
           goal.getTranslation(), speeds, Radians.of(pose.getRotation().getRadians()));
     }
-    Logger.recordOutput("Repulsor/Fallback/Engaged", false);
+    // Logger.recordOutput("Repulsor/Fallback/Engaged", false);
 
     var obstacleForceToGoal =
         getObstacleForce(curTrans, goal.getTranslation(), effectiveDynamicsFinal)
@@ -3232,7 +3231,7 @@ public class FieldPlanner {
                     true));
 
     Pose2d effectiveGoal = maybeBypass.orElse(goal);
-    Logger.recordOutput("Repulsor/Goal/Effective", effectiveGoal);
+    // Logger.recordOutput("Repulsor/Goal/Effective", effectiveGoal);
 
     var obstacleForce =
         getObstacleForce(curTrans, effectiveGoal.getTranslation(), effectiveDynamicsFinal)
@@ -3276,7 +3275,7 @@ public class FieldPlanner {
 
     if (!RobotBase.isReal()) {
       Pose2d arrowPose = new Pose2d(curTrans, netForce.getAngle());
-      Logger.recordOutput("Repulsor/ArrowFinal", arrowPose);
+      // Logger.recordOutput("Repulsor/ArrowFinal", arrowPose);
     }
 
     return new RepulsorSample(
@@ -3583,7 +3582,7 @@ public class FieldPlanner {
 
           Pose2d staged = new Pose2d(pick, requestedGoal.getRotation());
           setActiveGoal(staged);
-          Logger.recordOutput("Repulsor/StagedGoal", staged);
+          // Logger.recordOutput("Repulsor/StagedGoal", staged);
           return false;
         } else {
           stagedAttractor = null;
@@ -3639,7 +3638,7 @@ public class FieldPlanner {
             stagedModeTicks = 0;
             stagedGatePassed = false;
             goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-            Logger.recordOutput("Repulsor/StagedGoal", goal);
+            // Logger.recordOutput("Repulsor/StagedGoal", goal);
             return false;
           }
         }
@@ -3657,17 +3656,17 @@ public class FieldPlanner {
         stagedComplete = true;
 
         goal = requestedGoal;
-        Logger.recordOutput("Repulsor/StagedGoal", goal);
+        // Logger.recordOutput("Repulsor/StagedGoal", goal);
         return true;
       }
 
       if (liveTarget.getDistance(stagedAttractor) > 0.02) {
         stagedAttractor = liveTarget;
         goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-        Logger.recordOutput("Repulsor/StagedGoal", goal);
+        // Logger.recordOutput("Repulsor/StagedGoal", goal);
       } else {
         goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-        Logger.recordOutput("Repulsor/StagedGoal", goal);
+        // Logger.recordOutput("Repulsor/StagedGoal", goal);
       }
 
       return false;

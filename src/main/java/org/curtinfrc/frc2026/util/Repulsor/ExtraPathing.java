@@ -12,7 +12,6 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner.VisionObstacle;
-import org.littletonrobotics.junction.Logger;
 
 public class ExtraPathing {
   private static void recordEllipse(
@@ -117,13 +116,13 @@ public class ExtraPathing {
     final double eps = 1e-9;
     if (start.minus(goal).getNorm() < eps) {
       recordPath(topicRoot + "/Path/Direct", List.of(start, goal));
-      Logger.recordOutput(topicRoot + "/Clear", true);
+      // Logger.recordOutput(topicRoot + "/Clear", true);
       return true;
     }
 
     if (segmentCompletelyBlocked(start, goal, robotLengthMeters, robotWidthMeters, obstacles)) {
       recordPath(topicRoot + "/Path/Direct", List.of(start, goal));
-      Logger.recordOutput(topicRoot + "/Clear", false);
+      // Logger.recordOutput(topicRoot + "/Clear", false);
       return false;
     }
 
@@ -385,7 +384,7 @@ public class ExtraPathing {
     }
 
     if (directClear) {
-      Logger.recordOutput(topicRoot + "/Clear", true);
+      // Logger.recordOutput(topicRoot + "/Clear", true);
       return true;
     }
 
@@ -443,12 +442,12 @@ public class ExtraPathing {
     for (Translation2d w : candidates) {
       if (segClearAgainstAll.apply(start, w) && segClearAgainstAll.apply(w, goalEff)) {
         recordPath(topicRoot + "/Path/Chosen", List.of(start, w, goal));
-        Logger.recordOutput(topicRoot + "/Clear", true);
+        // Logger.recordOutput(topicRoot + "/Clear", true);
         return true;
       }
     }
 
-    Logger.recordOutput(topicRoot + "/Clear", false);
+    // Logger.recordOutput(topicRoot + "/Clear", false);
     return false;
   }
 
@@ -467,7 +466,7 @@ public class ExtraPathing {
   }
 
   private static void recordPath(String key, List<Translation2d> points) {
-    Logger.recordOutput(key, polylineToTrajectory(points));
+    // Logger.recordOutput(key, polylineToTrajectory(points));
   }
 
   private static void recordForbiddenGrid(
@@ -567,7 +566,7 @@ public class ExtraPathing {
     for (int i = 0; i < pts.size(); i++) {
       poses[i] = new Pose2d(pts.get(i), new Rotation2d());
     }
-    Logger.recordOutput(key, poses);
+    // Logger.recordOutput(key, poses);
   }
 
   private static Trajectory polylineToTrajectory(List<Translation2d> pts) {

@@ -15,7 +15,6 @@ import java.util.Random;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
-import org.littletonrobotics.junction.Logger;
 
 public class VisionSimTest implements RepulsorVision {
   private static final boolean USE_CONTROLLER = true;
@@ -122,7 +121,7 @@ public class VisionSimTest implements RepulsorVision {
 
         out[i] = new RepulsorVision.Obstacle(pose, new RepulsorVision.ObstacleType(a.rx, a.ry, k));
 
-        Logger.recordOutput("VisionSim/Agent" + i + "/Pose", pose);
+        // Logger.recordOutput("VisionSim/Agent" + i + "/Pose", pose);
       }
       return out;
     }
@@ -217,7 +216,7 @@ public class VisionSimTest implements RepulsorVision {
       VisionSimWorld.setSelfPose(rPose);
     }
 
-    Logger.recordOutput("VisionSim/RobotPose", rPose);
+    // Logger.recordOutput("VisionSim/RobotPose", rPose);
   }
 
   private Pose2d enforceSelfClearance(Pose2d prevPose, Pose2d candidate) {

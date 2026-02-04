@@ -1,7 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Tuning;
 
 import edu.wpi.first.math.MathUtil;
-import org.littletonrobotics.junction.Logger;
 
 public class DefaultDriveTuning extends DriveTuning {
   private double maxSpeed = 5.14;
@@ -55,16 +54,17 @@ public class DefaultDriveTuning extends DriveTuning {
   }
 
   // @Override public double baseStepMeters(double distanceMeters) { var speed = Math.min(8
-  // /*5.14*/, Math.sqrt(24 * distanceMeters)); Logger.recordOutput("Repulsor/Speed", speed); return
+  // /*5.14*/, Math.sqrt(24 * distanceMeters)); // Logger.recordOutput("Repulsor/Speed", speed);
+  // return
   // speed * dtSeconds(); }
 
   @Override
   public double baseStepMeters(double distanceMeters, boolean slowDown) {
     double d = Math.max(0.0, distanceMeters);
     if (d <= 0.0) {
-      Logger.recordOutput("Repulsor/Speed", 0.0);
-      Logger.recordOutput("Repulsor/Remaining", 0.0);
-      Logger.recordOutput("Repulsor/Step", 0.0);
+      // Logger.recordOutput("Repulsor/Speed", 0.0);
+      // Logger.recordOutput("Repulsor/Remaining", 0.0);
+      // Logger.recordOutput("Repulsor/Step", 0.0);
       return 0.0;
     }
 
@@ -106,9 +106,9 @@ public class DefaultDriveTuning extends DriveTuning {
       step = d;
     }
 
-    Logger.recordOutput("Repulsor/Speed", v);
-    Logger.recordOutput("Repulsor/Remaining", d);
-    Logger.recordOutput("Repulsor/Step", step);
+    // Logger.recordOutput("Repulsor/Speed", v);
+    // Logger.recordOutput("Repulsor/Remaining", d);
+    // Logger.recordOutput("Repulsor/Step", step);
 
     return step;
   }

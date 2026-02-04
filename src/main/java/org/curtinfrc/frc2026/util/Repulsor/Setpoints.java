@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
-import org.littletonrobotics.junction.Logger;
 
 public class Setpoints {
 
@@ -992,15 +991,15 @@ public class Setpoints {
         long lastNs = HUB_LAST_LOG_NS.get();
         if ((lastNs == 0L || (now - lastNs) >= 220_000_000L)
             && HUB_LAST_LOG_NS.compareAndSet(lastNs, now)) {
-          Logger.recordOutput("hubshot/distToTarget", distToTarget);
-          Logger.recordOutput("hubshot/useObs", useObs);
-          Logger.recordOutput("hubshot/lib_entries", lib != null ? lib.entries().size() : 0);
-          Logger.recordOutput("hubshot/lib_complete", lib != null && lib.complete());
-          Logger.recordOutput("hubshot/solved", sol != null);
-          Logger.recordOutput("hubshot/used_refine", refinedSol != null);
-          Logger.recordOutput(
-              "hubshot/pose_valid",
-              validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs));
+          // Logger.recordOutput("hubshot/distToTarget", distToTarget);
+          // Logger.recordOutput("hubshot/useObs", useObs);
+          // Logger.recordOutput("hubshot/lib_entries", lib != null ? lib.entries().size() : 0);
+          // Logger.recordOutput("hubshot/lib_complete", lib != null && lib.complete());
+          // Logger.recordOutput("hubshot/solved", sol != null);
+          // Logger.recordOutput("hubshot/used_refine", refinedSol != null);
+          // Logger.recordOutput(
+          // "hubshot/pose_valid",
+          // validShootPose(out.getTranslation(), targetFieldPos, halfL, halfW, obs));
         }
 
         return out;

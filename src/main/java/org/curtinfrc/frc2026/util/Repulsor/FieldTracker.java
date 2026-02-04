@@ -30,7 +30,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.PredictiveFieldState.PointCandidate;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
-import org.littletonrobotics.junction.Logger;
 
 public class FieldTracker {
   private static volatile FieldTracker instance;
@@ -1442,7 +1441,7 @@ public class FieldTracker {
 
         if (best != null) { // && collectValid.test(best.point)
           lastBest = best;
-          Logger.recordOutput("method", "collect_nearest_attempt");
+          // Logger.recordOutput("method", "collect_nearest_attempt");
           break;
         }
 
@@ -1462,7 +1461,7 @@ public class FieldTracker {
                 COLLECT_REFINE_GRID);
 
         if (best != null && collectValid.test(best.point)) {
-          Logger.recordOutput("method", "collect_hierarchical_attempt");
+          // Logger.recordOutput("method", "collect_hierarchical_attempt");
           break;
         }
 
@@ -1471,11 +1470,11 @@ public class FieldTracker {
                 robotPos, cap, usePts, goalUnits, Math.max(24, usePts.length));
 
         if (best != null && collectValid.test(best.point)) {
-          Logger.recordOutput("method", "collect_point_rank_attempt");
+          // Logger.recordOutput("method", "collect_point_rank_attempt");
           break;
         }
 
-        Logger.recordOutput("method", "hotspot_snap_attempt");
+        // Logger.recordOutput("method", "hotspot_snap_attempt");
         Translation2d hot = predictor.bestCollectHotspot(usePts, COLLECT_CELL_M);
         if (hot != null) {
           NearestPoint snap = nearestPointTo(hot, usePts);
@@ -1498,11 +1497,11 @@ public class FieldTracker {
         }
       }
 
-      // Logger.recordOutput("best", new Pose2d(best.point, Rotation2d.kZero));
+      // // Logger.recordOutput("best", new Pose2d(best.point, Rotation2d.kZero));
       Translation2d rawCandidate = (best != null ? best.point : null);
-      Logger.recordOutput("best1", rawCandidate);
-      Logger.recordOutput("collectValid", collectValid.test(rawCandidate));
-      Logger.recordOutput("collectValidRelaxed", collectValidRelaxed.test(rawCandidate));
+      // Logger.recordOutput("best1", rawCandidate);
+      // Logger.recordOutput("collectValid", collectValid.test(rawCandidate));
+      // Logger.recordOutput("collectValidRelaxed", collectValidRelaxed.test(rawCandidate));
 
       if (rawCandidate == null || !collectValid.test(rawCandidate)) {
         Translation2d fallback = null;
@@ -1565,7 +1564,7 @@ public class FieldTracker {
 
       // rawCandidate = canonicalizeCollectPoint(rawCandidate, usePts);
 
-      // Logger.recordOutput("sticky_dbg_rawCandU", new Pose2d(rawCandidate, Rotation2d.kZero));
+      // // Logger.recordOutput("sticky_dbg_rawCandU", new Pose2d(rawCandidate, Rotation2d.kZero));
 
       java.util.function.Function<Translation2d, Double> scoreResource =
           p -> {
@@ -1664,19 +1663,19 @@ public class FieldTracker {
             return extra;
           };
 
-      Logger.recordOutput(
-          "sticky_dbg_valid_sticky",
-          collectStickyPoint != null && collectValid.test(collectStickyPoint));
-      Logger.recordOutput(
-          "sticky_dbg_valid_bestCand", bestCandidate != null && collectValid.test(bestCandidate));
-      Logger.recordOutput("sticky_dbg_dynUse_n", dynUse != null ? dynUse.size() : -1);
-      Logger.recordOutput("sticky_dbg_lockHalf", collectStickyHalfLock);
-      Logger.recordOutput("sticky_dbg_sensedHalf", sensedHalf);
+      // Logger.recordOutput(
+      // "sticky_dbg_valid_sticky",
+      // collectStickyPoint != null && collectValid.test(collectStickyPoint));
+      // Logger.recordOutput(
+      // "sticky_dbg_valid_bestCand", bestCandidate != null && collectValid.test(bestCandidate));
+      // Logger.recordOutput("sticky_dbg_dynUse_n", dynUse != null ? dynUse.size() : -1);
+      // Logger.recordOutput("sticky_dbg_lockHalf", collectStickyHalfLock);
+      // Logger.recordOutput("sticky_dbg_sensedHalf", sensedHalf);
       Translation2d selectedResource;
-      Logger.recordOutput("pass", pass);
+      // Logger.recordOutput("pass", pass);
 
       if (pass == 0) {
-        Logger.recordOutput("tracker_dbg_bestCandidate", bestCandidate);
+        // Logger.recordOutput("tracker_dbg_bestCandidate", bestCandidate);
         selectedResource =
             collectStickySelector.update(
                 bestCandidate,
@@ -1717,19 +1716,19 @@ public class FieldTracker {
         }
       }
 
-      Logger.recordOutput("sticky_dbg_out", selectedResource);
-      Logger.recordOutput("sticky_dbg_prev", collectStickyPoint);
-      Logger.recordOutput(
-          "sticky_dbg_out_dist_prev",
-          (collectStickyPoint != null && selectedResource != null)
-              ? collectStickyPoint.getDistance(selectedResource)
-              : -1.0);
+      // Logger.recordOutput("sticky_dbg_out", selectedResource);
+      // Logger.recordOutput("sticky_dbg_prev", collectStickyPoint);
+      // Logger.recordOutput(
+      // "sticky_dbg_out_dist_prev",
+      // (collectStickyPoint != null && selectedResource != null)
+      //     ? collectStickyPoint.getDistance(selectedResource)
+      //     : -1.0);
 
       Pose2d selectedPose =
           (selectedResource != null)
               ? new Pose2d(selectedResource, new Rotation2d())
               : new Pose2d();
-      Logger.recordOutput("selectedResourceX", selectedPose);
+      // Logger.recordOutput("selectedResourceX", selectedPose);
 
       // selectedResource = canonicalizeCollectPoint(selectedResource, usePts);
 
@@ -1808,7 +1807,7 @@ public class FieldTracker {
           predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 1.0);
           clearCollectSticky();
           collectStickySelector.forceInvalidate();
-          Logger.recordOutput("collect_sticky_invalid_footprint", 1.0);
+          // Logger.recordOutput("collect_sticky_invalid_footprint", 1.0);
           Translation2d fallbackTarget =
               (bestCandidate != null && collectValid.test(bestCandidate)) ? bestCandidate : null;
           if (fallbackTarget != null) {
@@ -1824,7 +1823,7 @@ public class FieldTracker {
           }
         }
         collectStickyInvalidSec += dt;
-        Logger.recordOutput("collect_sticky_invalid_s", collectStickyInvalidSec);
+        // Logger.recordOutput("collect_sticky_invalid_s", collectStickyInvalidSec);
 
         if (collectStickyInvalidSec >= 0.55 && pass == 0) {
           predictor.markCollectDepleted(desiredCollectPoint, COLLECT_CELL_M, 1.0);
@@ -2052,8 +2051,8 @@ public class FieldTracker {
         collectReachedEmptySec = 0.0;
       }
 
-      Logger.recordOutput("collect_reached_empty_s", collectReachedEmptySec);
-      Logger.recordOutput("collect_live_fuel_near_target_n", liveFuelNearTarget);
+      // Logger.recordOutput("collect_reached_empty_s", collectReachedEmptySec);
+      // Logger.recordOutput("collect_live_fuel_near_target_n", liveFuelNearTarget);
 
       if (collectReachedEmptySec >= COLLECT_REACHED_EMPTY_FORCE_DROP_SEC && pass == 0) {
         Pose2d hold = holdPose.apply(desiredDriveTarget);
@@ -2071,7 +2070,7 @@ public class FieldTracker {
         collectEmptyDriveSec = 0.0;
       }
 
-      Logger.recordOutput("collect_empty_drive_s", collectEmptyDriveSec);
+      // Logger.recordOutput("collect_empty_drive_s", collectEmptyDriveSec);
 
       if (collectEmptyDriveSec >= COLLECT_EMPTY_DRIVE_DONE_SEC && pass == 0) {
         Pose2d hold = holdPose.apply(desiredDriveTarget);
@@ -2122,23 +2121,23 @@ public class FieldTracker {
         return hold;
       }
 
-      Logger.recordOutput("collect_resource_xy", desiredCollectPoint);
-      Logger.recordOutput("collect_target_xy", desiredDriveTarget);
-      Logger.recordOutput("collect_points_n", usePts.length);
-      Logger.recordOutput("collect_snap_active", collectSnapActive);
-      Logger.recordOutput("collect_sticky_side", collectStickySide);
-      Logger.recordOutput("collect_nearby_fuel_n", nearbyFuelCount);
-      Logger.recordOutput("collect_done_nofuel_s", collectNoFuelSec);
-      Logger.recordOutput("collect_done_stuck_s", collectStuckSec);
+      // Logger.recordOutput("collect_resource_xy", desiredCollectPoint);
+      // Logger.recordOutput("collect_target_xy", desiredDriveTarget);
+      // Logger.recordOutput("collect_points_n", usePts.length);
+      // Logger.recordOutput("collect_snap_active", collectSnapActive);
+      // Logger.recordOutput("collect_sticky_side", collectStickySide);
+      // Logger.recordOutput("collect_nearby_fuel_n", nearbyFuelCount);
+      // Logger.recordOutput("collect_done_nofuel_s", collectNoFuelSec);
+      // Logger.recordOutput("collect_done_stuck_s", collectStuckSec);
 
       if (best != null) {
-        Logger.recordOutput("collect_score", best.score);
-        Logger.recordOutput("collect_value", best.value);
-        Logger.recordOutput("collect_our_eta", best.ourEtaS);
-        Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
-        Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
-        Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
-        Logger.recordOutput("collect_intent_ally", best.allyIntent);
+        // Logger.recordOutput("collect_score", best.score);
+        // Logger.recordOutput("collect_value", best.value);
+        // Logger.recordOutput("collect_our_eta", best.ourEtaS);
+        // Logger.recordOutput("collect_enemy_pressure", best.enemyPressure);
+        // Logger.recordOutput("collect_ally_congestion", best.allyCongestion);
+        // Logger.recordOutput("collect_intent_enemy", best.enemyIntent);
+        // Logger.recordOutput("collect_intent_ally", best.allyIntent);
       }
 
       return new Pose2d(desiredDriveTarget, best != null ? best.rotation : Rotation2d.kZero);
