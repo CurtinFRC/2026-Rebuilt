@@ -2,8 +2,9 @@ import argparse
 import math
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, Literal, Dict, List
+from typing import Optional, Literal, Dict, List, Tuple
 
+import numpy as np
 import trimesh
 import yaml
 
@@ -37,15 +38,27 @@ class GamePieceMetadata:
     mesh_units: str
     scale: float
     volume_m3: float
+    surface_area_m2: float
     bounds_extents_m: List[float]
     flight_axis: str
     density_kg_per_m3: Optional[float]
     mass_kg_override: Optional[float]
     area_method: str
+    sphericity: Optional[float]
+    equivalent_sphere_diameter_m: Optional[float]
+    projected_area_resolution: Optional[int]
+    projected_area_rel_error: Optional[float]
+    volume_method: str
+    voxel_volume_pitch_m: Optional[float]
+    voxel_volume_rel_error: Optional[float]
     auto_shape_hint: Optional[str]
     auto_drag_coefficient_hint: Optional[float]
     material: Optional[str]
     estimated_terminal_velocity_mps: float
+    air_dynamic_viscosity_pa_s: float
+    reynolds_number_at_terminal: Optional[float]
+    drag_coefficient_at_terminal: Optional[float]
+    drag_model: Optional[str]
     alt_cross_section_estimates_m2: Dict[str, float]
     warnings: List[str]
 
@@ -86,27 +99,226 @@ def axis_vector(axis: str) -> tuple[float, float, float]:
     raise ValueError(f"Invalid flight_axis '{axis}', expected x, y or z")
 
 
-def compute_mass(
+def compute_surface_area(mesh: trimesh.Trimesh) -> float:
+    area = float(mesh.area)
+    if area <= 0.0:
+        raise ValueError("Mesh surface area is non-positive")
+    return area
+
+
+def compute_volume(
     mesh: trimesh.Trimesh,
-    density_kg_per_m3: Optional[float],
-    mass_override_kg: Optional[float],
+    rel_tol: float,
+    max_iter: int,
+) -> Tuple[float, str, Optional[float], Optional[float]]:
+    if mesh.is_volume and mesh.volume > 0.0:
+        return float(mesh.volume), "mesh", None, None
+
+    repaired = mesh.copy()
+    try:
+        repaired.remove_degenerate_faces()
+        repaired.remove_duplicate_faces()
+        repaired.remove_unreferenced_vertices()
+        repaired.fill_holes()
+        repaired.process(validate=True)
+        if repaired.is_volume and repaired.volume > 0.0:
+            return float(repaired.volume), "repaired", None, None
+    except Exception:
+        pass
+
+    bounds = mesh.bounds
+    extents = bounds[1] - bounds[0]
+    min_extent = float(np.min(extents))
+    if min_extent <= 0.0:
+        hull_volume = float(mesh.convex_hull.volume)
+        return hull_volume, "convex_hull", None, None
+
+    pitch = min_extent / 64.0
+    prev_volume = None
+    prev_pitch = None
+    rel_err = None
+
+    for _ in range(max_iter):
+        vg = mesh.voxelized(pitch)
+        vf = vg.fill()
+        volume = float(vf.volume)
+        if prev_volume is not None:
+            rel_err = abs(volume - prev_volume) / max(volume, prev_volume, 1e-12)
+            if rel_err <= rel_tol:
+                return volume, "voxel", pitch, rel_err
+        prev_volume = volume
+        prev_pitch = pitch
+        pitch *= 0.5
+
+    if prev_volume is None:
+        hull_volume = float(mesh.convex_hull.volume)
+        return hull_volume, "convex_hull", None, None
+
+    return float(prev_volume), "voxel", prev_pitch, rel_err
+
+
+def compute_sphericity(volume_m3: float, surface_area_m2: float) -> Optional[float]:
+    if volume_m3 <= 0.0 or surface_area_m2 <= 0.0:
+        return None
+    area_sphere = (math.pi ** (1.0 / 3.0)) * ((6.0 * volume_m3) ** (2.0 / 3.0))
+    if area_sphere <= 0.0:
+        return None
+    sphericity = area_sphere / surface_area_m2
+    return float(sphericity)
+
+
+def equivalent_sphere_diameter(volume_m3: float, area_m2: float) -> Optional[float]:
+    if volume_m3 > 0.0:
+        return float((6.0 * volume_m3 / math.pi) ** (1.0 / 3.0))
+    if area_m2 > 0.0:
+        return float(math.sqrt(4.0 * area_m2 / math.pi))
+    return None
+
+
+def drag_coefficient_haider_levenspiel(reynolds: float, sphericity: float) -> float:
+    re = max(reynolds, 1e-12)
+    phi = min(max(sphericity, 1e-3), 1.0)
+    a = math.exp(2.3288 - 6.4581 * phi + 2.4486 * phi * phi)
+    b = 0.0964 + 0.5565 * phi
+    c = math.exp(4.905 - 13.8944 * phi + 18.4222 * phi * phi - 10.2599 * phi ** 3)
+    d = math.exp(1.4681 + 12.2584 * phi - 20.7322 * phi * phi + 15.8855 * phi ** 3)
+    term1 = (24.0 / re) * (1.0 + a * (re ** b))
+    term2 = c / (1.0 + d / re)
+    return float(term1 + term2)
+
+
+def estimate_terminal_velocity_constant(
+    mass_kg: float,
+    volume_m3: float,
+    area_m2: float,
+    cd: float,
+    air_density: float,
 ) -> float:
-    if mass_override_kg is not None:
-        if mass_override_kg <= 0.0:
-            raise ValueError("mass_kg override must be > 0")
-        return float(mass_override_kg)
-    if density_kg_per_m3 is None or density_kg_per_m3 <= 0.0:
-        raise ValueError("Either mass_kg override or density_kg_per_m3 > 0 must be provided")
-    volume_m3 = float(mesh.volume)
-    if volume_m3 <= 0.0:
-        raise ValueError("Mesh volume is non-positive, check mesh units or integrity")
-    return float(density_kg_per_m3) * volume_m3
+    if mass_kg <= 0.0 or area_m2 <= 0.0 or cd <= 0.0 or air_density <= 0.0:
+        return 0.0
+    net_weight = (mass_kg - air_density * volume_m3) * 9.80665
+    if net_weight <= 0.0:
+        return 0.0
+    return math.sqrt(2.0 * net_weight / (air_density * area_m2 * cd))
 
 
-def compute_cross_section_area_projected(mesh: trimesh.Trimesh, flight_axis: str) -> float:
-    m = mesh
-    if not m.is_volume:
-        m = m.convex_hull
+def solve_terminal_velocity(
+    mass_kg: float,
+    volume_m3: float,
+    area_m2: float,
+    air_density: float,
+    air_dynamic_viscosity: float,
+    sphericity: float,
+    equiv_diameter_m: float,
+) -> Tuple[float, float, float]:
+    if (
+        mass_kg <= 0.0
+        or area_m2 <= 0.0
+        or air_density <= 0.0
+        or air_dynamic_viscosity <= 0.0
+        or equiv_diameter_m <= 0.0
+    ):
+        return 0.0, 0.0, 0.0
+    net_weight = (mass_kg - air_density * volume_m3) * 9.80665
+    if net_weight <= 0.0:
+        return 0.0, 0.0, 0.0
+
+    def drag_force(speed: float) -> float:
+        re = air_density * speed * equiv_diameter_m / air_dynamic_viscosity
+        cd = drag_coefficient_haider_levenspiel(re, sphericity)
+        return 0.5 * air_density * speed * speed * cd * area_m2
+
+    hi = 0.1
+    for _ in range(200):
+        if drag_force(hi) >= net_weight:
+            break
+        hi *= 2.0
+        if hi > 2000.0:
+            break
+    lo = 0.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if drag_force(mid) >= net_weight:
+            hi = mid
+        else:
+            lo = mid
+        if abs(hi - lo) / max(hi, 1e-9) < 1e-8:
+            break
+    vt = hi
+    re = air_density * vt * equiv_diameter_m / air_dynamic_viscosity
+    cd = drag_coefficient_haider_levenspiel(re, sphericity)
+    return float(vt), float(cd), float(re)
+
+
+def compute_projected_area(
+    mesh: trimesh.Trimesh,
+    flight_axis: str,
+    rel_tol: float,
+    base_resolution: int,
+    max_resolution: int,
+) -> Tuple[float, int, float]:
+    bounds = mesh.bounds
+    axis_map = {"x": 0, "y": 1, "z": 2}
+    axis_idx = axis_map[flight_axis.lower()]
+    if axis_idx == 0:
+        u_idx, v_idx = 1, 2
+    elif axis_idx == 1:
+        u_idx, v_idx = 0, 2
+    else:
+        u_idx, v_idx = 0, 1
+
+    u0, u1 = float(bounds[0, u_idx]), float(bounds[1, u_idx])
+    v0, v1 = float(bounds[0, v_idx]), float(bounds[1, v_idx])
+    axis_min, axis_max = float(bounds[0, axis_idx]), float(bounds[1, axis_idx])
+    if u1 <= u0 or v1 <= v0 or axis_max <= axis_min:
+        raise ValueError("Mesh bounds are degenerate, cannot compute projected area")
+
+    margin = (axis_max - axis_min) * 0.1 + 1e-6
+    origin_axis = axis_min - margin
+    direction = np.array(axis_vector(flight_axis), dtype=np.float64)
+    intersector = mesh.ray
+
+    prev_area = None
+    prev_res = None
+    area = 0.0
+    rel_err = 0.0
+
+    res = base_resolution
+    while res <= max_resolution:
+        du = (u1 - u0) / res
+        dv = (v1 - v0) / res
+        u_centers = u0 + (np.arange(res, dtype=np.float64) + 0.5) * du
+        v_centers = v0 + (np.arange(res, dtype=np.float64) + 0.5) * dv
+        total_hits = 0
+        max_rays = 200000
+        chunk_v = max(1, int(max_rays // max(u_centers.size, 1)))
+        for i in range(0, v_centers.size, chunk_v):
+            v_chunk = v_centers[i : i + chunk_v]
+            uu = np.tile(u_centers, v_chunk.size)
+            vv = np.repeat(v_chunk, u_centers.size)
+            origins = np.zeros((uu.size, 3), dtype=np.float64)
+            origins[:, axis_idx] = origin_axis
+            origins[:, u_idx] = uu
+            origins[:, v_idx] = vv
+            directions = np.tile(direction, (origins.shape[0], 1))
+            hits = intersector.intersects_any(origins, directions)
+            total_hits += int(hits.sum())
+        area = total_hits * du * dv
+        if prev_area is not None:
+            rel_err = abs(area - prev_area) / max(area, prev_area, 1e-12)
+            if rel_err <= rel_tol:
+                return float(area), int(res), float(rel_err)
+        prev_area = area
+        prev_res = res
+        res *= 2
+
+    if prev_area is not None:
+        rel_err = abs(area - prev_area) / max(area, prev_area, 1e-12)
+    return float(area), int(prev_res if prev_res is not None else res), float(rel_err)
+
+
+def compute_projected_area_analytic(mesh: trimesh.Trimesh, flight_axis: str) -> float:
+    m = mesh.convex_hull
     ux, uy, uz = axis_vector(flight_axis)
     normals = m.face_normals
     areas = m.area_faces
@@ -117,6 +329,44 @@ def compute_cross_section_area_projected(mesh: trimesh.Trimesh, flight_axis: str
     if projected_area <= 0.0:
         raise ValueError("Projected cross-section area computed as <= 0")
     return projected_area
+
+
+def compute_mass(
+    volume_m3: float,
+    density_kg_per_m3: Optional[float],
+    mass_override_kg: Optional[float],
+) -> float:
+    if mass_override_kg is not None:
+        if mass_override_kg <= 0.0:
+            raise ValueError("mass_kg override must be > 0")
+        return float(mass_override_kg)
+    if density_kg_per_m3 is None or density_kg_per_m3 <= 0.0:
+        raise ValueError("Either mass_kg override or density_kg_per_m3 > 0 must be provided")
+    if volume_m3 <= 0.0:
+        raise ValueError("Mesh volume is non-positive, check mesh units or integrity")
+    return float(density_kg_per_m3) * volume_m3
+
+
+def compute_cross_section_area_projected(
+    mesh: trimesh.Trimesh,
+    flight_axis: str,
+    rel_tol: float = 1e-4,
+    base_resolution: int = 64,
+    max_resolution: int = 4096,
+) -> float:
+    try:
+        area, _, _ = compute_projected_area(
+            mesh=mesh,
+            flight_axis=flight_axis,
+            rel_tol=rel_tol,
+            base_resolution=base_resolution,
+            max_resolution=max_resolution,
+        )
+        if area <= 0.0:
+            raise ValueError("Projected cross-section area computed as <= 0")
+        return area
+    except Exception:
+        return compute_projected_area_analytic(mesh, flight_axis)
 
 
 def compute_cross_section_area_bbox_ellipse(mesh: trimesh.Trimesh, flight_axis: str) -> float:
@@ -149,7 +399,10 @@ def compute_cross_section_area_bbox_rect(mesh: trimesh.Trimesh, flight_axis: str
     return a * b
 
 
-def guess_shape_and_cd(extents: List[float]) -> tuple[Optional[str], Optional[float]]:
+def guess_shape_and_cd(
+    extents: List[float],
+    sphericity: Optional[float],
+) -> tuple[Optional[str], Optional[float]]:
     if len(extents) != 3:
         return None, None
     ex, ey, ez = sorted(float(e) for e in extents)
@@ -157,12 +410,17 @@ def guess_shape_and_cd(extents: List[float]) -> tuple[Optional[str], Optional[fl
         return None, None
     r1 = ey / ex
     r2 = ez / ex
-    if 0.8 <= r1 <= 1.25 and 0.8 <= r2 <= 1.25:
+    phi = None if sphericity is None else float(sphericity)
+    if phi is not None and phi >= 0.9:
         return "sphere-ish", 0.47
     if r2 > 2.0 and r1 < 0.6:
         return "flat_disc-ish", 1.1
     if r2 > 2.0 and 0.6 <= r1 <= 1.4:
         return "cylinder-ish", 0.8
+    if phi is not None and phi >= 0.7:
+        return "rounded", 0.6
+    if phi is not None and phi >= 0.5:
+        return "blocky", 0.9
     return None, None
 
 
@@ -178,13 +436,18 @@ def compute_area(mesh: trimesh.Trimesh, method: AreaMethod, flight_axis: str) ->
 
 def estimate_terminal_velocity(
     mass_kg: float,
+    volume_m3: float,
     area_m2: float,
     cd: float,
     air_density: float,
 ) -> float:
-    if mass_kg <= 0.0 or area_m2 <= 0.0 or cd <= 0.0 or air_density <= 0.0:
-        return 0.0
-    return math.sqrt(2.0 * mass_kg * 9.81 / (air_density * area_m2 * cd))
+    return estimate_terminal_velocity_constant(
+        mass_kg=mass_kg,
+        volume_m3=volume_m3,
+        area_m2=area_m2,
+        cd=cd,
+        air_density=air_density,
+    )
 
 
 def build_yaml(
@@ -196,46 +459,130 @@ def build_yaml(
     mass_kg: Optional[float],
     drag_coefficient: Optional[float],
     air_density_kg_per_m3: float,
+    air_dynamic_viscosity_pa_s: float,
     scale: float,
     mesh_units: str,
     area_method: AreaMethod,
+    projected_area_rel_tol: float,
+    projected_area_base_resolution: int,
+    projected_area_max_resolution: int,
+    volume_rel_tol: float,
+    volume_max_iter: int,
 ) -> GamePieceYaml:
     mesh = load_mesh_any(mesh_path, scale)
-    volume_m3 = float(mesh.volume)
+    volume_m3, volume_method, voxel_pitch, voxel_rel = compute_volume(
+        mesh=mesh,
+        rel_tol=volume_rel_tol,
+        max_iter=volume_max_iter,
+    )
+    surface_area_m2 = compute_surface_area(mesh)
 
     eff_density = density_kg_per_m3
     if eff_density is None and material and material in MATERIAL_DENSITY_KG_PER_M3:
         eff_density = MATERIAL_DENSITY_KG_PER_M3[material]
 
-    mass_value = compute_mass(mesh, eff_density, mass_kg)
+    mass_value = compute_mass(volume_m3, eff_density, mass_kg)
 
     alt_areas: Dict[str, float] = {}
     warnings: List[str] = []
 
-    for method in ("projected", "bbox_ellipse", "bbox_rect"):
+    if not mesh.is_watertight:
+        warnings.append("Mesh is not watertight; volume and projected area may be inaccurate")
+
+    projected_resolution = None
+    projected_rel_error = None
+    try:
+        projected_area, projected_resolution, projected_rel_error = compute_projected_area(
+            mesh=mesh,
+            flight_axis=flight_axis,
+            rel_tol=projected_area_rel_tol,
+            base_resolution=projected_area_base_resolution,
+            max_resolution=projected_area_max_resolution,
+        )
+        alt_areas["projected"] = projected_area
+    except Exception as e:
+        try:
+            alt_areas["projected"] = compute_projected_area_analytic(mesh, flight_axis)
+            warnings.append(f"Projected area fallback used after ray failure: {e!s}")
+        except Exception as e2:
+            warnings.append(f"Area estimate failed for projected: {e!s}; fallback failed: {e2!s}")
+
+    for method in ("bbox_ellipse", "bbox_rect"):
         try:
             alt_areas[method] = compute_area(mesh, method, flight_axis)
         except Exception as e:
             warnings.append(f"Area estimate failed for {method}: {e!s}")
+
+    if projected_rel_error is not None and projected_rel_error > projected_area_rel_tol:
+        warnings.append(
+            f"Projected area did not converge to rel_tol ({projected_rel_error:.2e} > {projected_area_rel_tol:.2e})"
+        )
+    if volume_method == "voxel" and voxel_rel is not None and voxel_rel > volume_rel_tol:
+        warnings.append(
+            f"Voxel volume did not converge to rel_tol ({voxel_rel:.2e} > {volume_rel_tol:.2e})"
+        )
 
     if area_method not in alt_areas:
         raise ValueError(f"Requested area_method '{area_method}' did not produce a value")
 
     area_value = alt_areas[area_method]
     extents = [float(x) for x in mesh.extents]
+    sphericity = compute_sphericity(volume_m3, surface_area_m2)
+    eq_diameter = equivalent_sphere_diameter(volume_m3, area_value)
 
-    shape_hint, cd_hint = guess_shape_and_cd(extents)
+    shape_hint, cd_hint = guess_shape_and_cd(extents, sphericity)
+
+    model_cd = None
+    model_vt = None
+    model_re = None
+    drag_model = None
+
+    if sphericity is not None and eq_diameter is not None:
+        model_vt, model_cd, model_re = solve_terminal_velocity(
+            mass_kg=mass_value,
+            volume_m3=volume_m3,
+            area_m2=area_value,
+            air_density=air_density_kg_per_m3,
+            air_dynamic_viscosity=air_dynamic_viscosity_pa_s,
+            sphericity=sphericity,
+            equiv_diameter_m=eq_diameter,
+        )
+        if model_cd > 0.0:
+            drag_model = "haider_levenspiel"
+
+    auto_cd_hint = model_cd if model_cd and model_cd > 0.0 else cd_hint
+
     if drag_coefficient is None:
-        drag_value = cd_hint if cd_hint is not None else 0.75
+        if model_cd is not None and model_cd > 0.0:
+            drag_value = model_cd
+            vt = model_vt if model_vt is not None else 0.0
+            re_at_vt = model_re
+            drag_model_used = drag_model
+        else:
+            drag_value = cd_hint if cd_hint is not None else 0.75
+            vt = estimate_terminal_velocity(
+                mass_kg=mass_value,
+                volume_m3=volume_m3,
+                area_m2=area_value,
+                cd=drag_value,
+                air_density=air_density_kg_per_m3,
+            )
+            re_at_vt = None
+            drag_model_used = "heuristic"
     else:
         drag_value = drag_coefficient
-
-    vt = estimate_terminal_velocity(
-        mass_kg=mass_value,
-        area_m2=area_value,
-        cd=drag_value,
-        air_density=air_density_kg_per_m3,
-    )
+        vt = estimate_terminal_velocity(
+            mass_kg=mass_value,
+            volume_m3=volume_m3,
+            area_m2=area_value,
+            cd=drag_value,
+            air_density=air_density_kg_per_m3,
+        )
+        if eq_diameter is not None and vt > 0.0 and air_dynamic_viscosity_pa_s > 0.0:
+            re_at_vt = air_density_kg_per_m3 * vt * eq_diameter / air_dynamic_viscosity_pa_s
+        else:
+            re_at_vt = None
+        drag_model_used = "override"
 
     if vt < 3.0:
         warnings.append(f"Very low estimated terminal velocity ({vt:.2f} m/s) - check mass/area/cd")
@@ -247,15 +594,27 @@ def build_yaml(
         mesh_units=mesh_units,
         scale=float(scale),
         volume_m3=volume_m3,
+        surface_area_m2=surface_area_m2,
         bounds_extents_m=extents,
         flight_axis=flight_axis,
         density_kg_per_m3=None if eff_density is None else float(eff_density),
         mass_kg_override=None if mass_kg is None else float(mass_kg),
         area_method=area_method,
+        sphericity=None if sphericity is None else float(sphericity),
+        equivalent_sphere_diameter_m=None if eq_diameter is None else float(eq_diameter),
+        projected_area_resolution=None if projected_resolution is None else int(projected_resolution),
+        projected_area_rel_error=None if projected_rel_error is None else float(projected_rel_error),
+        volume_method=volume_method,
+        voxel_volume_pitch_m=None if voxel_pitch is None else float(voxel_pitch),
+        voxel_volume_rel_error=None if voxel_rel is None else float(voxel_rel),
         auto_shape_hint=shape_hint,
-        auto_drag_coefficient_hint=cd_hint,
+        auto_drag_coefficient_hint=None if auto_cd_hint is None else float(auto_cd_hint),
         material=material,
         estimated_terminal_velocity_mps=vt,
+        air_dynamic_viscosity_pa_s=float(air_dynamic_viscosity_pa_s),
+        reynolds_number_at_terminal=None if re_at_vt is None else float(re_at_vt),
+        drag_coefficient_at_terminal=None if drag_value is None else float(drag_value),
+        drag_model=drag_model_used,
         alt_cross_section_estimates_m2=alt_areas,
         warnings=warnings,
     )
@@ -293,14 +652,26 @@ def print_summary(obj: GamePieceYaml) -> None:
     print(f"    mesh_units                   = {m.mesh_units}")
     print(f"    scale                        = {m.scale}")
     print(f"    volume_m3                    = {m.volume_m3:.6f}")
+    print(f"    surface_area_m2              = {m.surface_area_m2:.6f}")
     print(f"    bounds_extents_m             = {m.bounds_extents_m}")
     print(f"    flight_axis                  = {m.flight_axis}")
     print(f"    material                     = {m.material}")
     print(f"    density_kg_per_m3            = {m.density_kg_per_m3}")
     print(f"    mass_kg_override             = {m.mass_kg_override}")
     print(f"    area_method                  = {m.area_method}")
+    print(f"    sphericity                   = {m.sphericity}")
+    print(f"    equivalent_sphere_diameter_m = {m.equivalent_sphere_diameter_m}")
+    print(f"    projected_area_resolution    = {m.projected_area_resolution}")
+    print(f"    projected_area_rel_error     = {m.projected_area_rel_error}")
+    print(f"    volume_method                = {m.volume_method}")
+    print(f"    voxel_volume_pitch_m         = {m.voxel_volume_pitch_m}")
+    print(f"    voxel_volume_rel_error       = {m.voxel_volume_rel_error}")
     print(f"    auto_shape_hint              = {m.auto_shape_hint}")
     print(f"    auto_drag_coefficient_hint   = {m.auto_drag_coefficient_hint}")
+    print(f"    air_dynamic_viscosity_pa_s   = {m.air_dynamic_viscosity_pa_s}")
+    print(f"    reynolds_number_at_terminal  = {m.reynolds_number_at_terminal}")
+    print(f"    drag_coefficient_at_terminal = {m.drag_coefficient_at_terminal}")
+    print(f"    drag_model                   = {m.drag_model}")
     print(f"    alt_cross_section_estimates_m2= {m.alt_cross_section_estimates_m2}")
     if m.warnings:
         print("    warnings:")
@@ -376,6 +747,12 @@ def main() -> None:
         help="Air density in kg/m^3",
     )
     parser.add_argument(
+        "--air-dynamic-viscosity-pa-s",
+        type=float,
+        default=1.81e-5,
+        help="Air dynamic viscosity in Pa*s",
+    )
+    parser.add_argument(
         "--scale",
         type=float,
         default=1.0,
@@ -387,6 +764,36 @@ def main() -> None:
         choices=["projected", "bbox_ellipse", "bbox_rect"],
         default="projected",
         help="Method to select for cross_section_area_m2 (all methods are still stored in metadata)",
+    )
+    parser.add_argument(
+        "--projected-area-rel-tol",
+        type=float,
+        default=1e-4,
+        help="Relative tolerance for projected area convergence",
+    )
+    parser.add_argument(
+        "--projected-area-base-resolution",
+        type=int,
+        default=64,
+        help="Base grid resolution for projected area sampling",
+    )
+    parser.add_argument(
+        "--projected-area-max-resolution",
+        type=int,
+        default=4096,
+        help="Maximum grid resolution for projected area sampling",
+    )
+    parser.add_argument(
+        "--volume-rel-tol",
+        type=float,
+        default=1e-4,
+        help="Relative tolerance for voxel volume convergence",
+    )
+    parser.add_argument(
+        "--volume-max-iter",
+        type=int,
+        default=8,
+        help="Maximum iterations for voxel volume convergence",
     )
     parser.add_argument(
         "--deploy-root",
@@ -426,9 +833,15 @@ def main() -> None:
         mass_kg=args.mass_kg,
         drag_coefficient=args.drag_coefficient,
         air_density_kg_per_m3=args.air_density_kg_per_m3,
+        air_dynamic_viscosity_pa_s=args.air_dynamic_viscosity_pa_s,
         scale=final_scale,
         mesh_units=args.mesh_units,
-        area_method=args.area_method,  # type: ignore[arg-type]
+        area_method=args.area_method,
+        projected_area_rel_tol=args.projected_area_rel_tol,
+        projected_area_base_resolution=args.projected_area_base_resolution,
+        projected_area_max_resolution=args.projected_area_max_resolution,
+        volume_rel_tol=args.volume_rel_tol,
+        volume_max_iter=args.volume_max_iter,
     )
 
     if not args.no_summary:

@@ -6,3 +6,4 @@ pyglet==1.5.27
 numpy>=1.23
 robotpy
 trimesh[easy]
+rtree
