@@ -7,7 +7,9 @@ import edu.wpi.first.math.VecBuilder;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.interpolation.TimeInterpolatableBuffer;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
@@ -26,7 +28,28 @@ public class Vision extends VirtualSubsystem {
   public static record CameraConfig(String name, Transform3d robotToCamera, double stdDev) {}
 
   public static CameraConfig[] cameraConfigs =
-      new CameraConfig[] {new CameraConfig("test", Transform3d.kZero, 1.0)};
+      new CameraConfig[] {
+        new CameraConfig(
+            "Intake Left",
+            new Transform3d(
+                new Translation3d(-0.293052, 0.445512, -0.289311), new Rotation3d(0, 40, -45)),
+            1.0),
+        new CameraConfig(
+            "Intake Right",
+            new Transform3d(
+                new Translation3d(0.293302, 0.445512, -0.289311), new Rotation3d(0, 40, 45)),
+            1.0),
+        new CameraConfig(
+            "Shooter Right",
+            new Transform3d(
+                new Translation3d(-0.292205, 0.474879, -0.041151), new Rotation3d(0, 40, -135)),
+            1.0),
+        new CameraConfig(
+            "PC_Camera",
+            new Transform3d(
+                new Translation3d(0.291955, 0.474879, -0.041151), new Rotation3d(0, 40, 135)),
+            1.0),
+      };
 
   private static double maxAmbiguity = 0.2;
   private static double maxZError = 0.4;
