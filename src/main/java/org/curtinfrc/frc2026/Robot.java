@@ -126,7 +126,13 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose));
+                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose),
+                  new VisionIOPhotonVisionSim(
+                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera(), drive::getPose),
+                  new VisionIOPhotonVisionSim(
+                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera(), drive::getPose),
+                  new VisionIOPhotonVisionSim(
+                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
         }
       }
     } else {

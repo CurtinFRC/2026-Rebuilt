@@ -30,6 +30,26 @@ public class Vision extends VirtualSubsystem {
   public static CameraConfig[] cameraConfigs =
       new CameraConfig[] {
         new CameraConfig(
+            "FL",
+            new Transform3d(
+                new Translation3d(0.293052, 0.445512, -0.289311), new Rotation3d(0, 40, -45)),
+            1.0),
+        new CameraConfig(
+            "FR",
+            new Transform3d(
+                new Translation3d(-0.293302, 0.445512, -0.289311), new Rotation3d(0, 40, 45)),
+            1.0),
+        new CameraConfig(
+            "BL",
+            new Transform3d(
+                new Translation3d(0.292205, 0.474879, -0.041151), new Rotation3d(0, 40, -135)),
+            1.0),
+        new CameraConfig(
+            "BR",
+            new Transform3d(
+                new Translation3d(-0.291955, 0.474879, -0.041151), new Rotation3d(0, 40, 135)),
+            1.0),
+        new CameraConfig(
             "OV9281",
             new Transform3d(new Translation3d(0.35, 0.2, 0), new Rotation3d(180, 0, 0)),
             1.0)
