@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -10,6 +11,7 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import java.util.ArrayList;
@@ -17,6 +19,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
 import org.curtinfrc.frc2026.drive.GyroIOPigeon2;
@@ -24,6 +27,19 @@ import org.curtinfrc.frc2026.drive.ModuleIO;
 import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
+import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
+import org.curtinfrc.frc2026.subsystems.Mag.Mag;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -46,6 +62,9 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
 public class Robot extends LoggedRobot {
   private Drive drive;
   private Vision vision;
+  private Intake intake;
+  private Mag mag;
+  private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -71,6 +90,7 @@ public class Robot extends LoggedRobot {
       case SIM -> {
         Logger.addDataReceiver(new NT4Publisher());
       }
+
       case REPLAY -> {
         setUseTiming(false);
         String logPath = LogFileUtil.findReplayLog();
@@ -80,7 +100,6 @@ public class Robot extends LoggedRobot {
     }
 
     Logger.start();
-
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
@@ -97,21 +116,39 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
         }
         case DEV -> {
           drive =
               new Drive(
                   new GyroIOPigeon2(),
-                  new ModuleIOTalonFX(TunerConstants.FrontLeft),
-                  new ModuleIOTalonFX(TunerConstants.FrontRight),
-                  new ModuleIOTalonFX(TunerConstants.BackLeft),
-                  new ModuleIOTalonFX(TunerConstants.BackRight));
+                  new ModuleIOTalonFX(DevTunerConstants.FrontLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.FrontRight),
+                  new ModuleIOTalonFX(DevTunerConstants.BackLeft),
+                  new ModuleIOTalonFX(DevTunerConstants.BackRight));
           vision =
               new Vision(
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVision(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera()));
+
+          intake = new Intake(new IntakeIODev());
+          mag =
+              new Mag(
+                  new MagRollerIODev(
+                      Constants.intakeMagRollerMotorID, InvertedValue.CounterClockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
         }
         case SIM -> {
           drive =
@@ -133,6 +170,9 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[2].name(), cameraConfigs[2].robotToCamera(), drive::getPose),
                   new VisionIOPhotonVisionSim(
                       cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
+          mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
+          intake = new Intake(new IntakeIOSim());
+          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
         }
       }
     } else {
@@ -144,6 +184,8 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
+      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -155,6 +197,32 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
+
+    controller
+        .leftTrigger()
+        .whileTrue(
+            Commands.parallel(
+                intake.RawControlConsume(1.0),
+                mag.store(0.7),
+                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+
+    controller
+        .a()
+        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    controller
+        .rightBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+        .onFalse(hoodedShooter.stopHoodedShooter());
+    controller
+        .leftBumper()
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
+        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+        .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
   /** This function is called periodically during all modes. */
@@ -183,7 +251,15 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {}
+  public void autonomousInit() {
+    // CommandScheduler.getInstance()
+    //     .schedule(
+    //         hoodedShooter
+    //             .hoodSysIdDynamicForward()
+    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
+    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
+    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
+  }
 
   /** This function is called periodically during autonomous. */
   @Override
