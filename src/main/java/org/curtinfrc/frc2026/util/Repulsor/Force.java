@@ -1,3 +1,14 @@
+﻿/*
+ * =============================================================
+ *  Repulsor Library
+ *  Copyright (c) 2026 Paul Hodges
+ *
+ *  Licensed under the MIT License.
+ *  SPDX-License-Identifier: MIT
+ * =============================================================
+ */
+
+
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -88,7 +99,7 @@ public class Force implements Interpolatable<Force>, ProtobufSerializable, Struc
   /**
    * Calculates the distance between two translations in 2D space.
    *
-   * <p>The distance between translations is defined as √((x₂−x₁)²+(y₂−y₁)²).
+   * <p>The distance between translations is defined as âˆš((xâ‚‚âˆ’xâ‚)Â²+(yâ‚‚âˆ’yâ‚)Â²).
    *
    * @param other The translation to compute the distance to.
    * @return The distance between the two translations.
