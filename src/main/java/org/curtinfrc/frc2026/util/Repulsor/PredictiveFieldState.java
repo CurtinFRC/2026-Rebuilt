@@ -297,8 +297,8 @@ public final class PredictiveFieldState {
 
   private static final double COLLECT_COMMIT_MIN_S = 0.42;
   private static final double COLLECT_COMMIT_MAX_S = 0.92;
-  private static final double COLLECT_SWITCH_BASE = 0.15;
-  private static final double COLLECT_SWITCH_ETA_W = 0.10;
+  private static final double COLLECT_SWITCH_BASE = 0.25;
+  private static final double COLLECT_SWITCH_ETA_W = 0.05;
 
   private static final double COLLECT_PROGRESS_MIN_DROP_M = 0.25;
   private static final double COLLECT_PROGRESS_WINDOW_S = 0.70;
@@ -731,7 +731,7 @@ public final class PredictiveFieldState {
         new Translation2d(-0.18, 0.18),
         new Translation2d(-0.18, -0.18)
       };
-  private static final double COLLECT_KEEP_BONUS = 0.45;
+  private static final double COLLECT_KEEP_BONUS = 0.20;
 
   private Rotation2d currentCollectHeading = new Rotation2d();
   private Translation2d currentCollectTouch = null;
@@ -1338,8 +1338,8 @@ public final class PredictiveFieldState {
 
     double commitS = collectCommitWindow(currentCollectEta);
     double switchMargin =
-        (COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta)) * 1.6
-            + 0.15;
+        (COLLECT_SWITCH_BASE + COLLECT_SWITCH_ETA_W * Math.max(0.0, currentCollectEta)) * 1.2
+            + 0.05;
 
     if (!escape && currentCollectTarget != null) {
       double age = now - currentCollectChosenTs;
