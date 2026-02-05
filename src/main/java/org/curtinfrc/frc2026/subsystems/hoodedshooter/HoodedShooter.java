@@ -173,7 +173,11 @@ public class HoodedShooter extends SubsystemBase {
   }
 
   public Command setHoodPosition(double positionDegrees) {
-    return run(() -> hoodIO.setPosition(positionDegrees / 360));
+    return run(
+        () -> {
+          hoodIO.setPosition(positionDegrees / 360);
+          Logger.recordOutput("ROBOERT SMILE", positionDegrees);
+        });
   }
 
   public Command setHoodVoltage(double voltage) {
