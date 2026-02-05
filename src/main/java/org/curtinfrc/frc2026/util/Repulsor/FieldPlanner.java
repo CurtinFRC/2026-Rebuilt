@@ -3418,11 +3418,13 @@ public class FieldPlanner {
   private static boolean gateIsBehind(
       Translation2d pos, Translation2d goal, GatedAttractorObstacle gate) {
     if (pos == null || goal == null || gate == null || gate.center == null) return false;
-    double dir = Math.signum(goal.getX() - pos.getX());
-    if (dir == 0.0) return false;
-    double gx = gate.center.getX();
-    if (dir > 0.0) return pos.getX() > gx + STAGED_PASSED_X_HYST_M;
-    else return pos.getX() < gx - STAGED_PASSED_X_HYST_M;
+    Translation2d toGoal = goal.minus(pos);
+    double n = toGoal.getNorm();
+    if (n <= 1e-6) return false;
+    Translation2d dir = toGoal.div(n);
+    Translation2d toGate = gate.center.minus(pos);
+    double proj = toGate.getX() * dir.getX() + toGate.getY() * dir.getY();
+    return proj < -STAGED_PASSED_X_HYST_M;
   }
 
   private GatedAttractorObstacle firstOccludingGateAlongSegment(
@@ -3566,6 +3568,15 @@ public class FieldPlanner {
     GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
 
     boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || (firstBlock != null);
+    if (stagedComplete && lastStagedPoint != null) {
+      double d = curPos.getDistance(lastStagedPoint);
+      if (d < STAGED_RESTAGE_DIST_M) {
+        shouldStage = false;
+      } else {
+        stagedComplete = false;
+        lastStagedPoint = null;
+      }
+    }
 
     if (shouldStage && stagedAttractor == null) {
       GatedAttractorObstacle gateToUse =
@@ -3655,6 +3666,7 @@ public class FieldPlanner {
       }
 
       if (reached && gateCleared) {
+        lastStagedPoint = liveTarget != null ? liveTarget : stagedAttractor;
         stagedAttractor = null;
         stagedGate = null;
         stagedUsingBypass = false;
