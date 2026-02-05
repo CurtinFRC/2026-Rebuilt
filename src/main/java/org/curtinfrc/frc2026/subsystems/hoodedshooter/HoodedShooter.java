@@ -172,8 +172,8 @@ public class HoodedShooter extends SubsystemBase {
         });
   }
 
-  public Command setHoodPosition(double positionRotations) {
-    return run(() -> hoodIO.setPosition(positionRotations));
+  public Command setHoodPosition(double positionDegrees) {
+    return run(() -> hoodIO.setPosition(positionDegrees / 360));
   }
 
   public Command setHoodVoltage(double voltage) {
@@ -197,10 +197,10 @@ public class HoodedShooter extends SubsystemBase {
   }
 
   public Command setHoodedShooterPositionAndVelocity(
-      double positionRotations, double velocityMetresPerSecond) {
+      double positionDegrees, double velocityMetresPerSecond) {
     return run(
         () -> {
-          hoodIO.setPosition(positionRotations);
+          hoodIO.setPosition(positionDegrees);
           shooterIO.setVelocity(velocityMetresPerSecond);
         });
   }
