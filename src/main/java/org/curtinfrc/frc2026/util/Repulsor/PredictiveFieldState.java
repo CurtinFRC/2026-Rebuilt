@@ -1,5 +1,6 @@
 package org.curtinfrc.frc2026.util.Repulsor;
 
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -13,6 +14,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.littletonrobotics.junction.Logger;
 
 public final class PredictiveFieldState {
 
@@ -1666,8 +1668,8 @@ public final class PredictiveFieldState {
     lastReturnedCollect = currentCollectTarget;
     lastReturnedCollectTs = now;
 
-    // Logger.recordOutput(
-    // "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, currentCollectHeading));
+    Logger.recordOutput(
+        "Repulsor/ChosenCollect", new Pose2d(currentCollectTarget, currentCollectHeading));
     // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", finalE.units);
     // Logger.recordOutput("Repulsor/Collect/ChosenCount", finalE.count);
     // Logger.recordOutput("Repulsor/Collect/ChosenScore", finalE.score);
@@ -1934,7 +1936,7 @@ public final class PredictiveFieldState {
         lastReturnedCollect = use;
         lastReturnedCollectTs = now;
 
-        // Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
+        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
         // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", eUse.units);
         // Logger.recordOutput("Repulsor/Collect/ChosenCount", eUse.count);
         // Logger.recordOutput("Repulsor/Collect/ChosenScore", eUse.score);
@@ -2059,7 +2061,7 @@ public final class PredictiveFieldState {
     lastReturnedCollect = bestP;
     lastReturnedCollectTs = Timer.getFPGATimestamp();
 
-    // Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
+    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
     // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", bestE.units);
     // Logger.recordOutput("Repulsor/Collect/ChosenCount", bestE.count);
     // Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);

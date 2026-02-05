@@ -3431,6 +3431,9 @@ public class FieldPlanner {
 
     GatedAttractorObstacle best = null;
     double bestT = Double.POSITIVE_INFINITY;
+    double bestLane = Double.POSITIVE_INFINITY;
+    double laneY = 0.5 * (pos.getY() + target.getY());
+    final double tieEps = 1e-6;
 
     for (GatedAttractorObstacle gate : gatedAttractors) {
       if (gate == null || gate.gatePoly == null) continue;
@@ -3441,9 +3444,16 @@ public class FieldPlanner {
       if (!segmentIntersectsPolygonOuter(pos, target, poly)) continue;
 
       double t = firstIntersectionT(pos, target, poly);
-      if (t < bestT) {
+      if (t < bestT - tieEps) {
         bestT = t;
+        bestLane = Math.abs(gate.center.getY() - laneY);
         best = gate;
+      } else if (Math.abs(t - bestT) <= tieEps) {
+        double lane = Math.abs(gate.center.getY() - laneY);
+        if (lane < bestLane) {
+          bestLane = lane;
+          best = gate;
+        }
       }
     }
 
