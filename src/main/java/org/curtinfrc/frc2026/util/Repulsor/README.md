@@ -4,7 +4,7 @@ Repulsor is a navigation / planning / utility library used by the 2026-Rebuilt r
 
 ## License
 
-Repulsor is licensed under the MIT License.
+Repulsor is licensed under the GPLv3 License.
 
 Copyright (c) 2026 Paul Hodges
 
