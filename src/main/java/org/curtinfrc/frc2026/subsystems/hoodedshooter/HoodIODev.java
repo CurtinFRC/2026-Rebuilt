@@ -44,14 +44,16 @@ public class HoodIODev implements HoodIO {
   public static final double ZERO_DEGREE_OFFSET_DEGREES = 53;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.0869;
-  public static final double KP = 20.0;
+  public static final double KP_STOWED = 155.6;
+  public static final double KP_OUT = 155.6;
   public static final double KI = 0.0;
-  public static final double KD = 0.3;
-  public static final double KS_STOWED = 0.60;
-  public static final double KS_OUT = 0.20;
-  public static final double KV = 0.15; // temp
-  public static final double KA = 0.0;
-  public static final double KG = 0.80;
+  public static final double KD = 5.05;
+
+  public static final double KS_STOWED = 0.6;
+  public static final double KS_OUT = 0.3;
+  public static final double KV = 4.81;
+  public static final double KA = 0.03;
+  public static final double KG = 0.14;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
   public static final double MM_ACCLERATION = 16;
@@ -80,7 +82,7 @@ public class HoodIODev implements HoodIO {
                   .withReverseSoftLimitEnable(true))
           .withSlot0(
               new Slot0Configs()
-                  .withKP(KP)
+                  .withKP(KP_STOWED)
                   .withKI(KI)
                   .withKD(KD)
                   .withKS(KS_STOWED)
@@ -91,7 +93,7 @@ public class HoodIODev implements HoodIO {
                   .withGravityType(GravityTypeValue.Arm_Cosine))
           .withSlot1(
               new Slot1Configs()
-                  .withKP(KP)
+                  .withKP(KP_OUT)
                   .withKI(KI)
                   .withKD(KD)
                   .withKS(KS_OUT)
@@ -110,7 +112,7 @@ public class HoodIODev implements HoodIO {
       new CANcoderConfiguration()
           .withMagnetSensor(
               new MagnetSensorConfigs()
-                  .withAbsoluteSensorDiscontinuityPoint(1)
+                  .withAbsoluteSensorDiscontinuityPoint(0.5)
                   .withSensorDirection(SensorDirectionValue.Clockwise_Positive)
                   .withMagnetOffset(ENCODER_MAGNET_OFFSET));
 
