@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
-
 
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
@@ -84,4 +83,3 @@ public class BehaviourManager {
     if (reasoner != null) reasoner.reset();
   }
 }
-

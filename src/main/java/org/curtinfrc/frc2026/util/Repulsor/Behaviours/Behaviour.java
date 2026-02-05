@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import edu.wpi.first.wpilibj2.command.Command;
@@ -32,4 +31,3 @@ public abstract class Behaviour {
 
   public abstract Command build(BehaviourContext ctx);
 }
-

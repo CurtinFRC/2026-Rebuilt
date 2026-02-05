@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -16,7 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
-
 
 package org.curtinfrc.frc2026.util.Repulsor.Units;
 
@@ -114,4 +113,3 @@ public final class ShooterUnits {
     return metersPerSecondToFlywheelRpm(exitVelocityMps, wheelDiameterMeters / 2.0);
   }
 }
-

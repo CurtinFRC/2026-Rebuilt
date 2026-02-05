@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Reasoning;
 
 import edu.wpi.first.wpilibj.Timer;
@@ -28,4 +27,3 @@ public final class WpiClock implements Clock {
     return Timer.getFPGATimestamp();
   }
 }
-

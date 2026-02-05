@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Metrics;
 
 import java.util.Optional;
@@ -29,4 +28,3 @@ public interface MetricCodec<T> {
     return Optional.empty();
   }
 }
-

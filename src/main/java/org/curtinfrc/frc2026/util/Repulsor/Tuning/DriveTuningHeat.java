@@ -1,4 +1,4 @@
-﻿/*
+/*
  * =============================================================
  *  Repulsor Library
  *  Copyright (c) 2026 Paul Hodges
@@ -164,4 +164,3 @@ public class DriveTuningHeat extends DriveTuning {
     }
   }
 }
-

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Fields;
 
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
@@ -25,4 +24,3 @@ import org.curtinfrc.frc2026.util.Repulsor.Heatmap.HeatmapProvider;
 
 public interface FieldDefinition
     extends FieldLayoutProvider, FieldPlanner.ObstacleProvider, HeatmapProvider {}
-

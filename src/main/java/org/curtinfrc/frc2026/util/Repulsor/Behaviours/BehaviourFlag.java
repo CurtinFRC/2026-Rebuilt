@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 public enum BehaviourFlag {
@@ -26,4 +25,3 @@ public enum BehaviourFlag {
   SHUTTLE_MODE,
   TEST_MODE
 }
-
