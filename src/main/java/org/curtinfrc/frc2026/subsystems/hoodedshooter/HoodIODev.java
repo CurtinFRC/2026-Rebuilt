@@ -41,7 +41,7 @@ public class HoodIODev implements HoodIO {
   public static final double LIMIT_BUFFER_ROTATIONS = 0.1;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.4;
   public static final double ENCODER_MAGNET_OFFSET = -0.051025;
-  public static final double ZERO_DEGREE_OFFSET = 53;
+  public static final double ZERO_DEGREE_OFFSET_DEGREES = 53;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.0869;
   public static final double KP = 20.0;
@@ -110,7 +110,7 @@ public class HoodIODev implements HoodIO {
       new CANcoderConfiguration()
           .withMagnetSensor(
               new MagnetSensorConfigs()
-                  .withAbsoluteSensorDiscontinuityPoint(0.5)
+                  .withAbsoluteSensorDiscontinuityPoint(1)
                   .withSensorDirection(SensorDirectionValue.Clockwise_Positive)
                   .withMagnetOffset(ENCODER_MAGNET_OFFSET));
 
@@ -156,7 +156,7 @@ public class HoodIODev implements HoodIO {
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
     inputs.hoodPositionDegrees =
-        (encoderPosition.getValueAsDouble() * 360 / GEAR_RATIO) + ZERO_DEGREE_OFFSET;
+        (encoderPosition.getValueAsDouble() * 360 / GEAR_RATIO) + ZERO_DEGREE_OFFSET_DEGREES;
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
   }
@@ -173,7 +173,7 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void setPosition(double position) {
-    var request = positionRequest.withPosition(position);
+    var request = positionRequest.withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360));
     if (this.position.getValueAsDouble() > STOWED_OUT_POSITION_THRESHOLD) {
       request.withSlot(1);
     } else {
