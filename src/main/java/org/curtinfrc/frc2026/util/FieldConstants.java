@@ -341,8 +341,8 @@ public class FieldConstants {
                   Path.of(
                       Filesystem.getDeployDirectory().getPath(),
                       "apriltags",
-                      "welded",
-                      "2026-official" + ".json");
+                      fieldType.getJsonFolder(),
+                      name + ".json");
               layout = new AprilTagFieldLayout(p);
               layoutString = new ObjectMapper().writeValueAsString(layout);
             } catch (IOException e) {
