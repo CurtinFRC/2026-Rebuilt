@@ -1,14 +1,13 @@
-name: fuel
+name: fuel1
 mass_kg: 0.227
-drag_coefficient: 0.48700926723950455
-cross_section_area_m2: 0.017667390320093575
+drag_coefficient: 0.47
+cross_section_area_m2: 0.017665851737347082
 air_density_kg_per_m3: 1.225
 metadata:
   source_mesh: GE-26900- Fuel (277).stl
   mesh_units: m
   scale: 1.0
   volume_m3: 0.001765744477897629
-  surface_area_m2: 0.07065780127390292
   bounds_extents_m:
   - 0.15000000596046448
   - 0.15000000596046448
@@ -17,23 +16,12 @@ metadata:
   density_kg_per_m3: 128.0
   mass_kg_override: 0.227
   area_method: projected
-  sphericity: 0.9998677866814223
-  equivalent_sphere_diameter_m: 0.14996033829518557
-  projected_area_resolution: 1024
-  projected_area_rel_error: 9.71628449281386e-05
-  volume_method: mesh
-  voxel_volume_pitch_m: null
-  voxel_volume_rel_error: null
   auto_shape_hint: sphere-ish
-  auto_drag_coefficient_hint: 0.48700926723950455
+  auto_drag_coefficient_hint: 0.47
   material: null
-  estimated_terminal_velocity_mps: 20.454380607604985
-  air_dynamic_viscosity_pa_s: 1.81e-05
-  reynolds_number_at_terminal: 207596.6104160379
-  drag_coefficient_at_terminal: 0.48700926723950455
-  drag_model: haider_levenspiel
+  estimated_terminal_velocity_mps: 20.92561189155543
   alt_cross_section_estimates_m2:
-    projected: 0.017667390320093575
+    projected: 0.017665851737347082
     bbox_ellipse: 0.01767146008084397
     bbox_rect: 0.02250000178813938
   warnings: []
