@@ -3,12 +3,9 @@
  *  Repulsor Library
  *  Copyright (c) 2026 Paul Hodges
  *
- *  Licensed under the MIT License.
- *  SPDX-License-Identifier: MIT
+ *  Licensed under the Repulsor Non-Commercial License (RNC-1.0).
  * =============================================================
  */
-
-
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 /** Interface for pressure or pneumatic effect models. */
@@ -40,3 +37,4 @@ public interface PressureModel {
   /** Resets any internal state to its default values. */
   void reset();
 }
+

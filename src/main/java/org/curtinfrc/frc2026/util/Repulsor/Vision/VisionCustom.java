@@ -3,12 +3,9 @@
  *  Repulsor Library
  *  Copyright (c) 2026 Paul Hodges
  *
- *  Licensed under the MIT License.
- *  SPDX-License-Identifier: MIT
+ *  Licensed under the Repulsor Non-Commercial License (RNC-1.0).
  * =============================================================
  */
-
-
 package org.curtinfrc.frc2026.util.Repulsor.Vision;
 
 import edu.wpi.first.networktables.NetworkTable;
@@ -48,3 +45,4 @@ public class VisionCustom implements RepulsorVision {
     return out.toArray(new Obstacle[0]);
   }
 }
+
