@@ -1,3 +1,4 @@
+
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
@@ -6,14 +7,10 @@ import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
-import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.Slot1Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
-import com.ctre.phoenix6.configs.TorqueCurrentConfigs;
 import com.ctre.phoenix6.controls.Follower;
-import com.ctre.phoenix6.controls.VelocityTorqueCurrentFOC;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.TalonFX;
@@ -27,7 +24,6 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import java.util.List;
-import java.util.function.BooleanSupplier;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIODev implements ShooterIO {
@@ -38,13 +34,12 @@ public class ShooterIODev implements ShooterIO {
   public static final double VELOCITY_TOLERANCE = 1;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.65;
-  private static final double KI = 0.001;
-  private static final double KD = 0.004;
+  private static final double KP = 0.00076245;
+  private static final double KI = 0.0;
+  private static final double KD = 0.1;
   private static final double KS = 0.24152;
   private static final double KV = 0.12173;
   private static final double KA = 0.015427;
-  private static final double EFFICIENCY = 0.8;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
@@ -58,23 +53,10 @@ public class ShooterIODev implements ShooterIO {
                   .withInverted(InvertedValue.CounterClockwise_Positive))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(100).withStatorCurrentLimit(120))
-          .withTorqueCurrent(
-              new TorqueCurrentConfigs()
-                  .withPeakForwardTorqueCurrent(120)
-                  .withPeakReverseTorqueCurrent(-120))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
           .withSlot0(
-              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA))
-          .withSlot1(
-              new Slot1Configs()
-                  .withKP(2)
-                  .withKI(0.002)
-                  .withKD(0.01)
-                  .withKS(KS)
-                  .withKV(KV)
-                  .withKA(KA))
-          .withMotionMagic(
-              new MotionMagicConfigs().withMotionMagicAcceleration(4000).withMotionMagicJerk(4000));
+              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA));
+
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();
   private final StatusSignal<AngularVelocity> velocity = leaderMotor.getVelocity();
@@ -88,8 +70,7 @@ public class ShooterIODev implements ShooterIO {
           followerMotor2.getDeviceTemp());
 
   final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
-  final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true);
-  final VelocityTorqueCurrentFOC velocityTorqueCurrentRequest = new VelocityTorqueCurrentFOC(0);
+  final VelocityVoltage velocityRequest = new VelocityVoltage(0).withEnableFOC(true).withSlot(0);
 
   public ShooterIODev() {
     tryUntilOk(5, () -> leaderMotor.getConfigurator().apply(sharedMotorConfig));
@@ -130,15 +111,9 @@ public class ShooterIODev implements ShooterIO {
   }
 
   @Override
-  public void setVelocity(double velocity, BooleanSupplier f) {
-    double rps = convertVelocityToRPS(velocity / EFFICIENCY);
-    int slot = f.getAsBoolean() ? 1 : 0;
-    if (f.getAsBoolean()) {
-      leaderMotor.setControl(
-          velocityTorqueCurrentRequest.withVelocity(rps).withSlot(slot).withFeedForward(70));
-    } else {
-      leaderMotor.setControl(velocityRequest.withVelocity(rps).withSlot(slot));
-    }
+  public void setVelocity(double velocity) {
+    double rps = convertVelocityToRPS(velocity);
+    leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
 
   public static double convertVelocityToRPS(double velocity) {

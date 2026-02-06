@@ -1,3 +1,4 @@
+
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import choreo.util.ChoreoAllianceFlipUtil;
@@ -13,8 +14,6 @@ import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
-import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
@@ -231,12 +230,11 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> shooterIO.setVoltage(0));
   }
 
-  public Command setShooterVelocity(double velocity, BooleanSupplier useFeedforward) {
-    return run(() -> shooterIO.setVelocity(velocity, useFeedforward));
+  public Command setShooterVelocity(double velocity) {
+    return run(() -> shooterIO.setVelocity(velocity));
   }
 
-  public Command setHoodedShooterPositionAndVelocity(
-      double position, double velocity, BooleanSupplier useFeedforward) {
+  public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
     return run(
         () -> {
           hoodIO.setPosition(position);
