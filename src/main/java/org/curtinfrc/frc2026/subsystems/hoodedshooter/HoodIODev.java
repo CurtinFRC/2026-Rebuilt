@@ -11,7 +11,6 @@ import com.ctre.phoenix6.configs.MagnetSensorConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.Slot1Configs;
 import com.ctre.phoenix6.configs.SoftwareLimitSwitchConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.MotionMagicVoltage;
@@ -36,24 +35,21 @@ public class HoodIODev implements HoodIO {
 
   public static final double GEAR_RATIO = 8.2; // 12:32 * 10:82
   public static final double MOTOR_TO_SENSOR_RATIO = 2.66666667;
-  public static final double FORWARD_LIMIT_ROTATIONS = 100;
-  public static final double REVERSE_LIMIT_ROTATIONS = -100;
-  public static final double LIMIT_BUFFER_ROTATIONS = 0.1;
+  public static final double FORWARD_LIMIT_ROTATIONS = 0.33888889;
+  public static final double REVERSE_LIMIT_ROTATIONS = 0;
+  public static final double LIMIT_BUFFER_ROTATIONS = 0.05;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.4;
-  public static final double ENCODER_MAGNET_OFFSET = -0.051025;
+  public static final double ENCODER_MAGNET_OFFSET = -0.034912;
   public static final double ZERO_DEGREE_OFFSET_DEGREES = 53;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.0869;
-  public static final double KP_STOWED = 155.6;
-  public static final double KP_OUT = 155.6;
-  public static final double KI = 0.0;
-  public static final double KD = 5.05;
-
-  public static final double KS_STOWED = 0.6;
-  public static final double KS_OUT = 0.3;
-  public static final double KV = 4.81;
-  public static final double KA = 0.03;
-  public static final double KG = 0.14;
+  public static final double KP = 15.0;
+  public static final double KI = 0.05;
+  public static final double KD = 0.0;
+  public static final double KS = 0.47;
+  public static final double KV = 0.15;
+  public static final double KA = 0.00;
+  public static final double KG = 0.8;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
   public static final double MM_ACCLERATION = 16;
@@ -82,21 +78,10 @@ public class HoodIODev implements HoodIO {
                   .withReverseSoftLimitEnable(true))
           .withSlot0(
               new Slot0Configs()
-                  .withKP(KP_STOWED)
+                  .withKP(KP)
                   .withKI(KI)
                   .withKD(KD)
-                  .withKS(KS_STOWED)
-                  .withKV(KV)
-                  .withKA(KA)
-                  .withKG(KG)
-                  .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
-                  .withGravityType(GravityTypeValue.Arm_Cosine))
-          .withSlot1(
-              new Slot1Configs()
-                  .withKP(KP_OUT)
-                  .withKI(KI)
-                  .withKD(KD)
-                  .withKS(KS_OUT)
+                  .withKS(KS)
                   .withKV(KV)
                   .withKA(KA)
                   .withKG(KG)
@@ -175,12 +160,6 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void setPosition(double position) {
-    var request = positionRequest.withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360));
-    if (this.position.getValueAsDouble() > STOWED_OUT_POSITION_THRESHOLD) {
-      request.withSlot(1);
-    } else {
-      request.withSlot(0);
-    }
-    motor.setControl(request);
+    motor.setControl(positionRequest.withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360)));
   }
 }
