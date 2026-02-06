@@ -39,7 +39,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.OnlineSearchState;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibrary;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibraryBuilder;
+import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotSolution;
 
 public class Setpoints {
 
@@ -363,13 +369,13 @@ public class Setpoints {
     private static final double HUB_SIMPLE_RADIUS_M = 3.0;
     private static final double HUB_OBS_ENABLE_DIST_M = 2.15;
 
-    private static final DragShotPlanner.GamePiecePhysics HUB_PHYSICS = loadHubPhysicsOnce();
+    private static final GamePiecePhysics HUB_PHYSICS = loadHubPhysicsOnce();
 
-    private static DragShotPlanner.GamePiecePhysics loadHubPhysicsOnce() {
+    private static GamePiecePhysics loadHubPhysicsOnce() {
       try {
         return DragShotPlanner.loadGamePieceFromDeployYaml(GAME_PIECE_ID_FUEL);
       } catch (Throwable t) {
-        return new DragShotPlanner.GamePiecePhysics() {
+        return new GamePiecePhysics() {
           @Override
           public double massKg() {
             return 0.27;
@@ -401,7 +407,7 @@ public class Setpoints {
       volatile int lastSolveObsHash;
 
       volatile long lastRefineNs;
-      volatile DragShotPlanner.ShotSolution lastSolution;
+      volatile ShotSolution lastSolution;
     }
 
     private static final double[][] SIMPLE_OFFS =
@@ -523,8 +529,8 @@ public class Setpoints {
       return safeValidFallback(targetFieldPos, halfL, halfW, obs);
     }
 
-    public static final DragShotPlanner.Constraints HUB_SHOT_CONSTRAINTS =
-        new DragShotPlanner.Constraints(0, 30, 0, 45.0, DragShotPlanner.Constraints.ShotStyle.ARC);
+    public static final Constraints HUB_SHOT_CONSTRAINTS =
+        new Constraints(0, 30, 0, 45.0, Constraints.ShotStyle.ARC);
 
     public static final int BLUE_HUB_ANCHOR_TAG_ID = 20;
     public static final int BLUE_OUTPOST_ANCHOR_TAG_ID = 13;
@@ -556,7 +562,7 @@ public class Setpoints {
       return alliance == Alliance.Red ? flipToRed(blue) : blue;
     }
 
-    public static Optional<DragShotPlanner.ShotSolution> getHubShotSolution(SetpointContext ctx) {
+    public static Optional<ShotSolution> getHubShotSolution(SetpointContext ctx) {
       if (ctx == null || ctx.robotPose().isEmpty()) {
         return Optional.empty();
       }
@@ -586,8 +592,8 @@ public class Setpoints {
 
     private static final ConcurrentHashMap<HubShotCacheKey, HubShotLibraryState> HUB_LIB_CACHE =
         new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<HubShotCacheKey, DragShotPlanner.OnlineSearchState>
-        HUB_ONLINE_STATE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<HubShotCacheKey, OnlineSearchState> HUB_ONLINE_STATE =
+        new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<HubShotCacheKey, HubLastPoseCache> HUB_LAST_POSE =
         new ConcurrentHashMap<>();
 
@@ -598,20 +604,20 @@ public class Setpoints {
 
     private static final class HubShotLibraryState {
       final HubShotCacheKey key;
-      final DragShotPlanner.GamePiecePhysics physics;
+      final GamePiecePhysics physics;
       final Translation2d targetFieldPos;
       final double releaseH;
       final double halfL;
       final double halfW;
 
-      volatile DragShotPlanner.ShotLibrary published;
+      volatile ShotLibrary published;
       volatile boolean done;
       final Object lock = new Object();
-      DragShotPlanner.ShotLibraryBuilder builder;
+      ShotLibraryBuilder builder;
 
       HubShotLibraryState(
           HubShotCacheKey key,
-          DragShotPlanner.GamePiecePhysics physics,
+          GamePiecePhysics physics,
           Translation2d targetFieldPos,
           double releaseH,
           double halfL,
@@ -679,7 +685,7 @@ public class Setpoints {
               double bearingStep = 12.0;
 
               st.builder =
-                  new DragShotPlanner.ShotLibraryBuilder(
+                  new ShotLibraryBuilder(
                       st.physics,
                       st.targetFieldPos,
                       HUB_OPENING_FRONT_EDGE_HEIGHT_M,
@@ -692,7 +698,7 @@ public class Setpoints {
                       radialStep,
                       bearingStep);
             }
-            DragShotPlanner.ShotLibrary publish = st.builder.maybeStep(900_000L);
+            ShotLibrary publish = st.builder.maybeStep(900_000L);
             if (publish != null) {
               if (!publish.entries().isEmpty() || publish.complete()) {
                 st.published = publish;
@@ -706,8 +712,8 @@ public class Setpoints {
       }
     }
 
-    private static DragShotPlanner.ShotLibrary getOrStartHubLibrary(
-        DragShotPlanner.GamePiecePhysics physics,
+    private static ShotLibrary getOrStartHubLibrary(
+        GamePiecePhysics physics,
         Translation2d targetFieldPos,
         double releaseH,
         double halfL,
@@ -728,15 +734,14 @@ public class Setpoints {
               key,
               k -> new HubShotLibraryState(k, physics, targetFieldPos, releaseH, halfL, halfW));
 
-      DragShotPlanner.ShotLibrary pub = st.published;
+      ShotLibrary pub = st.published;
       if (pub != null) return pub;
       return null;
     }
 
-    private static DragShotPlanner.OnlineSearchState getOrCreateOnlineState(
+    private static OnlineSearchState getOrCreateOnlineState(
         HubShotCacheKey key, Translation2d seed) {
-      return HUB_ONLINE_STATE.computeIfAbsent(
-          key, k -> new DragShotPlanner.OnlineSearchState(seed, 0.58));
+      return HUB_ONLINE_STATE.computeIfAbsent(key, k -> new OnlineSearchState(seed, 0.58));
     }
 
     private static HubShotCacheKey hubKey(
@@ -902,12 +907,11 @@ public class Setpoints {
 
         Translation2d seed = simple.getTranslation();
 
-        DragShotPlanner.ShotLibrary lib =
-            getOrStartHubLibrary(HUB_PHYSICS, targetFieldPos, releaseH, halfL, halfW);
+        ShotLibrary lib = getOrStartHubLibrary(HUB_PHYSICS, targetFieldPos, releaseH, halfL, halfW);
 
-        DragShotPlanner.ShotSolution libSol = null;
+        ShotSolution libSol = null;
         if (lib != null && !lib.entries().isEmpty()) {
-          Optional<DragShotPlanner.ShotSolution> opt =
+          Optional<ShotSolution> opt =
               DragShotPlanner.findBestShotFromLibrary(
                   lib,
                   HUB_PHYSICS,
@@ -925,7 +929,7 @@ public class Setpoints {
           }
         }
 
-        DragShotPlanner.OnlineSearchState online = getOrCreateOnlineState(key, seed);
+        OnlineSearchState online = getOrCreateOnlineState(key, seed);
 
         int mdx = Math.abs(rxmm - state.lastSolveRobotXmm);
         int mdy = Math.abs(rymm - state.lastSolveRobotYmm);
@@ -950,10 +954,10 @@ public class Setpoints {
 
         boolean allowRefine = !haveRecentSol && sinceRefine >= 120_000_000L;
 
-        DragShotPlanner.ShotSolution refinedSol = null;
+        ShotSolution refinedSol = null;
         if (allowRefine) {
           long refineBudgetNs = useObs ? 160_000L : 120_000L;
-          Optional<DragShotPlanner.ShotSolution> refined =
+          Optional<ShotSolution> refined =
               DragShotPlanner.findBestShotOnlineRefine(
                   HUB_PHYSICS,
                   targetFieldPos,
@@ -974,7 +978,7 @@ public class Setpoints {
           }
         }
 
-        DragShotPlanner.ShotSolution sol = refinedSol != null ? refinedSol : libSol;
+        ShotSolution sol = refinedSol != null ? refinedSol : libSol;
 
         Pose2d out;
         if (sol == null) {
