@@ -160,8 +160,9 @@ final class DragShotPlannerSolveAtPosition {
         double speedMinLoop = minSpeed;
         double speedMaxLoop = maxSpeed;
         double speedStepLocal = coarseStep;
+        double vGuess = Double.NaN;
         if (fastMode) {
-          double vGuess =
+          vGuess =
               DragShotPlannerUtil.estimateSpeedNoDrag(horizontalDistance, heightDelta, angleRadVal);
           if (Double.isFinite(vGuess)) {
             double window = Math.max(1.3, vGuess * 0.18);
@@ -186,11 +187,16 @@ final class DragShotPlannerSolveAtPosition {
         double localBestSigned = 0.0;
         boolean localFound = false;
 
-        for (double speed = speedMinLoop; speed <= speedMaxLoop + 1e-6; speed += speedStepLocal) {
-          sims++;
-          AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
-          try {
-            if (fastMode) {
+        boolean fastLocalOnly = false;
+        if (fastMode && Double.isFinite(vGuess)) {
+          double delta = Math.max(0.7, vGuess * 0.1);
+          double[] speeds = new double[] {vGuess, vGuess + delta, vGuess - delta};
+          for (double speed : speeds) {
+            if (speed < speedMinLoop || speed > speedMaxLoop) continue;
+            sims++;
+            AutoCloseable _p1 =
+                Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+            try {
               DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
                   sim,
                   gamePiece,
@@ -199,36 +205,78 @@ final class DragShotPlannerSolveAtPosition {
                   shooterReleaseHeightMeters,
                   horizontalDistance,
                   targetHeightMeters);
-            } else {
-              DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                  sim,
-                  gamePiece,
-                  speed * cos,
-                  speed * sin,
-                  shooterReleaseHeightMeters,
-                  horizontalDistance,
-                  targetHeightMeters);
+            } finally {
+              DragShotPlannerUtil.closeQuietly(_p1);
             }
-          } finally {
-            DragShotPlannerUtil.closeQuietly(_p1);
+
+            if (!sim.hitPlane) continue;
+            simsHit++;
+
+            double errAbs = sim.verticalErrorMeters;
+            if (errAbs < 0.0) {
+              errAbs = -errAbs;
+            }
+            if (errAbs <= acceptableError) simsWithin++;
+
+            if (!localFound || errAbs < localBestErrAbs - 1e-9) {
+              localFound = true;
+              localBestSpeed = speed;
+              localBestErrAbs = errAbs;
+              localBestTime = sim.timeAtPlaneSeconds;
+              localBestSigned = sim.verticalErrorMeters;
+            }
           }
-
-          if (!sim.hitPlane) continue;
-          simsHit++;
-
-          double errAbs = sim.verticalErrorMeters;
-          if (errAbs < 0.0) {
-            errAbs = -errAbs;
+          if (localFound) {
+            fastLocalOnly = true;
           }
-          if (errAbs <= acceptableError) simsWithin++;
+        }
 
-          if (!localFound || errAbs < localBestErrAbs - 1e-9) {
-            localFound = true;
-            localBestSpeed = speed;
-            localBestErrAbs = errAbs;
-            localBestTime = sim.timeAtPlaneSeconds;
-            localBestSigned = sim.verticalErrorMeters;
-            if (localBestErrAbs <= earlyAccept) break;
+        if (!fastLocalOnly) {
+          for (double speed = speedMinLoop; speed <= speedMaxLoop + 1e-6; speed += speedStepLocal) {
+            sims++;
+            AutoCloseable _p1 =
+                Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+            try {
+              if (fastMode) {
+                DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                    sim,
+                    gamePiece,
+                    speed * cos,
+                    speed * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              } else {
+                DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                    sim,
+                    gamePiece,
+                    speed * cos,
+                    speed * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              }
+            } finally {
+              DragShotPlannerUtil.closeQuietly(_p1);
+            }
+
+            if (!sim.hitPlane) continue;
+            simsHit++;
+
+            double errAbs = sim.verticalErrorMeters;
+            if (errAbs < 0.0) {
+              errAbs = -errAbs;
+            }
+            if (errAbs <= acceptableError) simsWithin++;
+
+            if (!localFound || errAbs < localBestErrAbs - 1e-9) {
+              localFound = true;
+              localBestSpeed = speed;
+              localBestErrAbs = errAbs;
+              localBestTime = sim.timeAtPlaneSeconds;
+              localBestSigned = sim.verticalErrorMeters;
+              if (localBestErrAbs <= earlyAccept) break;
+            }
           }
         }
 
@@ -244,117 +292,121 @@ final class DragShotPlannerSolveAtPosition {
         double refineBestTime = localBestTime;
         double refineBestSigned = localBestSigned;
 
-        int refineIters = fastMode ? 4 : 9;
-        for (int it = 0; it < refineIters; it++) {
-          double m1 = lo + (hi - lo) * (1.0 / 3.0);
-          double m2 = hi - (hi - lo) * (1.0 / 3.0);
+        if (!(fastMode && localBestErrAbs <= acceptableError)) {
+          int refineIters = fastMode ? 3 : 9;
+          for (int it = 0; it < refineIters; it++) {
+            double m1 = lo + (hi - lo) * (1.0 / 3.0);
+            double m2 = hi - (hi - lo) * (1.0 / 3.0);
 
-          double e1Abs;
-          double t1;
-          double s1;
-          sims++;
-          AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
-          try {
-            if (fastMode) {
-              DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
-                  sim,
-                  gamePiece,
-                  m1 * cos,
-                  m1 * sin,
-                  shooterReleaseHeightMeters,
-                  horizontalDistance,
-                  targetHeightMeters);
+            double e1Abs;
+            double t1;
+            double s1;
+            sims++;
+            AutoCloseable _p2 =
+                Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+            try {
+              if (fastMode) {
+                DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                    sim,
+                    gamePiece,
+                    m1 * cos,
+                    m1 * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              } else {
+                DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                    sim,
+                    gamePiece,
+                    m1 * cos,
+                    m1 * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              }
+            } finally {
+              DragShotPlannerUtil.closeQuietly(_p2);
+            }
+            if (sim.hitPlane) {
+              simsHit++;
+              e1Abs = sim.verticalErrorMeters;
+              if (e1Abs < 0.0) {
+                e1Abs = -e1Abs;
+              }
+              t1 = sim.timeAtPlaneSeconds;
+              s1 = sim.verticalErrorMeters;
+              if (e1Abs <= acceptableError) simsWithin++;
             } else {
-              DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                  sim,
-                  gamePiece,
-                  m1 * cos,
-                  m1 * sin,
-                  shooterReleaseHeightMeters,
-                  horizontalDistance,
-                  targetHeightMeters);
+              e1Abs = Double.POSITIVE_INFINITY;
+              t1 = 0.0;
+              s1 = Double.POSITIVE_INFINITY;
             }
-          } finally {
-            DragShotPlannerUtil.closeQuietly(_p2);
-          }
-          if (sim.hitPlane) {
-            simsHit++;
-            e1Abs = sim.verticalErrorMeters;
-            if (e1Abs < 0.0) {
-              e1Abs = -e1Abs;
-            }
-            t1 = sim.timeAtPlaneSeconds;
-            s1 = sim.verticalErrorMeters;
-            if (e1Abs <= acceptableError) simsWithin++;
-          } else {
-            e1Abs = Double.POSITIVE_INFINITY;
-            t1 = 0.0;
-            s1 = Double.POSITIVE_INFINITY;
-          }
 
-          double e2Abs;
-          double t2;
-          double s2;
-          sims++;
-          AutoCloseable _p3 = Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
-          try {
-            if (fastMode) {
-              DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
-                  sim,
-                  gamePiece,
-                  m2 * cos,
-                  m2 * sin,
-                  shooterReleaseHeightMeters,
-                  horizontalDistance,
-                  targetHeightMeters);
+            double e2Abs;
+            double t2;
+            double s2;
+            sims++;
+            AutoCloseable _p3 =
+                Profiler.section("DragShotPlanner.simulateToTargetPlane.solveAtPos");
+            try {
+              if (fastMode) {
+                DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                    sim,
+                    gamePiece,
+                    m2 * cos,
+                    m2 * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              } else {
+                DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                    sim,
+                    gamePiece,
+                    m2 * cos,
+                    m2 * sin,
+                    shooterReleaseHeightMeters,
+                    horizontalDistance,
+                    targetHeightMeters);
+              }
+            } finally {
+              DragShotPlannerUtil.closeQuietly(_p3);
+            }
+            if (sim.hitPlane) {
+              simsHit++;
+              e2Abs = sim.verticalErrorMeters;
+              if (e2Abs < 0.0) {
+                e2Abs = -e2Abs;
+              }
+              t2 = sim.timeAtPlaneSeconds;
+              s2 = sim.verticalErrorMeters;
+              if (e2Abs <= acceptableError) simsWithin++;
             } else {
-              DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                  sim,
-                  gamePiece,
-                  m2 * cos,
-                  m2 * sin,
-                  shooterReleaseHeightMeters,
-                  horizontalDistance,
-                  targetHeightMeters);
+              e2Abs = Double.POSITIVE_INFINITY;
+              t2 = 0.0;
+              s2 = Double.POSITIVE_INFINITY;
             }
-          } finally {
-            DragShotPlannerUtil.closeQuietly(_p3);
-          }
-          if (sim.hitPlane) {
-            simsHit++;
-            e2Abs = sim.verticalErrorMeters;
-            if (e2Abs < 0.0) {
-              e2Abs = -e2Abs;
+
+            if (e1Abs < refineBestErrAbs) {
+              refineBestErrAbs = e1Abs;
+              refineBestSpeed = m1;
+              refineBestTime = t1;
+              refineBestSigned = s1;
             }
-            t2 = sim.timeAtPlaneSeconds;
-            s2 = sim.verticalErrorMeters;
-            if (e2Abs <= acceptableError) simsWithin++;
-          } else {
-            e2Abs = Double.POSITIVE_INFINITY;
-            t2 = 0.0;
-            s2 = Double.POSITIVE_INFINITY;
-          }
+            if (e2Abs < refineBestErrAbs) {
+              refineBestErrAbs = e2Abs;
+              refineBestSpeed = m2;
+              refineBestTime = t2;
+              refineBestSigned = s2;
+            }
 
-          if (e1Abs < refineBestErrAbs) {
-            refineBestErrAbs = e1Abs;
-            refineBestSpeed = m1;
-            refineBestTime = t1;
-            refineBestSigned = s1;
-          }
-          if (e2Abs < refineBestErrAbs) {
-            refineBestErrAbs = e2Abs;
-            refineBestSpeed = m2;
-            refineBestTime = t2;
-            refineBestSigned = s2;
-          }
+            if (e1Abs <= e2Abs) {
+              hi = m2;
+            } else {
+              lo = m1;
+            }
 
-          if (e1Abs <= e2Abs) {
-            hi = m2;
-          } else {
-            lo = m1;
+            if (refineBestErrAbs <= refineBreak) break;
           }
-
-          if (refineBestErrAbs <= refineBreak) break;
         }
 
         boolean take;

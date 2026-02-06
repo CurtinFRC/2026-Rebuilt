@@ -101,6 +101,47 @@ final class DragShotPlannerOnlineSearch {
       double robotY = robotPos.getY();
       double targetX = targetFieldPosition.getX();
       double targetY = targetFieldPosition.getY();
+      int robotXmm = (int) Math.round(robotX * 1000.0);
+      int robotYmm = (int) Math.round(robotY * 1000.0);
+      int targetXmm = (int) Math.round(targetX * 1000.0);
+      int targetYmm = (int) Math.round(targetY * 1000.0);
+      int obsHash = obstaclesStableHash(dynamicObstacles);
+
+      ShotSolution cached = state.lastSolution();
+      if (cached != null) {
+        int dtx = Math.abs(targetXmm - state.lastTargetXmm());
+        int dty = Math.abs(targetYmm - state.lastTargetYmm());
+        if (dtx <= 20 && dty <= 20 && obsHash == state.lastObsHash()) {
+          Translation2d sp = cached.shooterPosition();
+          double dxr = robotX - sp.getX();
+          double dyr = robotY - sp.getY();
+          double distSq = dxr * dxr + dyr * dyr;
+          if (distSq <= maxTravelSq + 1e-6) {
+            double err = cached.verticalErrorMeters();
+            if (err < 0.0) err = -err;
+            if (err <= acceptableError) {
+              boolean ok;
+              AutoCloseable _pCached =
+                  Profiler.section("DragShotPlanner.isShooterPoseValid.cached");
+              try {
+                ok =
+                    DragShotPlannerObstacles.isShooterPoseValidInternal(
+                        sp,
+                        targetFieldPosition,
+                        robotHalfLengthMeters,
+                        robotHalfWidthMeters,
+                        dynamicObstacles);
+              } finally {
+                DragShotPlannerUtil.closeQuietly(_pCached);
+              }
+              if (ok) {
+                state.setLastSolution(cached, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
+                return Optional.of(cached);
+              }
+            }
+          }
+        }
+      }
 
       Translation2d seed = state.seed();
       if (seed == null) {
@@ -111,9 +152,9 @@ final class DragShotPlannerOnlineSearch {
       double speedStep = Math.max(0.35, (maxSpeed - minSpeed) / 55.0);
       double angleStep = fixedAngle ? 1.0 : Math.max(0.65, (maxAngleDeg - minAngleDeg) / 55.0);
       if (fastMode) {
-        speedStep = Math.max(speedStep, 0.55);
+        speedStep = Math.max(speedStep, 0.8);
         if (!fixedAngle) {
-          angleStep = Math.max(angleStep, 0.9);
+          angleStep = Math.max(angleStep, 1.2);
         }
       }
 
@@ -166,7 +207,7 @@ final class DragShotPlannerOnlineSearch {
               errSeed = -errSeed;
             }
             if (errSeed <= acceptableError) {
-              return Optional.of(
+              ShotSolution out =
                   new ShotSolution(
                       seedSol.shooterPosition(),
                       seedSol.shooterYaw(),
@@ -174,7 +215,9 @@ final class DragShotPlannerOnlineSearch {
                       seedSol.launchAngle(),
                       seedSol.timeToPlaneSeconds(),
                       targetFieldPosition,
-                      errSeed));
+                      errSeed);
+              state.setLastSolution(out, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
+              return Optional.of(out);
             }
             best =
                 new DragShotPlannerCandidate(
@@ -289,7 +332,7 @@ final class DragShotPlannerOnlineSearch {
                   distSq2);
 
           if (errSol <= acceptableError) {
-            return Optional.of(
+            ShotSolution out =
                 new ShotSolution(
                     cand.shooterPosition,
                     Rotation2d.fromRadians(cand.shooterYawRad),
@@ -297,7 +340,9 @@ final class DragShotPlannerOnlineSearch {
                     Rotation2d.fromRadians(cand.angleRad),
                     cand.timeToPlane,
                     targetFieldPosition,
-                    cand.verticalError));
+                    cand.verticalError);
+            state.setLastSolution(out, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
+            return Optional.of(out);
           }
 
           if (DragShotPlannerCandidate.isBetterCandidate(best, cand, shotStyle)) {
@@ -330,7 +375,7 @@ final class DragShotPlannerOnlineSearch {
       }
 
       if (best.verticalError <= acceptableError) {
-        return Optional.of(
+        ShotSolution out =
             new ShotSolution(
                 best.shooterPosition,
                 Rotation2d.fromRadians(best.shooterYawRad),
@@ -338,7 +383,9 @@ final class DragShotPlannerOnlineSearch {
                 Rotation2d.fromRadians(best.angleRad),
                 best.timeToPlane,
                 targetFieldPosition,
-                best.verticalError));
+                best.verticalError);
+        state.setLastSolution(out, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
+        return Optional.of(out);
       }
 
       state.seed(best.shooterPosition);
@@ -368,10 +415,11 @@ final class DragShotPlannerOnlineSearch {
       }
 
       if (refined != null) {
+        state.setLastSolution(refined, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
         return Optional.of(refined);
       }
 
-      return Optional.of(
+      ShotSolution out =
           new ShotSolution(
               best.shooterPosition,
               Rotation2d.fromRadians(best.shooterYawRad),
@@ -379,7 +427,9 @@ final class DragShotPlannerOnlineSearch {
               Rotation2d.fromRadians(best.angleRad),
               best.timeToPlane,
               targetFieldPosition,
-              best.verticalError));
+              best.verticalError);
+      state.setLastSolution(out, robotXmm, robotYmm, targetXmm, targetYmm, obsHash);
+      return Optional.of(out);
     } finally {
       DragShotPlannerUtil.closeQuietly(_p);
     }
@@ -421,5 +471,10 @@ final class DragShotPlannerOnlineSearch {
     } finally {
       DragShotPlannerUtil.closeQuietly(_p0);
     }
+  }
+
+  private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
+    if (obs == null || obs.isEmpty()) return 0;
+    return (System.identityHashCode(obs) * 31) ^ obs.size();
   }
 }

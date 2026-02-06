@@ -26,6 +26,13 @@ public final class OnlineSearchState {
   private Translation2d seed;
   private double stepMeters;
   private long lastUpdateNs;
+  private ShotSolution lastSolution;
+  private int lastRobotXmm;
+  private int lastRobotYmm;
+  private int lastTargetXmm;
+  private int lastTargetYmm;
+  private int lastObsHash;
+  private long lastSolutionNs;
 
   public OnlineSearchState(Translation2d seed, double stepMeters) {
     this.seed = seed;
@@ -56,5 +63,49 @@ public final class OnlineSearchState {
 
   public void touch() {
     this.lastUpdateNs = System.nanoTime();
+  }
+
+  ShotSolution lastSolution() {
+    return lastSolution;
+  }
+
+  int lastRobotXmm() {
+    return lastRobotXmm;
+  }
+
+  int lastRobotYmm() {
+    return lastRobotYmm;
+  }
+
+  int lastTargetXmm() {
+    return lastTargetXmm;
+  }
+
+  int lastTargetYmm() {
+    return lastTargetYmm;
+  }
+
+  int lastObsHash() {
+    return lastObsHash;
+  }
+
+  long lastSolutionNs() {
+    return lastSolutionNs;
+  }
+
+  void setLastSolution(
+      ShotSolution solution,
+      int robotXmm,
+      int robotYmm,
+      int targetXmm,
+      int targetYmm,
+      int obsHash) {
+    this.lastSolution = solution;
+    this.lastRobotXmm = robotXmm;
+    this.lastRobotYmm = robotYmm;
+    this.lastTargetXmm = targetXmm;
+    this.lastTargetYmm = targetYmm;
+    this.lastObsHash = obsHash;
+    this.lastSolutionNs = System.nanoTime();
   }
 }

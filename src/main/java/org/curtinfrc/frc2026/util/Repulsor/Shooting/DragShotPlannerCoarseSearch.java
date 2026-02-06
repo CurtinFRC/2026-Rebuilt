@@ -59,8 +59,8 @@ final class DragShotPlannerCoarseSearch {
           angleStepCoarse = Math.max(angleStepCoarse, angleRange / 6.0);
           angleStepCoarse = Math.max(angleStepCoarse, 3.5);
         }
-        radialStepCoarse = 0.8;
-        bearingStepDegCoarse = 36.0;
+        radialStepCoarse = 1.0;
+        bearingStepDegCoarse = 45.0;
       }
       double coarseTolerance = DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
@@ -166,8 +166,9 @@ final class DragShotPlannerCoarseSearch {
             double speedMinLoop = minSpeed;
             double speedMaxLoop = maxSpeed;
             double speedStepLocal = speedStepCoarse;
+            double vGuess = Double.NaN;
             if (fastMode) {
-              double vGuess =
+              vGuess =
                   DragShotPlannerUtil.estimateSpeedNoDrag(
                       horizontalDistance, heightDelta, angleRadVal);
               if (Double.isFinite(vGuess)) {
@@ -187,13 +188,16 @@ final class DragShotPlannerCoarseSearch {
               }
             }
 
-            for (double speed = speedMinLoop;
-                speed <= speedMaxLoop + 1e-6;
-                speed += speedStepLocal) {
-              sims++;
-              AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
-              try {
-                if (fastMode) {
+            boolean fastLocalOnly = false;
+            if (fastMode && Double.isFinite(vGuess)) {
+              double delta = Math.max(0.7, vGuess * 0.1);
+              double[] speeds = new double[] {vGuess, vGuess + delta, vGuess - delta};
+              for (double speed : speeds) {
+                if (speed < speedMinLoop || speed > speedMaxLoop) continue;
+                sims++;
+                AutoCloseable _p2 =
+                    Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
+                try {
                   DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
                       sim,
                       gamePiece,
@@ -202,46 +206,99 @@ final class DragShotPlannerCoarseSearch {
                       shooterReleaseHeightMeters,
                       horizontalDistance,
                       targetHeightMeters);
-                } else {
-                  DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                      sim,
-                      gamePiece,
-                      speed * cos,
-                      speed * sin,
-                      shooterReleaseHeightMeters,
-                      horizontalDistance,
-                      targetHeightMeters);
+                } finally {
+                  DragShotPlannerUtil.closeQuietly(_p2);
                 }
-              } finally {
-                DragShotPlannerUtil.closeQuietly(_p2);
-              }
 
-              if (!sim.hitPlane) {
-                continue;
-              }
-              simsHit++;
+                if (!sim.hitPlane) {
+                  continue;
+                }
+                simsHit++;
 
-              double error = sim.verticalErrorMeters;
-              if (error < 0.0) {
-                error = -error;
-              }
-              if (error > coarseTolerance) {
-                continue;
-              }
-              simsAccepted++;
+                double error = sim.verticalErrorMeters;
+                if (error < 0.0) {
+                  error = -error;
+                }
+                if (error > coarseTolerance) {
+                  continue;
+                }
+                simsAccepted++;
 
-              DragShotPlannerCandidate next =
-                  new DragShotPlannerCandidate(
-                      shooterPos,
-                      shooterYawRad,
-                      speed,
-                      angleRadVal,
-                      sim.timeAtPlaneSeconds,
-                      error,
-                      robotDistanceSq);
+                DragShotPlannerCandidate next =
+                    new DragShotPlannerCandidate(
+                        shooterPos,
+                        shooterYawRad,
+                        speed,
+                        angleRadVal,
+                        sim.timeAtPlaneSeconds,
+                        error,
+                        robotDistanceSq);
 
-              if (DragShotPlannerCandidate.isBetterCandidate(bestCoarse, next, shotStyle)) {
-                bestCoarse = next;
+                if (DragShotPlannerCandidate.isBetterCandidate(bestCoarse, next, shotStyle)) {
+                  bestCoarse = next;
+                }
+              }
+              fastLocalOnly = true;
+            }
+
+            if (!fastLocalOnly) {
+              for (double speed = speedMinLoop;
+                  speed <= speedMaxLoop + 1e-6;
+                  speed += speedStepLocal) {
+                sims++;
+                AutoCloseable _p2 =
+                    Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
+                try {
+                  if (fastMode) {
+                    DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                        sim,
+                        gamePiece,
+                        speed * cos,
+                        speed * sin,
+                        shooterReleaseHeightMeters,
+                        horizontalDistance,
+                        targetHeightMeters);
+                  } else {
+                    DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                        sim,
+                        gamePiece,
+                        speed * cos,
+                        speed * sin,
+                        shooterReleaseHeightMeters,
+                        horizontalDistance,
+                        targetHeightMeters);
+                  }
+                } finally {
+                  DragShotPlannerUtil.closeQuietly(_p2);
+                }
+
+                if (!sim.hitPlane) {
+                  continue;
+                }
+                simsHit++;
+
+                double error = sim.verticalErrorMeters;
+                if (error < 0.0) {
+                  error = -error;
+                }
+                if (error > coarseTolerance) {
+                  continue;
+                }
+                simsAccepted++;
+
+                DragShotPlannerCandidate next =
+                    new DragShotPlannerCandidate(
+                        shooterPos,
+                        shooterYawRad,
+                        speed,
+                        angleRadVal,
+                        sim.timeAtPlaneSeconds,
+                        error,
+                        robotDistanceSq);
+
+                if (DragShotPlannerCandidate.isBetterCandidate(bestCoarse, next, shotStyle)) {
+                  bestCoarse = next;
+                }
               }
             }
           }

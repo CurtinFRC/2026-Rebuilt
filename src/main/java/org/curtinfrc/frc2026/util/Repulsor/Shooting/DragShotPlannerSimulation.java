@@ -119,12 +119,12 @@ final class DragShotPlannerSimulation {
       }
 
       double minHorizClamp = fastMode ? 0.7 : 0.6;
-      double maxTimeFactor = fastMode ? 1.25 : 1.45;
-      double minTime = fastMode ? 0.35 : 0.45;
-      double maxTime = fastMode ? 3.2 : 4.2;
-      double dxDiv = fastMode ? 48.0 : 70.0;
-      double dxMin = fastMode ? 0.07 : 0.05;
-      double dxMax = fastMode ? 0.22 : 0.14;
+      double maxTimeFactor = fastMode ? 1.15 : 1.45;
+      double minTime = fastMode ? 0.30 : 0.45;
+      double maxTime = fastMode ? 2.8 : 4.2;
+      double dxDiv = fastMode ? 36.0 : 70.0;
+      double dxMin = fastMode ? 0.09 : 0.05;
+      double dxMax = fastMode ? 0.28 : 0.14;
 
       double minHorizontalSpeed = avx0 < minHorizClamp ? minHorizClamp : avx0;
       double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
