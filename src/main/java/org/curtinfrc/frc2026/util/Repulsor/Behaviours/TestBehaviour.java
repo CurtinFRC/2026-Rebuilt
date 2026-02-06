@@ -21,6 +21,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import java.util.EnumSet;
@@ -31,9 +32,16 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
-import org.littletonrobotics.junction.Logger;
+import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 
 public final class TestBehaviour extends Behaviour {
+  private final NetworkTablesValue<Double> shotAngle =
+      NetworkTablesValue.ofDouble(
+          NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotAngle"), 0.0);
+
+  private final NetworkTablesValue<Double> shotSpeed =
+      NetworkTablesValue.ofDouble(
+          NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotSpeed"), 0.0);
 
   public TestBehaviour() {}
 
@@ -79,8 +87,8 @@ public final class TestBehaviour extends Behaviour {
               Setpoints.Rebuilt2026.getHubShotSolution(makeCtx(ctx, robotPose))
                   .ifPresent(
                       sol -> {
-                        Logger.recordOutput("ShotSpeed", sol.launchSpeedMetersPerSecond());
-                        Logger.recordOutput("ShotAngle", sol.launchAngle().getDegrees());
+                        shotSpeed.set(sol.launchSpeedMetersPerSecond());
+                        shotAngle.set(sol.launchAngle().getDegrees());
                       });
 
               RepulsorSample sample =
