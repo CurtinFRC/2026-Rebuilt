@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026.subsystems.Intake;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;
 
+import com.ctre.phoenix6.BaseStatusSignal;
 import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
@@ -17,16 +18,17 @@ import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO.IntakeIOInputs;
+import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class IntakeIODev implements IntakeIO {
-  private final TalonFX motor = new TalonFX(46);
+  private final TalonFX motor; // = new TalonFX(46);
 
   private final VoltageOut voltageRequest = new VoltageOut(0).withEnableFOC(true);
 
-  private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
-  private final StatusSignal<Current> current = motor.getStatorCurrent();
-  private final StatusSignal<Angle> position = motor.getPosition();
-  private final StatusSignal<AngularVelocity> velocity = motor.getVelocity();
+  private final StatusSignal<Voltage> voltage;
+  private final StatusSignal<Current> current; // = motor.getStatorCurrent();
+  private final StatusSignal<Angle> position; // = motor.getPosition();
+  private final StatusSignal<AngularVelocity> velocity; // = motor.getVelocity();
   private static final CurrentLimitsConfigs currentLimits =
       new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
 
@@ -34,11 +36,12 @@ public class IntakeIODev implements IntakeIO {
 
   private static final double VEL_KS = 0;
   private static final double VEL_KV = 0;
-  private static final double VEL_KP = .4;
+  private static final double VEL_KP = .2;
   private static final double VEL_KI = 0.27;
   private static final double VEL_KD = 0;
 
   public IntakeIODev() {
+    motor = new TalonFX(46);
 
     tryUntilOk(
         5,
@@ -59,6 +62,14 @@ public class IntakeIODev implements IntakeIO {
                                 .withKD(VEL_KD)
                                 .withKS(VEL_KS)
                                 .withKV(VEL_KV))));
+
+    voltage = motor.getMotorVoltage();
+    current = motor.getStatorCurrent();
+    position = motor.getPosition();
+    velocity = motor.getVelocity();
+
+    BaseStatusSignal.setUpdateFrequencyForAll(20.0, voltage, current, position, velocity);
+    PhoenixUtil.registerSignals(false, voltage, current, position, velocity);
   }
 
   @Override
@@ -66,7 +77,7 @@ public class IntakeIODev implements IntakeIO {
     inputs.AppliedVoltage = voltage.getValueAsDouble();
     inputs.CurrentAmps = current.getValueAsDouble();
     inputs.angularVelocity = velocity.getValueAsDouble();
-    inputs.setPoint = 15;
+    inputs.setPoint = 67;
   }
 
   @Override
@@ -79,6 +90,8 @@ public class IntakeIODev implements IntakeIO {
   @Override
   public void setVelocityRPS(double targetVelocityRPS) {
     motor.setControl(
-        Intake_Vel_PID.withVelocity(targetVelocityRPS).withSlot(2).withFeedForward(8.1));
+        Intake_Vel_PID.withVelocity(targetVelocityRPS).withSlot(2).withFeedForward(8.9));
+
+    System.out.println(voltage.getValueAsDouble());
   }
 }

@@ -197,37 +197,52 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    // controller
-    //     .leftTrigger()
-    //     .whileTrue(
-    //         Commands.parallel(
-    //             intake.RawControlConsume(0.5), mag.store(0.7), mag.holdIndexerCommand()))
-    //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    // controller.a().whileFalse(Commands.parallel(null));
 
-    // controller.rightTrigger().whileTrue(mag.moveAll(.5)).onFalse(mag.stop());
+    // controller
+    //     .a()
+    //     .whileTrue(Commands.parallel(intake.RawControlConsume(0.3),
+    // mag.runAtVelocity_RPS_PID(67)))
+    //     .onFalse(
+    //         Commands.parallel(mag.stop(), hoodedShooter.stopHoodedShooter(), intake.RawIdle()));
+
+    controller
+        .leftTrigger()
+        .whileTrue(
+            Commands.parallel(
+                intake.runAtVelocityPID(67),
+                mag.runAtVelocity_RPS_PID(67),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5)))
+        .onFalse(
+            Commands.parallel(intake.RawIdle(), mag.stop(), hoodedShooter.stopHoodedShooter()));
+
+    controller
+        .rightTrigger()
+        .whileTrue(
+            Commands.parallel(intake.runAtVelocityPID(67), mag.runAtVelocity_RPS_PID_Store(67)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+
+    controller.b().whileTrue(drive.faceHub());
 
     // controller
     //     .b()
     //     .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
     //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .rightBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .leftBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of
+    // hub
+    //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
 
-    controller.b().whileTrue(intake.runAtVelocityPID(15)).onFalse(intake.RawIdle());
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(0.3), mag.runAtVelocity_RPS_PID(67)))
-        .onFalse(
-            Commands.parallel(mag.stop(), hoodedShooter.stopHoodedShooter(), intake.RawIdle()));
-    controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5));
+    // controller.b().whileTrue(intake.runAtVelocityPID(67)).onFalse(intake.RawIdle());
+
+    // controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5));
   }
 
   /** This function is called periodically during all modes. */

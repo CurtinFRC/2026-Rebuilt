@@ -46,4 +46,11 @@ public class Mag {
         middleMagRoller.runAtVelocityPID(velocityRPS),
         indexerMagRoller.runAtVelocityPID(velocityRPS));
   }
+
+  public Command runAtVelocity_RPS_PID_Store(double velocityRPS) {
+    return Commands.parallel(
+        intakeMagRoller.runAtVelocityPID(velocityRPS),
+        middleMagRoller.runAtVelocityPID(velocityRPS),
+        indexerMagRoller.stayAtCurrentPosition());
+  }
 }

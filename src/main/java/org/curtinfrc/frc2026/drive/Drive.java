@@ -300,4 +300,42 @@ public class Drive extends SubsystemBase {
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
         });
   }
+
+  public Command faceHub() {
+    return run(
+        () -> {
+          Pose2d currentPosition = getPose();
+          Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
+          double yDifference = hubPosition.getY() - currentPosition.getY();
+          yDifference = Math.abs(yDifference);
+          double xDifference = hubPosition.getX() - currentPosition.getX();
+          xDifference = Math.abs(xDifference);
+
+          // Angle
+          double targetAngle = Math.atan2(yDifference, xDifference);
+          targetAngle = Math.toDegrees(targetAngle);
+
+          double robotAngle = rawGyroRotation.getDegrees();
+          double angleSpeed = 0;
+
+          // If we are close to the target (on target)
+          if (robotAngle <= targetAngle - 2) {
+            angleSpeed = -0.15;
+            System.out.println("Target is to the right");
+          }
+          // if the target is to the right
+          else if (robotAngle >= targetAngle + 2) {
+            angleSpeed = 0.15;
+            System.out.println("Target is to the left");
+          } else {
+            angleSpeed = 0;
+            System.out.println("Robot on target");
+          }
+
+          // deadzones ()
+
+          ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
+          runVelocity(speed);
+        });
+  }
 }
