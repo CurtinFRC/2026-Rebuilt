@@ -41,7 +41,8 @@ final class DragShotPlannerCoarseSearch {
       double minAngleDeg,
       double maxAngleDeg,
       boolean fixedAngle,
-      Constraints.ShotStyle shotStyle) {
+      Constraints.ShotStyle shotStyle,
+      boolean fastMode) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.coarseSearch.body");
     try {
@@ -52,6 +53,15 @@ final class DragShotPlannerCoarseSearch {
       double angleStepCoarse = fixedAngle ? 1.0 : Math.max(2.4, angleRange / 9.0);
       double radialStepCoarse = 0.55;
       double bearingStepDegCoarse = 22.0;
+      if (fastMode) {
+        speedStepCoarse = Math.max(speedStepCoarse, speedRange / 6.0);
+        if (!fixedAngle) {
+          angleStepCoarse = Math.max(angleStepCoarse, angleRange / 6.0);
+          angleStepCoarse = Math.max(angleStepCoarse, 3.5);
+        }
+        radialStepCoarse = 0.8;
+        bearingStepDegCoarse = 36.0;
+      }
       double coarseTolerance = DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
       double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
@@ -91,6 +101,7 @@ final class DragShotPlannerCoarseSearch {
       double ry = robotCurrentPosition.getY();
       double targetX = targetFieldPosition.getX();
       double targetY = targetFieldPosition.getY();
+      double heightDelta = targetHeightMeters - shooterReleaseHeightMeters;
 
       int ranges = 0;
       int bearings = 0;
@@ -152,18 +163,55 @@ final class DragShotPlannerCoarseSearch {
             double sin = angleSin[ai];
             double angleRadVal = angleRad[ai];
 
-            for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStepCoarse) {
+            double speedMinLoop = minSpeed;
+            double speedMaxLoop = maxSpeed;
+            double speedStepLocal = speedStepCoarse;
+            if (fastMode) {
+              double vGuess =
+                  DragShotPlannerUtil.estimateSpeedNoDrag(
+                      horizontalDistance, heightDelta, angleRadVal);
+              if (Double.isFinite(vGuess)) {
+                double window = Math.max(1.3, vGuess * 0.18);
+                double lo = vGuess - window;
+                double hi = vGuess + window;
+                if (hi > minSpeed && lo < maxSpeed) {
+                  if (lo < minSpeed) lo = minSpeed;
+                  if (hi > maxSpeed) hi = maxSpeed;
+                  speedMinLoop = lo;
+                  speedMaxLoop = hi;
+                  double span = speedMaxLoop - speedMinLoop;
+                  if (span > 1e-6) {
+                    speedStepLocal = Math.max(speedStepCoarse, span / 3.0);
+                  }
+                }
+              }
+            }
+
+            for (double speed = speedMinLoop;
+                speed <= speedMaxLoop + 1e-6;
+                speed += speedStepLocal) {
               sims++;
               AutoCloseable _p2 = Profiler.section("DragShotPlanner.simulateToTargetPlane.coarse");
               try {
-                DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                    sim,
-                    gamePiece,
-                    speed * cos,
-                    speed * sin,
-                    shooterReleaseHeightMeters,
-                    horizontalDistance,
-                    targetHeightMeters);
+                if (fastMode) {
+                  DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                      sim,
+                      gamePiece,
+                      speed * cos,
+                      speed * sin,
+                      shooterReleaseHeightMeters,
+                      horizontalDistance,
+                      targetHeightMeters);
+                } else {
+                  DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                      sim,
+                      gamePiece,
+                      speed * cos,
+                      speed * sin,
+                      shooterReleaseHeightMeters,
+                      horizontalDistance,
+                      targetHeightMeters);
+                }
               } finally {
                 DragShotPlannerUtil.closeQuietly(_p2);
               }

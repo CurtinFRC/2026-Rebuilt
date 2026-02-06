@@ -24,6 +24,10 @@ import edu.wpi.first.math.geometry.Translation2d;
 final class DragShotPlannerCache {
   private static final int SOLVE_Q_MM = 20;
   private static final int SOLVE_Q_DEG_TENTH = 5;
+  private static final int FAST_Q_MM = 250;
+  private static final int FAST_Q_DEG = 3;
+  private static final int FAST_Q_HEIGHT_MM = 80;
+  private static final double FAST_Q_SPEED = 0.8;
 
   private static final int SOLVE_CACHE_BITS = 14;
   private static final int SOLVE_CACHE_SIZE = 1 << SOLVE_CACHE_BITS;
@@ -33,8 +37,17 @@ final class DragShotPlannerCache {
   private static final int SOLVE_CACHE_LOCKS = 1 << SOLVE_CACHE_LOCK_BITS;
   private static final Object[] SOLVE_CACHE_GUARDS = new Object[SOLVE_CACHE_LOCKS];
 
+  private static final int FAST_CACHE_BITS = 12;
+  private static final int FAST_CACHE_SIZE = 1 << FAST_CACHE_BITS;
+  private static final long[] FAST_CACHE_KEYS = new long[FAST_CACHE_SIZE];
+  private static final ShotSolution[] FAST_CACHE_VALS = new ShotSolution[FAST_CACHE_SIZE];
+  private static final int FAST_CACHE_LOCK_BITS = 5;
+  private static final int FAST_CACHE_LOCKS = 1 << FAST_CACHE_LOCK_BITS;
+  private static final Object[] FAST_CACHE_GUARDS = new Object[FAST_CACHE_LOCKS];
+
   static {
     for (int i = 0; i < SOLVE_CACHE_GUARDS.length; i++) SOLVE_CACHE_GUARDS[i] = new Object();
+    for (int i = 0; i < FAST_CACHE_GUARDS.length; i++) FAST_CACHE_GUARDS[i] = new Object();
   }
 
   private DragShotPlannerCache() {}
@@ -54,6 +67,65 @@ final class DragShotPlannerCache {
       SOLVE_CACHE_KEYS[idx] = key;
       SOLVE_CACHE_VALS[idx] = val;
     }
+  }
+
+  static ShotSolution fastGet(long key) {
+    int idx = (int) mix64(key) & (FAST_CACHE_SIZE - 1);
+    if (FAST_CACHE_KEYS[idx] == key) {
+      return FAST_CACHE_VALS[idx];
+    }
+    return null;
+  }
+
+  static void fastPut(long key, ShotSolution val) {
+    int idx = (int) mix64(key) & (FAST_CACHE_SIZE - 1);
+    Object g = FAST_CACHE_GUARDS[idx & (FAST_CACHE_LOCKS - 1)];
+    synchronized (g) {
+      FAST_CACHE_KEYS[idx] = key;
+      FAST_CACHE_VALS[idx] = val;
+    }
+  }
+
+  static long fastKey(
+      Translation2d shooterPos,
+      Translation2d target,
+      double targetH,
+      double releaseH,
+      double minSpeed,
+      double maxSpeed,
+      double minAngDeg,
+      double maxAngDeg,
+      Constraints.ShotStyle style) {
+
+    int sx = (int) Math.round(shooterPos.getX() * 1000.0 / FAST_Q_MM);
+    int sy = (int) Math.round(shooterPos.getY() * 1000.0 / FAST_Q_MM);
+    int tx = (int) Math.round(target.getX() * 1000.0 / FAST_Q_MM);
+    int ty = (int) Math.round(target.getY() * 1000.0 / FAST_Q_MM);
+
+    int th = (int) Math.round(targetH * 1000.0 / FAST_Q_HEIGHT_MM);
+    int rh = (int) Math.round(releaseH * 1000.0 / FAST_Q_HEIGHT_MM);
+
+    int ms = (int) Math.round(minSpeed / FAST_Q_SPEED);
+    int xs = (int) Math.round(maxSpeed / FAST_Q_SPEED);
+
+    int a0 = (int) Math.round(minAngDeg / FAST_Q_DEG);
+    int a1 = (int) Math.round(maxAngDeg / FAST_Q_DEG);
+
+    int st = style == null ? 0 : style.ordinal();
+
+    long k = 1469598103934665603L;
+    k = (k ^ sx) * 1099511628211L;
+    k = (k ^ sy) * 1099511628211L;
+    k = (k ^ tx) * 1099511628211L;
+    k = (k ^ ty) * 1099511628211L;
+    k = (k ^ th) * 1099511628211L;
+    k = (k ^ rh) * 1099511628211L;
+    k = (k ^ ms) * 1099511628211L;
+    k = (k ^ xs) * 1099511628211L;
+    k = (k ^ a0) * 1099511628211L;
+    k = (k ^ a1) * 1099511628211L;
+    k = (k ^ st) * 1099511628211L;
+    return k;
   }
 
   static long solveKey(

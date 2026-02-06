@@ -19,6 +19,7 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +50,7 @@ final class DragShotPlannerAutoSearch {
       double maxAngleDeg = constraints.maxLaunchAngleDeg();
       Constraints.ShotStyle shotStyle = constraints.shotStyle();
       double acceptableError = DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS;
+      boolean fastMode = true;
 
       if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
         Profiler.counterAdd("DragShotPlanner.auto.bad_speed_range", 1);
@@ -80,7 +82,8 @@ final class DragShotPlannerAutoSearch {
                 minAngleDeg,
                 maxAngleDeg,
                 fixedAngle,
-                shotStyle);
+                shotStyle,
+                fastMode);
       } finally {
         DragShotPlannerUtil.closeQuietly(_p1);
       }
@@ -88,6 +91,18 @@ final class DragShotPlannerAutoSearch {
       if (coarse == null) {
         Profiler.counterAdd("DragShotPlanner.auto.coarse_none", 1);
         return Optional.empty();
+      }
+
+      if (coarse.verticalError <= acceptableError) {
+        return Optional.of(
+            new ShotSolution(
+                coarse.shooterPosition,
+                Rotation2d.fromRadians(coarse.shooterYawRad),
+                coarse.speed,
+                Rotation2d.fromRadians(coarse.angleRad),
+                coarse.timeToPlane,
+                targetFieldPosition,
+                coarse.verticalError));
       }
 
       ShotSolution refined;

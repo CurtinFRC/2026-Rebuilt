@@ -68,6 +68,45 @@ final class DragShotPlannerSimulation {
       double shooterReleaseHeightMeters,
       double targetHorizontalDistanceMeters,
       double targetHeightMeters) {
+    simulateToTargetPlaneIntoInternal(
+        out,
+        gamePiece,
+        vx0,
+        vy0,
+        shooterReleaseHeightMeters,
+        targetHorizontalDistanceMeters,
+        targetHeightMeters,
+        false);
+  }
+
+  static void simulateToTargetPlaneIntoFast(
+      SimOut out,
+      GamePiecePhysics gamePiece,
+      double vx0,
+      double vy0,
+      double shooterReleaseHeightMeters,
+      double targetHorizontalDistanceMeters,
+      double targetHeightMeters) {
+    simulateToTargetPlaneIntoInternal(
+        out,
+        gamePiece,
+        vx0,
+        vy0,
+        shooterReleaseHeightMeters,
+        targetHorizontalDistanceMeters,
+        targetHeightMeters,
+        true);
+  }
+
+  private static void simulateToTargetPlaneIntoInternal(
+      SimOut out,
+      GamePiecePhysics gamePiece,
+      double vx0,
+      double vy0,
+      double shooterReleaseHeightMeters,
+      double targetHorizontalDistanceMeters,
+      double targetHeightMeters,
+      boolean fastMode) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.simulateToTargetPlane.body");
     try {
@@ -79,11 +118,19 @@ final class DragShotPlannerSimulation {
         return;
       }
 
-      double minHorizontalSpeed = avx0 < 0.6 ? 0.6 : avx0;
+      double minHorizClamp = fastMode ? 0.7 : 0.6;
+      double maxTimeFactor = fastMode ? 1.25 : 1.45;
+      double minTime = fastMode ? 0.35 : 0.45;
+      double maxTime = fastMode ? 3.2 : 4.2;
+      double dxDiv = fastMode ? 48.0 : 70.0;
+      double dxMin = fastMode ? 0.07 : 0.05;
+      double dxMax = fastMode ? 0.22 : 0.14;
+
+      double minHorizontalSpeed = avx0 < minHorizClamp ? minHorizClamp : avx0;
       double timeNoDrag = targetHorizontalDistanceMeters / minHorizontalSpeed;
-      double maxTimeSeconds = timeNoDrag * 1.45;
-      if (maxTimeSeconds < 0.45) maxTimeSeconds = 0.45;
-      if (maxTimeSeconds > 4.2) maxTimeSeconds = 4.2;
+      double maxTimeSeconds = timeNoDrag * maxTimeFactor;
+      if (maxTimeSeconds < minTime) maxTimeSeconds = minTime;
+      if (maxTimeSeconds > maxTime) maxTimeSeconds = maxTime;
 
       double kOverM = simParams(gamePiece).kOverM;
 
@@ -97,9 +144,9 @@ final class DragShotPlannerSimulation {
       double yPrev = y;
       double tPrev = 0.0;
 
-      double dxStep = targetHorizontalDistanceMeters / 70.0;
-      if (dxStep < 0.05) dxStep = 0.05;
-      if (dxStep > 0.14) dxStep = 0.14;
+      double dxStep = targetHorizontalDistanceMeters / dxDiv;
+      if (dxStep < dxMin) dxStep = dxMin;
+      if (dxStep > dxMax) dxStep = dxMax;
 
       int steps = 0;
 

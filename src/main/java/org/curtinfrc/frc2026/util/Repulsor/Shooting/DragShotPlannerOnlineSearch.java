@@ -84,6 +84,8 @@ final class DragShotPlannerOnlineSearch {
       Constraints.ShotStyle shotStyle = constraints.shotStyle();
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
       double acceptableError = DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS;
+      boolean fastMode =
+          acceptableError >= DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS - 1e-9;
 
       if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
         Profiler.counterAdd("DragShotPlanner.online.bad_speed_range", 1);
@@ -108,6 +110,12 @@ final class DragShotPlannerOnlineSearch {
 
       double speedStep = Math.max(0.35, (maxSpeed - minSpeed) / 55.0);
       double angleStep = fixedAngle ? 1.0 : Math.max(0.65, (maxAngleDeg - minAngleDeg) / 55.0);
+      if (fastMode) {
+        speedStep = Math.max(speedStep, 0.55);
+        if (!fixedAngle) {
+          angleStep = Math.max(angleStep, 0.9);
+        }
+      }
 
       DragShotPlannerCandidate best = null;
 
@@ -157,6 +165,17 @@ final class DragShotPlannerOnlineSearch {
             if (errSeed < 0.0) {
               errSeed = -errSeed;
             }
+            if (errSeed <= acceptableError) {
+              return Optional.of(
+                  new ShotSolution(
+                      seedSol.shooterPosition(),
+                      seedSol.shooterYaw(),
+                      seedSol.launchSpeedMetersPerSecond(),
+                      seedSol.launchAngle(),
+                      seedSol.timeToPlaneSeconds(),
+                      targetFieldPosition,
+                      errSeed));
+            }
             best =
                 new DragShotPlannerCandidate(
                     seedSol.shooterPosition(),
@@ -181,7 +200,7 @@ final class DragShotPlannerOnlineSearch {
       int rejectedNoSol = 0;
       int improvedCount = 0;
 
-      double[][] offsets = budgetNanos < 250_000L ? ONLINE_OFFS_FAST : ONLINE_OFFS;
+      double[][] offsets = fastMode ? ONLINE_OFFS_FAST : ONLINE_OFFS;
       while ((System.nanoTime() - start) < budgetNanos) {
         outer++;
         boolean improved = false;
@@ -269,6 +288,18 @@ final class DragShotPlannerOnlineSearch {
                   errSol,
                   distSq2);
 
+          if (errSol <= acceptableError) {
+            return Optional.of(
+                new ShotSolution(
+                    cand.shooterPosition,
+                    Rotation2d.fromRadians(cand.shooterYawRad),
+                    cand.speed,
+                    Rotation2d.fromRadians(cand.angleRad),
+                    cand.timeToPlane,
+                    targetFieldPosition,
+                    cand.verticalError));
+          }
+
           if (DragShotPlannerCandidate.isBetterCandidate(best, cand, shotStyle)) {
             best = cand;
             current = sol.shooterPosition();
@@ -278,8 +309,8 @@ final class DragShotPlannerOnlineSearch {
         }
 
         if (!improved) {
-          step *= 0.58;
-          if (step < 0.075) {
+          step *= fastMode ? 0.5 : 0.58;
+          if (step < (fastMode ? 0.12 : 0.075)) {
             break;
           }
         }

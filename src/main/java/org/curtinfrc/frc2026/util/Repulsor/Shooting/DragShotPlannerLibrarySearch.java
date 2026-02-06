@@ -65,6 +65,7 @@ final class DragShotPlannerLibrarySearch {
       Constraints.ShotStyle shotStyle = constraints.shotStyle();
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
       double acceptableError = DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS;
+      double nearEnoughSq = 0.25;
 
       int iter = 0;
       int rejectedTravel = 0;
@@ -121,6 +122,10 @@ final class DragShotPlannerLibrarySearch {
           best = next;
         }
         accepted++;
+
+        if (best.verticalError <= acceptableError && best.robotDistanceSq <= nearEnoughSq) {
+          break;
+        }
       }
 
       Profiler.counterAdd("DragShotPlanner.library.loop_iter", iter);

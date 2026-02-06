@@ -62,9 +62,10 @@ final class DragShotPlannerRefineAtPosition {
       double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
       double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
       boolean fastMode =
-          acceptableError >= DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS - 1e-9;
+          acceptableVerticalErrorMeters
+              >= DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS - 1e-9;
       if (fastMode) {
-        speedStepFine = Math.max(speedStepFine, 0.2);
+        speedStepFine = Math.max(speedStepFine, 0.3);
       }
       double acceptableError = acceptableVerticalErrorMeters;
 
@@ -85,7 +86,7 @@ final class DragShotPlannerRefineAtPosition {
         angleEndDeg = Math.min(maxAngleDeg, coarseAngleDeg + angleWindow);
         angleStepFineDeg = Math.max(0.22, (angleEndDeg - angleStartDeg) / 22.0);
         if (fastMode) {
-          angleStepFineDeg = Math.max(angleStepFineDeg, 0.6);
+          angleStepFineDeg = Math.max(angleStepFineDeg, 0.8);
         }
       }
 
@@ -99,13 +100,13 @@ final class DragShotPlannerRefineAtPosition {
       DragShotPlannerSimulation.SimOut sim = DragShotPlannerSimulation.simOut();
 
       int angleCap = (int) Math.ceil((angleEndDeg - angleStartDeg) / angleStepFineDeg) + 1;
-      double[] angleRad = new double[angleCap];
+      double[] angleRadArr = new double[angleCap];
       double[] angleCos = new double[angleCap];
       double[] angleSin = new double[angleCap];
       int angleCount = 0;
       for (double ang = angleStartDeg; ang <= angleEndDeg + 1e-6; ang += angleStepFineDeg) {
         double rad = ang * degToRad;
-        angleRad[angleCount] = rad;
+        angleRadArr[angleCount] = rad;
         angleCos[angleCount] = Math.cos(rad);
         angleSin[angleCount] = Math.sin(rad);
         angleCount++;
@@ -117,20 +118,31 @@ final class DragShotPlannerRefineAtPosition {
           continue;
         }
         double sin = angleSin[ai];
-        double angleRad = angleRad[ai];
+        double angleRadVal = angleRadArr[ai];
 
         for (double speed = speedMin; speed <= speedMax + 1e-6; speed += speedStepFine) {
           sims++;
           AutoCloseable _p1 = Profiler.section("DragShotPlanner.simulateToTargetPlane.refine");
           try {
-            DragShotPlannerSimulation.simulateToTargetPlaneInto(
-                sim,
-                gamePiece,
-                speed * cos,
-                speed * sin,
-                shooterReleaseHeightMeters,
-                horizontalDistance,
-                targetHeightMeters);
+            if (fastMode) {
+              DragShotPlannerSimulation.simulateToTargetPlaneIntoFast(
+                  sim,
+                  gamePiece,
+                  speed * cos,
+                  speed * sin,
+                  shooterReleaseHeightMeters,
+                  horizontalDistance,
+                  targetHeightMeters);
+            } else {
+              DragShotPlannerSimulation.simulateToTargetPlaneInto(
+                  sim,
+                  gamePiece,
+                  speed * cos,
+                  speed * sin,
+                  shooterReleaseHeightMeters,
+                  horizontalDistance,
+                  targetHeightMeters);
+            }
           } finally {
             DragShotPlannerUtil.closeQuietly(_p1);
           }
@@ -159,7 +171,7 @@ final class DragShotPlannerRefineAtPosition {
                     shooterFieldPosition,
                     shooterYaw,
                     speed,
-                    Rotation2d.fromRadians(angleRad),
+                    Rotation2d.fromRadians(angleRadVal),
                     sim.timeAtPlaneSeconds,
                     targetFieldPosition,
                     sim.verticalErrorMeters);

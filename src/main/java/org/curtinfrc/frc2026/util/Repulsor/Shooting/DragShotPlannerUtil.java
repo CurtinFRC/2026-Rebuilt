@@ -29,4 +29,24 @@ final class DragShotPlannerUtil {
     } catch (Exception ignored) {
     }
   }
+
+  static double estimateSpeedNoDrag(
+      double horizontalDistanceMeters, double heightDeltaMeters, double angleRad) {
+    double cos = Math.cos(angleRad);
+    if (cos <= 1e-6) {
+      return Double.NaN;
+    }
+    double sin = Math.sin(angleRad);
+    double tan = sin / cos;
+    double denom = horizontalDistanceMeters * tan - heightDeltaMeters;
+    if (denom <= 1e-6) {
+      return Double.NaN;
+    }
+    double v2 =
+        9.81 * horizontalDistanceMeters * horizontalDistanceMeters / (2.0 * cos * cos * denom);
+    if (v2 <= 0.0 || !Double.isFinite(v2)) {
+      return Double.NaN;
+    }
+    return Math.sqrt(v2);
+  }
 }
