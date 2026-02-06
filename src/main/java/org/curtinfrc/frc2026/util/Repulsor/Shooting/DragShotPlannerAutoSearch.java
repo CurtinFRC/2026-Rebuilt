@@ -48,6 +48,7 @@ final class DragShotPlannerAutoSearch {
       double minAngleDeg = constraints.minLaunchAngleDeg();
       double maxAngleDeg = constraints.maxLaunchAngleDeg();
       Constraints.ShotStyle shotStyle = constraints.shotStyle();
+      double acceptableError = DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS;
 
       if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
         Profiler.counterAdd("DragShotPlanner.auto.bad_speed_range", 1);
@@ -104,7 +105,7 @@ final class DragShotPlannerAutoSearch {
                 minAngleDeg,
                 maxAngleDeg,
                 fixedAngle,
-                DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
+                acceptableError,
                 coarse.speed,
                 coarse.angleRad);
       } finally {

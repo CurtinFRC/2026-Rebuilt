@@ -76,6 +76,11 @@ final class DragShotPlannerSolveAtPosition {
       Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
       double angleStep = fixedAngle ? 1.0 : Math.max(0.18, angleStepDeg);
+      boolean fastMode =
+          acceptableError >= DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS - 1e-9;
+      if (!fixedAngle && fastMode) {
+        angleStep = Math.max(angleStep, 0.5);
+      }
       double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
       double acceptableError = acceptableVerticalErrorMeters;
       double earlyAccept = acceptableError * 0.35;
@@ -96,6 +101,9 @@ final class DragShotPlannerSolveAtPosition {
 
       double speedRange = maxSpeed - minSpeed;
       double coarseStep = Math.max(Math.max(0.9, speedStep * 3.0), speedRange / 10.0);
+      if (fastMode) {
+        coarseStep = Math.max(coarseStep, 1.2);
+      }
 
       int angleCap = (int) Math.ceil((maxAngleDeg - minAngleDeg) / angleStep) + 1;
       double[] angleRad = new double[angleCap];
@@ -169,7 +177,8 @@ final class DragShotPlannerSolveAtPosition {
         double refineBestTime = localBestTime;
         double refineBestSigned = localBestSigned;
 
-        for (int it = 0; it < 9; it++) {
+        int refineIters = fastMode ? 6 : 9;
+        for (int it = 0; it < refineIters; it++) {
           double m1 = lo + (hi - lo) * (1.0 / 3.0);
           double m2 = hi - (hi - lo) * (1.0 / 3.0);
 

@@ -61,6 +61,11 @@ final class DragShotPlannerRefineAtPosition {
       double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
       double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
       double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
+      boolean fastMode =
+          acceptableError >= DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS - 1e-9;
+      if (fastMode) {
+        speedStepFine = Math.max(speedStepFine, 0.2);
+      }
       double acceptableError = acceptableVerticalErrorMeters;
 
       double angleStartDeg;
@@ -79,6 +84,9 @@ final class DragShotPlannerRefineAtPosition {
         angleStartDeg = Math.max(minAngleDeg, coarseAngleDeg - angleWindow);
         angleEndDeg = Math.min(maxAngleDeg, coarseAngleDeg + angleWindow);
         angleStepFineDeg = Math.max(0.22, (angleEndDeg - angleStartDeg) / 22.0);
+        if (fastMode) {
+          angleStepFineDeg = Math.max(angleStepFineDeg, 0.6);
+        }
       }
 
       ShotSolution best = null;

@@ -39,6 +39,14 @@ final class DragShotPlannerOnlineSearch {
         {-0.7071067811865476, 0.7071067811865476},
         {-0.7071067811865476, -0.7071067811865476}
       };
+  private static final double[][] ONLINE_OFFS_FAST =
+      new double[][] {
+        {0.0, 0.0},
+        {1.0, 0.0},
+        {-1.0, 0.0},
+        {0.0, 1.0},
+        {0.0, -1.0}
+      };
 
   private DragShotPlannerOnlineSearch() {}
 
@@ -75,6 +83,7 @@ final class DragShotPlannerOnlineSearch {
       boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
       Constraints.ShotStyle shotStyle = constraints.shotStyle();
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
+      double acceptableError = DragShotPlannerConstants.FAST_ACCEPTABLE_VERTICAL_ERROR_METERS;
 
       if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
         Profiler.counterAdd("DragShotPlanner.online.bad_speed_range", 1);
@@ -97,8 +106,8 @@ final class DragShotPlannerOnlineSearch {
         state.seed(seed);
       }
 
-      double speedStep = Math.max(0.22, (maxSpeed - minSpeed) / 70.0);
-      double angleStep = fixedAngle ? 1.0 : Math.max(0.40, (maxAngleDeg - minAngleDeg) / 70.0);
+      double speedStep = Math.max(0.35, (maxSpeed - minSpeed) / 55.0);
+      double angleStep = fixedAngle ? 1.0 : Math.max(0.65, (maxAngleDeg - minAngleDeg) / 55.0);
 
       DragShotPlannerCandidate best = null;
 
@@ -117,7 +126,7 @@ final class DragShotPlannerOnlineSearch {
                 minAngleDeg,
                 maxAngleDeg,
                 fixedAngle,
-                DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
+                acceptableError,
                 shotStyle,
                 speedStep,
                 angleStep);
@@ -172,6 +181,7 @@ final class DragShotPlannerOnlineSearch {
       int rejectedNoSol = 0;
       int improvedCount = 0;
 
+      double[][] offsets = budgetNanos < 250_000L ? ONLINE_OFFS_FAST : ONLINE_OFFS;
       while ((System.nanoTime() - start) < budgetNanos) {
         outer++;
         boolean improved = false;
@@ -179,7 +189,7 @@ final class DragShotPlannerOnlineSearch {
         double cx = current.getX();
         double cy = current.getY();
 
-        for (double[] o : ONLINE_OFFS) {
+        for (double[] o : offsets) {
           inner++;
           double px = cx + o[0] * step;
           double py = cy + o[1] * step;
@@ -228,7 +238,7 @@ final class DragShotPlannerOnlineSearch {
                     minAngleDeg,
                     maxAngleDeg,
                     fixedAngle,
-                    DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
+                    acceptableError,
                     shotStyle,
                     speedStep,
                     angleStep);
@@ -288,6 +298,18 @@ final class DragShotPlannerOnlineSearch {
         return Optional.empty();
       }
 
+      if (best.verticalError <= acceptableError) {
+        return Optional.of(
+            new ShotSolution(
+                best.shooterPosition,
+                Rotation2d.fromRadians(best.shooterYawRad),
+                best.speed,
+                Rotation2d.fromRadians(best.angleRad),
+                best.timeToPlane,
+                targetFieldPosition,
+                best.verticalError));
+      }
+
       state.seed(best.shooterPosition);
       state.stepMeters(Math.max(0.10, Math.min(0.80, step)));
       state.touch();
@@ -307,7 +329,7 @@ final class DragShotPlannerOnlineSearch {
                 minAngleDeg,
                 maxAngleDeg,
                 fixedAngle,
-                DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
+                acceptableError,
                 best.speed,
                 best.angleRad);
       } finally {

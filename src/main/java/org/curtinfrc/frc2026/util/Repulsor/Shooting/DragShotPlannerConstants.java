@@ -27,6 +27,7 @@ final class DragShotPlannerConstants {
   static final double MAX_ROBOT_TRAVEL_METERS_SQ =
       MAX_ROBOT_TRAVEL_METERS * MAX_ROBOT_TRAVEL_METERS;
   static final double ACCEPTABLE_VERTICAL_ERROR_METERS = 0.06;
+  static final double FAST_ACCEPTABLE_VERTICAL_ERROR_METERS = 0.25;
   static final double DEG_TO_RAD = Math.PI / 180.0;
   static final double RAD_TO_DEG = 180.0 / Math.PI;
 
