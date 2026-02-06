@@ -73,7 +73,9 @@ final class DragShotPlannerObstacles {
         return false;
       }
 
-      Rotation2d yaw = targetFieldPosition.minus(shooterPos).getAngle();
+      double dx = targetFieldPosition.getX() - x;
+      double dy = targetFieldPosition.getY() - y;
+      Rotation2d yaw = Rotation2d.fromRadians(Math.atan2(dy, dx));
       Translation2d[] rect =
           FieldPlanner.robotRect(shooterPos, yaw, robotHalfLengthMeters, robotHalfWidthMeters);
 

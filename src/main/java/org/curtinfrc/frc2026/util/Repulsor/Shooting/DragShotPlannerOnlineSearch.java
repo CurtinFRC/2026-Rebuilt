@@ -88,10 +88,12 @@ final class DragShotPlannerOnlineSearch {
       Translation2d robotPos = robotPose.getTranslation();
       double robotX = robotPos.getX();
       double robotY = robotPos.getY();
+      double targetX = targetFieldPosition.getX();
+      double targetY = targetFieldPosition.getY();
 
       Translation2d seed = state.seed();
       if (seed == null) {
-        seed = projectToValidRing(robotPos, targetFieldPosition);
+        seed = projectToValidRing(robotX, robotY, targetX, targetY);
         state.seed(seed);
       }
 
@@ -142,6 +144,10 @@ final class DragShotPlannerOnlineSearch {
           double dy = robotY - seedSol.shooterPosition().getY();
           double distSq = dx * dx + dy * dy;
           if (distSq <= maxTravelSq + 1e-6) {
+            double errSeed = seedSol.verticalErrorMeters();
+            if (errSeed < 0.0) {
+              errSeed = -errSeed;
+            }
             best =
                 new DragShotPlannerCandidate(
                     seedSol.shooterPosition(),
@@ -149,7 +155,7 @@ final class DragShotPlannerOnlineSearch {
                     seedSol.launchSpeedMetersPerSecond(),
                     seedSol.launchAngle().getRadians(),
                     seedSol.timeToPlaneSeconds(),
-                    Math.abs(seedSol.verticalErrorMeters()),
+                    errSeed,
                     distSq);
           }
         }
@@ -175,11 +181,14 @@ final class DragShotPlannerOnlineSearch {
 
         for (double[] o : ONLINE_OFFS) {
           inner++;
-          Translation2d p = new Translation2d(cx + o[0] * step, cy + o[1] * step);
-          Translation2d clipped = clipToRingAndField(p, targetFieldPosition);
+          double px = cx + o[0] * step;
+          double py = cy + o[1] * step;
+          Translation2d clipped = clipToRingAndField(px, py, targetX, targetY);
 
-          double dxr = robotX - clipped.getX();
-          double dyr = robotY - clipped.getY();
+          double clippedX = clipped.getX();
+          double clippedY = clipped.getY();
+          double dxr = robotX - clippedX;
+          double dyr = robotY - clippedY;
           double distSq = dxr * dxr + dyr * dyr;
           if (distSq > maxTravelSq) {
             rejectedTravel++;
@@ -236,6 +245,10 @@ final class DragShotPlannerOnlineSearch {
           double dy2 = robotY - sol.shooterPosition().getY();
           double distSq2 = dx2 * dx2 + dy2 * dy2;
 
+          double errSol = sol.verticalErrorMeters();
+          if (errSol < 0.0) {
+            errSol = -errSol;
+          }
           DragShotPlannerCandidate cand =
               new DragShotPlannerCandidate(
                   sol.shooterPosition(),
@@ -243,7 +256,7 @@ final class DragShotPlannerOnlineSearch {
                   sol.launchSpeedMetersPerSecond(),
                   sol.launchAngle().getRadians(),
                   sol.timeToPlaneSeconds(),
-                  Math.abs(sol.verticalErrorMeters()),
+                  errSol,
                   distSq2);
 
           if (DragShotPlannerCandidate.isBetterCandidate(best, cand, shotStyle)) {
@@ -319,18 +332,15 @@ final class DragShotPlannerOnlineSearch {
     }
   }
 
-  private static Translation2d projectToValidRing(Translation2d point, Translation2d target) {
+  private static Translation2d projectToValidRing(
+      double px, double py, double targetX, double targetY) {
     AutoCloseable _p = Profiler.section("DragShotPlanner.projectToValidRing");
     try {
-      double px = point.getX();
-      double py = point.getY();
-      double tx = target.getX();
-      double ty = target.getY();
-      double dx = px - tx;
-      double dy = py - ty;
+      double dx = px - targetX;
+      double dy = py - targetY;
       double r2 = dx * dx + dy * dy;
       if (r2 < 1e-12) {
-        return new Translation2d(tx - 3.0, ty);
+        return new Translation2d(targetX - 3.0, targetY);
       }
       double r = Math.sqrt(r2);
       double clamped =
@@ -338,20 +348,21 @@ final class DragShotPlannerOnlineSearch {
               DragShotPlannerConstants.MIN_RANGE_METERS,
               Math.min(DragShotPlannerConstants.MAX_RANGE_METERS, r));
       double scale = clamped / r;
-      return new Translation2d(tx + dx * scale, ty + dy * scale);
+      return new Translation2d(targetX + dx * scale, targetY + dy * scale);
     } finally {
       DragShotPlannerUtil.closeQuietly(_p);
     }
   }
 
-  private static Translation2d clipToRingAndField(Translation2d p, Translation2d target) {
+  private static Translation2d clipToRingAndField(
+      double px, double py, double targetX, double targetY) {
     AutoCloseable _p0 = Profiler.section("DragShotPlanner.clipToRingAndField");
     try {
-      Translation2d ring = projectToValidRing(p, target);
+      Translation2d ring = projectToValidRing(px, py, targetX, targetY);
       double x = ring.getX();
       double y = ring.getY();
       if (!Double.isFinite(x) || !Double.isFinite(y)) {
-        return new Translation2d(target.getX() - 3.0, target.getY());
+        return new Translation2d(targetX - 3.0, targetY);
       }
       return ring;
     } finally {

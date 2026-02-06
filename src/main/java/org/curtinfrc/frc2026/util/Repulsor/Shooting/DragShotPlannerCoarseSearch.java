@@ -56,6 +56,35 @@ final class DragShotPlannerCoarseSearch {
       double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
       double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
 
+      int bearingCap = (int) Math.ceil(360.0 / bearingStepDegCoarse);
+      double[] bearingRad = new double[bearingCap];
+      double[] bearingCos = new double[bearingCap];
+      double[] bearingSin = new double[bearingCap];
+      int bearingCount = 0;
+      for (double bearingDeg = 0.0; bearingDeg < 360.0 - 1e-9; bearingDeg += bearingStepDegCoarse) {
+        double rad = bearingDeg * degToRad;
+        bearingRad[bearingCount] = rad;
+        bearingCos[bearingCount] = Math.cos(rad);
+        bearingSin[bearingCount] = Math.sin(rad);
+        bearingCount++;
+      }
+
+      double angleStartDeg = minAngleDeg;
+      double angleEndDeg = maxAngleDeg;
+      double angleStepDeg = fixedAngle ? 1.0 : angleStepCoarse;
+      int angleCap = (int) Math.ceil((angleEndDeg - angleStartDeg) / angleStepDeg) + 1;
+      double[] angleRad = new double[angleCap];
+      double[] angleCos = new double[angleCap];
+      double[] angleSin = new double[angleCap];
+      int angleCount = 0;
+      for (double ang = angleStartDeg; ang <= angleEndDeg + 1e-6; ang += angleStepDeg) {
+        double rad = ang * degToRad;
+        angleRad[angleCount] = rad;
+        angleCos[angleCount] = Math.cos(rad);
+        angleSin[angleCount] = Math.sin(rad);
+        angleCount++;
+      }
+
       DragShotPlannerCandidate bestCoarse = null;
 
       double rx = robotCurrentPosition.getX();
@@ -77,11 +106,11 @@ final class DragShotPlannerCoarseSearch {
           range <= DragShotPlannerConstants.MAX_RANGE_METERS + 1e-6;
           range += radialStepCoarse) {
         ranges++;
-        for (double bearingDeg = 0.0; bearingDeg < 360.0; bearingDeg += bearingStepDegCoarse) {
+        for (int bi = 0; bi < bearingCount; bi++) {
           bearings++;
-          double bearingRad = bearingDeg * degToRad;
-          double cosB = Math.cos(bearingRad);
-          double sinB = Math.sin(bearingRad);
+          double bearingAngleRad = bearingRad[bi];
+          double cosB = bearingCos[bi];
+          double sinB = bearingSin[bi];
           double shooterX = targetX - range * cosB;
           double shooterY = targetY - range * sinB;
           Translation2d shooterPos = new Translation2d(shooterX, shooterY);
@@ -113,32 +142,15 @@ final class DragShotPlannerCoarseSearch {
           }
 
           double horizontalDistance = range;
-          double shooterYawRad = bearingRad;
+          double shooterYawRad = bearingAngleRad;
 
-          double angleStartDeg;
-          double angleEndDeg;
-          double angleStepDeg;
-
-          if (fixedAngle) {
-            angleStartDeg = minAngleDeg;
-            angleEndDeg = maxAngleDeg;
-            angleStepDeg = 1.0;
-          } else {
-            angleStartDeg = minAngleDeg;
-            angleEndDeg = maxAngleDeg;
-            angleStepDeg = angleStepCoarse;
-          }
-
-          for (double angleDeg = angleStartDeg;
-              angleDeg <= angleEndDeg + 1e-6;
-              angleDeg += angleStepDeg) {
-
-            double angleRad = angleDeg * degToRad;
-            double cos = Math.cos(angleRad);
+          for (int ai = 0; ai < angleCount; ai++) {
+            double cos = angleCos[ai];
             if (cos <= 0.0) {
               continue;
             }
-            double sin = Math.sin(angleRad);
+            double sin = angleSin[ai];
+            double angleRadVal = angleRad[ai];
 
             for (double speed = minSpeed; speed <= maxSpeed + 1e-6; speed += speedStepCoarse) {
               sims++;
@@ -161,7 +173,10 @@ final class DragShotPlannerCoarseSearch {
               }
               simsHit++;
 
-              double error = Math.abs(sim.verticalErrorMeters);
+              double error = sim.verticalErrorMeters;
+              if (error < 0.0) {
+                error = -error;
+              }
               if (error > coarseTolerance) {
                 continue;
               }
@@ -172,7 +187,7 @@ final class DragShotPlannerCoarseSearch {
                       shooterPos,
                       shooterYawRad,
                       speed,
-                      angleRad,
+                      angleRadVal,
                       sim.timeAtPlaneSeconds,
                       error,
                       robotDistanceSq);

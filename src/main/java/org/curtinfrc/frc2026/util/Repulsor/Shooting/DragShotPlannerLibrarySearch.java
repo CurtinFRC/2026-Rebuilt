@@ -102,6 +102,10 @@ final class DragShotPlannerLibrarySearch {
           }
         }
 
+        double err = e.verticalErrorMeters();
+        if (err < 0.0) {
+          err = -err;
+        }
         DragShotPlannerCandidate next =
             new DragShotPlannerCandidate(
                 shooterPos,
@@ -109,7 +113,7 @@ final class DragShotPlannerLibrarySearch {
                 e.launchSpeedMetersPerSecond(),
                 e.launchAngleRad(),
                 e.timeToPlaneSeconds(),
-                Math.abs(e.verticalErrorMeters()),
+                err,
                 robotDistanceSq);
 
         if (DragShotPlannerCandidate.isBetterCandidate(best, next, shotStyle)) {

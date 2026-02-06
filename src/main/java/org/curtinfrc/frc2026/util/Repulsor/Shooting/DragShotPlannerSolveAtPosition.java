@@ -73,10 +73,6 @@ final class DragShotPlannerSolveAtPosition {
         return null;
       }
 
-      double invD = 1.0 / horizontalDistance;
-      double dirUx = dxT * invD;
-      double dirUy = dyT * invD;
-
       Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
       double angleStep = fixedAngle ? 1.0 : Math.max(0.18, angleStepDeg);
@@ -101,11 +97,24 @@ final class DragShotPlannerSolveAtPosition {
       double speedRange = maxSpeed - minSpeed;
       double coarseStep = Math.max(Math.max(0.9, speedStep * 3.0), speedRange / 10.0);
 
-      for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
-        double angleRad = angleDeg * degToRad;
-        double cos = Math.cos(angleRad);
+      int angleCap = (int) Math.ceil((maxAngleDeg - minAngleDeg) / angleStep) + 1;
+      double[] angleRad = new double[angleCap];
+      double[] angleCos = new double[angleCap];
+      double[] angleSin = new double[angleCap];
+      int angleCount = 0;
+      for (double ang = minAngleDeg; ang <= maxAngleDeg + 1e-6; ang += angleStep) {
+        double rad = ang * degToRad;
+        angleRad[angleCount] = rad;
+        angleCos[angleCount] = Math.cos(rad);
+        angleSin[angleCount] = Math.sin(rad);
+        angleCount++;
+      }
+
+      for (int ai = 0; ai < angleCount; ai++) {
+        double cos = angleCos[ai];
         if (cos <= 0.0) continue;
-        double sin = Math.sin(angleRad);
+        double sin = angleSin[ai];
+        double angleRad = angleRad[ai];
 
         double localBestSpeed = 0.0;
         double localBestErrAbs = Double.POSITIVE_INFINITY;
@@ -132,7 +141,10 @@ final class DragShotPlannerSolveAtPosition {
           if (!sim.hitPlane) continue;
           simsHit++;
 
-          double errAbs = Math.abs(sim.verticalErrorMeters);
+          double errAbs = sim.verticalErrorMeters;
+          if (errAbs < 0.0) {
+            errAbs = -errAbs;
+          }
           if (errAbs <= acceptableError) simsWithin++;
 
           if (!localFound || errAbs < localBestErrAbs - 1e-9) {
@@ -180,7 +192,10 @@ final class DragShotPlannerSolveAtPosition {
           }
           if (sim.hitPlane) {
             simsHit++;
-            e1Abs = Math.abs(sim.verticalErrorMeters);
+            e1Abs = sim.verticalErrorMeters;
+            if (e1Abs < 0.0) {
+              e1Abs = -e1Abs;
+            }
             t1 = sim.timeAtPlaneSeconds;
             s1 = sim.verticalErrorMeters;
             if (e1Abs <= acceptableError) simsWithin++;
@@ -209,7 +224,10 @@ final class DragShotPlannerSolveAtPosition {
           }
           if (sim.hitPlane) {
             simsHit++;
-            e2Abs = Math.abs(sim.verticalErrorMeters);
+            e2Abs = sim.verticalErrorMeters;
+            if (e2Abs < 0.0) {
+              e2Abs = -e2Abs;
+            }
             t2 = sim.timeAtPlaneSeconds;
             s2 = sim.verticalErrorMeters;
             if (e2Abs <= acceptableError) simsWithin++;
@@ -289,9 +307,6 @@ final class DragShotPlannerSolveAtPosition {
         return null;
       }
 
-      Translation2d impactPos =
-          new Translation2d(sx + dirUx * horizontalDistance, sy + dirUy * horizontalDistance);
-
       ShotSolution outSolution =
           new ShotSolution(
               shooterFieldPosition,
@@ -299,7 +314,7 @@ final class DragShotPlannerSolveAtPosition {
               bestSpeed,
               Rotation2d.fromRadians(bestAngleRad),
               bestTime,
-              impactPos,
+              targetFieldPosition,
               bestSignedErr);
 
       DragShotPlannerCache.put(ck, outSolution);

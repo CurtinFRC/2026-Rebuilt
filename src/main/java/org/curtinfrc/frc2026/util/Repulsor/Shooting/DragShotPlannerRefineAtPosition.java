@@ -55,10 +55,6 @@ final class DragShotPlannerRefineAtPosition {
         return null;
       }
 
-      double invD = 1.0 / horizontalDistance;
-      double dirUx = dxT * invD;
-      double dirUy = dyT * invD;
-
       Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
       double speedWindow = Math.max(1.5, (maxSpeed - minSpeed) / 8.0);
@@ -94,16 +90,26 @@ final class DragShotPlannerRefineAtPosition {
 
       DragShotPlannerSimulation.SimOut sim = DragShotPlannerSimulation.simOut();
 
-      for (double angleDeg = angleStartDeg;
-          angleDeg <= angleEndDeg + 1e-6;
-          angleDeg += angleStepFineDeg) {
+      int angleCap = (int) Math.ceil((angleEndDeg - angleStartDeg) / angleStepFineDeg) + 1;
+      double[] angleRad = new double[angleCap];
+      double[] angleCos = new double[angleCap];
+      double[] angleSin = new double[angleCap];
+      int angleCount = 0;
+      for (double ang = angleStartDeg; ang <= angleEndDeg + 1e-6; ang += angleStepFineDeg) {
+        double rad = ang * degToRad;
+        angleRad[angleCount] = rad;
+        angleCos[angleCount] = Math.cos(rad);
+        angleSin[angleCount] = Math.sin(rad);
+        angleCount++;
+      }
 
-        double angleRad = angleDeg * degToRad;
-        double cos = Math.cos(angleRad);
+      for (int ai = 0; ai < angleCount; ai++) {
+        double cos = angleCos[ai];
         if (cos <= 0.0) {
           continue;
         }
-        double sin = Math.sin(angleRad);
+        double sin = angleSin[ai];
+        double angleRad = angleRad[ai];
 
         for (double speed = speedMin; speed <= speedMax + 1e-6; speed += speedStepFine) {
           sims++;
@@ -126,7 +132,10 @@ final class DragShotPlannerRefineAtPosition {
           }
           simsHit++;
 
-          double error = Math.abs(sim.verticalErrorMeters);
+          double error = sim.verticalErrorMeters;
+          if (error < 0.0) {
+            error = -error;
+          }
           if (error > acceptableError) {
             continue;
           }
@@ -136,8 +145,6 @@ final class DragShotPlannerRefineAtPosition {
               || error < bestError - DragShotPlannerConstants.EPS
               || (Math.abs(error - bestError) <= DragShotPlannerConstants.EPS
                   && speed < best.launchSpeedMetersPerSecond() - DragShotPlannerConstants.EPS)) {
-            Translation2d impactPos =
-                new Translation2d(sx + dirUx * horizontalDistance, sy + dirUy * horizontalDistance);
             bestError = error;
             best =
                 new ShotSolution(
@@ -146,7 +153,7 @@ final class DragShotPlannerRefineAtPosition {
                     speed,
                     Rotation2d.fromRadians(angleRad),
                     sim.timeAtPlaneSeconds,
-                    impactPos,
+                    targetFieldPosition,
                     sim.verticalErrorMeters);
           }
         }
