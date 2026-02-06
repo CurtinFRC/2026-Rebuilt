@@ -31,6 +31,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.littletonrobotics.junction.Logger;
 
 public final class TestBehaviour extends Behaviour {
 
@@ -78,8 +79,8 @@ public final class TestBehaviour extends Behaviour {
               Setpoints.Rebuilt2026.getHubShotSolution(makeCtx(ctx, robotPose))
                   .ifPresent(
                       sol -> {
-                        // Logger.recordOutput("ShotSpeed", sol.launchSpeedMetersPerSecond());
-                        // Logger.recordOutput("ShotAngle", sol.launchAngle().getDegrees());
+                        Logger.recordOutput("ShotSpeed", sol.launchSpeedMetersPerSecond());
+                        Logger.recordOutput("ShotAngle", sol.launchAngle().getDegrees());
                       });
 
               RepulsorSample sample =
