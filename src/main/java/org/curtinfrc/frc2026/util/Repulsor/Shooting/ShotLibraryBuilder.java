@@ -84,7 +84,7 @@ public final class ShotLibraryBuilder {
     this.radialStep = radialStep;
     this.bearingStepDeg = bearingStepDeg;
 
-    this.range = DragShotPlannerCore.MIN_RANGE_METERS;
+    this.range = DragShotPlannerConstants.MIN_RANGE_METERS;
     this.bearingDeg = 0.0;
     this.done = false;
     this.publishCounter = 0;
@@ -117,7 +117,7 @@ public final class ShotLibraryBuilder {
           List.copyOf(entries),
           completeFlag);
     } finally {
-      DragShotPlannerCore.closeQuietly(_p);
+      DragShotPlannerUtil.closeQuietly(_p);
     }
   }
 
@@ -138,14 +138,14 @@ public final class ShotLibraryBuilder {
         AutoCloseable _p1 = Profiler.section("DragShotPlanner.isShooterPoseValid.library");
         try {
           ok =
-              DragShotPlannerCore.isShooterPoseValid(
+              DragShotPlannerObstacles.isShooterPoseValid(
                   shooterPos,
                   targetFieldPosition,
                   robotHalfLengthMeters,
                   robotHalfWidthMeters,
                   null);
         } finally {
-          DragShotPlannerCore.closeQuietly(_p1);
+          DragShotPlannerUtil.closeQuietly(_p1);
         }
 
         if (ok) {
@@ -154,7 +154,7 @@ public final class ShotLibraryBuilder {
               Profiler.section("DragShotPlanner.solveBestAtShooterPosition.library");
           try {
             bestAtPos =
-                DragShotPlannerCore.solveBestAtShooterPosition(
+                DragShotPlannerSolveAtPosition.solveBestAtShooterPosition(
                     gamePiece,
                     shooterPos,
                     targetFieldPosition,
@@ -165,12 +165,12 @@ public final class ShotLibraryBuilder {
                     minAngleDeg,
                     maxAngleDeg,
                     fixedAngle,
-                    DragShotPlannerCore.ACCEPTABLE_VERTICAL_ERROR_METERS,
+                    DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
                     constraints.shotStyle(),
                     speedStep,
                     angleStepDeg);
           } finally {
-            DragShotPlannerCore.closeQuietly(_p2);
+            DragShotPlannerUtil.closeQuietly(_p2);
           }
 
           if (bestAtPos != null) {
@@ -199,7 +199,7 @@ public final class ShotLibraryBuilder {
         if (bearingDeg >= 360.0 - 1e-9) {
           bearingDeg = 0.0;
           range += radialStep;
-          if (range > DragShotPlannerCore.MAX_RANGE_METERS + 1e-6) {
+          if (range > DragShotPlannerConstants.MAX_RANGE_METERS + 1e-6) {
             done = true;
             publish = snapshot(true);
             break;
@@ -210,7 +210,7 @@ public final class ShotLibraryBuilder {
       Profiler.gaugeSet("DragShotPlanner.library.entries_size", entries.size());
       return publish;
     } finally {
-      DragShotPlannerCore.closeQuietly(_p);
+      DragShotPlannerUtil.closeQuietly(_p);
     }
   }
 }
