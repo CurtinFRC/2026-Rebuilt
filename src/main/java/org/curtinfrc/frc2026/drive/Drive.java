@@ -307,25 +307,32 @@ public class Drive extends SubsystemBase {
           Pose2d currentPosition = getPose();
           Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
           double yDifference = hubPosition.getY() - currentPosition.getY();
-          yDifference = Math.abs(yDifference);
+          // yDifference = Math.abs(yDifference);
           double xDifference = hubPosition.getX() - currentPosition.getX();
-          xDifference = Math.abs(xDifference);
+          // xDifference = Math.abs(xDifference);
 
           // Angle
           double targetAngle = Math.atan2(yDifference, xDifference);
+
+          Pose2d target =
+              new Pose2d(
+                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(targetAngle));
           targetAngle = Math.toDegrees(targetAngle);
 
-          double robotAngle = rawGyroRotation.getDegrees();
+          double robotAngle = currentPosition.getRotation().getDegrees();
           double angleSpeed = 0;
 
-          // If we are close to the target (on target)
+          Logger.recordOutput("Target Angle", targetAngle);
+          Logger.recordOutput("Robot Angle", robotAngle);
+          Logger.recordOutput("targetPose", target);
+          // If we are close to the target
           if (robotAngle <= targetAngle - 2) {
-            angleSpeed = -0.15;
+            angleSpeed = 1;
             System.out.println("Target is to the right");
           }
           // if the target is to the right
           else if (robotAngle >= targetAngle + 2) {
-            angleSpeed = 0.15;
+            angleSpeed = -1;
             System.out.println("Target is to the left");
           } else {
             angleSpeed = 0;
