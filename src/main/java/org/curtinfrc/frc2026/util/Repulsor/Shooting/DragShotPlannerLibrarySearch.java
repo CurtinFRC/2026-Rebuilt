@@ -62,6 +62,8 @@ final class DragShotPlannerLibrarySearch {
 
       double rx = robotCurrentPosition.getX();
       double ry = robotCurrentPosition.getY();
+      Constraints.ShotStyle shotStyle = constraints.shotStyle();
+      double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
 
       int iter = 0;
       int rejectedTravel = 0;
@@ -75,7 +77,7 @@ final class DragShotPlannerLibrarySearch {
         double dx = rx - shooterPos.getX();
         double dy = ry - shooterPos.getY();
         double robotDistanceSq = dx * dx + dy * dy;
-        if (robotDistanceSq > DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ) {
+        if (robotDistanceSq > maxTravelSq) {
           rejectedTravel++;
           continue;
         }
@@ -110,7 +112,7 @@ final class DragShotPlannerLibrarySearch {
                 Math.abs(e.verticalErrorMeters()),
                 robotDistanceSq);
 
-        if (DragShotPlannerCandidate.isBetterCandidate(best, next, constraints.shotStyle())) {
+        if (DragShotPlannerCandidate.isBetterCandidate(best, next, shotStyle)) {
           best = next;
         }
         accepted++;

@@ -19,7 +19,6 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
@@ -54,11 +53,15 @@ final class DragShotPlannerCoarseSearch {
       double radialStepCoarse = 0.55;
       double bearingStepDegCoarse = 22.0;
       double coarseTolerance = DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS * 3.0;
+      double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
+      double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
 
       DragShotPlannerCandidate bestCoarse = null;
 
       double rx = robotCurrentPosition.getX();
       double ry = robotCurrentPosition.getY();
+      double targetX = targetFieldPosition.getX();
+      double targetY = targetFieldPosition.getY();
 
       int ranges = 0;
       int bearings = 0;
@@ -76,13 +79,17 @@ final class DragShotPlannerCoarseSearch {
         ranges++;
         for (double bearingDeg = 0.0; bearingDeg < 360.0; bearingDeg += bearingStepDegCoarse) {
           bearings++;
-          Rotation2d bearing = Rotation2d.fromDegrees(bearingDeg);
-          Translation2d shooterPos = targetFieldPosition.minus(new Translation2d(range, bearing));
+          double bearingRad = bearingDeg * degToRad;
+          double cosB = Math.cos(bearingRad);
+          double sinB = Math.sin(bearingRad);
+          double shooterX = targetX - range * cosB;
+          double shooterY = targetY - range * sinB;
+          Translation2d shooterPos = new Translation2d(shooterX, shooterY);
 
-          double dx = rx - shooterPos.getX();
-          double dy = ry - shooterPos.getY();
+          double dx = rx - shooterX;
+          double dy = ry - shooterY;
           double robotDistanceSq = dx * dx + dy * dy;
-          if (robotDistanceSq > DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ) {
+          if (robotDistanceSq > maxTravelSq) {
             continue;
           }
 
@@ -105,12 +112,8 @@ final class DragShotPlannerCoarseSearch {
             continue;
           }
 
-          double horizontalDistance = shooterPos.getDistance(targetFieldPosition);
-          if (horizontalDistance < 1e-3) {
-            continue;
-          }
-
-          Rotation2d shooterYaw = targetFieldPosition.minus(shooterPos).getAngle();
+          double horizontalDistance = range;
+          double shooterYawRad = bearingRad;
 
           double angleStartDeg;
           double angleEndDeg;
@@ -130,7 +133,7 @@ final class DragShotPlannerCoarseSearch {
               angleDeg <= angleEndDeg + 1e-6;
               angleDeg += angleStepDeg) {
 
-            double angleRad = Math.toRadians(angleDeg);
+            double angleRad = angleDeg * degToRad;
             double cos = Math.cos(angleRad);
             if (cos <= 0.0) {
               continue;
@@ -167,7 +170,7 @@ final class DragShotPlannerCoarseSearch {
               DragShotPlannerCandidate next =
                   new DragShotPlannerCandidate(
                       shooterPos,
-                      shooterYaw.getRadians(),
+                      shooterYawRad,
                       speed,
                       angleRad,
                       sim.timeAtPlaneSeconds,

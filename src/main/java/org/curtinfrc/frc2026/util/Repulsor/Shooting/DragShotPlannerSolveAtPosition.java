@@ -80,6 +80,10 @@ final class DragShotPlannerSolveAtPosition {
       Rotation2d shooterYaw = Rotation2d.fromRadians(Math.atan2(dyT, dxT));
 
       double angleStep = fixedAngle ? 1.0 : Math.max(0.18, angleStepDeg);
+      double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
+      double acceptableError = acceptableVerticalErrorMeters;
+      double earlyAccept = acceptableError * 0.35;
+      double refineBreak = acceptableError * 0.18;
 
       double bestErrorAbs = Double.POSITIVE_INFINITY;
       double bestAngleRad = 0.0;
@@ -98,7 +102,7 @@ final class DragShotPlannerSolveAtPosition {
       double coarseStep = Math.max(Math.max(0.9, speedStep * 3.0), speedRange / 10.0);
 
       for (double angleDeg = minAngleDeg; angleDeg <= maxAngleDeg + 1e-6; angleDeg += angleStep) {
-        double angleRad = Math.toRadians(angleDeg);
+        double angleRad = angleDeg * degToRad;
         double cos = Math.cos(angleRad);
         if (cos <= 0.0) continue;
         double sin = Math.sin(angleRad);
@@ -129,7 +133,7 @@ final class DragShotPlannerSolveAtPosition {
           simsHit++;
 
           double errAbs = Math.abs(sim.verticalErrorMeters);
-          if (errAbs <= acceptableVerticalErrorMeters) simsWithin++;
+          if (errAbs <= acceptableError) simsWithin++;
 
           if (!localFound || errAbs < localBestErrAbs - 1e-9) {
             localFound = true;
@@ -137,7 +141,7 @@ final class DragShotPlannerSolveAtPosition {
             localBestErrAbs = errAbs;
             localBestTime = sim.timeAtPlaneSeconds;
             localBestSigned = sim.verticalErrorMeters;
-            if (localBestErrAbs <= acceptableVerticalErrorMeters * 0.35) break;
+            if (localBestErrAbs <= earlyAccept) break;
           }
         }
 
@@ -179,7 +183,7 @@ final class DragShotPlannerSolveAtPosition {
             e1Abs = Math.abs(sim.verticalErrorMeters);
             t1 = sim.timeAtPlaneSeconds;
             s1 = sim.verticalErrorMeters;
-            if (e1Abs <= acceptableVerticalErrorMeters) simsWithin++;
+            if (e1Abs <= acceptableError) simsWithin++;
           } else {
             e1Abs = Double.POSITIVE_INFINITY;
             t1 = 0.0;
@@ -208,7 +212,7 @@ final class DragShotPlannerSolveAtPosition {
             e2Abs = Math.abs(sim.verticalErrorMeters);
             t2 = sim.timeAtPlaneSeconds;
             s2 = sim.verticalErrorMeters;
-            if (e2Abs <= acceptableVerticalErrorMeters) simsWithin++;
+            if (e2Abs <= acceptableError) simsWithin++;
           } else {
             e2Abs = Double.POSITIVE_INFINITY;
             t2 = 0.0;
@@ -234,7 +238,7 @@ final class DragShotPlannerSolveAtPosition {
             lo = m1;
           }
 
-          if (refineBestErrAbs <= acceptableVerticalErrorMeters * 0.18) break;
+          if (refineBestErrAbs <= refineBreak) break;
         }
 
         boolean take;

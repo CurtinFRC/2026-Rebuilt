@@ -19,7 +19,6 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.ArrayList;
 import java.util.List;
@@ -129,10 +128,16 @@ public final class ShotLibraryBuilder {
       }
       long start = System.nanoTime();
       ShotLibrary publish = null;
+      double targetX = targetFieldPosition.getX();
+      double targetY = targetFieldPosition.getY();
+      double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
 
       while (!done && (System.nanoTime() - start) < budgetNanos) {
+        double bearingRad = bearingDeg * degToRad;
+        double cosB = Math.cos(bearingRad);
+        double sinB = Math.sin(bearingRad);
         Translation2d shooterPos =
-            targetFieldPosition.minus(new Translation2d(range, Rotation2d.fromDegrees(bearingDeg)));
+            new Translation2d(targetX - range * cosB, targetY - range * sinB);
 
         boolean ok;
         AutoCloseable _p1 = Profiler.section("DragShotPlanner.isShooterPoseValid.library");

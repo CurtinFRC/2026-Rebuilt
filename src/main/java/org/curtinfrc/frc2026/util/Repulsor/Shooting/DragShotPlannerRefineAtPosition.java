@@ -65,11 +65,14 @@ final class DragShotPlannerRefineAtPosition {
       double speedMin = Math.max(minSpeed, coarseSpeed - speedWindow);
       double speedMax = Math.min(maxSpeed, coarseSpeed + speedWindow);
       double speedStepFine = Math.max(0.11, (speedMax - speedMin) / 18.0);
+      double acceptableError = acceptableVerticalErrorMeters;
 
       double angleStartDeg;
       double angleEndDeg;
       double angleStepFineDeg;
-      double coarseAngleDeg = Math.toDegrees(coarseAngleRad);
+      double radToDeg = DragShotPlannerConstants.RAD_TO_DEG;
+      double degToRad = DragShotPlannerConstants.DEG_TO_RAD;
+      double coarseAngleDeg = coarseAngleRad * radToDeg;
 
       if (fixedAngle) {
         angleStartDeg = minAngleDeg;
@@ -95,7 +98,7 @@ final class DragShotPlannerRefineAtPosition {
           angleDeg <= angleEndDeg + 1e-6;
           angleDeg += angleStepFineDeg) {
 
-        double angleRad = Math.toRadians(angleDeg);
+        double angleRad = angleDeg * degToRad;
         double cos = Math.cos(angleRad);
         if (cos <= 0.0) {
           continue;
@@ -124,7 +127,7 @@ final class DragShotPlannerRefineAtPosition {
           simsHit++;
 
           double error = Math.abs(sim.verticalErrorMeters);
-          if (error > acceptableVerticalErrorMeters) {
+          if (error > acceptableError) {
             continue;
           }
           simsWithin++;

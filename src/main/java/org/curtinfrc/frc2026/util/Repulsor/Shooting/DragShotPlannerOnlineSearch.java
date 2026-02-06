@@ -73,6 +73,8 @@ final class DragShotPlannerOnlineSearch {
       double minAngleDeg = constraints.minLaunchAngleDeg();
       double maxAngleDeg = constraints.maxLaunchAngleDeg();
       boolean fixedAngle = Math.abs(maxAngleDeg - minAngleDeg) < 1e-6;
+      Constraints.ShotStyle shotStyle = constraints.shotStyle();
+      double maxTravelSq = DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ;
 
       if (minSpeed <= 0.0 || maxSpeed <= minSpeed) {
         Profiler.counterAdd("DragShotPlanner.online.bad_speed_range", 1);
@@ -114,7 +116,7 @@ final class DragShotPlannerOnlineSearch {
                 maxAngleDeg,
                 fixedAngle,
                 DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
-                constraints.shotStyle(),
+                shotStyle,
                 speedStep,
                 angleStep);
       } finally {
@@ -139,7 +141,7 @@ final class DragShotPlannerOnlineSearch {
           double dx = robotX - seedSol.shooterPosition().getX();
           double dy = robotY - seedSol.shooterPosition().getY();
           double distSq = dx * dx + dy * dy;
-          if (distSq <= DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ + 1e-6) {
+          if (distSq <= maxTravelSq + 1e-6) {
             best =
                 new DragShotPlannerCandidate(
                     seedSol.shooterPosition(),
@@ -179,7 +181,7 @@ final class DragShotPlannerOnlineSearch {
           double dxr = robotX - clipped.getX();
           double dyr = robotY - clipped.getY();
           double distSq = dxr * dxr + dyr * dyr;
-          if (distSq > DragShotPlannerConstants.MAX_ROBOT_TRAVEL_METERS_SQ) {
+          if (distSq > maxTravelSq) {
             rejectedTravel++;
             continue;
           }
@@ -218,7 +220,7 @@ final class DragShotPlannerOnlineSearch {
                     maxAngleDeg,
                     fixedAngle,
                     DragShotPlannerConstants.ACCEPTABLE_VERTICAL_ERROR_METERS,
-                    constraints.shotStyle(),
+                    shotStyle,
                     speedStep,
                     angleStep);
           } finally {
@@ -244,7 +246,7 @@ final class DragShotPlannerOnlineSearch {
                   Math.abs(sol.verticalErrorMeters()),
                   distSq2);
 
-          if (DragShotPlannerCandidate.isBetterCandidate(best, cand, constraints.shotStyle())) {
+          if (DragShotPlannerCandidate.isBetterCandidate(best, cand, shotStyle)) {
             best = cand;
             current = sol.shooterPosition();
             improved = true;
@@ -320,17 +322,23 @@ final class DragShotPlannerOnlineSearch {
   private static Translation2d projectToValidRing(Translation2d point, Translation2d target) {
     AutoCloseable _p = Profiler.section("DragShotPlanner.projectToValidRing");
     try {
-      Translation2d delta = point.minus(target);
-      double r = delta.getNorm();
-      if (r < 1e-6) {
-        return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+      double px = point.getX();
+      double py = point.getY();
+      double tx = target.getX();
+      double ty = target.getY();
+      double dx = px - tx;
+      double dy = py - ty;
+      double r2 = dx * dx + dy * dy;
+      if (r2 < 1e-12) {
+        return new Translation2d(tx - 3.0, ty);
       }
+      double r = Math.sqrt(r2);
       double clamped =
           Math.max(
               DragShotPlannerConstants.MIN_RANGE_METERS,
               Math.min(DragShotPlannerConstants.MAX_RANGE_METERS, r));
-      Translation2d unit = delta.div(r);
-      return target.plus(unit.times(clamped));
+      double scale = clamped / r;
+      return new Translation2d(tx + dx * scale, ty + dy * scale);
     } finally {
       DragShotPlannerUtil.closeQuietly(_p);
     }
@@ -343,9 +351,9 @@ final class DragShotPlannerOnlineSearch {
       double x = ring.getX();
       double y = ring.getY();
       if (!Double.isFinite(x) || !Double.isFinite(y)) {
-        return target.minus(new Translation2d(3.0, Rotation2d.kZero));
+        return new Translation2d(target.getX() - 3.0, target.getY());
       }
-      return new Translation2d(x, y);
+      return ring;
     } finally {
       DragShotPlannerUtil.closeQuietly(_p0);
     }
