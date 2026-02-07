@@ -69,6 +69,8 @@ public class Robot extends LoggedRobot {
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
 
+  private double hoodSetPosition = 53;
+
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
     Logger.recordMetadata("BuildDate", BuildConstants.BUILD_DATE);
@@ -199,7 +201,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getRightX()));
 
     controller
-        .leftTrigger()
+        .x()
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(1.0),
@@ -207,32 +209,23 @@ public class Robot extends LoggedRobot {
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller.y().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
 
     controller
         .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+        .whileTrue(
+            Commands.parallel(
+                intake.RawControlConsume(1.0),
+                mag.moveAll(0.5),
+                hoodedShooter.setShooterVelocity(hoodedShooter.SCORING_SHOOTER_VELOCITY)))
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop(), hoodedShooter.stopShooter()));
 
     // controller
     //     .rightBumper()
-    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-    //     .onFalse(hoodedShooter.stopHoodedShooter());
-    // controller
-    //     .leftBumper()
-    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of
-    // hub
-    //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-    //     .onFalse(hoodedShooter.stopHoodedShooter());
-
-    // controller
-    //     .leftBumper()
     //     .whileTrue(hoodedShooter.shootAtHub())
-    //     .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.shootAtHub())
-        .onFalse(hoodedShooter.setHoodedShooterPositionAndVelocity(60, 0));
+    //     .onFalse(hoodedShooter.setHoodedShooterPositionAndVelocity(60, 0));
+    controller.leftTrigger().onTrue(Commands.run(() -> hoodSetPosition -= 1)).onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
+    controller.rightTrigger().onTrue(Commands.run(() -> hoodSetPosition += 1)).onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
   }
 
   /** This function is called periodically during all modes. */

@@ -30,15 +30,14 @@ public class HoodedShooter extends SubsystemBase {
   public static final Translation2d HUB_LOCATION =
       new Translation2d(
           FieldConstants.Hub.topCenterPoint.getX(), FieldConstants.Hub.topCenterPoint.getY());
+
   public static final double WHEEL_DIAMETER = 0.101;
-  public static final Transform3d SHOOTER_TRANSFORM =
-      new Transform3d(0, 0, 1, new Rotation3d()); // Not confirmed
 
-  public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
-      new InterpolatingDoubleTreeMap();
-
+  // public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
+  //     new InterpolatingDoubleTreeMap();
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE =
       new InterpolatingDoubleTreeMap();
+  public static final double SCORING_SHOOTER_VELOCITY = 25;
 
   private final HoodIO hoodIO;
   private final HoodIOInputsAutoLogged hoodInputs = new HoodIOInputsAutoLogged();
@@ -60,16 +59,6 @@ public class HoodedShooter extends SubsystemBase {
   private final SysIdRoutine sysIdRoutineShooter;
   private final SysIdRoutine sysIdRoutineHood;
 
-  private boolean hoodSoftLimitedForward() {
-    return hoodInputs.positionRotations
-        > HoodIODev.FORWARD_LIMIT_ROTATIONS - HoodIODev.LIMIT_BUFFER_ROTATIONS;
-  }
-
-  private boolean hoodSoftLimitedReverse() {
-    return hoodInputs.positionRotations
-        < HoodIODev.REVERSE_LIMIT_ROTATIONS + HoodIODev.LIMIT_BUFFER_ROTATIONS;
-  }
-
   public BallSim ballSim = new BallSim(0.0, new Rotation2d(0.0), new Pose3d());
 
   public HoodedShooter(ShooterIO shooterIO, HoodIO hoodIO, Supplier<Pose2d> robotPose) {
@@ -77,10 +66,10 @@ public class HoodedShooter extends SubsystemBase {
     this.hoodIO = hoodIO;
     this.robotPose = robotPose;
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.05, 0.0);
-    DISTANCE_TO_SHOOTER_VELOCITY.put(2.035, 0.0);
-    DISTANCE_TO_SHOOTER_VELOCITY.put(5.474, 0.0);
-    DISTANCE_TO_SHOOTER_VELOCITY.put(4.0, 0.0);
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(3.05, 0.0);
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(2.035, 0.0);
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(5.474, 0.0);
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(4.0, 0.0);
 
     DISTANCE_TO_HOOD_ANGLE.put(3.05, 0.0);
     DISTANCE_TO_HOOD_ANGLE.put(2.035, 0.0);
@@ -144,6 +133,9 @@ public class HoodedShooter extends SubsystemBase {
     Logger.processInputs("Shooter", shooterInputs);
     Logger.recordOutput("Ball", ballSim.update(0.02));
 
+    double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
+    Logger.recordOutput("distanceFromHub", distanceLength);
+
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
     for (int motor = 0; motor < 3; motor++) {
@@ -158,9 +150,11 @@ public class HoodedShooter extends SubsystemBase {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
           double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
-          hoodAngle = (75); // angle conversion to rotations
-          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(3.04833887);
-          Logger.recordOutput("ROBOERT SMILE", hoodAngle);
+          double shooterVelocity = SCORING_SHOOTER_VELOCITY;
+
+          Logger.recordOutput("targetHoodAngle", hoodAngle);
+          Logger.recordOutput("targetShooterVelocity", shooterVelocity);
+
           hoodIO.setPosition(hoodAngle);
           shooterIO.setVelocity(20);
 
@@ -215,6 +209,16 @@ public class HoodedShooter extends SubsystemBase {
           hoodIO.setVoltage(0);
           shooterIO.setVelocity(0);
         });
+  }
+
+  private boolean hoodSoftLimitedForward() {
+    return hoodInputs.positionRotations
+        > HoodIODev.FORWARD_LIMIT_ROTATIONS - HoodIODev.LIMIT_BUFFER_ROTATIONS;
+  }
+
+  private boolean hoodSoftLimitedReverse() {
+    return hoodInputs.positionRotations
+        < HoodIODev.REVERSE_LIMIT_ROTATIONS + HoodIODev.LIMIT_BUFFER_ROTATIONS;
   }
 
   public Command shooterSysIdQuasistaticForward() {
