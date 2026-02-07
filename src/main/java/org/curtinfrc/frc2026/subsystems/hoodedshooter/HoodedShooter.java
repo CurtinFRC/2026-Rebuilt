@@ -158,10 +158,11 @@ public class HoodedShooter extends SubsystemBase {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
           double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
-          hoodAngle = (90 / 360); // angle conversion to rotations
+          hoodAngle = (75); // angle conversion to rotations
           double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(3.04833887);
+          Logger.recordOutput("ROBOERT SMILE", hoodAngle);
           hoodIO.setPosition(hoodAngle);
-          // shooterIO.setVelocity(20);
+          shooterIO.setVelocity(20);
 
           ballSim =
               new BallSim(
@@ -175,8 +176,7 @@ public class HoodedShooter extends SubsystemBase {
   public Command setHoodPosition(double positionDegrees) {
     return run(
         () -> {
-          hoodIO.setPosition(positionDegrees / 360);
-          Logger.recordOutput("ROBOERT SMILE", positionDegrees);
+          hoodIO.setPosition(positionDegrees);
         });
   }
 
