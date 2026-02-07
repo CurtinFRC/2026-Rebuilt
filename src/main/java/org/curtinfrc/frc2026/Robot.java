@@ -3,6 +3,8 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import com.ctre.phoenix6.signals.InvertedValue;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -201,7 +203,7 @@ public class Robot extends LoggedRobot {
         .x()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(1.0),
+                intake.RawControlConsume(0.7),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
@@ -212,7 +214,7 @@ public class Robot extends LoggedRobot {
         .a()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(1.0),
+                intake.RawControlConsume(0.7),
                 mag.moveAll(0.5),
                 hoodedShooter.setShooterVelocity(hoodedShooter.SCORING_SHOOTER_VELOCITY)))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop(), hoodedShooter.stopShooter()));
@@ -221,8 +223,18 @@ public class Robot extends LoggedRobot {
     //     .rightBumper()
     //     .whileTrue(hoodedShooter.shootAtHub())
     //     .onFalse(hoodedShooter.setHoodedShooterPositionAndVelocity(60, 0));
-    controller.leftTrigger().onTrue(Commands.run(() -> hoodSetPosition -= 1)).onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
-    controller.rightTrigger().onTrue(Commands.run(() -> hoodSetPosition += 1)).onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
+    // controller
+    //     .leftTrigger()
+    //     .onTrue(Commands.run(() -> hoodSetPosition -= 1))
+    //     .onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
+    // controller
+    //     .rightTrigger()
+    //     .onTrue(Commands.run(() -> hoodSetPosition += 1))
+    //     .onFalse(hoodedShooter.setHoodPosition(hoodSetPosition));
+    controller
+        .rightTrigger()
+        .onTrue(hoodedShooter.shootAtHub())
+        .onFalse(hoodedShooter.stopShooter());
   }
 
   /** This function is called periodically during all modes. */
@@ -235,6 +247,12 @@ public class Robot extends LoggedRobot {
     controllerDisconnected.set(!controller.isConnected());
     logRunningCommands();
     logRequiredSubsystems();
+    Logger.recordOutput(
+        "range",
+        new Pose2d(11.78013, 4.03348, Rotation2d.kZero)
+            .minus(drive.getPose())
+            .getTranslation()
+            .getNorm());
     Logger.recordOutput(
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
