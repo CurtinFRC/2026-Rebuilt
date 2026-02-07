@@ -143,7 +143,7 @@ public class HoodedShooter extends SubsystemBase {
     return run(
         () -> {
           hoodIO.setPosition(position);
-          shooterIO.setVelocity(velocity);
+          shooterIO.setVoltage(5);
         });
   }
 

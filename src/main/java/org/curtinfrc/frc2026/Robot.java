@@ -31,8 +31,10 @@ import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRoller;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIOSim;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
@@ -64,6 +66,11 @@ public class Robot extends LoggedRobot {
   private Vision vision;
   private Intake intake;
   private Mag mag;
+
+  private MagRoller roller1;
+  private MagRoller roller2;
+  private MagRoller roller3;
+
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
@@ -172,6 +179,11 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
+
+          // roller1 = new MagRoller(new MagRollerIOSim(3.0));
+          // roller2 = new MagRoller(new MagRollerIOSim(9.6));
+          // roller3 = new MagRoller(new MagRollerIOSim(3.0));
+          mag = new Mag(new MagRollerIOSim(3), new MagRollerIOSim(9.6), new MagRollerIOSim(3));
           hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
         }
       }
@@ -193,36 +205,54 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.joystickDrive(
-            () -> -controller.getLeftY(),
-            () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+        drive.hubHeadingjoyStickDrive(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
+
+    // controller.a().whileFalse(Commands.parallel(null));
+
+    // controller
+    //     .a()
+    //     .whileTrue(Commands.parallel(intake.RawControlConsume(0.3),
+    // mag.runAtVelocity_RPS_PID(67)))
+    //     .onFalse(
+    //         Commands.parallel(mag.stop(), hoodedShooter.stopHoodedShooter(), intake.RawIdle()));
 
     controller
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(1.0),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
+                intake.runAtVelocityPID(67),
+                mag.runAtVelocity_RPS_PID(67),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5)))
+        .onFalse(
+            Commands.parallel(intake.RawIdle(), mag.stop(), hoodedShooter.stopHoodedShooter()));
+
+    controller
+        .rightTrigger()
+        .whileTrue(
+            Commands.parallel(intake.runAtVelocityPID(67), mag.runAtVelocity_RPS_PID_Store(67)))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller.b().whileTrue(drive.faceHub());
 
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    // controller
+    //     .b()
+    //     .whileTrue(Commands.parallel(intake.RawControlConsume(-0.7), mag.moveAll(-0.5)))
+    //     .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .rightBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+    // controller
+    //     .leftBumper()
+    //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of
+    // hub
+    //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+    //     .onFalse(hoodedShooter.stopHoodedShooter());
+
+    // controller.b().whileTrue(intake.runAtVelocityPID(67)).onFalse(intake.RawIdle());
+
+    // controller.y().whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 5));
   }
 
   /** This function is called periodically during all modes. */

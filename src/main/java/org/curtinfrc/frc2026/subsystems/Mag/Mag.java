@@ -1,27 +1,19 @@
 package org.curtinfrc.frc2026.subsystems.Mag;
 
-import com.ctre.phoenix6.controls.PositionVoltage;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
-import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.*;
 
-public class Mag extends SubsystemBase {
+public class Mag {
 
   private MagRoller intakeMagRoller;
   private MagRoller middleMagRoller;
   private MagRoller indexerMagRoller;
 
-  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
-
   public Mag(MagRollerIO roller1, MagRollerIO roller2, MagRollerIO roller3) {
-    intakeMagRoller = new MagRoller(roller1);
-    middleMagRoller = new MagRoller(roller2);
-    indexerMagRoller = new MagRoller(roller3);
-  }
-
-  public void initDefaultCommand() {
-    setDefaultCommand(stop());
+    intakeMagRoller = new MagRoller(roller1, "intakeMagRoller");
+    middleMagRoller = new MagRoller(roller2, "midMagRoller");
+    indexerMagRoller = new MagRoller(roller3, "indexerMagRoller");
   }
 
   public Command spinIndexer(double volts) {
@@ -46,5 +38,19 @@ public class Mag extends SubsystemBase {
 
   public Command holdIndexerCommand() {
     return indexerMagRoller.stayAtCurrentPosition();
+  }
+
+  public Command runAtVelocity_RPS_PID(double velocityRPS) {
+    return Commands.parallel(
+        intakeMagRoller.runAtVelocityPID(velocityRPS),
+        middleMagRoller.runAtVelocityPID(velocityRPS),
+        indexerMagRoller.runAtVelocityPID(velocityRPS));
+  }
+
+  public Command runAtVelocity_RPS_PID_Store(double velocityRPS) {
+    return Commands.parallel(
+        intakeMagRoller.runAtVelocityPID(velocityRPS),
+        middleMagRoller.runAtVelocityPID(velocityRPS),
+        indexerMagRoller.stayAtCurrentPosition());
   }
 }
