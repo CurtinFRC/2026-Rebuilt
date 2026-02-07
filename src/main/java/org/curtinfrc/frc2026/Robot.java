@@ -194,7 +194,7 @@ public class Robot extends LoggedRobot {
 
     drive.setDefaultCommand(
         drive.hubHeadingjoyStickDrive(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
-        
+
     controller
         .leftTrigger()
         .whileTrue(
