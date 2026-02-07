@@ -67,6 +67,7 @@ import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStationBootstrap;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
+import org.curtinfrc.frc2026.util.Repulsor.IntakeFootprint;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
@@ -155,7 +156,7 @@ public class Robot extends LoggedRobot {
       new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
   GateTelemetry telem = new GateTelemetry("/robot/gates");
 
-  VisionSimTest visionSim = new VisionSimTest();
+  // VisionSimTest visionSim = new VisionSimTest();
   RepulsorSetpoint goal = new RepulsorSetpoint(Rebuilt2026.HUB_SHOOT, HeightSetpoint.L2);
 
   private boolean simHasPiece = false;
@@ -174,10 +175,11 @@ public class Robot extends LoggedRobot {
     repulsor =
         new Repulsor(drive, Constants.ROBOT_X, Constants.ROBOT_Y, 0.55, 0.22, () -> simHasPiece)
             .withFallback(new Fallback().new PID(1, 0, 0))
-            .withVision(visionSim)
+            // .withVision(visionSim)
             .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING));
 
     repulsor.setup();
+    IntakeFootprint.setFootprint(IntakeFootprint.frontRect(0.7, 0.175, 0.35));
   }
 
   public Robot() {
@@ -480,7 +482,7 @@ public class Robot extends LoggedRobot {
       repulsor.update();
     }
 
-    VisionSimTest.setSelfPose(drive.getPose());
+    // VisionSimTest.setSelfPose(drive.getPose());
 
     Logger.recordOutput("PIECE", pieceCount.get());
     if (pieceCount.get() > 10) {
@@ -527,7 +529,6 @@ public class Robot extends LoggedRobot {
   /** This function is called once when teleop is enabled. */
   @Override
   public void teleopInit() {
-    wireRepulsor();
   }
 
   /** This function is called periodically during operator control. */

@@ -13,7 +13,7 @@ public final class Constants {
   public static final int bBotIntakeMagRollerMotorID = 22;
   public static final int bBotIndexerMagRollerMotorID = 21;
 
-  public static final RobotType robotType = RobotType.DEV;
+  public static final RobotType robotType = RobotType.SIM;
   public static final double ROBOT_X = 0.85;
   public static final double ROBOT_Y = 0.85;
   public static final double FIELD_LENGTH = 16.540988;

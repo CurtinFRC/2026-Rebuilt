@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -23,7 +23,25 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.Objects;
 
+import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+
 public final class IntakeFootprint {
+  private static IntakeFootprint instance = null;
+
+  public static IntakeFootprint getFootprint() {
+    if (instance == null) {
+      throw new IllegalStateException(
+          "IntakeFootprint instance not initialized. Call one of the factory methods first.");
+    }
+    return instance;
+  }
+
+  public static void setFootprint(IntakeFootprint footprint) {
+    if (instance != null) {
+      throw new IllegalStateException("IntakeFootprint instance already set.");
+    }
+    instance = Objects.requireNonNull(footprint);
+  }
 
   public static IntakeFootprint robotSquare(double robotSideMeters) {
     double h = 0.5 * robotSideMeters;

@@ -29,6 +29,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+
+import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
@@ -718,7 +720,7 @@ public final class PredictiveFieldState {
     return tmp.toArray(new Translation2d[0]);
   }
 
-  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.frontRect(0.7, 0.175, 0.35);
+  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.getFootprint();
   private static final Translation2d[] COLLECT_FOOTPRINT_SAMPLES =
       new Translation2d[] {
         new Translation2d(0.0, 0.0),
