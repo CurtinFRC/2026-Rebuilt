@@ -371,7 +371,7 @@ public class Drive extends SubsystemBase {
   }
 
   public Command hubHeadingjoyStickDrive(
-      DoubleSupplier xSupplier, DoubleSupplier ySupplier, DoubleSupplier omegaSupplier) {
+      DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
     return run(
         () -> {
 
