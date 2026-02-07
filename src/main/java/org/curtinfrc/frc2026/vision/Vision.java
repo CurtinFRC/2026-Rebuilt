@@ -32,8 +32,9 @@ public class Vision extends VirtualSubsystem {
         new CameraConfig(
             "Intake Left",
             new Transform3d(
-                new Translation3d(-0.293052, 0.445512, -0.289311), new Rotation3d(0, 40, -45)),
-            1.0),
+                new Translation3d(0.293052, 0.2893110, 0.445512),
+                new Rotation3d(0, -0.20944, 0.436332)),
+            2.0),
         new CameraConfig(
             "Intake Right",
             new Transform3d(
