@@ -148,7 +148,7 @@ public class Robot extends LoggedRobot {
                       Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
-          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
+          hoodedShooter = new HoodedShooter(new ShooterIODev(), new HoodIODev(), drive::getPose);
         }
         case SIM -> {
           drive =
@@ -172,7 +172,7 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
-          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
+          hoodedShooter = new HoodedShooter(new ShooterIOSim(), new HoodIOSim(), drive::getPose);
         }
       }
     } else {
