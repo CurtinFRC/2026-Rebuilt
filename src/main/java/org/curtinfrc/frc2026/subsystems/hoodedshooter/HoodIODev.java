@@ -11,6 +11,7 @@ import com.ctre.phoenix6.configs.MagnetSensorConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.Slot1Configs;
 import com.ctre.phoenix6.configs.SoftwareLimitSwitchConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.MotionMagicVoltage;
@@ -28,6 +29,7 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
+import org.littletonrobotics.junction.Logger;
 
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
@@ -38,18 +40,19 @@ public class HoodIODev implements HoodIO {
   public static final double FORWARD_LIMIT_ROTATIONS = 0.33888889;
   public static final double REVERSE_LIMIT_ROTATIONS = 0;
   public static final double LIMIT_BUFFER_ROTATIONS = 0.05;
-  public static final double STOWED_OUT_POSITION_THRESHOLD = 0.4;
+  public static final double STOWED_OUT_POSITION_THRESHOLD = 0.175;
   public static final double ENCODER_MAGNET_OFFSET = -0.034912;
   public static final double ZERO_DEGREE_OFFSET_DEGREES = 53;
 
   public static final double GRAVITY_POSITION_OFFSET = -0.0869;
-  public static final double KP = 15.0;
+  public static final double KP = 30.0;
   public static final double KI = 0.05;
   public static final double KD = 0.0;
   public static final double KS = 0.47;
   public static final double KV = 0.15;
-  public static final double KA = 0.00;
-  public static final double KG = 0.8;
+  public static final double KA_OUT = 0.01;
+  public static final double KA_STOWED = 0.01;
+  public static final double KG = 0.5;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
   public static final double MM_ACCLERATION = 16;
@@ -83,7 +86,18 @@ public class HoodIODev implements HoodIO {
                   .withKD(KD)
                   .withKS(KS)
                   .withKV(KV)
-                  .withKA(KA)
+                  .withKA(KA_OUT)
+                  .withKG(KG)
+                  .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
+                  .withGravityType(GravityTypeValue.Arm_Cosine))
+          .withSlot1(
+              new Slot1Configs()
+                  .withKP(KP)
+                  .withKI(KI)
+                  .withKD(KD)
+                  .withKS(KS)
+                  .withKV(KV)
+                  .withKA(KA_STOWED)
                   .withKG(KG)
                   .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
                   .withGravityType(GravityTypeValue.Arm_Cosine))
@@ -160,6 +174,19 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void setPosition(double position) {
-    motor.setControl(positionRequest.withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360)));
+    Logger.recordOutput("setposition", position * 360);
+    if (position < STOWED_OUT_POSITION_THRESHOLD) {
+      motor.setControl(
+          positionRequest
+              .withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360))
+              .withSlot(1)
+              .withFeedForward(-0.35));
+    } else {
+      motor.setControl(
+          positionRequest
+              .withPosition(position - (ZERO_DEGREE_OFFSET_DEGREES / 360))
+              .withSlot(0)
+              .withFeedForward(0.05));
+    }
   }
 }
