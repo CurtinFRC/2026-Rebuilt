@@ -67,7 +67,6 @@ public class Drive extends SubsystemBase {
   // above.
   PIDController hubHeadingController = new PIDController(hubHeadingKP, hubHeadingKI, hubHeadingKD);
 
-
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
   private SwerveModulePosition[] lastModulePositions = // For delta tracking
@@ -92,7 +91,7 @@ public class Drive extends SubsystemBase {
     modules[2] = new Module(blModuleIO, 2, TunerConstants.BackLeft);
     modules[3] = new Module(brModuleIO, 3, TunerConstants.BackRight);
 
-     // setting minimum and maximum angle in values in radians.
+    // setting minimum and maximum angle in values in radians.
     hubHeadingController.enableContinuousInput(-Math.PI, Math.PI);
 
     // setting error tolerance when turning to an angle and the speed tolerance
@@ -317,13 +316,14 @@ public class Drive extends SubsystemBase {
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
         });
   }
+
   public double angleToHub() {
     // Get current position using the getPose method.
     Pose2d currentPosition = getPose();
 
     // Hub position from onshape in metres
     Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
-     // Measuring x and y differences to use trig to calculate angle in radians.
+    // Measuring x and y differences to use trig to calculate angle in radians.
     double yDifference = hubPosition.getY() - currentPosition.getY();
     // yDifference = Math.abs(yDifference);
     double xDifference = hubPosition.getX() - currentPosition.getX();
