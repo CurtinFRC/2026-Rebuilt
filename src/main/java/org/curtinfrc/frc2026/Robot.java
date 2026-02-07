@@ -231,8 +231,8 @@ public class Robot extends LoggedRobot {
     //     .onFalse(hoodedShooter.stopHoodedShooter());
     controller
         .rightBumper()
-        .whileTrue(hoodedShooter.setHoodPosition(100))
-        .onFalse(hoodedShooter.setHoodPosition(60));
+        .whileTrue(hoodedShooter.shootAtHub())
+        .onFalse(hoodedShooter.setHoodedShooterPositionAndVelocity(60, 0));
   }
 
   /** This function is called periodically during all modes. */
