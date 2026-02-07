@@ -153,8 +153,8 @@ public final class Rebuilt2026Reasoner
     seq.signals().put(ReasoningKeys.TELEOP, DriverStation.isTeleop());
 
     if (seq.signals().getOr(TESTING, false)) {
-      EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.AUTOPATH_MODE);
-      // EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.TEST_MODrE);
+      // EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.AUTOPATH_MODE);
+      EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.TEST_MODE);
       seq.signals().flush();
       return out;
     }
