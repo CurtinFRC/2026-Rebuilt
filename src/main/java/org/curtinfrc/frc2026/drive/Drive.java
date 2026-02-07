@@ -323,14 +323,12 @@ public class Drive extends SubsystemBase {
 
     // Hub position from onshape in metres
     Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
+
+    double targetAngle =
+        hubPosition.minus(currentPosition).getTranslation().getAngle().getRadians();
     // Measuring x and y differences to use trig to calculate angle in radians.
-    double yDifference = hubPosition.getY() - currentPosition.getY();
-    // yDifference = Math.abs(yDifference);
-    double xDifference = hubPosition.getX() - currentPosition.getX();
-    // xDifference = Math.abs(xDifference);
 
     // Using trig to caluclate angle with atan2 in radians.
-    double targetAngle = Math.atan2(yDifference, xDifference);
 
     return targetAngle + Math.PI;
   }
@@ -375,10 +373,6 @@ public class Drive extends SubsystemBase {
           // Get current position using the getPose method.
           Pose2d currentPosition = getPose();
 
-          // Plugging in target angle to target position/pose
-          Pose2d target =
-              new Pose2d(
-                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(angleToHub()));
           // targetAngle = Math.toDegrees(targetAngle);
 
           // Getting robot current angle in radians
@@ -388,9 +382,8 @@ public class Drive extends SubsystemBase {
           // to go to
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub());
 
-          Logger.recordOutput("Target Angle", angleToHub());
-          Logger.recordOutput("Robot Angle", robotAngle);
-          Logger.recordOutput("targetPose", target);
+          Logger.recordOutput("TargetAngle", angleToHub());
+          Logger.recordOutput("RobotAngle", robotAngle);
 
           // Get linear velocity
           Translation2d linearVelocity =
