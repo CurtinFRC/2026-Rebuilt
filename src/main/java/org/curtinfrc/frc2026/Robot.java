@@ -2,6 +2,8 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import choreo.auto.AutoChooser;
+import choreo.auto.AutoFactory;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
@@ -9,11 +11,13 @@ import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -61,6 +65,8 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  */
 public class Robot extends LoggedRobot {
   private Drive drive;
+  private final AutoFactory autoFactory;
+  private final AutoChooser autoChooser;
   private Vision vision;
   private Intake intake;
   private Mag mag;
@@ -188,6 +194,17 @@ public class Robot extends LoggedRobot {
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
+    autoFactory =
+        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+    autoChooser = new AutoChooser();
+
+    SmartDashboard.putData("autoChooser", autoChooser);
+    autoChooser.addCmd("Dev Test", this::testDrive);
+    autoChooser.addCmd("Print Test", this::printTest);
+    autoChooser.addCmd("Sim Test 2x2", this::simTestDrive);
+    autoChooser.select("Forward");
+    RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
+
     DriverStation.silenceJoystickConnectionWarning(true);
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
@@ -223,6 +240,26 @@ public class Robot extends LoggedRobot {
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
+  }
+
+  private Command printTest() {
+    return Commands.run(
+        () -> {
+          System.out.println("Test");
+        },
+        drive);
+  }
+
+  private Command simTestDrive() {
+    return autoFactory
+        .trajectoryCmd("testSim2x2")
+        .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
+  }
+
+  private Command testDrive() {
+    return autoFactory
+        .trajectoryCmd("testDev")
+        .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
   /** This function is called periodically during all modes. */
