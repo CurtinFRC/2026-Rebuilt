@@ -31,9 +31,10 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID3 = 29;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.00076245;
-  private static final double KI = 0.0;
-  private static final double KD = 0.1;
+  private static final double EFFICIENCY = 0.85;
+  private static final double KP = 0.05;
+  private static final double KI = 0.001;
+  private static final double KD = 0.003;
   private static final double KS = 0.24152;
   private static final double KV = 0.12173;
   private static final double KA = 0.015427;
@@ -93,10 +94,8 @@ public class ShooterIODev implements ShooterIO {
 
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
-    inputs.positionRotations = position.getValueAsDouble();
     inputs.velocityMetresPerSecond = convertRPSToVelocity(velocity.getValueAsDouble());
-    inputs.accelerationMetresPerSecondPerSecond =
-        convertRPSToVelocity(acceleration.getValueAsDouble());
+    inputs.positionRotations = position.getValueAsDouble();
   }
 
   @Override
@@ -105,21 +104,21 @@ public class ShooterIODev implements ShooterIO {
   }
 
   @Override
+  public void setVelocity(double velocity) {
+    double rps = convertVelocityToRPS(velocity / EFFICIENCY);
+    leaderMotor.setControl(velocityRequest.withVelocity(rps));
+  }
+
+  @Override
   public void setVoltageV(Voltage voltage) {
     leaderMotor.setControl(voltageRequest.withOutput(voltage));
   }
 
-  @Override
-  public void setVelocity(double velocity) {
-    double rps = convertVelocityToRPS(velocity);
-    leaderMotor.setControl(velocityRequest.withVelocity(rps));
-  }
-
-  public double convertVelocityToRPS(double velocity) {
+  public static double convertVelocityToRPS(double velocity) {
     return velocity / (HoodedShooter.WHEEL_DIAMETER * Math.PI);
   }
 
-  public double convertRPSToVelocity(double angularVelocityRotationsPerSecond) {
+  public static double convertRPSToVelocity(double angularVelocityRotationsPerSecond) {
     return angularVelocityRotationsPerSecond * (HoodedShooter.WHEEL_DIAMETER * Math.PI);
   }
 }
