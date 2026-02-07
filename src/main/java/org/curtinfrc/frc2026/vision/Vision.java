@@ -8,6 +8,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.interpolation.TimeInterpolatableBuffer;
@@ -32,17 +33,20 @@ public class Vision extends VirtualSubsystem {
         new CameraConfig(
             "Intake Left",
             new Transform3d(
-                new Translation3d(-0.293052, 0.445512, -0.289311), new Rotation3d(0, 40, -45)),
-            1.0),
+                new Translation3d(0.293052, 0.2893110, 0.445512),
+                new Rotation3d(0, -0.20944, 0.436332)),
+            2.0),
         new CameraConfig(
             "Intake Right",
             new Transform3d(
-                new Translation3d(0.293302, 0.445512, -0.289311), new Rotation3d(0, 40, 45)),
+                new Translation3d(0.293302, -0.289311, 0.445512),
+                new Rotation3d(0, -0.20944, -0.436332)),
             1.0),
         new CameraConfig(
             "Shooter Right",
             new Transform3d(
-                new Translation3d(-0.292205, 0.474879, -0.041151), new Rotation3d(0, 40, -135)),
+                new Translation3d(-0.292205, 0.474879, 0.041151),
+                new Rotation3d(0, 0.20944, 2.61799)),
             1.0),
         new CameraConfig(
             "PC_Camera",

@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026.vision;
 
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.wpilibj.DriverStation;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,6 +29,12 @@ public class VisionIOPhotonVision implements VisionIO {
   @Override
   public void updateInputs(VisionIOInputs inputs) {
     inputs.connected = camera.isConnected();
+
+    if (DriverStation.isEnabled()) {
+      camera.setFPSLimit(60);
+    } else {
+      camera.setFPSLimit(5);
+    }
 
     // Read new camera observations
     Set<Short> tagIds = new HashSet<>();
