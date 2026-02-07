@@ -59,7 +59,7 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 3.5;
+  public static final double hubHeadingKP = 7;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0;
 
@@ -317,23 +317,23 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  public double angleToHub () {
-      // Get current position using the getPose method.
-          Pose2d currentPosition = getPose();
+  public double angleToHub() {
+    // Get current position using the getPose method.
+    Pose2d currentPosition = getPose();
 
-          // Hub position from onshape in metres
-          Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
+    // Hub position from onshape in metres
+    Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
 
-          // Measuring x and y differences to use trig to calculate angle in radians.
-          double yDifference = hubPosition.getY() - currentPosition.getY();
-          // yDifference = Math.abs(yDifference);
-          double xDifference = hubPosition.getX() - currentPosition.getX();
-          // xDifference = Math.abs(xDifference);
+    // Measuring x and y differences to use trig to calculate angle in radians.
+    double yDifference = hubPosition.getY() - currentPosition.getY();
+    // yDifference = Math.abs(yDifference);
+    double xDifference = hubPosition.getX() - currentPosition.getX();
+    // xDifference = Math.abs(xDifference);
 
-          // Using trig to caluclate angle with atan2 in radians.
-          double targetAngle = Math.atan2(yDifference, xDifference);
+    // Using trig to caluclate angle with atan2 in radians.
+    double targetAngle = Math.atan2(yDifference, xDifference);
 
-          return targetAngle;
+    return targetAngle + Math.PI;
   }
 
   public Command faceHub() {
@@ -360,7 +360,6 @@ public class Drive extends SubsystemBase {
           Logger.recordOutput("Robot Angle", robotAngle);
           Logger.recordOutput("targetPose", target);
 
-
           // Creating a new instance of the class ChassisSpeeds and plugging in angleSpeed and
           // setting vxMetersPerSecond to 0 and vyMetersPerSecond to 0 (because we are turning)
           ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
@@ -370,8 +369,7 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  public Command hubHeadingjoyStickDrive(
-      DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
+  public Command hubHeadingjoyStickDrive(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
     return run(
         () -> {
 
@@ -412,5 +410,5 @@ public class Drive extends SubsystemBase {
               ChassisSpeeds.fromFieldRelativeSpeeds(
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
         });
-      }
+  }
 }
