@@ -193,10 +193,7 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.joystickDrive(
-            () -> -controller.getLeftY(),
-            () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+        drive.hubHeadingjoyStickDrive(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
 
     controller
         .leftTrigger()
