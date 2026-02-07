@@ -58,14 +58,14 @@ public class Drive extends SubsystemBase {
   private final Alert gyroDisconnectedAlert =
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
-
   // Setting PID values for turning towards Hub.
   public static final double hubHeadingKP = 3.5;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0;
 
-  // Creating a new instance of the class PIDController and plugging in PID values from variables above.
-  PIDController hubHeadingController = new PIDController(hubHeadingKP,hubHeadingKI ,hubHeadingKD);
+  // Creating a new instance of the class PIDController and plugging in PID values from variables
+  // above.
+  PIDController hubHeadingController = new PIDController(hubHeadingKP, hubHeadingKI, hubHeadingKD);
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -90,12 +90,12 @@ public class Drive extends SubsystemBase {
     modules[1] = new Module(frModuleIO, 1, TunerConstants.FrontRight);
     modules[2] = new Module(blModuleIO, 2, TunerConstants.BackLeft);
     modules[3] = new Module(brModuleIO, 3, TunerConstants.BackRight);
-  
-    //setting minimum and maximum angle in values in radians.
+
+    // setting minimum and maximum angle in values in radians.
     hubHeadingController.enableContinuousInput(-Math.PI, Math.PI);
 
-    //setting error tolerance when turning to an angle and the speed tolerance
-    hubHeadingController.setTolerance(0.02,0.1);
+    // setting error tolerance when turning to an angle and the speed tolerance
+    hubHeadingController.setTolerance(0.02, 0.1);
 
     // Usage reporting for swerve template
     HAL.report(tResourceType.kResourceType_RobotDrive, tInstances.kRobotDriveSwerve_AdvantageKit);
@@ -317,15 +317,10 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  
-
-  public Command faceHub() {
-    return run(
-        () -> {
-
-          // Get current position using hte getPose method.
+  public double angleToHub () {
+      // Get current position using the getPose method.
           Pose2d currentPosition = getPose();
-          
+
           // Hub position from onshape in metres
           Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
 
@@ -338,42 +333,84 @@ public class Drive extends SubsystemBase {
           // Using trig to caluclate angle with atan2 in radians.
           double targetAngle = Math.atan2(yDifference, xDifference);
 
+          return targetAngle;
+  }
+
+  public Command faceHub() {
+    return run(
+        () -> {
+
+          // Get current position using the getPose method.
+          Pose2d currentPosition = getPose();
+
           // Plugging in target angle to target position/pose
           Pose2d target =
               new Pose2d(
-                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(targetAngle));
+                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(angleToHub()));
           // targetAngle = Math.toDegrees(targetAngle);
-          
+
           // Getting robot current angle in radians
           double robotAngle = currentPosition.getRotation().getRadians();
 
-          // Getting optimal angle speed by providing the current robot angle and the angle we want to go to
-          double angleSpeed = hubHeadingController.calculate(robotAngle, targetAngle);
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub());
 
-          Logger.recordOutput("Target Angle", targetAngle);
+          Logger.recordOutput("Target Angle", angleToHub());
           Logger.recordOutput("Robot Angle", robotAngle);
           Logger.recordOutput("targetPose", target);
 
 
-          // If we are close to the target
-          // if (robotAngle <= targetAngle - 2) {
-          //   angleSpeed = 1;
-          //   System.out.println("Target is to the right");
-          // }
-          // // if the target is to the right
-          // else if (robotAngle >= targetAngle + 2) {
-          //   angleSpeed = -1;
-          //   System.out.println("Target is to the left");
-          // } else {
-          //   angleSpeed = 0;
-          //   System.out.println("Robot on target");
-          // }
-
-          // Creating a new instance of the class ChassisSpeeds and plugging in angleSpeed and setting vxMetersPerSecond to 0 and vyMetersPerSecond to 0 (because we are turning)
+          // Creating a new instance of the class ChassisSpeeds and plugging in angleSpeed and
+          // setting vxMetersPerSecond to 0 and vyMetersPerSecond to 0 (because we are turning)
           ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
-          
-          //Running it
+
+          // Running it
           runVelocity(speed);
         });
   }
+
+  public Command hubHeadingjoyStickDrive(
+      DoubleSupplier xSupplier, DoubleSupplier ySupplier, DoubleSupplier omegaSupplier) {
+    return run(
+        () -> {
+
+          // Get current position using the getPose method.
+          Pose2d currentPosition = getPose();
+
+          // Plugging in target angle to target position/pose
+          Pose2d target =
+              new Pose2d(
+                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(angleToHub()));
+          // targetAngle = Math.toDegrees(targetAngle);
+
+          // Getting robot current angle in radians
+          double robotAngle = currentPosition.getRotation().getRadians();
+
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub());
+
+          Logger.recordOutput("Target Angle", angleToHub());
+          Logger.recordOutput("Robot Angle", robotAngle);
+          Logger.recordOutput("targetPose", target);
+
+          // Get linear velocity
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+          // Convert to field relative speeds & send command
+          ChassisSpeeds speeds =
+              new ChassisSpeeds(
+                  linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                  linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                  angleSpeed);
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          runVelocity(
+              ChassisSpeeds.fromFieldRelativeSpeeds(
+                  speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+        });
+      }
 }
