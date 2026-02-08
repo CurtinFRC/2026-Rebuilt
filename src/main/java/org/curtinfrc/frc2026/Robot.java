@@ -200,7 +200,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-    controller
+    controller // intake and store
         .x()
         .whileTrue(
             Commands.parallel(
@@ -209,21 +209,13 @@ public class Robot extends LoggedRobot {
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.y().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
-
-    controller
-        .a()
-        .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(0.7),
-                mag.moveAll(0.5),
-                hoodedShooter.setShooterVelocity(HoodedShooter.SCORING_SHOOTER_VELOCITY)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop(), hoodedShooter.stopShooter()));
-
-    controller
+    controller // spinup shooter and aim
         .rightTrigger()
         .onTrue(hoodedShooter.shootAtHub())
         .onFalse(hoodedShooter.stopShooter());
+
+    // index balls when shooter and hood ready
+    hoodedShooter.readyToShoot().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */

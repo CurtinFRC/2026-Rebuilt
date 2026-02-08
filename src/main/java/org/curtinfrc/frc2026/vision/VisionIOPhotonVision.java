@@ -33,7 +33,7 @@ public class VisionIOPhotonVision implements VisionIO {
     if (DriverStation.isEnabled()) {
       camera.setFPSLimit(60);
     } else {
-      camera.setFPSLimit(5);
+      camera.setFPSLimit(1);
     }
 
     // Read new camera observations

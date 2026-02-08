@@ -20,6 +20,7 @@ import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.sim.BallSim;
@@ -57,6 +58,9 @@ public class HoodedShooter extends SubsystemBase {
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
   private final Alert[] shooterMotorTempAlerts = new Alert[3];
 
+  public final Trigger hoodedShooterReady =
+      new Trigger(() -> hoodInputs.atTargetPosition && shooterInputs.atTargetVelocity);
+
   private final MutVoltage appliedVoltageMut = Volts.mutable(0);
   private final MutAngle angleRadiansMut = Radians.mutable(0);
   private final MutAngularVelocity angularVelocityRadiansMut = RadiansPerSecond.mutable(0);
@@ -89,6 +93,7 @@ public class HoodedShooter extends SubsystemBase {
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
         new Alert("Hood motor temperature above 60°C.", AlertType.kWarning); // change
+
     for (int motor = 0; motor < 3; motor++) {
       this.shooterMotorDisconnectedAlerts[motor] =
           new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
@@ -145,6 +150,8 @@ public class HoodedShooter extends SubsystemBase {
 
     double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
     Logger.recordOutput("distanceFromHub", distanceLength);
+    Logger.recordOutput(
+        "hoodedShooterReady", hoodInputs.atTargetPosition && shooterInputs.atTargetVelocity);
 
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
@@ -152,6 +159,10 @@ public class HoodedShooter extends SubsystemBase {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
       shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);
     }
+  }
+
+  public Trigger readyToShoot() {
+    return hoodedShooterReady;
   }
 
   public Command shootAtHub() { // this assumes that the robot is facing the target
@@ -164,7 +175,6 @@ public class HoodedShooter extends SubsystemBase {
           // double hoodAngle = hoodSetpoint.get();
           // double shooterVelocity = shooterSetpoint.get();
 
-          Logger.recordOutput("targetHoodAngle", hoodAngle);
           Logger.recordOutput("targetShooterVelocity", shooterVelocity);
 
           hoodIO.setPosition(hoodAngle);
