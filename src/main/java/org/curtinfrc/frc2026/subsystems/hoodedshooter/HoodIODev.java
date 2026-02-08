@@ -50,9 +50,9 @@ public class HoodIODev implements HoodIO {
   public static final double KI = 0;
   public static final double KD = 3.37;
   public static final double KS = 0.47;
-  public static final double KV = 0.15;
-  public static final double KA_OUT = 0.01;
-  public static final double KA_STOWED = 0.01;
+  public static final double KV = 2.76;
+  public static final double KA_OUT = 0.02;
+  public static final double KA_STOWED = 0.02;
   public static final double KG = 0.5;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
@@ -160,8 +160,7 @@ public class HoodIODev implements HoodIO {
 
     inputs.positionSetPoint = setpoint;
     inputs.atTargetPosition =
-        inputs.hoodPositionDegrees < setpoint + POSITION_TOLERANCE_DEGREES
-            && inputs.hoodPositionDegrees > setpoint - POSITION_TOLERANCE_DEGREES;
+        Math.abs(setpoint - inputs.hoodPositionDegrees) < POSITION_TOLERANCE_DEGREES;
   }
 
   @Override

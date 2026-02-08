@@ -30,16 +30,16 @@ public class ShooterIODev implements ShooterIO {
   public static final int ID2 = 18; // not used
   public static final int ID3 = 29;
 
-  public static final double VELOCITY_TOLERANCE = 5;
+  public static final double VELOCITY_TOLERANCE = 1;
 
   public static final double GEAR_RATIO = 1.0;
   private static final double EFFICIENCY = 0.85;
-  private static final double KP = 0.05;
-  private static final double KI = 0.001;
-  private static final double KD = 0.003;
+  private static final double KP = 0.0;
+  private static final double KI = 0.0;
+  private static final double KD = 0.0;
   private static final double KS = 0.24152;
-  private static final double KV = 0.12173;
-  private static final double KA = 0.015427;
+  private static final double KV = 0.126;
+  private static final double KA = 0.0;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
@@ -102,8 +102,7 @@ public class ShooterIODev implements ShooterIO {
 
     inputs.velocitySetPoint = setpoint;
     inputs.atTargetVelocity =
-        inputs.velocityMetresPerSecond < setpoint + VELOCITY_TOLERANCE
-            && inputs.velocityMetresPerSecond > setpoint;
+        Math.abs(setpoint - inputs.velocityMetresPerSecond) < VELOCITY_TOLERANCE;
   }
 
   @Override
@@ -113,7 +112,7 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void setVelocity(double velocity) {
-    setpoint = velocity;
+    setpoint = velocity + 4;
     double rps = convertVelocityToRPS(velocity / EFFICIENCY);
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }

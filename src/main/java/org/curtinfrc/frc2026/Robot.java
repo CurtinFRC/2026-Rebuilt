@@ -30,6 +30,7 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
@@ -191,7 +192,15 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {},
               new ModuleIO() {});
-      vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      vision =
+          new Vision(
+              drive::addVisionMeasurement,
+              drive::getRotation,
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {});
+      intake = new Intake(new IntakeIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter =
           new HoodedShooter(
@@ -203,10 +212,10 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.joystickDrive(
+        drive.locationHeadingjoyStickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+            hoodedShooter::getVirtualHubLocation));
 
     controller // intake and store
         .x()
@@ -219,10 +228,7 @@ public class Robot extends LoggedRobot {
 
     controller // spinup shooter and aim
         .rightTrigger()
-        .onTrue(
-            drive
-                .faceLocation(hoodedShooter::getVirtualHubLocation)
-                .andThen(hoodedShooter.shootAtHub()))
+        .onTrue(hoodedShooter.shootAtHub())
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready

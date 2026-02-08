@@ -7,7 +7,7 @@ import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
 import edu.wpi.first.math.Matrix;
-import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -20,6 +20,7 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -48,12 +49,10 @@ public class Drive extends SubsystemBase {
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
 
-  private final PIDController faceHubPID = new PIDController(4.0, 0.0, 0.2);
-
   private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
   public static final Translation2d HUB_LOCATION = new Translation2d(12, 4);
 
-  private static final double ANGLE_MAX_ACCELERATION = 20.0;
+  private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
   private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
   private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
@@ -65,13 +64,18 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 7;
+  public static final double hubHeadingKP = 10;
   public static final double hubHeadingKI = 0;
-  private static final double hubHeadingKD = 0;
+  private static final double hubHeadingKD = 0.2;
 
   // Creating a new instance of the class PIDController and plugging in PID values from variables
   // above.
-  PIDController hubHeadingController = new PIDController(hubHeadingKP, hubHeadingKI, hubHeadingKD);
+  ProfiledPIDController hubHeadingController =
+      new ProfiledPIDController(
+          hubHeadingKP,
+          hubHeadingKI,
+          hubHeadingKD,
+          new TrapezoidProfile.Constraints(MAX_ANGULAR_SPEED - 0.5, ANGLE_MAX_ACCELERATION));
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -329,11 +333,15 @@ public class Drive extends SubsystemBase {
     Pose2d locationPose =
         new Pose2d(locationTransform.getX(), locationTransform.getY(), Rotation2d.kZero);
 
-    // Measuring x and y differences to use trig to calculate angle in radians.
     double targetAngle =
-        locationPose.minus(currentPosition).getTranslation().getAngle().getRadians();
+        locationPose
+            .getTranslation()
+            .minus(currentPosition.getTranslation())
+            .getAngle()
+            .rotateBy(Rotation2d.k180deg)
+            .getRadians();
 
-    return targetAngle + Math.PI;
+    return targetAngle;
   }
 
   public Command faceLocation(Supplier<Translation2d> locationSupplier) {

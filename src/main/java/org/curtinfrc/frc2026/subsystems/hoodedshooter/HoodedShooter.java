@@ -85,19 +85,24 @@ public class HoodedShooter extends SubsystemBase {
     this.robotVelocity = robotVelocity;
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(2.45, 80.0); // Actually 80.5
+    DISTANCE_TO_HOOD_ANGLE.put(2.45, 82.0); // Actually 80.5
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.15);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5); // Actually 23.5
     DISTANCE_TO_HOOD_ANGLE.put(3.6, 75.0); // Actually 75.5
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.6, 1.2);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.8, 19.5); // Actually 23.5
     DISTANCE_TO_HOOD_ANGLE.put(3.8, 73.0); // Actually 73.5
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.8, 1.43);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(5.11, 64.0); // Actually 64.5
+    DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0); // Actually 64.5
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(5.66, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(5.66, 63.0); // Actually 63.5
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(5.66, 19.5); // Actually 23.5
+    // DISTANCE_TO_HOOD_ANGLE.put(5.66, 63.0); // Actually 63.5
+    // DISTANCE_TO_BALL_FLIGHT_TIME.put(5.66, 1.0);
 
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
@@ -183,7 +188,7 @@ public class HoodedShooter extends SubsystemBase {
 
     Translation2d hubCompensationOffset = robotVel.times(-airTime);
     Translation2d compensatedHubLocation = HUB_LOCATION.plus(hubCompensationOffset);
-    return compensatedHubLocation;
+    return (realDistanceLength > 1) ? compensatedHubLocation : HUB_LOCATION;
   }
 
   public Command shootAtHub() {
@@ -206,9 +211,9 @@ public class HoodedShooter extends SubsystemBase {
           ballSim =
               new BallSim(
                   shooterVelocity,
-                  Rotation2d.fromDegrees(89),
+                  Rotation2d.fromDegrees(hoodAngle + 90),
                   new Pose3d(robotPose.get())
-                      .transformBy(new Transform3d(0.2, 0.0, 0.4, Rotation3d.kZero)));
+                      .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero)));
         });
   }
 
