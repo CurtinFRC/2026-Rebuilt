@@ -8,11 +8,15 @@ public interface ShooterIO {
   public static class ShooterIOInputs {
     public boolean[] motorsConnected;
     public double[] motorTemperatures;
+
     public double appliedVolts;
     public double currentAmps;
     public double velocityMetresPerSecond;
     public double accelerationMetresPerSecondPerSecond;
     public double positionRotations;
+
+    public boolean atTargetVelocity;
+    public double velocitySetPoint;
   }
 
   public default void updateInputs(ShooterIOInputs inputs) {}

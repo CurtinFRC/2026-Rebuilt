@@ -26,9 +26,11 @@ import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIODev implements ShooterIO {
-  public static final int ID1 = 18;
-  public static final int ID2 = 19;
+  public static final int ID1 = 19;
+  public static final int ID2 = 18; // not used
   public static final int ID3 = 29;
+
+  public static final double VELOCITY_TOLERANCE = 5;
 
   public static final double GEAR_RATIO = 1.0;
   private static final double EFFICIENCY = 0.85;
@@ -48,7 +50,7 @@ public class ShooterIODev implements ShooterIO {
           .withMotorOutput(
               new MotorOutputConfigs()
                   .withNeutralMode(NeutralModeValue.Coast)
-                  .withInverted(InvertedValue.Clockwise_Positive))
+                  .withInverted(InvertedValue.CounterClockwise_Positive))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(100).withStatorCurrentLimit(120))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
@@ -60,6 +62,7 @@ public class ShooterIODev implements ShooterIO {
   private final StatusSignal<AngularVelocity> velocity = leaderMotor.getVelocity();
   private final StatusSignal<AngularAcceleration> acceleration = leaderMotor.getAcceleration();
   private final StatusSignal<Angle> position = leaderMotor.getPosition();
+  private double setpoint = 19.5;
 
   private final List<StatusSignal<Temperature>> motorTemperatures =
       List.of(
@@ -76,7 +79,7 @@ public class ShooterIODev implements ShooterIO {
     tryUntilOk(5, () -> followerMotor2.getConfigurator().apply(sharedMotorConfig));
 
     followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
-    followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
+    followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
 
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, acceleration, voltage, current);
     leaderMotor.optimizeBusUtilization();
@@ -96,6 +99,11 @@ public class ShooterIODev implements ShooterIO {
     inputs.currentAmps = current.getValueAsDouble();
     inputs.velocityMetresPerSecond = convertRPSToVelocity(velocity.getValueAsDouble());
     inputs.positionRotations = position.getValueAsDouble();
+
+    inputs.velocitySetPoint = setpoint;
+    inputs.atTargetVelocity =
+        inputs.velocityMetresPerSecond < setpoint + VELOCITY_TOLERANCE
+            && inputs.velocityMetresPerSecond > setpoint;
   }
 
   @Override
@@ -105,6 +113,7 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void setVelocity(double velocity) {
+    setpoint = velocity;
     double rps = convertVelocityToRPS(velocity / EFFICIENCY);
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }

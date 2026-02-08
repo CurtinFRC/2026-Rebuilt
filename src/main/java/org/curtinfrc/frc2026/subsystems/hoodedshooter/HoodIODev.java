@@ -29,11 +29,12 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
-import org.littletonrobotics.junction.Logger;
 
 public class HoodIODev implements HoodIO {
   public static final int MOTOR_ID = 17;
   public static final int ENCODER_ID = 21;
+
+  public static final double POSITION_TOLERANCE_DEGREES = 1.0;
 
   public static final double GEAR_RATIO = 8.2; // 12:32 * 10:82
   public static final double MOTOR_TO_SENSOR_RATIO = 2.66666667;
@@ -120,6 +121,7 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Angle> encoderPosition = encoder.getPosition();
   private final StatusSignal<Temperature> temperature = motor.getDeviceTemp();
+  private double setpoint = ZERO_DEGREE_OFFSET_DEGREES;
 
   private final VoltageOut voltageRequest =
       new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
@@ -155,6 +157,11 @@ public class HoodIODev implements HoodIO {
         (encoderPosition.getValueAsDouble() * 360 / GEAR_RATIO) + ZERO_DEGREE_OFFSET_DEGREES;
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
+
+    inputs.positionSetPoint = setpoint;
+    inputs.atTargetPosition =
+        inputs.hoodPositionDegrees < setpoint + POSITION_TOLERANCE_DEGREES
+            && inputs.hoodPositionDegrees > setpoint - POSITION_TOLERANCE_DEGREES;
   }
 
   @Override
@@ -169,7 +176,7 @@ public class HoodIODev implements HoodIO {
 
   @Override
   public void setPosition(double position) {
-    Logger.recordOutput("setpositiondegrees", position);
+    setpoint = position;
     if (position / 360 < STOWED_OUT_POSITION_THRESHOLD) {
       motor.setControl(
           positionRequest
