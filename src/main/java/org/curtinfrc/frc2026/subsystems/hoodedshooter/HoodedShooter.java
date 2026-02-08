@@ -75,7 +75,10 @@ public class HoodedShooter extends SubsystemBase {
     DISTANCE_TO_HOOD_ANGLE.put(2.45, 80.0); // Actually 80.5
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(3.6, 77.0); // Actually 77.5
+    DISTANCE_TO_HOOD_ANGLE.put(3.6, 75.0); // Actually 75.5
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.8, 19.5); // Actually 23.5
+    DISTANCE_TO_HOOD_ANGLE.put(3.8, 73.0); // Actually 73.5
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5); // Actually 23.5
     DISTANCE_TO_HOOD_ANGLE.put(5.11, 64.0); // Actually 64.5
@@ -156,10 +159,10 @@ public class HoodedShooter extends SubsystemBase {
         () -> {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
-          // double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
-          // double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(distanceLength);
-          double hoodAngle = hoodSetpoint.get();
-          double shooterVelocity = shooterSetpoint.get();
+          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
+          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(distanceLength);
+          // double hoodAngle = hoodSetpoint.get();
+          // double shooterVelocity = shooterSetpoint.get();
 
           Logger.recordOutput("targetHoodAngle", hoodAngle);
           Logger.recordOutput("targetShooterVelocity", shooterVelocity);
