@@ -50,7 +50,7 @@ public class HoodedShooter extends SubsystemBase {
 
   private final LoggedTunableNumber hoodSetpoint = new LoggedTunableNumber("HoodSetpoint", 90);
   private final LoggedTunableNumber shooterSetpoint =
-      new LoggedTunableNumber("ShooterSetpoint", 19);
+      new LoggedTunableNumber("ShooterSetpoint", 19.5);
 
   private final Alert hoodMotorDisconnectedAlert;
   private final Alert hoodMotorTempAlert;
@@ -75,10 +75,13 @@ public class HoodedShooter extends SubsystemBase {
     DISTANCE_TO_HOOD_ANGLE.put(2.45, 80.0); // Actually 80.5
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(3.6, 70.0); // Actually 70.5
+    DISTANCE_TO_HOOD_ANGLE.put(3.6, 77.0); // Actually 77.5
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5); // Actually 23.5
     DISTANCE_TO_HOOD_ANGLE.put(5.11, 64.0); // Actually 64.5
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(5.66, 19.5); // Actually 23.5
+    DISTANCE_TO_HOOD_ANGLE.put(5.66, 63.0); // Actually 63.5
 
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
@@ -153,10 +156,10 @@ public class HoodedShooter extends SubsystemBase {
         () -> {
           double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
 
-          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
-          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(distanceLength);
-          // double hoodAngle = hoodSetpoint.get();
-          // double shooterVelocity = shooterSetpoint.get();
+          // double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
+          // double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(distanceLength);
+          double hoodAngle = hoodSetpoint.get();
+          double shooterVelocity = shooterSetpoint.get();
 
           Logger.recordOutput("targetHoodAngle", hoodAngle);
           Logger.recordOutput("targetShooterVelocity", shooterVelocity);
