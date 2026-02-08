@@ -13,6 +13,7 @@ import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.units.measure.MutAngle;
 import edu.wpi.first.units.measure.MutAngularVelocity;
 import edu.wpi.first.units.measure.MutVoltage;
@@ -39,6 +40,8 @@ public class HoodedShooter extends SubsystemBase {
       new InterpolatingDoubleTreeMap();
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE =
       new InterpolatingDoubleTreeMap();
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_BALL_FLIGHT_TIME =
+      new InterpolatingDoubleTreeMap();
   public static final double SCORING_SHOOTER_VELOCITY = 25;
 
   private final HoodIO hoodIO;
@@ -48,6 +51,7 @@ public class HoodedShooter extends SubsystemBase {
   private final ShooterIOInputsAutoLogged shooterInputs = new ShooterIOInputsAutoLogged();
 
   private final Supplier<Pose2d> robotPose;
+  private final Supplier<ChassisSpeeds> robotVelocity;
 
   private final LoggedTunableNumber hoodSetpoint = new LoggedTunableNumber("HoodSetpoint", 90);
   private final LoggedTunableNumber shooterSetpoint =
@@ -70,10 +74,15 @@ public class HoodedShooter extends SubsystemBase {
 
   public BallSim ballSim = new BallSim(0.0, new Rotation2d(0.0), new Pose3d());
 
-  public HoodedShooter(ShooterIO shooterIO, HoodIO hoodIO, Supplier<Pose2d> robotPose) {
+  public HoodedShooter(
+      ShooterIO shooterIO,
+      HoodIO hoodIO,
+      Supplier<Pose2d> robotPose,
+      Supplier<ChassisSpeeds> robotVelocity) {
     this.shooterIO = shooterIO;
     this.hoodIO = hoodIO;
     this.robotPose = robotPose;
+    this.robotVelocity = robotVelocity;
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 19.5); // Actually 23.5
     DISTANCE_TO_HOOD_ANGLE.put(2.45, 80.0); // Actually 80.5
@@ -165,15 +174,29 @@ public class HoodedShooter extends SubsystemBase {
     return hoodedShooterReady;
   }
 
-  public Command shootAtHub() { // this assumes that the robot is facing the target
+  public Translation2d getVirtualHubLocation() {
+    double realDistanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
+    Translation2d robotVel =
+        new Translation2d(
+            robotVelocity.get().vxMetersPerSecond, robotVelocity.get().vyMetersPerSecond);
+    double airTime = DISTANCE_TO_BALL_FLIGHT_TIME.get(realDistanceLength);
+
+    Translation2d hubCompensationOffset = robotVel.times(-airTime);
+    Translation2d compensatedHubLocation = HUB_LOCATION.plus(hubCompensationOffset);
+    return compensatedHubLocation;
+  }
+
+  public Command shootAtHub() {
     return run(
         () -> {
-          double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
+          Translation2d compensatedHubLocation = getVirtualHubLocation();
 
-          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(distanceLength);
-          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(distanceLength);
+          double compensatedDistanceLength =
+              compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
           // double hoodAngle = hoodSetpoint.get();
           // double shooterVelocity = shooterSetpoint.get();
+          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(compensatedDistanceLength);
+          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
 
           Logger.recordOutput("targetShooterVelocity", shooterVelocity);
 

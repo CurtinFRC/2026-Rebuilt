@@ -118,7 +118,9 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
         }
         case DEV -> {
           drive =
@@ -150,7 +152,9 @@ public class Robot extends LoggedRobot {
                       Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
-          hoodedShooter = new HoodedShooter(new ShooterIODev(), new HoodIODev(), drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIODev(), new HoodIODev(), drive::getPose, drive::getChassisSpeeds);
         }
         case SIM -> {
           drive =
@@ -174,7 +178,9 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
-          hoodedShooter = new HoodedShooter(new ShooterIOSim(), new HoodIOSim(), drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIOSim(), new HoodIOSim(), drive::getPose, drive::getChassisSpeeds);
         }
       }
     } else {
@@ -187,7 +193,9 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
-      hoodedShooter = new HoodedShooter(new ShooterIO() {}, new HoodIO() {}, drive::getPose);
+      hoodedShooter =
+          new HoodedShooter(
+              new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -211,7 +219,10 @@ public class Robot extends LoggedRobot {
 
     controller // spinup shooter and aim
         .rightTrigger()
-        .onTrue(hoodedShooter.shootAtHub())
+        .onTrue(
+            drive
+                .faceLocation(hoodedShooter::getVirtualHubLocation)
+                .andThen(hoodedShooter.shootAtHub()))
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready

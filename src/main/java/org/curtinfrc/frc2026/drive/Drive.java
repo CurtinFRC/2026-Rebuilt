@@ -29,6 +29,7 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
 import org.littletonrobotics.junction.AutoLogOutput;
@@ -218,7 +219,7 @@ public class Drive extends SubsystemBase {
 
   /** Returns the measured chassis speeds of the robot. */
   @AutoLogOutput(key = "SwerveChassisSpeeds/Measured")
-  private ChassisSpeeds getChassisSpeeds() {
+  public ChassisSpeeds getChassisSpeeds() {
     return kinematics.toChassisSpeeds(getModuleStates());
   }
 
@@ -322,33 +323,32 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  public double angleToHub() {
+  public double angleToLocation(Translation2d locationTransform) {
     // Get current position using the getPose method.
     Pose2d currentPosition = getPose();
+    Pose2d locationPose =
+        new Pose2d(locationTransform.getX(), locationTransform.getY(), Rotation2d.kZero);
 
-    // Hub position from onshape in metres
-    Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
-
-    double targetAngle =
-        hubPosition.minus(currentPosition).getTranslation().getAngle().getRadians();
     // Measuring x and y differences to use trig to calculate angle in radians.
-
-    // Using trig to caluclate angle with atan2 in radians.
+    double targetAngle =
+        locationPose.minus(currentPosition).getTranslation().getAngle().getRadians();
 
     return targetAngle + Math.PI;
   }
 
-  public Command faceHub() {
+  public Command faceLocation(Supplier<Translation2d> locationSupplier) {
     return run(
         () -> {
-
+          Translation2d locationTransform = locationSupplier.get();
           // Get current position using the getPose method.
           Pose2d currentPosition = getPose();
 
           // Plugging in target angle to target position/pose
           Pose2d target =
               new Pose2d(
-                  currentPosition.getX(), currentPosition.getY(), new Rotation2d(angleToHub()));
+                  currentPosition.getX(),
+                  currentPosition.getY(),
+                  new Rotation2d(angleToLocation(locationTransform)));
           // targetAngle = Math.toDegrees(targetAngle);
 
           // Getting robot current angle in radians
@@ -356,9 +356,10 @@ public class Drive extends SubsystemBase {
 
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
-          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub());
+          double angleSpeed =
+              hubHeadingController.calculate(robotAngle, angleToLocation(locationTransform));
 
-          Logger.recordOutput("Target Angle", angleToHub());
+          Logger.recordOutput("Target Angle", angleToLocation(locationTransform));
           Logger.recordOutput("Robot Angle", robotAngle);
           Logger.recordOutput("targetPose", target);
 
@@ -371,7 +372,10 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  public Command hubHeadingjoyStickDrive(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
+  public Command locationHeadingjoyStickDrive(
+      DoubleSupplier xSupplier,
+      DoubleSupplier ySupplier,
+      Supplier<Translation2d> locationTransform) {
     return run(
         () -> {
 
@@ -385,9 +389,10 @@ public class Drive extends SubsystemBase {
 
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
-          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub());
+          double angleSpeed =
+              hubHeadingController.calculate(robotAngle, angleToLocation(locationTransform.get()));
 
-          Logger.recordOutput("TargetAngle", angleToHub());
+          Logger.recordOutput("TargetAngle", angleToLocation(locationTransform.get()));
           Logger.recordOutput("RobotAngle", robotAngle);
 
           // Get linear velocity
