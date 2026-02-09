@@ -340,7 +340,7 @@ public class FieldConstants {
               Path p =
                   Path.of(
                       Filesystem.getDeployDirectory().toString(),
-                      "apriltags"
+                      "apriltags",
                       fieldType.getJsonFolder(),
                       name + ".json");
               layout = new AprilTagFieldLayout(p);
