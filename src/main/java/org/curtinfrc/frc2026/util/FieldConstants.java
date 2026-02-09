@@ -13,6 +13,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.geometry.Translation3d;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.wpilibj.Filesystem;
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -338,10 +339,7 @@ public class FieldConstants {
             try {
               Path p =
                   Path.of(
-                      "src",
-                      "main",
-                      "deploy",
-                      "apriltags",
+                      Filesystem.getDeployDirectory().toString(),
                       fieldType.getJsonFolder(),
                       name + ".json");
               layout = new AprilTagFieldLayout(p);
