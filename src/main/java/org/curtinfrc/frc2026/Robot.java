@@ -169,6 +169,8 @@ public class Robot extends LoggedRobot {
   void wireRepulsor() {
     // simHasPiece = true;
 
+    IntakeFootprint.setFootprint(IntakeFootprint.frontRect(0.7, 0.175, 0.35));
+
     var pg = Triggers.localParallelGate(Tag.SCORING);
     // telem.registerParallel("repulsor_tags", pg);
 
@@ -179,7 +181,6 @@ public class Robot extends LoggedRobot {
             .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING));
 
     repulsor.setup();
-    IntakeFootprint.setFootprint(IntakeFootprint.frontRect(0.7, 0.175, 0.35));
   }
 
   public Robot() {

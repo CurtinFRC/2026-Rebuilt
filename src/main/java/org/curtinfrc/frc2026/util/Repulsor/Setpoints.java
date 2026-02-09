@@ -530,7 +530,7 @@ public class Setpoints {
     }
 
     public static final Constraints HUB_SHOT_CONSTRAINTS =
-        new Constraints(0, 30, 0, 45.0, Constraints.ShotStyle.ARC);
+        new Constraints(0, 30, 60, 90.0, Constraints.ShotStyle.ARC);
 
     public static final int BLUE_HUB_ANCHOR_TAG_ID = 20;
     public static final int BLUE_OUTPOST_ANCHOR_TAG_ID = 13;
