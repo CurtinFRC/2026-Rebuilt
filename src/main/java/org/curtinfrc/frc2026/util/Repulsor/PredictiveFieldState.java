@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -29,6 +29,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
@@ -720,7 +721,7 @@ public final class PredictiveFieldState {
     return tmp.toArray(new Translation2d[0]);
   }
 
-  private static final IntakeFootprint COLLECT_INTAKE = IntakeFootprint.getFootprint();
+  private static final Supplier<IntakeFootprint> COLLECT_INTAKE = IntakeFootprint::getFootprint;
   private static final Translation2d[] COLLECT_FOOTPRINT_SAMPLES =
       new Translation2d[] {
         new Translation2d(0.0, 0.0),
@@ -756,7 +757,7 @@ public final class PredictiveFieldState {
     if (center == null) return null;
     Translation2d front =
         center.plus(
-            COLLECT_INTAKE.supportPointRobotFrame(new Translation2d(1.0, 0.0)).rotateBy(heading));
+            COLLECT_INTAKE.get().supportPointRobotFrame(new Translation2d(1.0, 0.0)).rotateBy(heading));
     return enforceHardStopOnFuel(dyn, front, rCore, rSnap, rCentroid, 0.10);
   }
 
@@ -829,7 +830,7 @@ public final class PredictiveFieldState {
     for (double d : deg) {
       Rotation2d h = baseHeading.plus(Rotation2d.fromDegrees(d));
       Translation2d p =
-          COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(desiredCenter, h, fuelTouch);
+          COLLECT_INTAKE.get().snapCenterSoFootprintTouchesPoint(desiredCenter, h, fuelTouch);
       FootprintEval fp = evalFootprint(dyn, p, h, rCore);
       if (fp.maxCount < 1 || fp.sumUnits < minUnits) continue;
       if (best == null
@@ -1510,7 +1511,7 @@ public final class PredictiveFieldState {
       currentCollectHeading =
           face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
       currentCollectTarget =
-          COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(
+          COLLECT_INTAKE.get().snapCenterSoFootprintTouchesPoint(
               currentCollectTarget, currentCollectHeading, currentCollectTouch);
 
       if (inShootBand.test(currentCollectTarget)) {
@@ -1618,7 +1619,7 @@ public final class PredictiveFieldState {
         currentCollectHeading =
             face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
         currentCollectTarget =
-            COLLECT_INTAKE.snapCenterSoFootprintTouchesPoint(
+            COLLECT_INTAKE.get().snapCenterSoFootprintTouchesPoint(
                 currentCollectTarget, currentCollectHeading, currentCollectTouch);
         if (inShootBand.test(currentCollectTarget)) {
           addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
