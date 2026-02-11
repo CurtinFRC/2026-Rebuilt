@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
@@ -100,7 +101,7 @@ public class Setpoints {
       double coralOffsetMeters,
       double algaeOffsetMeters,
       double shooterReleaseHeightMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles) {
 
     public static final SetpointContext EMPTY =
         new SetpointContext(Optional.empty(), 0.0, 0.0, 0.0, 0.0, 0.0, List.of());
@@ -456,7 +457,7 @@ public class Setpoints {
         Translation2d targetFieldPos,
         double halfL,
         double halfW,
-        List<? extends FieldPlanner.Obstacle> obs) {
+        List<? extends Obstacle> obs) {
       return DragShotPlanner.isShooterPoseValid(shooterPos, targetFieldPos, halfL, halfW, obs);
     }
 
@@ -464,7 +465,7 @@ public class Setpoints {
         Translation2d target,
         double halfL,
         double halfW,
-        List<? extends FieldPlanner.Obstacle> obs) {
+        List<? extends Obstacle> obs) {
       for (Translation2d p : SAFE_FALLBACKS) {
         if (validShootPose(p, target, halfL, halfW, obs)) {
           return toPoseFacing(p, target);
@@ -479,7 +480,7 @@ public class Setpoints {
         Translation2d target,
         double halfL,
         double halfW,
-        List<? extends FieldPlanner.Obstacle> obs,
+        List<? extends Obstacle> obs,
         double baseRadius) {
 
       Translation2d r = robotPose.getTranslation();
@@ -518,7 +519,7 @@ public class Setpoints {
         Translation2d targetFieldPos,
         double halfL,
         double halfW,
-        List<? extends FieldPlanner.Obstacle> obs,
+        List<? extends Obstacle> obs,
         double baseRadius) {
 
       Pose2d candidate = findValidAround(robotPose, targetFieldPos, halfL, halfW, obs, baseRadius);
@@ -754,7 +755,7 @@ public class Setpoints {
           (int) Math.round(halfW * 1000.0));
     }
 
-    private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
+    private static int obstaclesStableHash(List<? extends Obstacle> obs) {
       if (obs == null || obs.isEmpty()) return 0;
       return (System.identityHashCode(obs) * 31) ^ obs.size();
     }
@@ -844,7 +845,7 @@ public class Setpoints {
         double distToTarget = robotPose.getTranslation().getDistance(targetFieldPos);
 
         boolean useObs = distToTarget <= HUB_OBS_ENABLE_DIST_M;
-        List<? extends FieldPlanner.Obstacle> obs = useObs ? ctx.dynamicObstacles() : List.of();
+        List<? extends Obstacle> obs = useObs ? ctx.dynamicObstacles() : List.of();
         int obsHash = useObs ? obstaclesStableHash(obs) : 0;
 
         HubShotCacheKey key = hubKey(targetFieldPos, releaseH, halfL, halfW);
@@ -1045,3 +1046,4 @@ public class Setpoints {
     }
   }
 }
+

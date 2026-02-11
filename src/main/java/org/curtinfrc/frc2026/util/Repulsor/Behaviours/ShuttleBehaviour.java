@@ -26,7 +26,7 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.function.Supplier;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
@@ -112,3 +112,4 @@ public final class ShuttleBehaviour extends Behaviour {
         .finallyDo(i -> ctx.drive.runVelocity(new ChassisSpeeds()));
   }
 }
+

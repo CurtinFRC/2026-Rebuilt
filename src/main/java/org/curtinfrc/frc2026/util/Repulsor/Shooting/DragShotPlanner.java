@@ -22,7 +22,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 
 public final class DragShotPlanner {
   private DragShotPlanner() {}
@@ -36,7 +36,7 @@ public final class DragShotPlanner {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles) {
     return DragShotPlannerCore.isShooterPoseValid(
         shooterPos,
         targetFieldPosition,
@@ -54,7 +54,7 @@ public final class DragShotPlanner {
       double shooterReleaseHeightMeters,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
     return DragShotPlannerCore.findBestShotFromLibrary(
         library,
@@ -77,7 +77,7 @@ public final class DragShotPlanner {
       double shooterReleaseHeightMeters,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
     return DragShotPlannerCore.findBestShotAuto(
         gamePiece,
@@ -99,7 +99,7 @@ public final class DragShotPlanner {
       double shooterReleaseHeightMeters,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Constraints constraints,
       OnlineSearchState state,
       long budgetNanos) {
@@ -117,3 +117,4 @@ public final class DragShotPlanner {
         budgetNanos);
   }
 }
+

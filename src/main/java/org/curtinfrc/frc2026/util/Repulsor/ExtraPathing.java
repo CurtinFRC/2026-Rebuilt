@@ -29,7 +29,13 @@ import java.util.List;
 import java.util.Queue;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.HorizontalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.PointObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.SnowmanObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.TeardropObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner.VisionObstacle;
 
 public class ExtraPathing {
@@ -76,9 +82,9 @@ public class ExtraPathing {
     return (x - a.getX()) / dx;
   }
 
-  private static boolean isPushableObstacle(FieldPlanner.Obstacle o) {
-    return (o instanceof FieldPlanner.PointObstacle)
-        || (o instanceof FieldPlanner.SnowmanObstacle)
+  private static boolean isPushableObstacle(Obstacle o) {
+    return (o instanceof PointObstacle)
+        || (o instanceof SnowmanObstacle)
         || (o instanceof VisionObstacle);
   }
 
@@ -192,7 +198,7 @@ public class ExtraPathing {
           for (Obstacle obs : obstacles) {
             if (obs == null) continue;
 
-            if (obs instanceof FieldPlanner.PointObstacle p) {
+            if (obs instanceof PointObstacle p) {
               double eff = p.radius + corridorR;
               if (p.loc.getX() >= lminX
                   && p.loc.getX() <= lmaxX
@@ -208,7 +214,7 @@ public class ExtraPathing {
               continue;
             }
 
-            if (obs instanceof FieldPlanner.SnowmanObstacle s) {
+            if (obs instanceof SnowmanObstacle s) {
               double eff = s.radius + corridorR;
               if (s.loc.getX() >= lminX
                   && s.loc.getX() <= lmaxX
@@ -224,7 +230,7 @@ public class ExtraPathing {
               continue;
             }
 
-            if (obs instanceof FieldPlanner.HorizontalObstacle h) {
+            if (obs instanceof HorizontalObstacle h) {
               double t = paramForYOnSegment(h.y, a, b);
               if (!Double.isNaN(t) && t >= 0.0 && t <= 1.0) {
                 if (t <= terminalT) return false;
@@ -235,7 +241,7 @@ public class ExtraPathing {
               continue;
             }
 
-            if (obs instanceof FieldPlanner.VerticalObstacle v) {
+            if (obs instanceof VerticalObstacle v) {
               double t = paramForXOnSegment(v.x, a, b);
               if (!Double.isNaN(t) && t >= 0.0 && t <= 1.0) {
                 if (t <= terminalT) return false;
@@ -246,7 +252,7 @@ public class ExtraPathing {
               continue;
             }
 
-            if (obs instanceof FieldPlanner.TeardropObstacle tdrop) {
+            if (obs instanceof TeardropObstacle tdrop) {
               double eff = tdrop.primaryMaxRange + corridorR;
               DistParam dp = pointToSegDistParam(tdrop.loc, a, b);
               if (dp.dist <= eff) {
@@ -292,7 +298,7 @@ public class ExtraPathing {
     for (Obstacle obs : obstacles) {
       if (obs == null) continue;
 
-      if (obs instanceof FieldPlanner.PointObstacle p) {
+      if (obs instanceof PointObstacle p) {
         double eff = p.radius + corridorR;
         if (inAABB.test(p.loc)) {
           DistParam dp = pointToSegDistParam(p.loc, start, goalEff);
@@ -311,7 +317,7 @@ public class ExtraPathing {
         continue;
       }
 
-      if (obs instanceof FieldPlanner.SnowmanObstacle s) {
+      if (obs instanceof SnowmanObstacle s) {
         double eff = s.radius + corridorR;
         if (inAABB.test(s.loc)) {
           DistParam dp = pointToSegDistParam(s.loc, start, goalEff);
@@ -330,7 +336,7 @@ public class ExtraPathing {
         continue;
       }
 
-      if (obs instanceof FieldPlanner.HorizontalObstacle h) {
+      if (obs instanceof HorizontalObstacle h) {
         double t = paramForYOnSegment(h.y, start, goalEff);
         if (!Double.isNaN(t) && t >= 0.0 && t <= 1.0) {
           directClear = false;
@@ -344,7 +350,7 @@ public class ExtraPathing {
         continue;
       }
 
-      if (obs instanceof FieldPlanner.VerticalObstacle v) {
+      if (obs instanceof VerticalObstacle v) {
         double t = paramForXOnSegment(v.x, start, goalEff);
         if (!Double.isNaN(t) && t >= 0.0 && t <= 1.0) {
           directClear = false;
@@ -358,7 +364,7 @@ public class ExtraPathing {
         continue;
       }
 
-      if (obs instanceof FieldPlanner.TeardropObstacle tdrop) {
+      if (obs instanceof TeardropObstacle tdrop) {
         double eff = tdrop.primaryMaxRange + corridorR;
         DistParam dp = pointToSegDistParam(tdrop.loc, start, goalEff);
         if (inAABB.test(tdrop.loc) && dp.dist <= eff) {
@@ -421,17 +427,17 @@ public class ExtraPathing {
     }
 
     for (Obstacle obs : obstacles) {
-      if (obs instanceof FieldPlanner.PointObstacle p) {
+      if (obs instanceof PointObstacle p) {
         candidates.addAll(offsetAround(p.loc, p.radius + corridorR + 0.05, start, goal));
-      } else if (obs instanceof FieldPlanner.SnowmanObstacle s) {
+      } else if (obs instanceof SnowmanObstacle s) {
         candidates.addAll(offsetAround(s.loc, s.radius + corridorR + 0.05, start, goal));
-      } else if (obs instanceof FieldPlanner.HorizontalObstacle h) {
+      } else if (obs instanceof HorizontalObstacle h) {
         double y = h.y + Math.copySign(corridorR + 0.05, goal.getY() - start.getY());
         candidates.add(new Translation2d((start.getX() + goal.getX()) * 0.5, y));
-      } else if (obs instanceof FieldPlanner.VerticalObstacle v) {
+      } else if (obs instanceof VerticalObstacle v) {
         double x = v.x + Math.copySign(corridorR + 0.05, goal.getX() - start.getX());
         candidates.add(new Translation2d(x, (start.getY() + goal.getY()) * 0.5));
-      } else if (obs instanceof FieldPlanner.TeardropObstacle t) {
+      } else if (obs instanceof TeardropObstacle t) {
         Translation2d sg = goal.minus(start);
         double vn = sg.getNorm();
         if (vn > eps) {
@@ -543,19 +549,19 @@ public class ExtraPathing {
     int i = 0;
     for (Obstacle ob : obstacles) {
       String k = root + "/#" + (i++);
-      if (ob instanceof FieldPlanner.PointObstacle p) {
+      if (ob instanceof PointObstacle p) {
         recordCircle(k + "/Circle", p.loc, p.radius + corridorR, 40);
-      } else if (ob instanceof FieldPlanner.SnowmanObstacle s) {
+      } else if (ob instanceof SnowmanObstacle s) {
         recordCircle(k + "/Circle", s.loc, s.radius + corridorR, 40);
-      } else if (ob instanceof FieldPlanner.VerticalObstacle v) {
+      } else if (ob instanceof VerticalObstacle v) {
         recordPath(
             k + "/Line",
             List.of(new Translation2d(v.x, 0.0), new Translation2d(v.x, Constants.FIELD_WIDTH)));
-      } else if (ob instanceof FieldPlanner.HorizontalObstacle h) {
+      } else if (ob instanceof HorizontalObstacle h) {
         recordPath(
             k + "/Line",
             List.of(new Translation2d(0.0, h.y), new Translation2d(Constants.FIELD_LENGTH, h.y)));
-      } else if (ob instanceof FieldPlanner.TeardropObstacle t) {
+      } else if (ob instanceof TeardropObstacle t) {
         recordCircle(k + "/Bulb", t.loc, t.primaryMaxRange + corridorR, 40);
         Translation2d tailA = t.loc.plus(new Translation2d(0.0, t.primaryMaxRange + corridorR));
         Translation2d tailB =
@@ -688,3 +694,5 @@ public class ExtraPathing {
     }
   }
 }
+
+

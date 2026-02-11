@@ -39,7 +39,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
@@ -574,3 +574,4 @@ public class AutoPathBehaviour extends Behaviour {
     return collectRoute;
   }
 }
+

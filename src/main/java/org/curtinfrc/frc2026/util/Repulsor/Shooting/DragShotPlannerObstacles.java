@@ -24,11 +24,12 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.ArrayList;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 
 final class DragShotPlannerObstacles {
-  private static volatile List<FieldPlanner.Obstacle> STATIC_OBSTACLES;
+  private static volatile List<Obstacle> STATIC_OBSTACLES;
 
   private DragShotPlannerObstacles() {}
 
@@ -37,7 +38,7 @@ final class DragShotPlannerObstacles {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles) {
     AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValid");
     try {
       return isShooterPoseValidInternal(
@@ -56,7 +57,7 @@ final class DragShotPlannerObstacles {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValidInternal.body");
     try {
@@ -79,14 +80,14 @@ final class DragShotPlannerObstacles {
       Translation2d[] rect =
           FieldPlanner.robotRect(shooterPos, yaw, robotHalfLengthMeters, robotHalfWidthMeters);
 
-      for (FieldPlanner.Obstacle sObs : staticObstacles()) {
+      for (Obstacle sObs : staticObstacles()) {
         if (sObs.intersectsRectangle(rect)) {
           return false;
         }
       }
 
       if (dynamicObstacles != null && !dynamicObstacles.isEmpty()) {
-        for (FieldPlanner.Obstacle d : dynamicObstacles) {
+        for (Obstacle d : dynamicObstacles) {
           if (d.intersectsRectangle(rect)) {
             return false;
           }
@@ -106,14 +107,14 @@ final class DragShotPlannerObstacles {
     }
   }
 
-  private static List<FieldPlanner.Obstacle> staticObstacles() {
+  private static List<Obstacle> staticObstacles() {
     AutoCloseable _p = Profiler.section("DragShotPlanner.staticObstacles");
     try {
-      List<FieldPlanner.Obstacle> v = STATIC_OBSTACLES;
+      List<Obstacle> v = STATIC_OBSTACLES;
       if (v != null) {
         return v;
       }
-      ArrayList<FieldPlanner.Obstacle> out = new ArrayList<>(64);
+      ArrayList<Obstacle> out = new ArrayList<>(64);
       try {
         out.addAll(Constants.FIELD.walls());
       } catch (Throwable ignored) {
@@ -130,3 +131,4 @@ final class DragShotPlannerObstacles {
     }
   }
 }
+

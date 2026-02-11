@@ -23,7 +23,7 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 
 final class DragShotPlannerAutoSearch {
@@ -37,7 +37,7 @@ final class DragShotPlannerAutoSearch {
       double shooterReleaseHeightMeters,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.findBestShotAuto");
@@ -138,3 +138,4 @@ final class DragShotPlannerAutoSearch {
     }
   }
 }
+

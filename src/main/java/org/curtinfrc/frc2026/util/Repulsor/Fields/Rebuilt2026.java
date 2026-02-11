@@ -27,12 +27,12 @@ import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.CorridorCenterlineRail;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.GatedAttractorObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.HorizontalObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RectangleObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.VerticalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.CorridorCenterlineRail;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.GatedAttractorObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.HorizontalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.RectangleObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
@@ -500,3 +500,5 @@ public final class Rebuilt2026 implements FieldDefinition {
     return hb.build();
   }
 }
+
+

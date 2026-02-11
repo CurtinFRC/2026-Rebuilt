@@ -23,7 +23,7 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
-import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 
 final class DragShotPlannerOnlineSearch {
@@ -58,7 +58,7 @@ final class DragShotPlannerOnlineSearch {
       double shooterReleaseHeightMeters,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Constraints constraints,
       OnlineSearchState state,
       long budgetNanos) {
@@ -473,8 +473,9 @@ final class DragShotPlannerOnlineSearch {
     }
   }
 
-  private static int obstaclesStableHash(List<? extends FieldPlanner.Obstacle> obs) {
+  private static int obstaclesStableHash(List<? extends Obstacle> obs) {
     if (obs == null || obs.isEmpty()) return 0;
     return (System.identityHashCode(obs) * 31) ^ obs.size();
   }
 }
+

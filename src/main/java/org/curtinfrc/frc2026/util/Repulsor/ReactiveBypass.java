@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Function;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
 
 public class ReactiveBypass {
   public static class Config {
@@ -274,7 +276,7 @@ public class ReactiveBypass {
       double dtSeconds,
       double robotX,
       double robotY,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Function<Translation2d[], Boolean> intersectsDynamicOnly,
       Function<String, Boolean> canRejoinOriginal) {
 
@@ -824,7 +826,7 @@ public class ReactiveBypass {
       Rotation2d headingTowardGoal,
       double robotX,
       double robotY,
-      List<? extends FieldPlanner.Obstacle> dynamicObstacles,
+      List<? extends Obstacle> dynamicObstacles,
       Function<Translation2d[], Boolean> intersectsDynamicOnly) {
 
     boolean ok1 =
@@ -1107,3 +1109,4 @@ public class ReactiveBypass {
     }
   }
 }
+
