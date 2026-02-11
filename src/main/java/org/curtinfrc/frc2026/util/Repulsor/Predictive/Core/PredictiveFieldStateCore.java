@@ -38,6 +38,13 @@ import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.IntakeFootprint;
 import org.curtinfrc.frc2026.util.Repulsor.Interval;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.CollectEval;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.FootprintEval;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.HeadingPick;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.IntentAgg;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.IntentAggCont;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.ResourceRegions;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.Track;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.CollectProbe;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.DynamicObject;
@@ -102,20 +109,6 @@ public class PredictiveFieldStateCore {
 
   public void markCollectDepleted(Translation2d p, double cellM, double strength) {
     addDepletedMark(p, Math.max(0.10, cellM * 2.0), strength, DEPLETED_TTL_S, false);
-  }
-
-  private static final class Track {
-    Translation2d pos;
-    Translation2d vel;
-    double speedCap;
-    double lastTs;
-
-    Track(Translation2d p, Translation2d v, double cap, double t) {
-      pos = p != null ? p : new Translation2d();
-      vel = v != null ? v : new Translation2d();
-      speedCap = cap;
-      lastTs = t;
-    }
   }
 
   private static final double MIN_DT = 0.02;
@@ -199,7 +192,6 @@ public class PredictiveFieldStateCore {
   private static final int COLLECT_GRID_FALLBACK_MAX = 1400;
 
   private static final double DEPLETED_TTL_S = 3.25;
-  private static final double DEPLETED_DECAY = 1.15;
   private static final double DEPLETED_PEN_W = 1.75;
   private static final double DEPLETED_MARK_NEAR_M = 0.65;
   private static final double DEPLETED_MARK_EMPTY_UNITS = 0.07;
@@ -228,9 +220,6 @@ public class PredictiveFieldStateCore {
   private static final double EVIDENCE_MIN_MAX = 0.18;
 
   private static final double ACTIVITY_CAP = 1.05;
-
-  private static final int DEPLETED_MARKS_MAX = 128;
-  private static final int REGION_STATS_MAX = 512;
 
   private static final int PATH_SAMPLES = 7;
   private static final double PATH_COST_W = 0.60;
@@ -305,40 +294,8 @@ public class PredictiveFieldStateCore {
   private volatile Predicate<Translation2d> collectResourcePositionFilter =
       PredictiveFieldStateCore::defaultCollectResourcePositionFilter;
 
-  private static final class DepletedMark {
-    final Translation2d p;
-    double t;
-    double s;
-    double r;
-    double ttl;
-    final boolean ring;
-    final double ringR0;
-    final double ringR1;
-
-    DepletedMark(Translation2d p, double t, double s, double r, double ttl) {
-      this.p = p != null ? p : new Translation2d();
-      this.t = t;
-      this.s = Math.max(0.0, s);
-      this.r = Math.max(0.05, r);
-      this.ttl = Math.max(0.1, ttl);
-      this.ring = false;
-      this.ringR0 = 0.0;
-      this.ringR1 = 0.0;
-    }
-
-    DepletedMark(Translation2d p, double t, double s, double r0, double r1, double ttl) {
-      this.p = p != null ? p : new Translation2d();
-      this.t = t;
-      this.s = Math.max(0.0, s);
-      this.r = Math.max(0.05, 0.5 * (Math.max(r0, r1) - Math.min(r0, r1)));
-      this.ttl = Math.max(0.1, ttl);
-      this.ring = true;
-      this.ringR0 = Math.max(0.05, Math.min(r0, r1));
-      this.ringR1 = Math.max(this.ringR0 + 0.05, Math.max(r0, r1));
-    }
-  }
-
-  private final ArrayList<DepletedMark> depletedMarks = new ArrayList<>(256);
+  private final PredictiveCollectPenaltyTracker penaltyTracker =
+      new PredictiveCollectPenaltyTracker();
 
   private Translation2d lastReturnedCollect = null;
   private double lastReturnedCollectTs = 0.0;
@@ -359,13 +316,114 @@ public class PredictiveFieldStateCore {
   private int lastGoalUnitsForCollect = 1;
   private double lastCellMForCollect = COLLECT_CELL_M;
 
-  private static final class RegionStat {
-    int attempts;
-    int successes;
-    double lastAttemptTs;
-  }
+  private final PredictiveCollectSecondaryRankers.Api secondaryCollectApi =
+      new PredictiveCollectSecondaryRankers.Api() {
+        @Override
+        public SpatialDyn cachedDyn() {
+          return PredictiveFieldStateCore.this.cachedDyn();
+        }
 
-  private final HashMap<Long, RegionStat> regionStats = new HashMap<>(512);
+        @Override
+        public void setCollectContext(
+            Translation2d ourPos, double ourSpeedCap, int goalUnits, double cellM) {
+          lastOurPosForCollect = ourPos;
+          lastOurCapForCollect = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
+          lastGoalUnitsForCollect = Math.max(1, goalUnits);
+          lastCellMForCollect = Math.max(0.10, cellM);
+        }
+
+        @Override
+        public void sweepDepletedMarks() {
+          PredictiveFieldStateCore.this.sweepDepletedMarks();
+        }
+
+        @Override
+        public Translation2d[] buildCollectCandidates(Translation2d[] gridPoints, SpatialDyn dyn) {
+          return PredictiveFieldStateCore.this.buildCollectCandidates(gridPoints, dyn);
+        }
+
+        @Override
+        public double dynamicMinUnits(double totalEvidence) {
+          return PredictiveFieldStateCore.this.dynamicMinUnits(totalEvidence);
+        }
+
+        @Override
+        public int dynamicMinCount(double totalEvidence) {
+          return PredictiveFieldStateCore.this.dynamicMinCount(totalEvidence);
+        }
+
+        @Override
+        public double minEvidence(double totalEvidence) {
+          return PredictiveFieldStateCore.this.minEvidence(totalEvidence);
+        }
+
+        @Override
+        public ResourceRegions buildResourceRegions(SpatialDyn dyn, int maxRegions) {
+          return PredictiveFieldStateCore.this.buildResourceRegions(dyn, maxRegions);
+        }
+
+        @Override
+        public IntentAggCont enemyIntentToRegions(ResourceRegions regs) {
+          return PredictiveFieldStateCore.this.enemyIntentToRegions(enemyMap, regs);
+        }
+
+        @Override
+        public IntentAggCont allyIntentToRegions(ResourceRegions regs) {
+          return PredictiveFieldStateCore.this.allyIntentToRegions(allyMap, regs);
+        }
+
+        @Override
+        public double estimateTravelTime(Translation2d a, Translation2d b, double speed) {
+          return PredictiveFieldStateCore.this.estimateTravelTime(a, b, speed);
+        }
+
+        @Override
+        public CollectEval evalCollectPoint(
+            Translation2d ourPos,
+            double ourSpeedCap,
+            Translation2d p,
+            int goalUnits,
+            double cellM,
+            SpatialDyn dyn,
+            IntentAggCont enemyIntent,
+            IntentAggCont allyIntent) {
+          return PredictiveFieldStateCore.this.evalCollectPoint(
+              ourPos, ourSpeedCap, p, goalUnits, cellM, dyn, enemyIntent, allyIntent);
+        }
+
+        @Override
+        public double allyRadialDensity(Translation2d p, double sigma) {
+          return PredictiveFieldStateCore.radialDensity(allyMap, p, sigma);
+        }
+
+        @Override
+        public double enemyRadialDensity(Translation2d p, double sigma) {
+          return PredictiveFieldStateCore.radialDensity(enemyMap, p, sigma);
+        }
+
+        @Override
+        public double regionBanditBonus(SpatialDyn dyn, Translation2d p, double now) {
+          return PredictiveFieldStateCore.this.regionBanditBonus(dyn, p, now);
+        }
+
+        @Override
+        public void addDepletedMark(
+            Translation2d p, double radiusM, double strength, double ttlS, boolean merge) {
+          PredictiveFieldStateCore.this.addDepletedMark(p, radiusM, strength, ttlS, merge);
+        }
+
+        @Override
+        public void addDepletedRing(
+            Translation2d p, double r0, double r1, double strength, double ttlS) {
+          PredictiveFieldStateCore.this.addDepletedRing(p, r0, r1, strength, ttlS);
+        }
+
+        @Override
+        public void setLastReturnedCollect(Translation2d p, double nowS) {
+          lastReturnedCollect = p;
+          lastReturnedCollectTs = nowS;
+        }
+      };
 
   public void registerResourceSpec(String type, ResourceSpec spec) {
     if (type == null || type.isEmpty() || spec == null) return;
@@ -590,7 +648,7 @@ public class PredictiveFieldStateCore {
     return out;
   }
 
-  private static void sortIdxByKey(double[] key, int[] idx) {
+  static void sortIdxByKey(double[] key, int[] idx) {
     quickSortIdx(key, idx, 0, idx.length - 1);
   }
 
@@ -664,42 +722,7 @@ public class PredictiveFieldStateCore {
   }
 
   private Translation2d[] peakFinder(Translation2d[] gridPoints, SpatialDyn dyn, int topN) {
-    if (gridPoints == null || gridPoints.length == 0 || dyn == null) return new Translation2d[0];
-
-    int K = Math.max(1, topN);
-    Translation2d[] bestP = new Translation2d[K];
-    double[] bestV = new double[K];
-    for (int i = 0; i < K; i++) bestV[i] = -1e18;
-
-    for (int i = 0; i < gridPoints.length; i++) {
-      Translation2d p = gridPoints[i];
-      if (p == null) continue;
-
-      Translation2d near = dyn.nearestResourceTo(p, COLLECT_PEAK_GATE_R);
-      if (near == null) continue;
-
-      double v = dyn.evidenceMassWithin(p, COLLECT_PEAK_SCORE_R);
-      if (v <= 1e-9) continue;
-
-      int worstI = 0;
-      double worst = bestV[0];
-      for (int k = 1; k < K; k++) {
-        if (bestV[k] < worst) {
-          worst = bestV[k];
-          worstI = k;
-        }
-      }
-      if (v > worst) {
-        bestV[worstI] = v;
-        bestP[worstI] = p;
-      }
-    }
-
-    ArrayList<Translation2d> tmp = new ArrayList<>(K);
-    for (Translation2d p : bestP) if (p != null) tmp.add(p);
-
-    tmp = dedupPoints(tmp, adaptiveDupSkip(dyn));
-    return tmp.toArray(new Translation2d[0]);
+    return PredictiveCollectCandidateBuilder.peakFinder(gridPoints, dyn, topN);
   }
 
   private static final Supplier<IntakeFootprint> COLLECT_INTAKE = IntakeFootprint::getFootprint;
@@ -745,13 +768,6 @@ public class PredictiveFieldStateCore {
     return enforceHardStopOnFuel(dyn, front, rCore, rSnap, rCentroid, 0.10);
   }
 
-  private static final class FootprintEval {
-    int maxCount;
-    double sumUnits;
-    double avgEvidence;
-    boolean hasEvidence;
-  }
-
   private FootprintEval evalFootprint(
       SpatialDyn dyn, Translation2d center, Rotation2d heading, double rCore) {
     FootprintEval e = new FootprintEval();
@@ -787,18 +803,6 @@ public class PredictiveFieldStateCore {
     if (fp.maxCount < 1 || fp.sumUnits < minUnits) return false;
     fillFootprintEvidence(dyn, center, heading, fp);
     return fp.avgEvidence >= minUnits * 0.85;
-  }
-
-  private static final class HeadingPick {
-    final Translation2d center;
-    final Rotation2d heading;
-    final FootprintEval eval;
-
-    HeadingPick(Translation2d center, Rotation2d heading, FootprintEval eval) {
-      this.center = center;
-      this.heading = heading;
-      this.eval = eval;
-    }
   }
 
   private HeadingPick bestHeadingForFootprint(
@@ -1724,748 +1728,66 @@ public class PredictiveFieldStateCore {
       int goalUnits,
       int coarseTopK,
       int refineGrid) {
-
-    if (ourPos == null) return null;
-
-    SpatialDyn dyn = cachedDyn();
-    if (dyn == null || dyn.resources.isEmpty()) return null;
-
-    lastOurPosForCollect = ourPos;
-    lastOurCapForCollect = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
-    lastGoalUnitsForCollect = Math.max(1, goalUnits);
-    lastCellMForCollect = Math.max(0.10, cellM);
-
-    double cap = lastOurCapForCollect;
-    int goal = lastGoalUnitsForCollect;
-
-    sweepDepletedMarks();
-
-    Translation2d[] targets = buildCollectCandidates(points, dyn);
-    if (targets.length == 0) return null;
-
-    double totalEv = dyn.totalEvidence();
-    double minUnits = dynamicMinUnits(totalEv);
-    int minCount = dynamicMinCount(totalEv);
-
-    ResourceRegions enemyRegions = buildResourceRegions(dyn, ENEMY_REGIONS_MAX);
-    IntentAggCont enemyIntent = enemyIntentToRegions(enemyMap, enemyRegions);
-    IntentAggCont allyIntent = allyIntentToRegions(allyMap, enemyRegions);
-
-    int topK = Math.max(1, Math.min(coarseTopK, Math.max(2, targets.length)));
-    int rg = Math.max(2, refineGrid);
-
-    double half = Math.max(0.05, cellM * 0.5);
-    double step = (2.0 * half) / (rg - 1);
-
-    int[] bestIdx = new int[topK];
-    double[] bestScore = new double[topK];
-    for (int i = 0; i < topK; i++) {
-      bestIdx[i] = -1;
-      bestScore[i] = -1e18;
-    }
-
-    int fallbackIdx = -1;
-    double fallbackUnits = -1e18;
-
-    double minEv = minEvidence(totalEv);
-
-    for (int i = 0; i < targets.length; i++) {
-      Translation2d cpt = targets[i];
-      if (cpt == null) continue;
-
-      double regionUnitsAny = dyn.valueInSquare(cpt, half);
-      if (regionUnitsAny > fallbackUnits) {
-        fallbackUnits = regionUnitsAny;
-        fallbackIdx = i;
-      }
-
-      double ev = dyn.evidenceMassWithin(cpt, EVIDENCE_R);
-      if (ev < minEv && regionUnitsAny < Math.max(0.03, minUnits * 0.70)) continue;
-
-      double eta = estimateTravelTime(ourPos, cpt, cap);
-      double near = Math.exp(-COLLECT_NEAR_DECAY * eta);
-
-      if (regionUnitsAny < Math.min(COLLECT_COARSE_MIN_REGION_UNITS, minUnits * 0.90)) continue;
-
-      double sat = 1.0 - Math.exp(-COLLECT_VALUE_SAT_K * Math.max(0.0, regionUnitsAny));
-      double value = sat * goal * COLLECT_VALUE_GAIN;
-
-      CollectEval e = evalCollectPoint(ourPos, cap, cpt, goal, cellM, dyn, enemyIntent, allyIntent);
-      double activity =
-          Math.min(
-              ACTIVITY_CAP,
-              COLLECT_ACTIVITY_ALLY_W * radialDensity(allyMap, cpt, COLLECT_ACTIVITY_SIGMA)
-                  + COLLECT_ACTIVITY_ENEMY_W * radialDensity(enemyMap, cpt, COLLECT_ACTIVITY_SIGMA)
-                  + COLLECT_ACTIVITY_DYN_W * dyn.otherDensity(cpt, COLLECT_ACTIVITY_SIGMA));
-
-      double score =
-          value * COLLECT_REGION_SAMPLES_W
-              - eta * COLLECT_ETA_COST
-              + near * COLLECT_NEAR_BONUS
-              - e.enemyPressure * COLLECT_ENEMY_PRESS_COST
-              - e.allyCongestion * COLLECT_ALLY_CONGEST_COST
-              - e.enemyIntent * COLLECT_ENEMY_INTENT_COST
-              - e.allyIntent * COLLECT_ALLY_INTENT_COST
-              - activity
-              - e.depleted * DEPLETED_PEN_W
-              + regionBanditBonus(dyn, cpt, Timer.getFPGATimestamp());
-
-      if (ev < minEv) score -= 2.00;
-
-      int insertAt = -1;
-      double worst = 1e18;
-      int worstK = -1;
-      for (int k = 0; k < topK; k++) {
-        if (bestIdx[k] < 0) {
-          insertAt = k;
-          break;
-        }
-        if (bestScore[k] < worst) {
-          worst = bestScore[k];
-          worstK = k;
-        }
-      }
-      if (insertAt < 0) {
-        if (score > worst && worstK >= 0) insertAt = worstK;
-      }
-      if (insertAt >= 0) {
-        bestIdx[insertAt] = i;
-        bestScore[insertAt] = score;
-      }
-    }
-
-    boolean anyCoarse = false;
-    for (int k = 0; k < topK; k++) if (bestIdx[k] >= 0) anyCoarse = true;
-
-    if (!anyCoarse && fallbackIdx >= 0) {
-      bestIdx[0] = fallbackIdx;
-      bestScore[0] = -1e12;
-    }
-
-    final int MAX_TRIES = 10;
-
-    double[] candScore = new double[MAX_TRIES];
-    Translation2d[] candPt = new Translation2d[MAX_TRIES];
-    CollectEval[] candEval = new CollectEval[MAX_TRIES];
-    int candN = 0;
-
-    for (int k = 0; k < topK; k++) {
-      int idx = bestIdx[k];
-      if (idx < 0) continue;
-
-      Translation2d center = targets[idx];
-      if (center == null) continue;
-
-      for (int ix = 0; ix < rg; ix++) {
-        double ox = -half + ix * step;
-        for (int iy = 0; iy < rg; iy++) {
-          double oy = -half + iy * step;
-          Translation2d p = new Translation2d(center.getX() + ox, center.getY() + oy);
-
-          CollectEval e =
-              evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
-          e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
-          e.score += e.banditBonus;
-
-          if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
-          if (e.evidence < minEv) e.score -= 2.25;
-
-          int insert = -1;
-          if (candN < MAX_TRIES) {
-            insert = candN++;
-          } else {
-            int worstI = 0;
-            double worstS = candScore[0];
-            for (int t = 1; t < candN; t++) {
-              if (candScore[t] < worstS) {
-                worstS = candScore[t];
-                worstI = t;
-              }
-            }
-            if (e.score > worstS) insert = worstI;
-          }
-
-          if (insert >= 0) {
-            candScore[insert] = e.score;
-            candPt[insert] = p;
-            candEval[insert] = e;
-          }
-        }
-      }
-    }
-
-    if (candN == 0) return null;
-
-    int[] order = new int[candN];
-    for (int i = 0; i < candN; i++) order[i] = i;
-
-    for (int i = 0; i < candN - 1; i++) {
-      int best = i;
-      double bestS = candScore[order[i]];
-      for (int j = i + 1; j < candN; j++) {
-        double s = candScore[order[j]];
-        if (s > bestS) {
-          best = j;
-          bestS = s;
-        }
-      }
-      int tmp = order[i];
-      order[i] = order[best];
-      order[best] = tmp;
-    }
-
-    double now = Timer.getFPGATimestamp();
-
-    for (int oi = 0; oi < candN; oi++) {
-      int ci = order[oi];
-      Translation2d p = candPt[ci];
-      CollectEval e0 = candEval[ci];
-      if (p == null || e0 == null) continue;
-
-      Translation2d snapped = dyn.centroidResourcesWithin(p, 0.85, 0.20);
-      Translation2d use = p;
-      CollectEval eUse = e0;
-
-      if (snapped != null) {
-        CollectEval es =
-            evalCollectPoint(ourPos, cap, snapped, goal, cellM, dyn, enemyIntent, allyIntent);
-        es.banditBonus = regionBanditBonus(dyn, snapped, now);
-        es.score += es.banditBonus;
-
-        if (es.units < minUnits * 0.55 || es.count < Math.max(1, minCount - 1)) es.score -= 2.75;
-        if (es.evidence < minEv) es.score -= 2.25;
-
-        if (es.score > e0.score + 1e-9) {
-          use = snapped;
-          eUse = es;
-        }
-      }
-
-      if (eUse.units >= Math.max(0.02, minUnits * 0.70)
-          && eUse.count >= Math.max(1, minCount - 1)) {
-        lastReturnedCollect = use;
-        lastReturnedCollectTs = now;
-
-        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
-        // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", eUse.units);
-        // Logger.recordOutput("Repulsor/Collect/ChosenCount", eUse.count);
-        // Logger.recordOutput("Repulsor/Collect/ChosenScore", eUse.score);
-        // Logger.recordOutput("Repulsor/Collect/ChosenEta", eUse.eta);
-        // Logger.recordOutput("Repulsor/Collect/ChosenEvidence", eUse.evidence);
-
-        return new PointCandidate(
-            use,
-            new Rotation2d(),
-            eUse.eta,
-            eUse.value,
-            eUse.enemyPressure,
-            eUse.allyCongestion,
-            eUse.enemyIntent,
-            eUse.allyIntent,
-            eUse.score);
-      }
-
-      addDepletedMark(use, 0.70, 1.20, DEPLETED_TTL_S, false);
-      addDepletedRing(use, 0.35, 0.95, 0.75, DEPLETED_TTL_S);
-      recordRegionAttempt(dyn, use, now, false);
-    }
-
-    return null;
+    return PredictiveCollectSecondaryRankers.rankCollectHierarchical(
+        secondaryCollectApi, ourPos, ourSpeedCap, points, cellM, goalUnits, coarseTopK, refineGrid);
   }
 
   public Translation2d bestCollectHotspot(Translation2d[] points, double cellM) {
-    if (points == null || points.length == 0) return null;
-    SpatialDyn dyn = cachedDyn();
-    if (dyn == null || dyn.resources.isEmpty()) return null;
-
-    double half = Math.max(0.05, cellM * 0.5);
-    Translation2d best = null;
-    double bestU = 0.0;
-
-    for (Translation2d p : points) {
-      if (p == null) continue;
-      double u = dyn.valueInSquare(p, half);
-      if (u > bestU) {
-        bestU = u;
-        best = p;
-      }
-    }
-
-    double min = Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.5);
-    return bestU >= min ? best : null;
+    return PredictiveCollectSecondaryRankers.bestCollectHotspot(secondaryCollectApi, points, cellM);
   }
 
   public PointCandidate rankCollectPoints(
       Translation2d ourPos, double ourSpeedCap, Translation2d[] points, int goalUnits, int limit) {
-
-    if (ourPos == null) return null;
-
-    SpatialDyn dyn = cachedDyn();
-    if (dyn == null || dyn.resources.isEmpty()) return null;
-
-    lastOurPosForCollect = ourPos;
-    lastOurCapForCollect = ourSpeedCap > 0.0 ? ourSpeedCap : DEFAULT_OUR_SPEED;
-    lastGoalUnitsForCollect = Math.max(1, goalUnits);
-    lastCellMForCollect = COLLECT_CELL_M;
-
-    sweepDepletedMarks();
-
-    Translation2d[] targets = buildCollectCandidates(points, dyn);
-    if (targets == null || targets.length == 0) return null;
-
-    double totalEv = dyn.totalEvidence();
-    double minUnits = dynamicMinUnits(totalEv);
-    int minCount = dynamicMinCount(totalEv);
-
-    ResourceRegions enemyRegions = buildResourceRegions(dyn, ENEMY_REGIONS_MAX);
-    IntentAggCont enemyIntent = enemyIntentToRegions(enemyMap, enemyRegions);
-    IntentAggCont allyIntent = allyIntentToRegions(allyMap, enemyRegions);
-
-    double cap = lastOurCapForCollect;
-    int goal = lastGoalUnitsForCollect;
-
-    int maxCheck = limit > 0 ? Math.min(Math.max(1, limit), targets.length) : targets.length;
-
-    double[] etas = new double[targets.length];
-    int[] order = new int[targets.length];
-    for (int i = 0; i < targets.length; i++) {
-      order[i] = i;
-      Translation2d t = targets[i];
-      etas[i] = t != null ? estimateTravelTime(ourPos, t, cap) : Double.POSITIVE_INFINITY;
-    }
-
-    sortIdxByKey(etas, order);
-
-    Translation2d bestP = null;
-    CollectEval bestE = null;
-
-    double minEv = minEvidence(totalEv);
-
-    for (int oi = 0; oi < order.length && oi < maxCheck; oi++) {
-      int i = order[oi];
-      Translation2d p = targets[i];
-      if (p == null) continue;
-
-      CollectEval e =
-          evalCollectPoint(ourPos, cap, p, goal, COLLECT_CELL_M, dyn, enemyIntent, allyIntent);
-      e.banditBonus = regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
-      e.score += e.banditBonus;
-
-      if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
-      if (e.evidence < minEv) e.score -= 2.25;
-
-      if (bestE == null || e.score > bestE.score + 1e-9) {
-        bestE = e;
-        bestP = p;
-      }
-    }
-
-    if (bestP == null || bestE == null) return null;
-
-    if (bestE.units < Math.max(0.02, minUnits * 0.70) || bestE.count < Math.max(1, minCount - 1)) {
-      addDepletedMark(bestP, 0.70, 1.15, DEPLETED_TTL_S, false);
-      addDepletedRing(bestP, 0.35, 0.95, 0.75, DEPLETED_TTL_S);
-      return null;
-    }
-
-    lastReturnedCollect = bestP;
-    lastReturnedCollectTs = Timer.getFPGATimestamp();
-
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
-    // Logger.recordOutput("Repulsor/Collect/ChosenFuelUnits", bestE.units);
-    // Logger.recordOutput("Repulsor/Collect/ChosenCount", bestE.count);
-    // Logger.recordOutput("Repulsor/Collect/ChosenScore", bestE.score);
-
-    return new PointCandidate(
-        bestP,
-        new Rotation2d(),
-        bestE.eta,
-        bestE.value,
-        bestE.enemyPressure,
-        bestE.allyCongestion,
-        bestE.enemyIntent,
-        bestE.allyIntent,
-        bestE.score);
+    return PredictiveCollectSecondaryRankers.rankCollectPoints(
+        secondaryCollectApi, ourPos, ourSpeedCap, points, goalUnits, limit);
   }
 
   private Translation2d[] buildCollectCandidates(Translation2d[] gridPoints, SpatialDyn dyn) {
-    Translation2d[] clusters = buildResourceClustersMulti(dyn, COLLECT_CLUSTER_MAX);
-
-    ArrayList<Translation2d> peaks = new ArrayList<>(64);
-    if (dyn != null && dyn.resources != null && !dyn.resources.isEmpty() && gridPoints != null) {
-      Translation2d[] peakPts = peakFinder(gridPoints, dyn, PEAK_FINDER_TOPN);
-      for (Translation2d p : peakPts) if (p != null) peaks.add(p);
-    }
-
-    ArrayList<Translation2d> out = new ArrayList<>(256);
-    for (Translation2d c : clusters) if (c != null) out.add(c);
-    for (Translation2d p : peaks) if (p != null) out.add(p);
-
-    if (dyn != null
-        && dyn.resources != null
-        && !dyn.resources.isEmpty()
-        && dyn.specs != null
-        && !dyn.specs.isEmpty()) {
-      Translation2d[] bestRes = new Translation2d[Math.max(1, COLLECT_RESOURCE_SEEDS_MAX)];
-      double[] bestW = new double[bestRes.length];
-      for (int i = 0; i < bestW.length; i++) bestW[i] = -1e18;
-
-      for (DynamicObject o : dyn.resources) {
-        if (o == null || o.pos == null || o.type == null) continue;
-        ResourceSpec s = dyn.specs.get(o.type.toLowerCase());
-        if (s == null) continue;
-
-        double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
-        double w = Math.max(0.0, s.unitValue) * ageW;
-
-        int worstI = 0;
-        double worst = bestW[0];
-        for (int k = 1; k < bestW.length; k++) {
-          if (bestW[k] < worst) {
-            worst = bestW[k];
-            worstI = k;
-          }
-        }
-        if (w > worst) {
-          bestW[worstI] = w;
-          bestRes[worstI] = o.pos;
-        }
-      }
-
-      for (Translation2d p : bestRes) if (p != null) out.add(p);
-    }
-
-    if (gridPoints == null || gridPoints.length == 0) {
-      return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
-          .toArray(new Translation2d[0]);
-    }
-
-    int nGrid = 0;
-    for (Translation2d p : gridPoints) if (p != null) nGrid++;
-    if (nGrid == 0) {
-      return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
-          .toArray(new Translation2d[0]);
-    }
-
-    int K = Math.min(COLLECT_GRID_TOPK, Math.min(nGrid, COLLECT_GRID_FALLBACK_MAX));
-    Translation2d[] bestP = new Translation2d[K];
-    Translation2d[] bestN = new Translation2d[K];
-    double[] bestS = new double[K];
-    for (int i = 0; i < K; i++) bestS[i] = -1e18;
-
-    double gateR = COLLECT_CAND_GATE_R;
-
-    for (int i = 0; i < gridPoints.length; i++) {
-      Translation2d p = gridPoints[i];
-      if (p == null) continue;
-      if (dyn == null) continue;
-
-      Translation2d near = dyn.nearestResourceTo(p, gateR);
-      if (near == null) continue;
-
-      double s = dyn.evidenceMassWithin(p, 0.85);
-      if (s <= 1e-9) continue;
-
-      int worstI = 0;
-      double worst = bestS[0];
-      for (int k = 1; k < K; k++) {
-        if (bestS[k] < worst) {
-          worst = bestS[k];
-          worstI = k;
-        }
-      }
-      if (s > worst) {
-        bestS[worstI] = s;
-        bestP[worstI] = p;
-        bestN[worstI] = near;
-      }
-    }
-
-    for (int i = 0; i < K; i++) {
-      Translation2d p = bestP[i];
-      if (p != null) out.add(p);
-      Translation2d q = bestN[i];
-      if (q != null) out.add(q);
-    }
-
-    return spreadCollectPoints(dedupPoints(out, adaptiveDupSkip(dyn)), dyn)
-        .toArray(new Translation2d[0]);
+    return PredictiveCollectCandidateBuilder.buildCollectCandidates(
+        gridPoints, dyn, PEAK_FINDER_TOPN);
   }
 
   private ArrayList<Translation2d> dedupPoints(ArrayList<Translation2d> in, double dupSkipM) {
-    if (in == null || in.isEmpty()) return new ArrayList<>();
-    double d2 = dupSkipM * dupSkipM;
-    ArrayList<Translation2d> out = new ArrayList<>(in.size());
-    for (int i = 0; i < in.size(); i++) {
-      Translation2d p = in.get(i);
-      if (p == null) continue;
-      boolean dup = false;
-      for (int j = 0; j < out.size(); j++) {
-        Translation2d q = out.get(j);
-        double dx = q.getX() - p.getX();
-        double dy = q.getY() - p.getY();
-        if (dx * dx + dy * dy <= d2) {
-          dup = true;
-          break;
-        }
-      }
-      if (!dup) out.add(p);
-    }
-    return out;
+    return PredictiveCollectCandidateBuilder.dedupPoints(in, dupSkipM);
   }
 
   private ArrayList<Translation2d> spreadCollectPoints(
       ArrayList<Translation2d> in, SpatialDyn dyn) {
-    if (in == null || in.isEmpty()) return new ArrayList<>();
-    double sep = adaptiveCollectSeparation(dyn);
-    double d2 = sep * sep;
-    int n = in.size();
-    double[] score = new double[n];
-    for (int i = 0; i < n; i++) {
-      Translation2d p = in.get(i);
-      score[i] =
-          (dyn != null && p != null) ? dyn.evidenceMassWithin(p, COLLECT_SPREAD_SCORE_R) : 0.0;
-    }
-
-    boolean[] blocked = new boolean[n];
-    ArrayList<Translation2d> out = new ArrayList<>(n);
-
-    for (; ; ) {
-      int bestI = -1;
-      double best = -1e18;
-      for (int i = 0; i < n; i++) {
-        if (blocked[i]) continue;
-        if (score[i] > best) {
-          best = score[i];
-          bestI = i;
-        }
-      }
-      if (bestI < 0) break;
-      Translation2d p = in.get(bestI);
-      if (p != null) out.add(p);
-      blocked[bestI] = true;
-      if (p == null) continue;
-      for (int j = 0; j < n; j++) {
-        if (blocked[j]) continue;
-        Translation2d q = in.get(j);
-        if (q == null) {
-          blocked[j] = true;
-          continue;
-        }
-        double dx = q.getX() - p.getX();
-        double dy = q.getY() - p.getY();
-        if (dx * dx + dy * dy <= d2) blocked[j] = true;
-      }
-    }
-    return out;
+    return PredictiveCollectCandidateBuilder.spreadCollectPoints(in, dyn);
   }
 
   private double adaptiveDupSkip(SpatialDyn dyn) {
-    double total = dyn != null ? dyn.totalEvidence() : 0.0;
-    double x = clamp01(total / 6.0);
-    return lerp(0.18, 0.42, x);
+    return PredictiveCollectCandidateBuilder.adaptiveDupSkip(dyn);
   }
 
   private double adaptiveCollectSeparation(SpatialDyn dyn) {
-    double total = dyn != null ? dyn.totalEvidence() : 0.0;
-    double x = clamp01(total / 6.0);
-    return lerp(COLLECT_SPREAD_MIN, COLLECT_SPREAD_MAX, x);
-  }
-
-  private static final class ClusterAcc {
-    double sx;
-    double sy;
-    double sw;
-    int n;
+    return PredictiveCollectCandidateBuilder.adaptiveCollectSeparation(dyn);
   }
 
   private Translation2d[] buildResourceClustersMulti(SpatialDyn dyn, int maxClusters) {
-    if (dyn == null || dyn.resources.isEmpty() || dyn.specs.isEmpty()) return new Translation2d[0];
-
-    double coarseBin = Math.max(0.25, Math.min(0.35, 0.30));
-    double inv = 1.0 / Math.max(1e-6, coarseBin);
-
-    HashMap<Long, ClusterAcc> coarse = new HashMap<>(256);
-
-    for (DynamicObject o : dyn.resources) {
-      if (o == null || o.pos == null || o.type == null) continue;
-      ResourceSpec s = dyn.specs.get(o.type.toLowerCase());
-      if (s == null) continue;
-
-      int cx = (int) Math.floor(o.pos.getX() * inv);
-      int cy = (int) Math.floor(o.pos.getY() * inv);
-      long k = SpatialDyn.key(cx, cy);
-
-      ClusterAcc a = coarse.get(k);
-      if (a == null) {
-        a = new ClusterAcc();
-        coarse.put(k, a);
-      }
-
-      double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
-      double w = Math.max(0.0, s.unitValue) * ageW;
-
-      a.sx += o.pos.getX() * w;
-      a.sy += o.pos.getY() * w;
-      a.sw += w;
-      a.n++;
-    }
-
-    if (coarse.isEmpty()) return new Translation2d[0];
-
-    ArrayList<long[]> scored = new ArrayList<>(coarse.size());
-    for (var e : coarse.entrySet()) {
-      ClusterAcc a = e.getValue();
-      if (a == null || a.sw <= 1e-9) continue;
-      scored.add(new long[] {e.getKey(), Double.doubleToLongBits(a.sw)});
-    }
-
-    if (scored.isEmpty()) return new Translation2d[0];
-
-    scored.sort(
-        (u, v) -> {
-          double a = Double.longBitsToDouble(u[1]);
-          double b = Double.longBitsToDouble(v[1]);
-          return Double.compare(b, a);
-        });
-
-    int m = Math.min(maxClusters, scored.size());
-    ArrayList<Translation2d> out = new ArrayList<>(m);
-
-    for (int i = 0; i < m; i++) {
-      long key = scored.get(i)[0];
-      ClusterAcc a = coarse.get(key);
-      if (a == null || a.sw <= 1e-9) continue;
-
-      Translation2d c = new Translation2d(a.sx / a.sw, a.sy / a.sw);
-
-      Translation2d refined = meanShiftRefine(dyn, c, 0.75, 3);
-      if (refined != null) out.add(refined);
-    }
-
-    out = dedupPoints(out, 0.28);
-    return out.toArray(new Translation2d[0]);
+    return PredictiveCollectCandidateBuilder.buildResourceClustersMulti(dyn, maxClusters);
   }
 
   private Translation2d meanShiftRefine(SpatialDyn dyn, Translation2d seed, double r, int iters) {
-    if (dyn == null || seed == null) return null;
-    Translation2d c = seed;
-    double rr2 = r * r;
-
-    for (int it = 0; it < Math.max(1, iters); it++) {
-      double sx = 0.0;
-      double sy = 0.0;
-      double sw = 0.0;
-
-      for (DynamicObject o : dyn.resources) {
-        if (o == null || o.pos == null || o.type == null) continue;
-        ResourceSpec s = dyn.specs.get(o.type.toLowerCase());
-        if (s == null) continue;
-
-        double dx = o.pos.getX() - c.getX();
-        double dy = o.pos.getY() - c.getY();
-        double d2 = dx * dx + dy * dy;
-        if (d2 > rr2) continue;
-
-        double ageW = error() ? 1.0 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
-        double w = Math.max(0.0, s.unitValue) * ageW;
-
-        sx += o.pos.getX() * w;
-        sy += o.pos.getY() * w;
-        sw += w;
-      }
-
-      if (sw <= 1e-9) break;
-
-      Translation2d nc = new Translation2d(sx / sw, sy / sw);
-      if (nc.getDistance(c) <= 0.02) {
-        c = nc;
-        break;
-      }
-      c = nc;
-    }
-
-    return c;
+    return PredictiveCollectCandidateBuilder.meanShiftRefine(dyn, seed, r, iters);
   }
 
   private void sweepDepletedMarks() {
-    if (error()) return;
-    if (depletedMarks.isEmpty()) return;
-    double now = Timer.getFPGATimestamp();
-    depletedMarks.removeIf(m -> now - m.t > m.ttl);
-    if (depletedMarks.size() > DEPLETED_MARKS_MAX) {
-      while (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
-    }
+    penaltyTracker.sweepDepletedMarks(error());
   }
 
   private void addDepletedMark(
       Translation2d p, double radiusM, double strength, double ttlS, boolean merge) {
-    if (error()) return;
-    if (p == null) return;
-
-    double now = Timer.getFPGATimestamp();
-    double r = Math.max(0.10, radiusM);
-    double s = Math.max(0.0, strength);
-    double ttl = Math.max(0.1, ttlS);
-
-    if (merge) {
-      for (int i = depletedMarks.size() - 1; i >= 0; i--) {
-        DepletedMark m = depletedMarks.get(i);
-        if (m == null || m.ring) continue;
-        if (m.p.getDistance(p) <= 0.30) {
-          m.t = now;
-          m.s = Math.max(m.s, s);
-          m.r = Math.max(m.r, r);
-          m.ttl = Math.max(m.ttl, ttl);
-          return;
-        }
-      }
-    }
-
-    depletedMarks.add(new DepletedMark(p, now, s, r, ttl));
-    if (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
+    penaltyTracker.addDepletedMark(p, radiusM, strength, ttlS, merge, error());
   }
 
   private void addDepletedRing(
       Translation2d p, double r0, double r1, double strength, double ttlS) {
-    if (error()) return;
-    if (p == null) return;
-    double now = Timer.getFPGATimestamp();
-    depletedMarks.add(
-        new DepletedMark(p, now, Math.max(0.0, strength), r0, r1, Math.max(0.1, ttlS)));
-    if (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
+    penaltyTracker.addDepletedRing(p, r0, r1, strength, ttlS, error());
   }
 
   private double depletedPenaltySoft(Translation2d p) {
-    if (error()) return 0.0;
-    if (p == null || depletedMarks.isEmpty()) return 0.0;
-
-    double now = Timer.getFPGATimestamp();
-    double sum = 0.0;
-
-    for (int i = 0; i < depletedMarks.size(); i++) {
-      DepletedMark m = depletedMarks.get(i);
-      if (m == null) continue;
-      double age = Math.max(0.0, now - m.t);
-      if (age > m.ttl) continue;
-
-      double w = m.s * Math.exp(-DEPLETED_DECAY * age);
-
-      double d = m.p.getDistance(p);
-
-      if (!m.ring) {
-        double sig2 = Math.max(1e-6, m.r * m.r);
-        sum += w * Math.exp(-0.5 * (d * d) / sig2);
-      } else {
-        double mid = 0.5 * (m.ringR0 + m.ringR1);
-        double width = Math.max(0.08, 0.33 * (m.ringR1 - m.ringR0));
-        double x = d - mid;
-        double sig2 = Math.max(1e-6, width * width);
-        sum += w * Math.exp(-0.5 * (x * x) / sig2);
-      }
-    }
-
-    return Math.min(2.25, sum);
+    return penaltyTracker.depletedPenaltySoft(p, error());
   }
 
   private static Translation2d lerpVec(Translation2d a, Translation2d b, double alpha) {
@@ -2496,78 +1818,33 @@ public class PredictiveFieldStateCore {
   }
 
   private double estimateTravelTime(Translation2d a, Translation2d b, double speed) {
-    double base = etaPath(a, b, speed);
-    if (base <= ETA_FLOOR + 1e-9) return base;
-
-    SpatialDyn dyn = cachedDyn();
-    if (dyn == null) return base;
-
-    double seg = a.getDistance(b);
-    if (seg < 1e-3) return base;
-
-    double inv = 1.0 / Math.max(1.0, (double) (PATH_SAMPLES - 1));
-    double cost = 0.0;
-
-    for (int i = 0; i < PATH_SAMPLES; i++) {
-      double t = i * inv;
-      Translation2d p = new Translation2d(lerp(a.getX(), b.getX(), t), lerp(a.getY(), b.getY(), t));
-
-      double c =
-          0.85 * radialDensity(allyMap, p, 1.00)
-              + 0.95 * radialDensity(enemyMap, p, 1.00)
-              + 0.70 * dyn.otherDensity(p, 1.00);
-
-      cost += c;
-    }
-
-    cost /= Math.max(1.0, PATH_SAMPLES);
-    double mult = 1.0 + PATH_COST_W * Math.min(1.35, cost);
-    return Math.max(ETA_FLOOR, base * mult);
+    return PredictiveCollectDynamics.estimateTravelTime(
+        a, b, speed, cachedDyn(), allyMap, enemyMap);
   }
 
   private static double minEtaToTarget(HashMap<Integer, Track> map, Translation2d t) {
-    double best = Double.POSITIVE_INFINITY;
-    for (Track r : map.values()) {
-      double s = Math.max(0.1, r.speedCap);
-      double e = etaPath(r.pos, t, s);
-      if (e < best) best = e;
-    }
-    return best;
+    return PredictiveCollectDynamics.minEtaToTarget(map, t);
   }
 
   private static double dotNorm(Translation2d a, Translation2d b) {
-    double an = a.getNorm();
-    double bn = b.getNorm();
-    if (an < 1e-6 || bn < 1e-6) return 0.0;
-    return (a.getX() * b.getX() + a.getY() * b.getY()) / (an * bn);
+    return PredictiveCollectDynamics.dotNorm(a, b);
   }
 
   private double radialKernel(double dist) {
-    double s2 = KERNEL_SIGMA * KERNEL_SIGMA;
-    return Math.exp(-0.5 * (dist * dist) / Math.max(1e-6, s2));
+    return PredictiveCollectDynamics.radialKernel(dist);
   }
 
   private static double densityKernel(double d, double sigma) {
-    double s2 = sigma * sigma;
-    return Math.exp(-0.5 * (d * d) / Math.max(1e-6, s2));
+    return PredictiveCollectDynamics.densityKernel(d, sigma);
   }
 
   private static double radialDensity(
       HashMap<Integer, Track> map, Translation2d target, double sigma) {
-    if (map.isEmpty()) return 0.0;
-    double agg = 0.0;
-    for (Track r : map.values()) {
-      double d = r.pos.getDistance(target);
-      agg += densityKernel(d, sigma);
-    }
-    return agg / Math.max(1.0, map.size());
+    return PredictiveCollectDynamics.radialDensity(map, target, sigma);
   }
 
   private static Translation2d predictAt(Track r, double horizonS) {
-    if (r == null) return new Translation2d();
-    double h = Math.max(0.0, horizonS);
-    if (r.vel == null || r.vel.getNorm() < 1e-9) return r.pos;
-    return r.pos.plus(r.vel.times(h));
+    return PredictiveCollectDynamics.predictAt(r, horizonS);
   }
 
   private double radialPressure(
@@ -2576,17 +1853,8 @@ public class PredictiveFieldStateCore {
       double ourEtaS,
       double intentMass,
       int count) {
-    if (enemies.isEmpty()) return 0.0;
-    double agg = 0.0;
-    for (Track r : enemies.values()) {
-      Translation2d p = predictAt(r, ourEtaS);
-      double d = p.getDistance(target);
-      double k = radialKernel(Math.max(0.0, d - RESERVATION_RADIUS));
-      agg += k;
-    }
-    double base = agg / Math.max(1.0, enemies.size());
-    double intent = count > 0 ? (intentMass / Math.max(1.0, count)) : 0.0;
-    return base * (1.0 + 0.85 * intent);
+    return PredictiveCollectDynamics.radialPressure(
+        enemies, target, ourEtaS, RESERVATION_RADIUS, intentMass, count);
   }
 
   private double radialCongestion(
@@ -2595,17 +1863,8 @@ public class PredictiveFieldStateCore {
       double ourEtaS,
       double intentMass,
       int count) {
-    if (allies.isEmpty()) return 0.0;
-    double agg = 0.0;
-    for (Track r : allies.values()) {
-      Translation2d p = predictAt(r, ourEtaS);
-      double d = p.getDistance(target);
-      double k = radialKernel(Math.max(0.0, d - RESERVATION_RADIUS));
-      agg += k;
-    }
-    double base = agg / Math.max(1.0, allies.size());
-    double intent = count > 0 ? (intentMass / Math.max(1.0, count)) : 0.0;
-    return base * (1.0 + 0.75 * intent);
+    return PredictiveCollectDynamics.radialCongestion(
+        allies, target, ourEtaS, RESERVATION_RADIUS, intentMass, count);
   }
 
   private double headingAffinity(
@@ -2613,257 +1872,23 @@ public class PredictiveFieldStateCore {
       Translation2d target,
       HashMap<Integer, Track> allies,
       HashMap<Integer, Track> enemies) {
-    Translation2d toTarget = target.minus(ourPos);
-    if (toTarget.getNorm() < 1e-6) return 0.0;
-    double allyAlign = 0.0;
-    int na = 0;
-    for (Track a : allies.values()) {
-      Translation2d to = target.minus(a.pos);
-      if (to.getNorm() < 1e-6 || a.vel.getNorm() < 1e-6) continue;
-      double c = dotNorm(to, a.vel);
-      allyAlign += Math.max(0.0, c);
-      na++;
-    }
-    if (na > 0) allyAlign /= na;
-    double enemyMis = 0.0;
-    int ne = 0;
-    for (Track e : enemies.values()) {
-      Translation2d to = target.minus(e.pos);
-      if (to.getNorm() < 1e-6 || e.vel.getNorm() < 1e-6) continue;
-      double c = dotNorm(to, e.vel);
-      enemyMis += Math.max(0.0, 1.0 - c);
-      ne++;
-    }
-    if (ne > 0) enemyMis /= ne;
-    return 0.6 * allyAlign + 0.4 * enemyMis;
-  }
-
-  private static final class IntentAgg {
-    final double[] intent;
-    final int count;
-
-    IntentAgg(double[] intent, int count) {
-      this.intent = intent;
-      this.count = count;
-    }
+    return PredictiveCollectDynamics.headingAffinity(ourPos, target, allies, enemies);
   }
 
   private IntentAgg softIntentAgg(HashMap<Integer, Track> map, List<Translation2d> targets) {
-    int m = targets.size();
-    double[] accum = new double[m];
-    if (map.isEmpty() || m == 0) return new IntentAgg(accum, 0);
-
-    ensureScratch(m);
-    double[] logits = scratchLogits;
-    double[] probs = scratchLogits2;
-
-    int n = 0;
-    double invT = 1.0 / Math.max(0.2, SOFTMAX_TEMP);
-
-    for (Track r : map.values()) {
-      n++;
-      double maxLogit = -1e18;
-
-      for (int i = 0; i < m; i++) {
-        Translation2d t = targets.get(i);
-        double d = r.pos.getDistance(t);
-        double eta = d / Math.max(0.1, r.speedCap);
-
-        Translation2d dir = t.minus(r.pos);
-        double align = 0.0;
-        if (dir.getNorm() > 1e-6 && r.vel.getNorm() > 1e-6) {
-          align = Math.max(0.0, dotNorm(dir, r.vel));
-        }
-
-        double logit = -(eta * invT) + 0.35 * align;
-        logits[i] = logit;
-        if (logit > maxLogit) maxLogit = logit;
-      }
-
-      double sum = 0.0;
-      for (int i = 0; i < m; i++) {
-        double e = Math.exp(logits[i] - maxLogit);
-        probs[i] = e;
-        sum += e;
-      }
-      double inv = 1.0 / Math.max(1e-9, sum);
-
-      for (int i = 0; i < m; i++) {
-        double w = probs[i] * inv;
-        accum[i] += w;
-      }
-    }
-
-    return new IntentAgg(accum, n);
-  }
-
-  private static final class ResourceRegions {
-    final Translation2d[] centers;
-    final double[] mass;
-
-    ResourceRegions(Translation2d[] centers, double[] mass) {
-      this.centers = centers != null ? centers : new Translation2d[0];
-      this.mass = mass != null ? mass : new double[this.centers.length];
-    }
-  }
-
-  private static final class IntentAggCont {
-    final Translation2d[] regions;
-    final double[] intentMass;
-    final int count;
-
-    IntentAggCont(Translation2d[] regions, double[] intentMass, int count) {
-      this.regions = regions != null ? regions : new Translation2d[0];
-      this.intentMass = intentMass != null ? intentMass : new double[this.regions.length];
-      this.count = count;
-    }
-
-    double intentAt(Translation2d p) {
-      if (p == null || regions.length == 0) return 0.0;
-      double sum = 0.0;
-      double s2 = ENEMY_REGION_SIGMA * ENEMY_REGION_SIGMA;
-      for (int i = 0; i < regions.length; i++) {
-        Translation2d c = regions[i];
-        if (c == null) continue;
-        double d = c.getDistance(p);
-        double k = Math.exp(-0.5 * (d * d) / Math.max(1e-6, s2));
-        sum += intentMass[i] * k;
-      }
-      return sum;
-    }
+    return PredictiveCollectDynamics.softIntentAgg(map, targets);
   }
 
   private ResourceRegions buildResourceRegions(SpatialDyn dyn, int maxRegions) {
-    if (dyn == null) return new ResourceRegions(new Translation2d[0], new double[0]);
-    Translation2d[] c = buildResourceClustersMulti(dyn, Math.max(4, maxRegions));
-    double[] m = new double[c.length];
-    for (int i = 0; i < c.length; i++) {
-      Translation2d p = c[i];
-      m[i] = p != null ? dyn.evidenceMassWithin(p, 0.85) : 0.0;
-    }
-    return new ResourceRegions(c, m);
+    return PredictiveCollectDynamics.buildResourceRegions(dyn, maxRegions);
   }
 
   private IntentAggCont enemyIntentToRegions(HashMap<Integer, Track> map, ResourceRegions regs) {
-    int m = regs != null && regs.centers != null ? regs.centers.length : 0;
-    double[] accum = new double[m];
-    if (map.isEmpty() || m == 0) return new IntentAggCont(regs.centers, accum, 0);
-
-    ensureScratch(m);
-    double[] logits = scratchLogits;
-    double[] probs = scratchLogits2;
-
-    int n = 0;
-    double invT = 1.0 / Math.max(0.2, SOFTMAX_TEMP);
-
-    for (Track r : map.values()) {
-      n++;
-      double maxLogit = -1e18;
-
-      for (int i = 0; i < m; i++) {
-        Translation2d t = regs.centers[i];
-        if (t == null) {
-          logits[i] = -1e18;
-          continue;
-        }
-
-        double d = r.pos.getDistance(t);
-        double eta = d / Math.max(0.1, r.speedCap);
-
-        Translation2d dir = t.minus(r.pos);
-        double align = 0.0;
-        if (dir.getNorm() > 1e-6 && r.vel.getNorm() > 1e-6) {
-          align = Math.max(0.0, dotNorm(dir, r.vel));
-        }
-
-        double mass = regs.mass != null && i < regs.mass.length ? regs.mass[i] : 0.0;
-        double massTerm = Math.log(1.0 + Math.max(0.0, mass));
-
-        double logit = -(eta * invT) + 0.35 * align + 0.22 * massTerm;
-        logits[i] = logit;
-        if (logit > maxLogit) maxLogit = logit;
-      }
-
-      double sum = 0.0;
-      for (int i = 0; i < m; i++) {
-        double li = logits[i];
-        if (li <= -1e17) {
-          probs[i] = 0.0;
-          continue;
-        }
-        double e = Math.exp(li - maxLogit);
-        probs[i] = e;
-        sum += e;
-      }
-      double inv = 1.0 / Math.max(1e-9, sum);
-
-      for (int i = 0; i < m; i++) {
-        accum[i] += probs[i] * inv;
-      }
-    }
-
-    return new IntentAggCont(regs.centers, accum, n);
+    return PredictiveCollectDynamics.enemyIntentToRegions(map, regs, ENEMY_REGION_SIGMA);
   }
 
   private IntentAggCont allyIntentToRegions(HashMap<Integer, Track> map, ResourceRegions regs) {
-    int m = regs != null && regs.centers != null ? regs.centers.length : 0;
-    double[] accum = new double[m];
-    if (map.isEmpty() || m == 0) return new IntentAggCont(regs.centers, accum, 0);
-
-    ensureScratch(m);
-    double[] logits = scratchLogits;
-    double[] probs = scratchLogits2;
-
-    int n = 0;
-    double invT = 1.0 / Math.max(0.2, SOFTMAX_TEMP);
-
-    for (Track r : map.values()) {
-      n++;
-      double maxLogit = -1e18;
-
-      for (int i = 0; i < m; i++) {
-        Translation2d t = regs.centers[i];
-        if (t == null) {
-          logits[i] = -1e18;
-          continue;
-        }
-
-        double d = r.pos.getDistance(t);
-        double eta = d / Math.max(0.1, r.speedCap);
-
-        Translation2d dir = t.minus(r.pos);
-        double align = 0.0;
-        if (dir.getNorm() > 1e-6 && r.vel.getNorm() > 1e-6) {
-          align = Math.max(0.0, dotNorm(dir, r.vel));
-        }
-
-        double mass = regs.mass != null && i < regs.mass.length ? regs.mass[i] : 0.0;
-        double massTerm = Math.log(1.0 + Math.max(0.0, mass));
-
-        double logit = -(eta * invT) + 0.35 * align + 0.18 * massTerm;
-        logits[i] = logit;
-        if (logit > maxLogit) maxLogit = logit;
-      }
-
-      double sum = 0.0;
-      for (int i = 0; i < m; i++) {
-        double li = logits[i];
-        if (li <= -1e17) {
-          probs[i] = 0.0;
-          continue;
-        }
-        double e = Math.exp(li - maxLogit);
-        probs[i] = e;
-        sum += e;
-      }
-      double inv = 1.0 / Math.max(1e-9, sum);
-
-      for (int i = 0; i < m; i++) {
-        accum[i] += probs[i] * inv;
-      }
-    }
-
-    return new IntentAggCont(regs.centers, accum, n);
+    return PredictiveCollectDynamics.allyIntentToRegions(map, regs, ENEMY_REGION_SIGMA);
   }
 
   private static double clamp(double x, double lo, double hi) {
@@ -2988,29 +2013,6 @@ public class PredictiveFieldStateCore {
 
     if (maxC >= 1) return COLLECT_HOLE_PENALTY;
     return COLLECT_NOFUEL_PENALTY;
-  }
-
-  private static final class CollectEval {
-    Translation2d p;
-    double eta;
-    double units;
-    int count;
-    double evidence;
-    double value;
-    double enemyPressure;
-    double allyCongestion;
-    double enemyIntent;
-    double allyIntent;
-    double localAvoid;
-    double activity;
-    double depleted;
-    double overlap;
-    int coreCount;
-    double coreDist;
-    double robustPenalty;
-    double score;
-    double regionUnits;
-    double banditBonus;
   }
 
   private CollectEval evalCollectPoint(
@@ -3185,46 +2187,12 @@ public class PredictiveFieldStateCore {
 
   private void recordRegionAttempt(SpatialDyn dyn, Translation2d p, double now, boolean success) {
     if (dyn == null || p == null) return;
-    long k = regionKey(p, 0.30);
-    RegionStat st = regionStats.get(k);
-    if (st == null) {
-      if (regionStats.size() > REGION_STATS_MAX) regionStats.clear();
-      st = new RegionStat();
-      regionStats.put(k, st);
-    }
-    st.attempts++;
-    if (success) st.successes++;
-    st.lastAttemptTs = now;
+    penaltyTracker.recordRegionAttempt(p, now, success);
   }
 
   private double regionBanditBonus(SpatialDyn dyn, Translation2d p, double now) {
     if (dyn == null || p == null) return 0.0;
-    if (regionStats.isEmpty()) return 0.0;
-
-    long k = regionKey(p, 0.30);
-    RegionStat st = regionStats.get(k);
-    if (st == null) return 0.0;
-
-    int a = Math.max(1, st.attempts);
-    double mean = (double) st.successes / a;
-
-    double totalA = 0.0;
-    for (RegionStat rs : regionStats.values()) totalA += Math.max(1, rs.attempts);
-    totalA = Math.max(1.0, totalA);
-
-    double ucb = mean + 0.65 * Math.sqrt(Math.log(totalA + 1.0) / a);
-
-    double rec = now - st.lastAttemptTs;
-    double recW = rec >= 0.0 ? Math.exp(-0.25 * rec) : 1.0;
-
-    return 0.22 * ucb * recW;
-  }
-
-  private static long regionKey(Translation2d p, double binM) {
-    double inv = 1.0 / Math.max(1e-6, binM);
-    int cx = (int) Math.floor(p.getX() * inv);
-    int cy = (int) Math.floor(p.getY() * inv);
-    return SpatialDyn.key(cx, cy);
+    return penaltyTracker.regionBanditBonus(p, now);
   }
 
   private static double lerp(double a, double b, double t) {
