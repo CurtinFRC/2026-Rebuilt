@@ -251,6 +251,7 @@ public class Robot extends LoggedRobot {
     Threads.setCurrentThreadPriority(true, 99);
     PhoenixUtil.refreshAll();
     VirtualSubsystem.periodicAll();
+    GameState.periodic();
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
     logRunningCommands();
@@ -260,6 +261,7 @@ public class Robot extends LoggedRobot {
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
     Threads.setCurrentThreadPriority(false, 10);
     Logger.recordOutput("gameState", GameState.isHubActive());
+    Logger.recordOutput("remainingShiftTime", GameState.getRemainingShiftTime());
   }
 
   /** This function is called once when the robot is disabled. */
