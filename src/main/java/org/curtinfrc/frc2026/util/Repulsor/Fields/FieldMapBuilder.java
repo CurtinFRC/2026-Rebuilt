@@ -31,13 +31,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElementModel;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameObject;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.PrimitiveObject;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElementModel;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameObject;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Pipe;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.PrimitiveObject;
 
 public final class FieldMapBuilder {
   public enum CategorySpec {
@@ -56,11 +57,11 @@ public final class FieldMapBuilder {
     CategorySpec category = CategorySpec.kScore;
   }
 
-  private final FieldTracker ft;
+  private final FieldTrackerCore ft;
   private final List<GameElement> elements = new ArrayList<>();
   private ElementSpec spec;
 
-  public FieldMapBuilder(FieldTracker ft) {
+  public FieldMapBuilder(FieldTrackerCore ft) {
     this.ft = Objects.requireNonNull(ft);
   }
 
@@ -111,8 +112,7 @@ public final class FieldMapBuilder {
     Pose3d p = s().pose;
     s().primitives
         .add(
-            ft
-            .new Pipe(
+            new Pipe(
                 new Pose3d(p.getX(), p.getY(), p.getZ(), new Rotation3d(rollRad, pitchRad, yawRad)),
                 radius,
                 Radians.of(yawRad)));
@@ -130,7 +130,7 @@ public final class FieldMapBuilder {
     double half = sideMeters * 0.5;
     s().primitives
         .add(
-            ft.new PrimitiveObject() {
+            new PrimitiveObject() {
               @Override
               public boolean intersects(Pose3d pos) {
                 double x = pos.getX();
@@ -194,9 +194,9 @@ public final class FieldMapBuilder {
   public FieldMapBuilder add() {
     ElementSpec es = s();
     PrimitiveObject[] prim = es.primitives.toArray(new PrimitiveObject[0]);
-    GameElementModel model = ft.new GameElementModel(es.pose, prim);
+    GameElementModel model = new GameElementModel(es.pose, prim);
     elements.add(
-        ft.new GameElement(es.alliance, es.capacity, model, es.filter, es.related, es.category));
+        new GameElement(es.alliance, es.capacity, model, es.filter, es.related, es.category));
     spec = null;
     return this;
   }
@@ -235,21 +235,19 @@ public final class FieldMapBuilder {
       PrimitiveObject[] prims = e.getModel().getComposition();
       List<PrimitiveObject> nprims = new ArrayList<>();
       for (PrimitiveObject pr : prims) {
-        if (pr instanceof FieldTracker.Pipe) {
-          FieldTracker.Pipe pipe = (FieldTracker.Pipe) pr;
+        if (pr instanceof Pipe) {
+          Pipe pipe = (Pipe) pr;
           Pose3d pp = pipe.getPosition();
           nprims.add(
-              ft
-              .new Pipe(
+              new Pipe(
                   new Pose3d(2 * xAxis - pp.getX(), pp.getY(), pp.getZ(), pp.getRotation()),
                   pipe.getRadius(),
                   pipe.getAngle()));
         }
       }
-      GameElementModel model = ft.new GameElementModel(mp, nprims.toArray(new PrimitiveObject[0]));
+      GameElementModel model = new GameElementModel(mp, nprims.toArray(new PrimitiveObject[0]));
       GameElement m =
-          ft
-          .new GameElement(
+          new GameElement(
               e.getAlliance(),
               e.getMaxContained(),
               model,

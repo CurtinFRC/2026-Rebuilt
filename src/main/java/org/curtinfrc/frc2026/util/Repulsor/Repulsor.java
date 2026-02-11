@@ -49,9 +49,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Fallback.PlannerFallback;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.FieldVision;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Flags.FlagManager;
@@ -61,6 +58,10 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Vision.FieldVision;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuningHeat;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
 
@@ -204,8 +205,8 @@ public class Repulsor {
     reasoner.setTesting(true);
     m_behaviourManager.setReasoner(reasoner);
 
-    FieldTracker ft = FieldTracker.getInstance();
-    FieldVision front = ft.new FieldVision("main");
+    FieldTrackerCore ft = FieldTrackerCore.getInstance();
+    FieldVision front = ft.createFieldVision("main");
     m_fieldVisions.add(front);
   }
 
@@ -459,7 +460,7 @@ public class Repulsor {
   }
 
   private Optional<RepulsorSetpoint> chooseNextScoreFromFieldTracker() {
-    FieldTracker ft = FieldTracker.getInstance();
+    FieldTrackerCore ft = FieldTrackerCore.getInstance();
     GameElement[] elements = ft.getFieldMap();
     if (elements == null || elements.length == 0) return Optional.empty();
 

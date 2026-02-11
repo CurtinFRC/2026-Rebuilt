@@ -41,14 +41,14 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Helpers.FieldPlannerForc
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Helpers.FieldPlannerGeometry;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Helpers.FieldPlannerGoalManager;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractorObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 import org.curtinfrc.frc2026.util.Repulsor.HeadingGate;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultDriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultTurnTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuning;
@@ -341,7 +341,7 @@ public class FieldPlanner {
                 : Alliance.kRed;
 
         var cands =
-            FieldTracker.getInstance().getPredictedSetpoints(preferred, curTrans, 3.5, cat, 8);
+            FieldTrackerCore.getInstance().getPredictedSetpoints(preferred, curTrans, 3.5, cat, 8);
 
         SetpointContext spCtx =
             new SetpointContext(

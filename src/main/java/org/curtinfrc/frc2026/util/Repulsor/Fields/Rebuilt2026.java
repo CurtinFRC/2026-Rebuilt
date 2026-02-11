@@ -33,14 +33,14 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractor
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.HorizontalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.RectangleObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.VerticalObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
 
 public final class Rebuilt2026 implements FieldDefinition {
   private static final double CORNER_CHAMFER = 0;
@@ -53,7 +53,7 @@ public final class Rebuilt2026 implements FieldDefinition {
   private static final double GRID_REGION_HALF_Y_M = Constants.FIELD_WIDTH * 0.5;
 
   @Override
-  public GameElement[] build(FieldTracker ft) {
+  public GameElement[] build(FieldTrackerCore ft) {
     var b = new FieldMapBuilder(ft);
 
     Pose2d blueOutpost = Setpoints.Rebuilt2026.OUTPOST_COLLECT.approximateBluePose();

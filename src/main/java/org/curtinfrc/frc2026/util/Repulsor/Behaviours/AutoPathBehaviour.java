@@ -40,12 +40,10 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.HPStationMetrics;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.MetricRecorder;
-import org.curtinfrc.frc2026.util.Repulsor.PredictiveFieldState;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
@@ -55,6 +53,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
 
 public class AutoPathBehaviour extends Behaviour {
   private final int prio;
@@ -141,7 +141,7 @@ public class AutoPathBehaviour extends Behaviour {
   private Command buildShootReadyCommand(BehaviourContext ctx) {
     return Commands.runOnce(
             () -> {
-              FieldTracker.getInstance().resetAll();
+              FieldTrackerCore.getInstance().resetAll();
             })
         .andThen(
             Commands.waitSeconds(2)
@@ -166,7 +166,7 @@ public class AutoPathBehaviour extends Behaviour {
     return Commands.runOnce(
         () -> {
           System.out.println("AutoPathBehaviour: Resetting FieldTracker");
-          FieldTracker.getInstance().resetAll();
+          FieldTrackerCore.getInstance().resetAll();
         });
   }
 
@@ -291,7 +291,7 @@ public class AutoPathBehaviour extends Behaviour {
                 } else {
                   RepulsorSetpoint pred = pickPredicted(ctx);
                   // desired = (pred != null) ? pred : scoreFallback;
-                  FieldTracker.getInstance().resetAll();
+                  FieldTrackerCore.getInstance().resetAll();
                   desired = scoreFallback;
                 }
 
@@ -525,10 +525,10 @@ public class AutoPathBehaviour extends Behaviour {
                 && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
             ? Alliance.kBlue
             : Alliance.kRed;
-    FieldTracker ft = FieldTracker.getInstance();
+    FieldTrackerCore ft = FieldTrackerCore.getInstance();
     ft.updatePredictorWorld(alliance);
     double cap = ourSpeedCap != null ? Math.max(0.1, ourSpeedCap.get()) : 3.5;
-    List<PredictiveFieldState.Candidate> ranked =
+    List<Candidate> ranked =
         ft.getPredictedCandidates(
             alliance, ctx.robotPose.get().getTranslation(), cap, CategorySpec.kScore, 1);
     if (ranked == null || ranked.isEmpty()) return null;
@@ -552,7 +552,7 @@ public class AutoPathBehaviour extends Behaviour {
             : robotPose;
 
     Pose2d nextBlue =
-        FieldTracker.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
+        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
 
     if (nextBlue == null) {
       nextBlue =

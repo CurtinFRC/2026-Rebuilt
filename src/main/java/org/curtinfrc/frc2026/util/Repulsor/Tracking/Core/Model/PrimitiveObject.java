@@ -17,17 +17,10 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor;
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import edu.wpi.first.math.geometry.Pose3d;
 
-public class FieldTracker extends FieldTrackerCore {
-  public FieldTracker() {
-    super();
-  }
-
-  public FieldTracker(FieldLayoutProvider provider) {
-    super(provider);
-  }
+public abstract class PrimitiveObject {
+  public abstract boolean intersects(Pose3d pos);
 }

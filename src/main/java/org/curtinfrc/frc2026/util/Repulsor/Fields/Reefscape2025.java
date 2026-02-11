@@ -29,14 +29,14 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.DiagonalWallOb
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.HorizontalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.TeardropObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.VerticalObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
 
 public final class Reefscape2025 implements FieldDefinition {
 
@@ -85,7 +85,7 @@ public final class Reefscape2025 implements FieldDefinition {
   }
 
   @Override
-  public GameElement[] build(FieldTracker ft) {
+  public GameElement[] build(FieldTrackerCore ft) {
     var b = new FieldMapBuilder(ft);
 
     List<Pose3d> blueFaces =

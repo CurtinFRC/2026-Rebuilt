@@ -17,17 +17,14 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor;
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+public class CollectProbe {
+  public final int count;
+  public final double units;
 
-public class FieldTracker extends FieldTrackerCore {
-  public FieldTracker() {
-    super();
-  }
-
-  public FieldTracker(FieldLayoutProvider provider) {
-    super(provider);
+  public CollectProbe(int count, double units) {
+    this.count = Math.max(0, count);
+    this.units = Math.max(0.0, units);
   }
 }

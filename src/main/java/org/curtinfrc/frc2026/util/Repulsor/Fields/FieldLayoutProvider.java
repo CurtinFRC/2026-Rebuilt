@@ -19,10 +19,11 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Fields;
 
-import org.curtinfrc.frc2026.util.Repulsor.FieldTracker;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
 
 public interface FieldLayoutProvider {
-  FieldTracker.GameElement[] build(FieldTracker ft);
+  GameElement[] build(FieldTrackerCore ft);
 
   String gameName();
 
