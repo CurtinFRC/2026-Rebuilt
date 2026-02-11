@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -56,11 +56,9 @@ public class FieldPlanner {
   private static final double CORNER_CHAMFER = 0;
   public static final double GOAL_STRENGTH = 2.2;
   private static final double STAGED_CENTER_BAND_M = 3.648981;
-  private static final double STAGED_REACH_DIST_M = 0.2;
-  private static final double STAGED_RESTAGE_DIST_M = 1.2;
+  private static final double STAGED_RESTAGE_DIST_M = 1.5;
   private static final double STAGED_SAME_GOAL_POS_M = 0.05;
   private static final double STAGED_SAME_GOAL_ROT_DEG = 5.0;
-  private static final double STAGED_MAX_SEC = 2.0;
   private GatedAttractorObstacle stagedGate = null;
 
   private static final class ClearMemo {

@@ -234,7 +234,7 @@ public final class PredictiveFieldState {
   private static final double COLLECT_ENEMY_INTENT_COST = 0.75;
   private static final double COLLECT_ALLY_INTENT_COST = 0.55;
   private static final double COLLECT_VALUE_SAT_K = 0.75;
-  private static final double COLLECT_AGE_DECAY = 1.25;
+  private static final double COLLECT_AGE_DECAY = 0.75; // 1.25
   private static final double COLLECT_LOCAL_AVOID_R = 0.9;
   private static final double COLLECT_ACTIVITY_SIGMA = 1.05;
   private static final double COLLECT_ACTIVITY_ALLY_W = 0.80;
@@ -243,7 +243,7 @@ public final class PredictiveFieldState {
   private static final double COLLECT_REGION_SAMPLES_W = 2.70;
   private static final double COLLECT_CELL_M = 0.10;
   private static final double COLLECT_NEAR_BONUS = 0.85;
-  private static final double COLLECT_NEAR_DECAY = 1.35;
+  private static final double COLLECT_NEAR_DECAY = 1.1; // 1.35;
   private static final double COLLECT_SPREAD_SCORE_R = 0.85;
   private static final double COLLECT_SPREAD_MIN = 0.30;
   private static final double COLLECT_SPREAD_MAX = 0.65;
