@@ -1,9 +1,28 @@
-package org.curtinfrc.frc2026.util.Repulsor.fieldplanner;
+/*
+ * Copyright (C) 2026 Paul Hodges
+ *
+ * This file is part of Repulsor.
+ *
+ * Repulsor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Repulsor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Repulsor. If not, see https://www.gnu.org/licenses/.
+ */
+
+package org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public class SquareObstacle extends Obstacle {
@@ -17,8 +36,7 @@ public class SquareObstacle extends Obstacle {
   private static final double CORNER_FORCE_SCALE = 22.0;
   private static final double CORNER_FORCE_SOFTEN = 0.08;
 
-  public SquareObstacle(
-      Translation2d center, double sizeMeters, double strength, double maxRange) {
+  public SquareObstacle(Translation2d center, double sizeMeters, double strength, double maxRange) {
     super(strength, true);
     this.center = center;
     this.halfSize = Math.max(0.0, sizeMeters * 0.5);
@@ -197,8 +215,7 @@ public class SquareObstacle extends Obstacle {
       Translation2d outwardU = outward.div(Math.max(EPS, outN));
       double w = 1.0 - Math.min(1.0, dCorner / CORNER_RANGE_M);
       double w2 = w * w;
-      double mag =
-          (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
+      double mag = (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
       cornerBoost = outwardU.times(mag);
     }
 
@@ -354,4 +371,3 @@ public class SquareObstacle extends Obstacle {
     return true;
   }
 }
-

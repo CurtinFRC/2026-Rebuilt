@@ -22,7 +22,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 import edu.wpi.first.math.geometry.Pose2d;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.DriveRepulsor;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
 import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner;
 
@@ -55,4 +55,3 @@ public class BehaviourContext {
     this.robotPose = robotPose;
   }
 }
-

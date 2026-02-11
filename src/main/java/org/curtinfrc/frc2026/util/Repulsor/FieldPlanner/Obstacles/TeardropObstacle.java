@@ -1,10 +1,29 @@
-package org.curtinfrc.frc2026.util.Repulsor.fieldplanner;
+/*
+ * Copyright (C) 2026 Paul Hodges
+ *
+ * This file is part of Repulsor.
+ *
+ * Repulsor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Repulsor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Repulsor. If not, see https://www.gnu.org/licenses/.
+ */
 
+package org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles;
+
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.math.MathUtil;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public class TeardropObstacle extends Obstacle {
@@ -53,8 +72,7 @@ public class TeardropObstacle extends Obstacle {
     Translation2d outwardsForce;
     if (distPosLoc <= primaryMaxRange && distPosLoc >= tiny) {
       double mag =
-          distToForceMag(
-              Math.max(distPosLoc - primaryRadius, 0), primaryMaxRange - primaryRadius);
+          distToForceMag(Math.max(distPosLoc - primaryRadius, 0), primaryMaxRange - primaryRadius);
       var dir = angleFromVec(posToLoc, targetToLocAngle);
       outwardsForce = new Translation2d(mag, dir);
     } else {
@@ -67,8 +85,7 @@ public class TeardropObstacle extends Obstacle {
     double distanceAlongLine = positionRel.getX();
 
     Translation2d sidewaysForce;
-    double distanceScalar =
-        (Math.abs(tailLength) > tiny) ? (distanceAlongLine / tailLength) : 0.0;
+    double distanceScalar = (Math.abs(tailLength) > tiny) ? (distanceAlongLine / tailLength) : 0.0;
     if (distanceScalar >= 0 && distanceScalar <= 1) {
       double secondaryMaxRange =
           MathUtil.interpolate(primaryMaxRange, 0, distanceScalar * distanceScalar);
@@ -79,8 +96,7 @@ public class TeardropObstacle extends Obstacle {
           strength = tailStrength * (distanceAlongLine / Math.max(primaryMaxRange, tiny));
         } else {
           double denom = Math.max(tailLength - primaryMaxRange, tiny);
-          strength =
-              -tailStrength * distanceAlongLine / denom + tailLength * tailStrength / denom;
+          strength = -tailStrength * distanceAlongLine / denom + tailLength * tailStrength / denom;
         }
         strength *= 1 - distanceToLine / Math.max(secondaryMaxRange, tiny);
 
@@ -134,12 +150,10 @@ public class TeardropObstacle extends Obstacle {
       Translation2d unit = delta.div(delta.getNorm());
       double projection = dot(corner.minus(tailStart), unit);
       if (projection >= 0 && projection <= tailLength) {
-        double lateral =
-            Math.abs((corner.minus(tailStart)).rotateBy(tailDir.unaryMinus()).getY());
+        double lateral = Math.abs((corner.minus(tailStart)).rotateBy(tailDir.unaryMinus()).getY());
         if (lateral < primaryMaxRange) return true;
       }
     }
     return false;
   }
 }
-

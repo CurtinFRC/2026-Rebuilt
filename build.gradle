@@ -186,7 +186,8 @@ spotless {
     java {
         target fileTree(".") {
             include "**/*.java"
-            exclude "**/build/**", "**/build-*/**"
+            targetExclude 'bin/**', 'build/**', '**/generated/**', '**/generated-sources/**'
+
         }
 
         replaceRegex("removeBOM", "^\\uFEFF", "")

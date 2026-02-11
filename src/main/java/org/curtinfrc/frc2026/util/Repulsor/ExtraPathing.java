@@ -29,13 +29,13 @@ import java.util.List;
 import java.util.Queue;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.HorizontalObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.PointObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.SnowmanObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.TeardropObstacle;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.VerticalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.HorizontalObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.PointObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.SnowmanObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.TeardropObstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner.VisionObstacle;
 
 public class ExtraPathing {
@@ -694,5 +694,3 @@ public class ExtraPathing {
     }
   }
 }
-
-

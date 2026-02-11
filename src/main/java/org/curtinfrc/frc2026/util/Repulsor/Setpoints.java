@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
@@ -462,10 +462,7 @@ public class Setpoints {
     }
 
     private static Pose2d safeValidFallback(
-        Translation2d target,
-        double halfL,
-        double halfW,
-        List<? extends Obstacle> obs) {
+        Translation2d target, double halfL, double halfW, List<? extends Obstacle> obs) {
       for (Translation2d p : SAFE_FALLBACKS) {
         if (validShootPose(p, target, halfL, halfW, obs)) {
           return toPoseFacing(p, target);
@@ -1046,4 +1043,3 @@ public class Setpoints {
     }
   }
 }
-

@@ -22,7 +22,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 
 final class DragShotPlannerCore {
   private DragShotPlannerCore() {}
@@ -117,4 +117,3 @@ final class DragShotPlannerCore {
         budgetNanos);
   }
 }
-

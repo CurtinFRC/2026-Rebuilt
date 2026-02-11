@@ -36,8 +36,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Function;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 
 public class ReactiveBypass {
   public static class Config {
@@ -1109,4 +1109,3 @@ public class ReactiveBypass {
     }
   }
 }
-

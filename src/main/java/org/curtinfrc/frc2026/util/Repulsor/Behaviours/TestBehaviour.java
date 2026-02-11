@@ -26,7 +26,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import java.util.EnumSet;
 import java.util.Optional;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.RepulsorSample;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
@@ -113,4 +113,3 @@ public final class TestBehaviour extends Behaviour {
         .finallyDo(i -> ctx.drive.runVelocity(new ChassisSpeeds()));
   }
 }
-

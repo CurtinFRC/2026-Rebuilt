@@ -1,10 +1,29 @@
-package org.curtinfrc.frc2026.util.Repulsor.fieldplanner;
+/*
+ * Copyright (C) 2026 Paul Hodges
+ *
+ * This file is part of Repulsor.
+ *
+ * Repulsor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Repulsor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Repulsor. If not, see https://www.gnu.org/licenses/.
+ */
+
+package org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public class RectangleObstacle extends Obstacle {
@@ -887,8 +906,7 @@ public class RectangleObstacle extends Obstacle {
 
     for (int i = 0; i < stepT.length; i++) {
       Translation2d pCW = pos.plus(tCW.times(stepT[i])).plus(outward.times(stepO[i]));
-      double sCW =
-          scoreCandidatePolyWithWalls(pos, goal, pCW, baseDist, baseClear, polyExp, true);
+      double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, baseDist, baseClear, polyExp, true);
       if (sCW < bestSCW) {
         bestSCW = sCW;
         bestPCW = pCW;
@@ -1059,15 +1077,7 @@ public class RectangleObstacle extends Obstacle {
       double strength,
       double maxRangeX,
       double maxRangeY) {
-    this(
-        center,
-        widthMeters,
-        heightMeters,
-        Rotation2d.kZero,
-        strength,
-        maxRangeX,
-        maxRangeY,
-        true);
+    this(center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRangeX, maxRangeY, true);
   }
 
   public static RectangleObstacle simple(
@@ -1078,14 +1088,7 @@ public class RectangleObstacle extends Obstacle {
       double maxRangeX,
       double maxRangeY) {
     return new RectangleObstacle(
-        center,
-        widthMeters,
-        heightMeters,
-        Rotation2d.kZero,
-        strength,
-        maxRangeX,
-        maxRangeY,
-        false);
+        center, widthMeters, heightMeters, Rotation2d.kZero, strength, maxRangeX, maxRangeY, false);
   }
 
   @Override
@@ -1325,8 +1328,7 @@ public class RectangleObstacle extends Obstacle {
         int teardropSide = -goalSide;
 
         FlowTeardrop tear = (teardropSide == shortSignA) ? tearA_CCW : tearB_CCW;
-        Rotation2d dir =
-            teardropTailDir(goalSide, teardropSide, tear.loc, target, gLocal, pLocal);
+        Rotation2d dir = teardropTailDir(goalSide, teardropSide, tear.loc, target, gLocal, pLocal);
         Translation2d v = tear.forceVec(position, dir);
         tearVec = v.times(EDGE_TEAR_BLEND * wEdge);
       }
@@ -1341,8 +1343,7 @@ public class RectangleObstacle extends Obstacle {
           cornerHandoffNudgeLocked(
               position, pLocal, gLocal, cornerWorld, wCorner, handoffShortSign);
 
-      if (commitDir == 0)
-        setCommitDir(impliedDirFromGeometry(position, target), true, cornerWorld);
+      if (commitDir == 0) setCommitDir(impliedDirFromGeometry(position, target), true, cornerWorld);
     }
 
     Translation2d clearPush = Translation2d.kZero;
@@ -1462,8 +1463,7 @@ public class RectangleObstacle extends Obstacle {
 
     for (int i = 0; i < stepT.length; i++) {
       Translation2d pCW = pos.plus(tCW.times(stepT[i])).plus(outwardU.times(stepO[i]));
-      double sCW =
-          scoreCandidatePolyWithWalls(pos, goal, pCW, baseDist, baseClear, polyExp, true);
+      double sCW = scoreCandidatePolyWithWalls(pos, goal, pCW, baseDist, baseClear, polyExp, true);
       if (sCW < bestSCW) {
         bestSCW = sCW;
         bestPCW = pCW;
@@ -1513,8 +1513,7 @@ public class RectangleObstacle extends Obstacle {
     double w = smooth01(1.0 - (dCorner / Math.max(EPS, CORNER_RANGE_M)));
     double w2 = w * w;
 
-    double mPush =
-        (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
+    double mPush = (strength * CORNER_FORCE_SCALE) * w2 / (CORNER_FORCE_SOFTEN + dCorner * dCorner);
     Translation2d push = awayU.times(mPush);
 
     Translation2d slideDir =
@@ -1725,4 +1724,3 @@ public class RectangleObstacle extends Obstacle {
     return false;
   }
 }
-

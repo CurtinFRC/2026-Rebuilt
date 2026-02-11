@@ -21,7 +21,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 
 final class DragShotPlannerCoarseSearch {
@@ -319,4 +319,3 @@ final class DragShotPlannerCoarseSearch {
     }
   }
 }
-

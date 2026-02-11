@@ -24,8 +24,8 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.ArrayList;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.FieldPlanner;
-import org.curtinfrc.frc2026.util.Repulsor.fieldplanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 
 final class DragShotPlannerObstacles {
@@ -131,4 +131,3 @@ final class DragShotPlannerObstacles {
     }
   }
 }
-
