@@ -9,29 +9,29 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.PredictiveFieldStateCore;
 
-public final class FieldTrackerCollectPlanner {
-  private final FieldTrackerCollectObjectiveRuntime engine;
+final class FieldTrackerCollectObjectiveRuntime {
+  private final FieldTrackerCollectObjectiveLoop loop;
 
-  public FieldTrackerCollectPlanner(
+  FieldTrackerCollectObjectiveRuntime(
       PredictiveFieldStateCore predictor,
       Supplier<Translation2d[]> collectObjectivePoints,
       Supplier<List<DynamicObject>> dynamicsSupplier,
       Predicate<String> collectTypePredicate) {
-    this.engine =
-        new FieldTrackerCollectObjectiveRuntime(
+    this.loop =
+        new FieldTrackerCollectObjectiveLoop(
             predictor, collectObjectivePoints, dynamicsSupplier, collectTypePredicate);
   }
 
-  public void resetAll() {
-    engine.resetAll();
+  void resetAll() {
+    loop.resetAll();
   }
 
-  public Pose2d nextObjectiveGoalBlue(
+  Pose2d nextObjectiveGoalBlue(
       Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
-    return engine.nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, cat);
+    return loop.nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, cat);
   }
 
-  public void clearState() {
-    engine.clearState();
+  void clearState() {
+    loop.clearState();
   }
 }

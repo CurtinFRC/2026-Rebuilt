@@ -413,7 +413,7 @@ final class PredictiveCollectSecondaryRankers {
       etas[i] = t != null ? api.estimateTravelTime(ourPos, t, cap) : Double.POSITIVE_INFINITY;
     }
 
-    PredictiveFieldStateCore.sortIdxByKey(etas, order);
+    sortIdxByKey(etas, order);
 
     Translation2d bestP = null;
     CollectEval bestE = null;
@@ -461,5 +461,28 @@ final class PredictiveCollectSecondaryRankers {
         bestE.enemyIntent,
         bestE.allyIntent,
         bestE.score);
+  }
+
+  private static void sortIdxByKey(double[] key, int[] idx) {
+    quickSortIdx(key, idx, 0, idx.length - 1);
+  }
+
+  private static void quickSortIdx(double[] key, int[] idx, int lo, int hi) {
+    int i = lo;
+    int j = hi;
+    double p = key[idx[(lo + hi) >>> 1]];
+    while (i <= j) {
+      while (key[idx[i]] < p) i++;
+      while (key[idx[j]] > p) j--;
+      if (i <= j) {
+        int t = idx[i];
+        idx[i] = idx[j];
+        idx[j] = t;
+        i++;
+        j--;
+      }
+    }
+    if (lo < j) quickSortIdx(key, idx, lo, j);
+    if (i < hi) quickSortIdx(key, idx, i, hi);
   }
 }
