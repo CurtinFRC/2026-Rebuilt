@@ -30,8 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
-
-import org.curtinfrc.frc2026.subsystems.Intake.Intake;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement;
 import org.curtinfrc.frc2026.util.Repulsor.FieldTracker.GameElement.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
@@ -367,7 +365,6 @@ public final class PredictiveFieldState {
       DriverStation.getAlliance()
           .map(al -> (al == DriverStation.Alliance.Blue) ? Alliance.kBlue : Alliance.kRed)
           .orElse(Alliance.kRed);
-  
 
   private RepulsorSetpoint lastChosen = null;
   private double lastChosenTs = 0.0;
@@ -758,7 +755,10 @@ public final class PredictiveFieldState {
     if (center == null) return null;
     Translation2d front =
         center.plus(
-            COLLECT_INTAKE.get().supportPointRobotFrame(new Translation2d(1.0, 0.0)).rotateBy(heading));
+            COLLECT_INTAKE
+                .get()
+                .supportPointRobotFrame(new Translation2d(1.0, 0.0))
+                .rotateBy(heading));
     return enforceHardStopOnFuel(dyn, front, rCore, rSnap, rCentroid, 0.10);
   }
 
@@ -1512,8 +1512,10 @@ public final class PredictiveFieldState {
       currentCollectHeading =
           face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
       currentCollectTarget =
-          COLLECT_INTAKE.get().snapCenterSoFootprintTouchesPoint(
-              currentCollectTarget, currentCollectHeading, currentCollectTouch);
+          COLLECT_INTAKE
+              .get()
+              .snapCenterSoFootprintTouchesPoint(
+                  currentCollectTarget, currentCollectHeading, currentCollectTouch);
 
       if (inShootBand.test(currentCollectTarget)) {
         addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
@@ -1620,8 +1622,10 @@ public final class PredictiveFieldState {
         currentCollectHeading =
             face(currentCollectTarget, currentCollectTouch, currentCollectHeading);
         currentCollectTarget =
-            COLLECT_INTAKE.get().snapCenterSoFootprintTouchesPoint(
-                currentCollectTarget, currentCollectHeading, currentCollectTouch);
+            COLLECT_INTAKE
+                .get()
+                .snapCenterSoFootprintTouchesPoint(
+                    currentCollectTarget, currentCollectHeading, currentCollectTouch);
         if (inShootBand.test(currentCollectTarget)) {
           addDepletedMark(currentCollectTarget, 0.65, 1.25, DEPLETED_TTL_S, false);
           addDepletedRing(currentCollectTarget, 0.35, 0.95, 0.80, DEPLETED_TTL_S);

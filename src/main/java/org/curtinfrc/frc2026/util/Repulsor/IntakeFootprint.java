@@ -23,8 +23,6 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.Objects;
 
-import org.curtinfrc.frc2026.subsystems.Intake.Intake;
-
 public final class IntakeFootprint {
   private static IntakeFootprint instance = null;
 

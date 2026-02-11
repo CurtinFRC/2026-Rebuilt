@@ -181,12 +181,6 @@ task(eventDeploy) {
     }
 }
 createVersionFile.dependsOn(eventDeploy)
-
-wrapper {
-    gradleVersion = '8.14.3'
-}
-
-// Spotless formatting
 project.compileJava.dependsOn(spotlessApply)
 spotless {
     java {
@@ -194,6 +188,9 @@ spotless {
             include "**/*.java"
             exclude "**/build/**", "**/build-*/**"
         }
+
+        replaceRegex("removeBOM", "^\\uFEFF", "")
+
         toggleOffOn()
         googleJavaFormat()
         trimTrailingWhitespace()
@@ -204,25 +201,37 @@ spotless {
             include "**/*.gradle"
             exclude "**/build/**", "**/build-*/**"
         }
+
+        replaceRegex("removeBOM", "^\\uFEFF", "")
+
         greclipse()
-        leadingTabsToSpaces(4)
+        indentWithSpaces(4)
         trimTrailingWhitespace()
         endWithNewline()
     }
+
     json {
         target fileTree(".") {
             include "**/*.json"
             exclude "**/build/**", "**/build-*/**"
         }
+
+        replaceRegex("removeBOM", "^\\uFEFF", "")
+
         gson().indentWithSpaces(2)
+        endWithNewline()
     }
+
     format "misc", {
         target fileTree(".") {
             include "**/*.md", "**/.gitignore"
             exclude "**/build/**", "**/build-*/**"
         }
+
+        replaceRegex("removeBOM", "^\\uFEFF", "")
+
         trimTrailingWhitespace()
-        leadingTabsToSpaces(2)
+        indentWithSpaces(2)
         endWithNewline()
     }
 }

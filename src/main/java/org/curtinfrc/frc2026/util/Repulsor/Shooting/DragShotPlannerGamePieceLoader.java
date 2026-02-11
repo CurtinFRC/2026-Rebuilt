@@ -76,10 +76,7 @@ final class DragShotPlannerGamePieceLoader {
                 : cfg.mass_kg;
         double area = cfg.cross_section_area_m2;
         double cd = cfg.drag_coefficient;
-        double air =
-            cfg.air_density_kg_per_m3 > 0.0
-                ? cfg.air_density_kg_per_m3
-                : 1.225;
+        double air = cfg.air_density_kg_per_m3 > 0.0 ? cfg.air_density_kg_per_m3 : 1.225;
 
         if (mass <= 0.0 || area <= 0.0 || cd <= 0.0 || air <= 0.0) {
           DriverStation.reportError("Invalid game piece YAML values: " + path.toString(), false);
@@ -88,10 +85,13 @@ final class DragShotPlannerGamePieceLoader {
         String name = cfg.name != null && !cfg.name.isEmpty() ? cfg.name : id;
         return new YamlGamePiecePhysics(name, mass, area, cd, air);
       } catch (IOException ex) {
-        DriverStation.reportError("Failed to read game piece YAML: " + path.toString() + " - " + ex.getMessage(), false);
-        throw new IllegalStateException("Failed to read game piece YAML: " + path.toString() + " - " + ex.getMessage(), ex);
+        DriverStation.reportError(
+            "Failed to read game piece YAML: " + path.toString() + " - " + ex.getMessage(), false);
+        throw new IllegalStateException(
+            "Failed to read game piece YAML: " + path.toString() + " - " + ex.getMessage(), ex);
       } catch (RuntimeException ex) {
-        DriverStation.reportError("Failed to parse game piece YAML: " + path.toString() + " - " + ex.getMessage(), true);
+        DriverStation.reportError(
+            "Failed to parse game piece YAML: " + path.toString() + " - " + ex.getMessage(), true);
         throw ex;
       }
     } finally {
