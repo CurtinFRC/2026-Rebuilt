@@ -100,7 +100,7 @@ def load_config() -> ViewerConfig:
         field_length_m=_f("FIELD_LENGTH_M", 16.540988),
         field_width_m=_f("FIELD_WIDTH_M", 8.21055),
         field_z_m=_f("FIELD_Z_M", 0.0),
-        ball_radius_m=_f("BALL_RADIUS_M", 0.09),
+        ball_radius_m=_f("BALL_RADIUS_M", 0.075),
         obs_box_side_m=_f("OBS_BOX_SIDE_M", 0.6),
         robot_box_l_m=_f("ROBOT_BOX_L_M", 0.85),
         robot_box_w_m=_f("ROBOT_BOX_W_M", 0.85),

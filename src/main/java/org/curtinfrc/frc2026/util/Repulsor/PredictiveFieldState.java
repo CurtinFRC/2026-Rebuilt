@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -364,9 +364,10 @@ public final class PredictiveFieldState {
 
   private List<GameElement> worldElements = List.of();
   private Alliance ourAlliance =
-      DriverStation.getAlliance().get() == edu.wpi.first.wpilibj.DriverStation.Alliance.Blue
-          ? Alliance.kBlue
-          : Alliance.kRed;
+      DriverStation.getAlliance()
+          .map(al -> (al == DriverStation.Alliance.Blue) ? Alliance.kBlue : Alliance.kRed)
+          .orElse(Alliance.kRed);
+  
 
   private RepulsorSetpoint lastChosen = null;
   private double lastChosenTs = 0.0;

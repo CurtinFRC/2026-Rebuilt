@@ -20,36 +20,56 @@
 package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 
 import java.util.List;
+import java.util.Map;
 
 public final class GamePiecePhysicsConfig {
   public String name;
   public double mass_kg;
   public double drag_coefficient;
   public double cross_section_area_m2;
-  public Double air_density_kg_per_m3;
+  public double air_density_kg_per_m3;
   public Metadata metadata;
 
   public static final class Metadata {
     public String source_mesh;
     public String mesh_units;
     public double scale;
-    public double volume_m3;
-    public List<Double> bounds_extents_m;
-    public String flight_axis;
-    public double density_kg_per_m3;
-    public Double mass_kg_override;
-    public String area_method;
-    public String auto_shape_hint;
-    public double auto_drag_coefficient_hint;
-    public String material;
-    public double estimated_terminal_velocity_mps;
-    public AltCrossSectionEstimates alt_cross_section_estimates_m2;
-    public List<String> warnings;
-  }
 
-  public static final class AltCrossSectionEstimates {
-    public double projected;
-    public double bbox_ellipse;
-    public double bbox_rect;
+    public double volume_m3;
+    public double surface_area_m2;
+    public List<Double> bounds_extents_m;
+
+    public String flight_axis;
+
+    public Double density_kg_per_m3;
+    public Double mass_kg_override;
+
+    public String area_method;
+
+    public Double sphericity;
+    public Double equivalent_sphere_diameter_m;
+
+    public Integer projected_area_resolution;
+    public Double projected_area_rel_error;
+
+    public String volume_method;
+    public Double voxel_volume_pitch_m;
+    public Double voxel_volume_rel_error;
+
+    public String auto_shape_hint;
+    public Double auto_drag_coefficient_hint;
+
+    public String material;
+
+    public double estimated_terminal_velocity_mps;
+
+    public double air_dynamic_viscosity_pa_s;
+    public Double reynolds_number_at_terminal;
+
+    public Double drag_coefficient_at_terminal;
+    public String drag_model;
+
+    public Map<String, Double> alt_cross_section_estimates_m2;
+    public List<String> warnings;
   }
 }

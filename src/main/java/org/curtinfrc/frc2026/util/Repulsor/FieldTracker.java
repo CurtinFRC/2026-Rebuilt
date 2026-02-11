@@ -418,7 +418,7 @@ public class FieldTracker {
     this.predictor = new PredictiveFieldState();
     this.collectCache = new ObjectiveCache();
     rebuildObjectiveCaches();
-    predictor.registerResourceSpec("fuel", new PredictiveFieldState.ResourceSpec(0.38, 1.0, 0.95));
+    predictor.registerResourceSpec("fuel", new PredictiveFieldState.ResourceSpec(0.075, 1.0, 0.95));
   }
 
   public abstract class PrimitiveObject {
