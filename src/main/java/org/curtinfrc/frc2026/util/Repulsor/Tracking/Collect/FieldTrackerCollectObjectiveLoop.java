@@ -28,7 +28,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateCore;
-import org.curtinfrc.frc2026.util.Repulsor.StickyTarget;
+import org.curtinfrc.frc2026.util.Repulsor.Target.StickyTarget;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassCandidateResult;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassCandidateStep;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassContext;
