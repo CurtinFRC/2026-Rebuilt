@@ -44,7 +44,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.HPStationMetrics;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.MetricRecorder;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
-import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
+import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.MutablePoseSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;

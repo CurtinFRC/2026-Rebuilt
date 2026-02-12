@@ -44,7 +44,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractor
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 import org.curtinfrc.frc2026.util.Repulsor.HeadingGate;
-import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
+import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
