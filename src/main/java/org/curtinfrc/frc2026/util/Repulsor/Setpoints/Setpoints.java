@@ -17,7 +17,6 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific.*;
