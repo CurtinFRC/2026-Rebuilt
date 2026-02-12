@@ -202,6 +202,8 @@ public class Robot extends LoggedRobot {
     autoChooser.addCmd("Dev Test", this::testDrive);
     autoChooser.addCmd("Print Test", this::printTest);
     autoChooser.addCmd("Sim Test 2x2", this::simTestDrive);
+    autoChooser.addCmd("Dev Test Positive X", this::positiveXDrive);
+    autoChooser.addCmd("Test Intake", this::.RawIdle);
     autoChooser.select("Forward");
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -250,6 +252,12 @@ public class Robot extends LoggedRobot {
         drive);
   }
 
+  private Command positiveXDrive() {
+    return autoFactory
+        .trajectoryCmd("testDevPositiveX")
+        .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
+  }
+
   private Command simTestDrive() {
     return autoFactory
         .trajectoryCmd("testSim2x2")
@@ -261,6 +269,7 @@ public class Robot extends LoggedRobot {
         .trajectoryCmd("testDev")
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
+
 
   /** This function is called periodically during all modes. */
   @Override
