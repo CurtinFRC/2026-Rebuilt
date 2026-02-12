@@ -34,9 +34,9 @@ import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.GameElement;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
 
 public final class Reefscape2025 implements FieldDefinition {
 

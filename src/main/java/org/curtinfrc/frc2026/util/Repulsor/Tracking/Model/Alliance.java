@@ -17,15 +17,9 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
-
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+public enum Alliance {
+  kBlue,
+  kRed
 }

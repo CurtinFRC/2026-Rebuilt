@@ -16,16 +16,25 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Collect.Runtime;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
-
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
-}
+public record PredictiveCollectNearestSearchResult(
+    Translation2d bestPoint,
+    Translation2d bestTouch,
+    Rotation2d bestHeading,
+    CollectEval bestEval,
+    double[] topScore,
+    double[] topEta,
+    double[] topUnits,
+    double[] topRegion,
+    double[] topDep,
+    double[] topAvoid,
+    double[] topEnemyPressure,
+    double[] topAllyCongestion,
+    double[] topActivity,
+    double[] topEvidence,
+    int topCount) {}

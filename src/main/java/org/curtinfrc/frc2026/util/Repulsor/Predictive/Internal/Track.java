@@ -16,16 +16,20 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Translation2d;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+public final class Track {
+  public Translation2d pos;
+  public Translation2d vel;
+  public double speedCap;
+  public double lastTs;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+  public Track(Translation2d p, Translation2d v, double cap, double t) {
+    pos = p != null ? p : new Translation2d();
+    vel = v != null ? v : new Translation2d();
+    speedCap = cap;
+    lastTs = t;
+  }
 }

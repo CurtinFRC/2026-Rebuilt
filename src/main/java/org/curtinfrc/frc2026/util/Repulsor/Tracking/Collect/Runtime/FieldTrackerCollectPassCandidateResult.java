@@ -16,16 +16,18 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Translation2d;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
-
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
-}
+public record FieldTrackerCollectPassCandidateResult(
+    PointCandidate best,
+    Translation2d bestCandidate,
+    Predicate<Translation2d> collectValid,
+    Predicate<Translation2d> footprintHasFuel,
+    Function<Translation2d, Double> scoreResource,
+    Pose2d immediatePose) {}

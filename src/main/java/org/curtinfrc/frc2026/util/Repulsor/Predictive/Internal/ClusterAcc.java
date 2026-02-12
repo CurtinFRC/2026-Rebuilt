@@ -16,16 +16,11 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
-
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
-
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+public final class ClusterAcc {
+  public double sx;
+  public double sy;
+  public double sw;
+  public int n;
 }

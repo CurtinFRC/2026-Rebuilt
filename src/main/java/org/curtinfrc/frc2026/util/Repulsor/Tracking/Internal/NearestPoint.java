@@ -16,16 +16,16 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Translation2d;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+public final class NearestPoint {
+  public final Translation2d p;
+  public final double d;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+  public NearestPoint(Translation2d p, double d) {
+    this.p = p;
+    this.d = d;
+  }
 }

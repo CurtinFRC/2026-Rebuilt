@@ -17,15 +17,22 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+import edu.wpi.first.math.geometry.Translation2d;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
+public class DynamicObject {
+  public final String id;
+  public final String type;
+  public final Translation2d pos;
+  public final Translation2d vel;
+  public final double ageS;
 
-  String gameName();
-
-  int gameYear();
+  public DynamicObject(String id, String type, Translation2d pos, Translation2d vel, double ageS) {
+    this.id = id;
+    this.type = type != null ? type : "unknown";
+    this.pos = pos != null ? pos : new Translation2d();
+    this.vel = vel != null ? vel : new Translation2d();
+    this.ageS = Math.max(0.0, ageS);
+  }
 }

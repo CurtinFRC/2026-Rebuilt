@@ -17,15 +17,10 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+import edu.wpi.first.math.geometry.Pose3d;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+public abstract class PrimitiveObject {
+  public abstract boolean intersects(Pose3d pos);
 }

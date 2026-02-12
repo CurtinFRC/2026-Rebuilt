@@ -16,16 +16,27 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+public final class _CellKey {
+  private final int ix;
+  private final int iy;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+  public _CellKey(int ix, int iy) {
+    this.ix = ix;
+    this.iy = iy;
+  }
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
+  @Override
+  public int hashCode() {
+    return (ix * 73856093) ^ (iy * 19349663);
+  }
 
-  String gameName();
-
-  int gameYear();
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof _CellKey)) return false;
+    _CellKey k = (_CellKey) o;
+    return ix == k.ix && iy == k.iy;
+  }
 }

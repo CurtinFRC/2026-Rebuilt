@@ -17,15 +17,16 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Model;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+public class ResourceSpec {
+  public final double radiusM;
+  public final double unitValue;
+  public final double sigmaM;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+  public ResourceSpec(double radiusM, double unitValue, double sigmaM) {
+    this.radiusM = Math.max(0.01, radiusM);
+    this.unitValue = unitValue;
+    this.sigmaM = Math.max(0.02, sigmaM);
+  }
 }

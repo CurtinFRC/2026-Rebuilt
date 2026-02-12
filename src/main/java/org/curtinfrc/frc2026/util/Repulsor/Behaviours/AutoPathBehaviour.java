@@ -43,7 +43,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.HPStationMetrics;
 import org.curtinfrc.frc2026.util.Repulsor.Metrics.MetricRecorder;
-import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.Candidate;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
@@ -53,8 +53,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Model.Alliance;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
 
 public class AutoPathBehaviour extends Behaviour {
   private final int prio;

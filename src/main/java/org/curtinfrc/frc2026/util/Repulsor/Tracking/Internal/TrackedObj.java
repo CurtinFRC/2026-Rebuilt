@@ -16,16 +16,28 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Tracking.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Pose3d;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+public final class TrackedObj {
+  public final String id;
+  public volatile String type;
+  public volatile Pose3d pos;
+  public volatile Pose3d prev;
+  public volatile long tNs;
+  public volatile double vx;
+  public volatile double vy;
+  public volatile double vz;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+  public TrackedObj(String id) {
+    this.id = id;
+    this.type = "unknown";
+    this.pos = null;
+    this.prev = null;
+    this.tNs = 0L;
+    this.vx = 0.0;
+    this.vy = 0.0;
+    this.vz = 0.0;
+  }
 }

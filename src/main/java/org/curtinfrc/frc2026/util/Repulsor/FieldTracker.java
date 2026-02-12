@@ -20,7 +20,7 @@
 package org.curtinfrc.frc2026.util.Repulsor;
 
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.FieldTrackerCore;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 
 public class FieldTracker extends FieldTrackerCore {
   public FieldTracker() {

@@ -16,16 +16,19 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal;
 
-package org.curtinfrc.frc2026.util.Repulsor.Fields;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
 
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
-import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
+public final class HeadingPick {
+  public final Translation2d center;
+  public final Rotation2d heading;
+  public final FootprintEval eval;
 
-public interface FieldLayoutProvider {
-  GameElement[] build(FieldTrackerCore ft);
-
-  String gameName();
-
-  int gameYear();
+  public HeadingPick(Translation2d center, Rotation2d heading, FootprintEval eval) {
+    this.center = center;
+    this.heading = heading;
+    this.eval = eval;
+  }
 }
