@@ -47,6 +47,12 @@ public class BehaviourManager {
     return this;
   }
 
+  public BehaviourManager clear() {
+    stop();
+    behaviours.clear();
+    return this;
+  }
+
   public void update(BehaviourContext ctx) {
     EnumSet<BehaviourFlag> flags =
         reasoner != null ? reasoner.update(ctx) : EnumSet.noneOf(BehaviourFlag.class);

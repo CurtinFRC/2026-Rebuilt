@@ -31,17 +31,15 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.Behaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourContext;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourFlag;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.BehaviourManager;
-import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
-import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
-import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
@@ -52,7 +50,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Flags.FlagManager;
-import org.curtinfrc.frc2026.util.Repulsor.Reasoning.Rebuilt2026Reasoner;
+import org.curtinfrc.frc2026.util.Repulsor.Reasoning.Reasoner;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.GameSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -118,6 +116,41 @@ public class Repulsor {
     return this;
   }
 
+  public Repulsor addBehaviour(Behaviour behaviour) {
+    m_behaviourManager.add(Objects.requireNonNull(behaviour, "behaviour"));
+    return this;
+  }
+
+  public Repulsor addBehaviours(Behaviour... behaviours) {
+    if (behaviours == null) return this;
+    for (Behaviour behaviour : behaviours) {
+      addBehaviour(behaviour);
+    }
+    return this;
+  }
+
+  public Repulsor clearBehaviours() {
+    m_behaviourManager.clear();
+    return this;
+  }
+
+  public Repulsor setReasoner(Reasoner<BehaviourFlag, BehaviourContext> reasoner) {
+    m_behaviourManager.setReasoner(reasoner);
+    return this;
+  }
+
+  public boolean isInScoringGate() {
+    return m_gateInScoring.map(Trigger::getAsBoolean).orElse(true);
+  }
+
+  public boolean isInCollectingGate() {
+    return m_gateInCollecting.map(Trigger::getAsBoolean).orElse(false);
+  }
+
+  public RepulsorSetpoint getNextScore() {
+    return m_nextScore;
+  }
+
   public <T> Repulsor followGate(Triggers.PhaseGate<T> gate, T collecting, T scoring) {
     Trigger inScoring = gate.when(scoring);
     Trigger inCollecting = gate.when(collecting);
@@ -165,46 +198,7 @@ public class Repulsor {
     this.m_hasPiece = hasPiece;
 
     m_planner = new FieldPlanner(new Rebuilt2026(), new DriveTuningHeat(() -> m_drive.getPose()));
-
-    Supplier<Boolean> inScoreSup = () -> m_gateInScoring.map(Trigger::getAsBoolean).orElse(true);
-    Supplier<Boolean> inCollectSup =
-        () -> m_gateInCollecting.map(Trigger::getAsBoolean).orElse(false);
-    Supplier<RepulsorSetpoint> nextScoreSup = () -> m_nextScore;
-
-    Trigger atOutpost = within(Meters.of(0.45), Setpoints.Rebuilt2026.OUTPOST_COLLECT);
-    Supplier<Boolean> atHPSup = atOutpost::getAsBoolean;
-
-    Supplier<List<RepulsorSetpoint>> hpOptionsSup =
-        () ->
-            List.of(
-                new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE));
-
-    Supplier<RepulsorSetpoint> shuttleGoalSup =
-        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE);
-
-    Supplier<RepulsorSetpoint> defenseGoalSup =
-        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
-
-    m_behaviourManager =
-        new BehaviourManager()
-            .add(new DefenseBehaviour(30, defenseGoalSup, () -> 2.8))
-            .add(new ShuttleBehaviour(20, shuttleGoalSup, () -> 3.2))
-            .add(new TestBehaviour())
-            .add(
-                new AutoPathBehaviour(
-                    10,
-                    inScoreSup,
-                    inCollectSup,
-                    nextScoreSup,
-                    hpOptionsSup,
-                    atHPSup,
-                    m_hasPiece,
-                    sp -> sp.point().name(),
-                    () -> 3.5));
-
-    Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
-    reasoner.setTesting(true);
-    m_behaviourManager.setReasoner(reasoner);
+    m_behaviourManager = new BehaviourManager();
 
     FieldTrackerCore ft = FieldTrackerCore.getInstance();
     FieldVision front = ft.createFieldVision("main");

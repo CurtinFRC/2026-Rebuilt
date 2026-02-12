@@ -29,8 +29,10 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -61,6 +63,10 @@ import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
@@ -69,8 +75,12 @@ import org.curtinfrc.frc2026.util.Repulsor.Fallback;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback.PID;
 import org.curtinfrc.frc2026.util.Repulsor.IntakeFootprint;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
+import org.curtinfrc.frc2026.util.Repulsor.Reasoning.Rebuilt2026Reasoner;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
@@ -173,7 +183,45 @@ public class Robot extends LoggedRobot {
         new Repulsor(drive, Constants.ROBOT_X, Constants.ROBOT_Y, 0.55, 0.22, () -> simHasPiece)
             .withFallback(new Fallback().new PID(1, 0, 0))
             // .withVision(visionSim)
+            .withShooterReleaseHeightMetersSupplier(() -> 0.5)
             .followGate(pg, Triggers.set(Tag.COLLECTING), Triggers.set(Tag.SCORING));
+
+    Supplier<Boolean> inScoreSup = repulsor::isInScoringGate;
+    Supplier<Boolean> inCollectSup = repulsor::isInCollectingGate;
+    Supplier<RepulsorSetpoint> nextScoreSup = repulsor::getNextScore;
+
+    Trigger atOutpost = repulsor.within(Meters.of(0.45), Setpoints.Rebuilt2026.OUTPOST_COLLECT);
+    Supplier<Boolean> atHPSup = atOutpost::getAsBoolean;
+
+    Supplier<List<RepulsorSetpoint>> hpOptionsSup =
+        () ->
+            List.of(
+                new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE));
+
+    Supplier<RepulsorSetpoint> shuttleGoalSup =
+        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE);
+
+    Supplier<RepulsorSetpoint> defenseGoalSup =
+        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
+
+    repulsor.addBehaviours(
+        new DefenseBehaviour(30, defenseGoalSup, () -> 2.8),
+        new ShuttleBehaviour(20, shuttleGoalSup, () -> 3.2),
+        new TestBehaviour(),
+        new AutoPathBehaviour(
+            10,
+            inScoreSup,
+            inCollectSup,
+            nextScoreSup,
+            hpOptionsSup,
+            atHPSup,
+            () -> simHasPiece,
+            sp -> sp.point().name(),
+            () -> 3.5));
+
+    Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
+    reasoner.setTesting(true);
+    repulsor.setReasoner(reasoner);
 
     repulsor.setup();
   }
