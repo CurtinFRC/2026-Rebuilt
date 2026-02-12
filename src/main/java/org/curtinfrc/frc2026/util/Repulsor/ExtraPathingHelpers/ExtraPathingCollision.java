@@ -17,19 +17,23 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-package org.curtinfrc.frc2026.util.Repulsor;
+package org.curtinfrc.frc2026.util.Repulsor.ExtraPathingHelpers;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
-import org.curtinfrc.frc2026.util.Repulsor.ExtraPathingHelpers.ExtraPathingBounceListener;
-import org.curtinfrc.frc2026.util.Repulsor.ExtraPathingHelpers.ExtraPathingClearPath;
-import org.curtinfrc.frc2026.util.Repulsor.ExtraPathingHelpers.ExtraPathingCollision;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 
-public class ExtraPathing {
+public final class ExtraPathingCollision {
+  private ExtraPathingCollision() {}
 
   public static Translation2d[] rectCorners(Translation2d center, double length, double width) {
-    return ExtraPathingCollision.rectCorners(center, length, width);
+    double hx = length * 0.5, hy = width * 0.5;
+    return new Translation2d[] {
+      new Translation2d(center.getX() - hx, center.getY() - hy),
+      new Translation2d(center.getX() + hx, center.getY() - hy),
+      new Translation2d(center.getX() + hx, center.getY() + hy),
+      new Translation2d(center.getX() - hx, center.getY() + hy)
+    };
   }
 
   public static boolean robotIntersects(
@@ -37,25 +41,30 @@ public class ExtraPathing {
       double robotLengthMeters,
       double robotWidthMeters,
       List<? extends Obstacle> obstacles) {
-    return ExtraPathingCollision.robotIntersects(
-        center, robotLengthMeters, robotWidthMeters, obstacles);
+    Translation2d[] rect = rectCorners(center, robotLengthMeters, robotWidthMeters);
+    for (Obstacle ob : obstacles) {
+      if (ob != null && ob.intersectsRectangle(rect)) return true;
+    }
+    return false;
   }
 
-  public static boolean isClearPath(
-      String topicRoot,
+  static boolean segmentCompletelyBlocked(
       Translation2d start,
       Translation2d goal,
-      List<? extends Obstacle> obstacles,
       double robotLengthMeters,
       double robotWidthMeters,
-      boolean publishSamples) {
-    return ExtraPathingClearPath.isClearPath(
-        topicRoot, start, goal, obstacles, robotLengthMeters, robotWidthMeters, publishSamples);
-  }
-
-  public class BounceListener extends ExtraPathingBounceListener {
-    public BounceListener(double bounceDistanceThreshold, int bounceHistoryLimit) {
-      super(bounceDistanceThreshold, bounceHistoryLimit);
+      List<? extends Obstacle> obstacles) {
+    if (obstacles == null || obstacles.isEmpty()) return false;
+    int samples = 6;
+    for (int i = 0; i <= samples; i++) {
+      double s = i / (double) samples;
+      double x = start.getX() + (goal.getX() - start.getX()) * s;
+      double y = start.getY() + (goal.getY() - start.getY()) * s;
+      Translation2d p = new Translation2d(x, y);
+      if (!robotIntersects(p, robotLengthMeters, robotWidthMeters, obstacles)) {
+        return false;
+      }
     }
+    return true;
   }
 }
