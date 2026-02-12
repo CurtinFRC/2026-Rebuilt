@@ -16,8 +16,6 @@ public class GameState {
 
   private static Alert noAllianceAlert = new Alert("No Alliance Read", AlertType.kWarning);
   private static Alert noGameDataAlert = new Alert("No Game Data Read", AlertType.kWarning);
-  private static Alert missingDataAlert =
-      new Alert("Missing Alliance or Game Data", AlertType.kWarning);
 
   public static void updateAlliance() {
     noAllianceAlert.set(false);
@@ -72,8 +70,7 @@ public class GameState {
   }
 
   public static boolean isHubActive() {
-    missingDataAlert.set(!(inactiveFirst.isPresent() && alliance.isPresent()));
-    if (missingDataAlert.get()) {
+    if (!(inactiveFirst.isPresent() && alliance.isPresent())) {
       return false;
     }
 
