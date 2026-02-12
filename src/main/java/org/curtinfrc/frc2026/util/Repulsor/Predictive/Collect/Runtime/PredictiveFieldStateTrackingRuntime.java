@@ -28,9 +28,9 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAgg;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.Track;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
 
 public final class PredictiveFieldStateTrackingRuntime {

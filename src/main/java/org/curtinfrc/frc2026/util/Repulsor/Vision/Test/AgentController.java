@@ -24,7 +24,8 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Random;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
+
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
 
 public final class AgentController {
   private final Random rng;

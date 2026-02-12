@@ -32,7 +32,7 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.Random;
 import org.curtinfrc.frc2026.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Vision.RepulsorVision;
 
 public class VisionSimTest implements RepulsorVision {

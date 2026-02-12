@@ -22,7 +22,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Tracking.Model;
 import java.util.Optional;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.RepulsorSetpoint;
 
 public class GameElement {
   private final GameObject[] containedStorage;

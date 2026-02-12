@@ -28,10 +28,10 @@ import java.util.EnumSet;
 import java.util.Optional;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 
 public final class TestBehaviour extends Behaviour {

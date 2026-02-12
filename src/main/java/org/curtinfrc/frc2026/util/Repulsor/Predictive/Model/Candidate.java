@@ -19,8 +19,9 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Predictive.Model;
 
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.RepulsorSetpoint;
+
 import edu.wpi.first.math.geometry.Translation2d;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 
 public class Candidate {
   public final RepulsorSetpoint setpoint;
