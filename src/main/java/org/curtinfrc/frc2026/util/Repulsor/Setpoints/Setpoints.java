@@ -25,10 +25,8 @@ public class Setpoints {
   public static class Rebuilt2026 extends _Rebuilt2026 {
     private Rebuilt2026() {}
   }
-  ;
 
   public static class Reefscape2025 extends _Reefscape2025 {
     private Reefscape2025() {}
   }
-  ;
 }
