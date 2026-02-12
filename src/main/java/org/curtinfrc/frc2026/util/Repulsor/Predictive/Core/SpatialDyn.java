@@ -29,13 +29,13 @@ import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.ResourceSpec;
 
-final class SpatialDyn {
+public final class SpatialDyn {
   static long key(int cx, int cy) {
     return (((long) cx) << 32) ^ (cy & 0xffffffffL);
   }
 
   final List<DynamicObject> all;
-  final List<DynamicObject> resources;
+  public final List<DynamicObject> resources;
   final List<DynamicObject> others;
   final HashMap<String, ResourceSpec> specs;
   final HashMap<String, Double> otherWeights;
@@ -129,7 +129,7 @@ final class SpatialDyn {
     return out;
   }
 
-  int countResourcesWithin(Translation2d p, double r) {
+  public int countResourcesWithin(Translation2d p, double r) {
     if (p == null) return 0;
     double rr2 = r * r;
     int c = 0;
@@ -145,7 +145,7 @@ final class SpatialDyn {
     return c;
   }
 
-  double totalEvidence() {
+  public double totalEvidence() {
     if (resources.isEmpty() || specs.isEmpty()) return 0.0;
     double sum = 0.0;
     for (DynamicObject o : resources) {
@@ -161,7 +161,7 @@ final class SpatialDyn {
     return Math.max(0.0, sum);
   }
 
-  double evidenceMassWithin(Translation2d p, double r) {
+  public double evidenceMassWithin(Translation2d p, double r) {
     if (p == null || resources.isEmpty() || specs.isEmpty()) return 0.0;
     double rr2 = r * r;
     double sum = 0.0;
@@ -187,7 +187,7 @@ final class SpatialDyn {
     return Math.max(0.0, sum);
   }
 
-  double valueAt(Translation2d p) {
+  public double valueAt(Translation2d p) {
     if (p == null || resources.isEmpty() || specs.isEmpty()) return 0.0;
 
     double r = 2.0;
@@ -236,7 +236,7 @@ final class SpatialDyn {
     return Math.max(0.0, sum);
   }
 
-  double valueInSquare(Translation2d center, double half) {
+  public double valueInSquare(Translation2d center, double half) {
     if (center == null || resources.isEmpty() || specs.isEmpty()) return 0.0;
     double x0 = center.getX() - half;
     double x1 = center.getX() + half;
@@ -268,7 +268,7 @@ final class SpatialDyn {
     return Math.max(0.0, sum);
   }
 
-  Translation2d centroidResourcesWithin(Translation2d seed, double r, double minMass) {
+  public Translation2d centroidResourcesWithin(Translation2d seed, double r, double minMass) {
     if (seed == null || resources.isEmpty() || specs.isEmpty()) return null;
 
     double rr2 = r * r;
@@ -319,7 +319,7 @@ final class SpatialDyn {
     return new Translation2d(sx / sw, sy / sw);
   }
 
-  Translation2d nearestResourceTo(Translation2d p, double maxDist) {
+  public Translation2d nearestResourceTo(Translation2d p, double maxDist) {
     if (p == null || resources.isEmpty()) return null;
     double bestD2 = maxDist * maxDist;
     Translation2d best = null;
@@ -341,7 +341,7 @@ final class SpatialDyn {
     return best;
   }
 
-  double otherDensity(Translation2d p, double sigma) {
+  public double otherDensity(Translation2d p, double sigma) {
     if (p == null || others.isEmpty()) return 0.0;
     double s = Math.max(0.05, sigma);
     double r = 3.0 * s;
@@ -369,7 +369,7 @@ final class SpatialDyn {
     return Math.max(0.0, agg / wSum);
   }
 
-  double localAvoidPenalty(Translation2d p, double r) {
+  public double localAvoidPenalty(Translation2d p, double r) {
     if (p == null || others.isEmpty()) return 0.0;
     double rr = Math.max(0.05, r);
     double rr2 = rr * rr;

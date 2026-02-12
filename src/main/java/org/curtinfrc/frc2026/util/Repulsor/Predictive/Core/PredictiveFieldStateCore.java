@@ -99,7 +99,8 @@ public class PredictiveFieldStateCore {
     engine.clearStale(maxAgeS);
   }
 
-  public List<Candidate> rank(Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
+  public List<Candidate> rank(
+      Translation2d ourPos, double ourSpeedCap, CategorySpec cat, int limit) {
     return engine.rank(ourPos, ourSpeedCap, cat, limit);
   }
 

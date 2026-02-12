@@ -25,7 +25,7 @@ import java.util.HashMap;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.DepletedMark;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.RegionStat;
 
-final class PredictiveCollectPenaltyTracker {
+public final class PredictiveCollectPenaltyTracker {
   private static final double DEPLETED_TTL_S = 3.25;
   private static final double DEPLETED_DECAY = 1.15;
   private static final int DEPLETED_MARKS_MAX = 128;
@@ -118,7 +118,7 @@ final class PredictiveCollectPenaltyTracker {
     return Math.min(2.25, sum);
   }
 
-  void recordRegionAttempt(Translation2d p, double now, boolean success) {
+  public void recordRegionAttempt(Translation2d p, double now, boolean success) {
     if (p == null) return;
     long k = regionKey(p, 0.30);
     RegionStat st = regionStats.get(k);
@@ -132,7 +132,7 @@ final class PredictiveCollectPenaltyTracker {
     st.lastAttemptTs = now;
   }
 
-  double regionBanditBonus(Translation2d p, double now) {
+  public double regionBanditBonus(Translation2d p, double now) {
     if (p == null) return 0.0;
     if (regionStats.isEmpty()) return 0.0;
 

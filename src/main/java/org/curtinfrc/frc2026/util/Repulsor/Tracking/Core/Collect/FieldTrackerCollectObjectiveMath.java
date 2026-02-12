@@ -1,12 +1,11 @@
 package org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Collect;
 
 import edu.wpi.first.math.geometry.Translation2d;
-import java.util.ArrayList;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Internal.NearestPoint;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Core.Internal._SpatialIndex;
 
-final class FieldTrackerCollectObjectiveMath {
+public final class FieldTrackerCollectObjectiveMath {
   private static final double STICKY_SAME_M = 0.45;
   private static final double SWITCH_APPROACH_COS_MIN = Math.cos(Math.toRadians(78.0));
   private static final double STICKY_NEAR_DIST_M = 1.40;
@@ -15,17 +14,17 @@ final class FieldTrackerCollectObjectiveMath {
 
   private FieldTrackerCollectObjectiveMath() {}
 
-  static boolean stickySame(Translation2d a, Translation2d b) {
+  public static boolean stickySame(Translation2d a, Translation2d b) {
     return samePoint(a, b, STICKY_SAME_M);
   }
 
-  static boolean stickySwitched(Translation2d prev, Translation2d next) {
+  public static boolean stickySwitched(Translation2d prev, Translation2d next) {
     if (prev == null && next != null) return true;
     if (prev == null || next == null) return false;
     return !stickySame(prev, next);
   }
 
-  static Translation2d canonicalizeCollectPoint(Translation2d p, Translation2d[] setpoints) {
+  public static Translation2d canonicalizeCollectPoint(Translation2d p, Translation2d[] setpoints) {
     if (p == null || setpoints == null || setpoints.length == 0) return p;
 
     Translation2d best = null;
@@ -47,11 +46,11 @@ final class FieldTrackerCollectObjectiveMath {
     return bestD2 <= snap2 ? best : p;
   }
 
-  static int sideSignX(double x) {
+  public static int sideSignX(double x) {
     return sideSignXBand(x, 0.10);
   }
 
-  static int sideSignXBand(double x, double band) {
+  public static int sideSignXBand(double x, double band) {
     double mid = Constants.FIELD_LENGTH * 0.5;
     double b = Math.max(0.0, band);
     if (x < mid - b) return -1;
@@ -59,7 +58,7 @@ final class FieldTrackerCollectObjectiveMath {
     return 0;
   }
 
-  static int sideSign(Translation2d p) {
+  public static int sideSign(Translation2d p) {
     if (p == null) return 0;
     return sideSignX(p.getX());
   }
@@ -69,11 +68,11 @@ final class FieldTrackerCollectObjectiveMath {
     return a.getDistance(b) <= tol;
   }
 
-  static double dot(Translation2d a, Translation2d b) {
+  public static double dot(Translation2d a, Translation2d b) {
     return a.getX() * b.getX() + a.getY() * b.getY();
   }
 
-  static Translation2d unit(Translation2d v) {
+  public static Translation2d unit(Translation2d v) {
     double n = v.getNorm();
     if (n <= 1e-9) return new Translation2d(1.0, 0.0);
     return v.div(n);
@@ -89,13 +88,13 @@ final class FieldTrackerCollectObjectiveMath {
     return dot(approachHat, toCandHat) < SWITCH_APPROACH_COS_MIN;
   }
 
-  static Translation2d unitOrDefault(Translation2d v, Translation2d def) {
+  public static Translation2d unitOrDefault(Translation2d v, Translation2d def) {
     double n = v.getNorm();
     if (n <= 1e-9) return def;
     return v.div(n);
   }
 
-  static NearestPoint nearestPointTo(Translation2d q, Translation2d[] pts) {
+  public static NearestPoint nearestPointTo(Translation2d q, Translation2d[] pts) {
     if (q == null || pts == null || pts.length == 0)
       return new NearestPoint(null, Double.POSITIVE_INFINITY);
     Translation2d best = null;
@@ -131,31 +130,31 @@ final class FieldTrackerCollectObjectiveMath {
     return idx;
   }
 
-  static Translation2d perp(Translation2d v) {
+  public static Translation2d perp(Translation2d v) {
     return new Translation2d(-v.getY(), v.getX());
   }
 
-  static double nowSFromNs(long ns) {
+  public static double nowSFromNs(long ns) {
     return ns / 1e9;
   }
 
-  static double holdSForDist(double d) {
+  public static double holdSForDist(double d) {
     double t = clamp01((d - STICKY_NEAR_DIST_M) / (STICKY_FAR_DIST_M - STICKY_NEAR_DIST_M));
     double min = lerp(0.70, 0.25, t);
     double max = lerp(3.80, 1.80, t);
     return Math.max(min, Math.min(max, max));
   }
 
-  static double switchMarginForDist(double d) {
+  public static double switchMarginForDist(double d) {
     double t = clamp01((d - STICKY_NEAR_DIST_M) / (STICKY_FAR_DIST_M - STICKY_NEAR_DIST_M));
     return lerp(1.45, 0.50, t);
   }
 
-  static double lerp(double a, double b, double t) {
+  public static double lerp(double a, double b, double t) {
     return a + (b - a) * t;
   }
 
-  static double clamp01(double x) {
+  public static double clamp01(double x) {
     if (x < 0.0) return 0.0;
     if (x > 1.0) return 1.0;
     return x;

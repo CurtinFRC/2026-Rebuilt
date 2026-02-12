@@ -28,8 +28,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Internal.ResourceRegi
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.PointCandidate;
 import org.littletonrobotics.junction.Logger;
 
-final class PredictiveCollectSecondaryRankers {
-  interface Api {
+public final class PredictiveCollectSecondaryRankers {
+  public interface Api {
     SpatialDyn cachedDyn();
 
     void setCollectContext(Translation2d ourPos, double ourSpeedCap, int goalUnits, double cellM);

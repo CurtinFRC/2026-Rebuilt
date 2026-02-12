@@ -9,7 +9,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Core.PredictiveFieldStateCore;
 
-final class FieldTrackerCollectObjectiveRuntime {
+public final class FieldTrackerCollectObjectiveRuntime {
   private final FieldTrackerCollectObjectiveLoop loop;
 
   FieldTrackerCollectObjectiveRuntime(
