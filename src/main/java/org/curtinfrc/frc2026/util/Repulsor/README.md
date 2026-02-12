@@ -1,4 +1,4 @@
-﻿# Repulsor
+# Repulsor
 
 Repulsor is a field-aware autonomy and utility stack used by the `2026-Rebuilt` robot codebase.
 It combines pathing, obstacle avoidance, objective selection, behavior orchestration, tracking, predictive scoring, shooting setpoints, and simulation support in one package.
