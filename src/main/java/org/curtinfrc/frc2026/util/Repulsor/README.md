@@ -175,8 +175,7 @@ Then:
 
 ## Future
 
-There are lots of things to be added
-
+There are lots of things to be added.
 
 ## Licence
 
