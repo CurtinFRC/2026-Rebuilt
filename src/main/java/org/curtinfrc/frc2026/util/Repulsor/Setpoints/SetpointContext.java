@@ -17,19 +17,27 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific.*;
+import edu.wpi.first.math.geometry.Pose2d;
+import java.util.List;
+import java.util.Optional;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 
-public class Setpoints {
-  public static class Rebuilt2026 extends _Rebuilt2026 {
-    private Rebuilt2026() {}
-  }
-  ;
+public record SetpointContext(
+    Optional<Pose2d> robotPose,
+    double robotLengthMeters,
+    double robotWidthMeters,
+    double coralOffsetMeters,
+    double algaeOffsetMeters,
+    double shooterReleaseHeightMeters,
+    List<? extends Obstacle> dynamicObstacles) {
 
-  public static class Reefscape2025 extends _Reefscape2025 {
-    private Reefscape2025() {}
+  public static final SetpointContext EMPTY =
+      new SetpointContext(Optional.empty(), 0.0, 0.0, 0.0, 0.0, 0.0, List.of());
+
+  public SetpointContext {
+    robotPose = robotPose == null ? Optional.empty() : robotPose;
+    dynamicObstacles = dynamicObstacles == null ? List.of() : dynamicObstacles;
   }
-  ;
 }

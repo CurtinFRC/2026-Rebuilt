@@ -17,19 +17,13 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific.*;
-
-public class Setpoints {
-  public static class Rebuilt2026 extends _Rebuilt2026 {
-    private Rebuilt2026() {}
-  }
-  ;
-
-  public static class Reefscape2025 extends _Reefscape2025 {
-    private Reefscape2025() {}
-  }
-  ;
+public enum SetpointType {
+  kHumanPlayer,
+  kScore,
+  kProcessor,
+  kDeepCage,
+  kShallowCage,
+  kOther
 }

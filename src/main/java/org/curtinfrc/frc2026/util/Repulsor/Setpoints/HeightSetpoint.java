@@ -17,19 +17,31 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific.*;
+import static edu.wpi.first.units.Units.Meters;
 
-public class Setpoints {
-  public static class Rebuilt2026 extends _Rebuilt2026 {
-    private Rebuilt2026() {}
-  }
-  ;
+import edu.wpi.first.units.measure.Distance;
 
-  public static class Reefscape2025 extends _Reefscape2025 {
-    private Reefscape2025() {}
+public enum HeightSetpoint {
+  L1(Meters.of(0.46)),
+  L2(Meters.of(0.81)),
+  L3(Meters.of(1.21)),
+  L4(Meters.of(1.83)),
+  PROCESSOR(Meters.of(0.18)),
+  DEEP_CAGE(Meters.of(0.75)),
+  SHALLOW_CAGE(Meters.of(0.09)),
+  CORAL_STATION(Meters.of(0.95)),
+  NET(Meters.of(1.93)),
+  NONE(null);
+
+  private final Distance height;
+
+  HeightSetpoint(Distance height) {
+    this.height = height;
   }
-  ;
+
+  public Distance getHeight() {
+    return height;
+  }
 }

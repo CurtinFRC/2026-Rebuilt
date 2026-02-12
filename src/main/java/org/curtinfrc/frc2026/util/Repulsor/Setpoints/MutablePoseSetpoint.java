@@ -17,19 +17,22 @@
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
 
-
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific.*;
+import edu.wpi.first.math.geometry.Pose2d;
+import java.util.concurrent.atomic.AtomicReference;
 
-public class Setpoints {
-  public static class Rebuilt2026 extends _Rebuilt2026 {
-    private Rebuilt2026() {}
-  }
-  ;
+public final class MutablePoseSetpoint extends GameSetpoint {
+  private final AtomicReference<Pose2d> bluePoseRef;
 
-  public static class Reefscape2025 extends _Reefscape2025 {
-    private Reefscape2025() {}
+  public MutablePoseSetpoint(String name, SetpointType type, AtomicReference<Pose2d> bluePoseRef) {
+    super(name, type == null ? SetpointType.kOther : type, false);
+    this.bluePoseRef = bluePoseRef == null ? new AtomicReference<>(Pose2d.kZero) : bluePoseRef;
   }
-  ;
+
+  @Override
+  public Pose2d bluePose(SetpointContext ctx) {
+    Pose2d p = bluePoseRef.get();
+    return p != null ? p : Pose2d.kZero;
+  }
 }

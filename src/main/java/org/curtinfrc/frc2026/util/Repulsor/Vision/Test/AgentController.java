@@ -24,12 +24,12 @@ import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Random;
-
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.GameSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
 
 public final class AgentController {
   private final Random rng;
-  private final List<Setpoints.GameSetpoint> scoreCycle;
+  private final List<GameSetpoint> scoreCycle;
 
   private final Pose2d collectA = Setpoints.Rebuilt2026.OUTPOST_COLLECT.approximateBluePose();
   private final Pose2d collectB = Setpoints.Rebuilt2026.CENTER_COLLECT.approximateBluePose();
@@ -49,7 +49,7 @@ public final class AgentController {
   private double tRoamer = 0;
   private double tBlocker = 0;
 
-  public AgentController(Random rng, List<Setpoints.GameSetpoint> scoreCycle) {
+  public AgentController(Random rng, List<GameSetpoint> scoreCycle) {
     this.rng = rng;
     this.scoreCycle = scoreCycle;
   }

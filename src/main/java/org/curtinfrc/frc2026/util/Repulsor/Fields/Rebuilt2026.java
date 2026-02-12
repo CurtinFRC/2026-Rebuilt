@@ -34,10 +34,10 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.HorizontalObst
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.RectangleObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.HeightSetpoint;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Heatmap;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
