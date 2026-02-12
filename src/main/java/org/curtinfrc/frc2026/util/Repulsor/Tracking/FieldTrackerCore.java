@@ -34,7 +34,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.ResourceSpec;
-import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateCore;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateRuntime;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Internal.ObjectiveCache;
@@ -49,7 +49,7 @@ public class FieldTrackerCore {
 
   public GameElement[] field_map;
 
-  private final PredictiveFieldStateCore predictor;
+  private final PredictiveFieldStateRuntime predictor;
   private final ObjectiveCache collectCache;
   private final FieldTrackerDynamicTracker dynamicTracker = new FieldTrackerDynamicTracker();
   private final FieldTrackerCollectPlanner collectPlanner;
@@ -90,7 +90,7 @@ public class FieldTrackerCore {
     if (provider == null) throw new IllegalArgumentException("provider cannot be null");
 
     this.field_map = provider.build(this);
-    this.predictor = new PredictiveFieldStateCore();
+    this.predictor = new PredictiveFieldStateRuntime();
     this.collectCache = new ObjectiveCache();
     this.collectPlanner =
         new FieldTrackerCollectPlanner(
@@ -127,7 +127,7 @@ public class FieldTrackerCore {
     return t;
   }
 
-  public PredictiveFieldStateCore getPredictor() {
+  public PredictiveFieldStateRuntime getPredictor() {
     return predictor;
   }
 

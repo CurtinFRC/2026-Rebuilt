@@ -19,6 +19,6 @@
 
 package org.curtinfrc.frc2026.util.Repulsor;
 
-import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateCore;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateRuntime;
 
-public class PredictiveFieldState extends PredictiveFieldStateCore {}
+public class PredictiveFieldState extends PredictiveFieldStateRuntime {}

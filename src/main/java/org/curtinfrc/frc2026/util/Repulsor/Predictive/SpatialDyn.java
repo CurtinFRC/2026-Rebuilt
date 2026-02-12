@@ -88,8 +88,8 @@ public final class SpatialDyn {
 
     for (DynamicObject o : this.all) {
       if (o == null || o.pos == null) continue;
-      if (!PredictiveFieldStateCore.error()
-          && o.ageS > PredictiveFieldStateCore.RESOURCE_HARD_MAX_AGE_S) continue;
+      if (!PredictiveFieldStateRuntime.error()
+          && o.ageS > PredictiveFieldStateRuntime.RESOURCE_HARD_MAX_AGE_S) continue;
 
       String ty = o.type != null ? o.type.toLowerCase() : "unknown";
       if (this.collectTypes.contains(ty) && !this.collectFilter.test(o.pos)) continue;
@@ -153,9 +153,9 @@ public final class SpatialDyn {
       ResourceSpec s = specs.get(o.type.toLowerCase());
       if (s == null) continue;
       double ageW =
-          PredictiveFieldStateCore.error()
+          PredictiveFieldStateRuntime.error()
               ? 1.0
-              : Math.exp(-PredictiveFieldStateCore.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+              : Math.exp(-PredictiveFieldStateRuntime.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
       sum += Math.max(0.0, s.unitValue) * ageW;
     }
     return Math.max(0.0, sum);
@@ -178,9 +178,9 @@ public final class SpatialDyn {
         if (s == null) continue;
 
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
-                : Math.exp(-PredictiveFieldStateCore.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+                : Math.exp(-PredictiveFieldStateRuntime.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         sum += Math.max(0.0, s.unitValue) * ageW;
       }
     }
@@ -207,22 +207,22 @@ public final class SpatialDyn {
 
         double age = Math.max(0.0, o.ageS);
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
-                : Math.exp(-PredictiveFieldStateCore.COLLECT_AGE_DECAY * age);
+                : Math.exp(-PredictiveFieldStateRuntime.COLLECT_AGE_DECAY * age);
 
         double sigmaBase =
             Math.max(
-                PredictiveFieldStateCore.RESOURCE_SIGMA_MIN,
+                PredictiveFieldStateRuntime.RESOURCE_SIGMA_MIN,
                 Math.min(
-                    PredictiveFieldStateCore.RESOURCE_SIGMA_ABS_MAX,
-                    Math.min(s.sigmaM * PredictiveFieldStateCore.RESOURCE_SIGMA_REL_MAX, 2.0)));
+                    PredictiveFieldStateRuntime.RESOURCE_SIGMA_ABS_MAX,
+                    Math.min(s.sigmaM * PredictiveFieldStateRuntime.RESOURCE_SIGMA_REL_MAX, 2.0)));
 
         double sigma = sigmaBase * (0.70 + 0.35 * Math.exp(-0.85 * age));
         sigma =
             Math.max(
-                PredictiveFieldStateCore.RESOURCE_SIGMA_MIN,
-                Math.min(PredictiveFieldStateCore.RESOURCE_SIGMA_ABS_MAX, sigma));
+                PredictiveFieldStateRuntime.RESOURCE_SIGMA_MIN,
+                Math.min(PredictiveFieldStateRuntime.RESOURCE_SIGMA_ABS_MAX, sigma));
 
         double sig2 = sigma * sigma;
 
@@ -258,9 +258,9 @@ public final class SpatialDyn {
         if (s == null) continue;
 
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
-                : Math.exp(-PredictiveFieldStateCore.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
+                : Math.exp(-PredictiveFieldStateRuntime.COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         sum += Math.max(0.0, s.unitValue) * ageW;
       }
     }
@@ -291,19 +291,19 @@ public final class SpatialDyn {
 
         double age = Math.max(0.0, o.ageS);
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
-                : Math.exp(-PredictiveFieldStateCore.COLLECT_AGE_DECAY * age);
+                : Math.exp(-PredictiveFieldStateRuntime.COLLECT_AGE_DECAY * age);
 
         double sigmaBase =
             Math.max(
-                PredictiveFieldStateCore.RESOURCE_SIGMA_MIN,
-                Math.min(PredictiveFieldStateCore.RESOURCE_SIGMA_ABS_MAX, s.sigmaM));
+                PredictiveFieldStateRuntime.RESOURCE_SIGMA_MIN,
+                Math.min(PredictiveFieldStateRuntime.RESOURCE_SIGMA_ABS_MAX, s.sigmaM));
         double sigma = sigmaBase * (0.70 + 0.35 * Math.exp(-0.85 * age));
         sigma =
             Math.max(
-                PredictiveFieldStateCore.RESOURCE_SIGMA_MIN,
-                Math.min(PredictiveFieldStateCore.RESOURCE_SIGMA_ABS_MAX, sigma));
+                PredictiveFieldStateRuntime.RESOURCE_SIGMA_MIN,
+                Math.min(PredictiveFieldStateRuntime.RESOURCE_SIGMA_ABS_MAX, sigma));
 
         double sig2 = sigma * sigma;
 

@@ -27,7 +27,7 @@ import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
-import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateCore;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateRuntime;
 import org.curtinfrc.frc2026.util.Repulsor.Target.StickyTarget;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassCandidateResult;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassCandidateStep;
@@ -39,13 +39,13 @@ import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTracker
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime.FieldTrackerCollectPassStickyStep;
 
 public final class FieldTrackerCollectObjectiveLoop {
-  public final PredictiveFieldStateCore predictor;
+  public final PredictiveFieldStateRuntime predictor;
   public final Supplier<Translation2d[]> collectObjectivePoints;
   final Supplier<List<DynamicObject>> dynamicsSupplier;
   final Predicate<String> collectTypePredicate;
 
   FieldTrackerCollectObjectiveLoop(
-      PredictiveFieldStateCore predictor,
+      PredictiveFieldStateRuntime predictor,
       Supplier<Translation2d[]> collectObjectivePoints,
       Supplier<List<DynamicObject>> dynamicsSupplier,
       Predicate<String> collectTypePredicate) {

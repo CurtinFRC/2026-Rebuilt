@@ -106,7 +106,7 @@ public final class PredictiveCollectCandidateBuilder {
         if (s == null) continue;
 
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
                 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         double w = Math.max(0.0, s.unitValue) * ageW;
@@ -290,7 +290,7 @@ public final class PredictiveCollectCandidateBuilder {
       }
 
       double ageW =
-          PredictiveFieldStateCore.error()
+          PredictiveFieldStateRuntime.error()
               ? 1.0
               : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
       double w = Math.max(0.0, s.unitValue) * ageW;
@@ -359,7 +359,7 @@ public final class PredictiveCollectCandidateBuilder {
         if (d2 > rr2) continue;
 
         double ageW =
-            PredictiveFieldStateCore.error()
+            PredictiveFieldStateRuntime.error()
                 ? 1.0
                 : Math.exp(-COLLECT_AGE_DECAY * Math.max(0.0, o.ageS));
         double w = Math.max(0.0, s.unitValue) * ageW;

@@ -25,13 +25,13 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
-import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateCore;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateRuntime;
 
 public final class FieldTrackerCollectObjectiveRuntime {
   private final FieldTrackerCollectObjectiveLoop loop;
 
   FieldTrackerCollectObjectiveRuntime(
-      PredictiveFieldStateCore predictor,
+      PredictiveFieldStateRuntime predictor,
       Supplier<Translation2d[]> collectObjectivePoints,
       Supplier<List<DynamicObject>> dynamicsSupplier,
       Predicate<String> collectTypePredicate) {

@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Repulsor. If not, see https://www.gnu.org/licenses/.
  */
-package org.curtinfrc.frc2026.util.Repulsor.Predictive.Collect.Runtime;
+package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
