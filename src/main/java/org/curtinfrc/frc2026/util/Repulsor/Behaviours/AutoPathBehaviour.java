@@ -132,8 +132,6 @@ public class AutoPathBehaviour extends Behaviour {
         Optional.of(robotPose),
         Math.max(0.0, ctx.robot_x) * 2.0,
         Math.max(0.0, ctx.robot_y) * 2.0,
-        ctx.coral_offset,
-        ctx.algae_offset,
         release,
         ctx.vision.getObstacles());
   }
@@ -442,8 +440,6 @@ public class AutoPathBehaviour extends Behaviour {
                       ctx.vision.getObstacles(),
                       ctx.robot_x,
                       ctx.robot_y,
-                      ctx.coral_offset,
-                      ctx.algae_offset,
                       cat,
                       false,
                       0.0);

@@ -287,15 +287,7 @@ public class Repulsor {
 
     m_behaviourManager.update(
         new BehaviourContext(
-            this,
-            m_planner,
-            m_visionPlanner,
-            m_drive,
-            robot_x,
-            robot_y,
-            coral_offset,
-            algae_offset,
-            m_drive::getPose));
+            this, m_planner, m_visionPlanner, m_drive, robot_x, robot_y, m_drive::getPose));
   }
 
   public DriveRepulsor getDrive() {
@@ -311,8 +303,7 @@ public class Repulsor {
     double wid = Math.max(0.0, robot_y) * 2.0;
     double release =
         shooterReleaseHeightMeters == null ? 0.0 : Math.max(0.0, shooterReleaseHeightMeters.get());
-    return new SetpointContext(
-        Optional.ofNullable(robotPose), len, wid, coral_offset, algae_offset, release, dyn);
+    return new SetpointContext(Optional.ofNullable(robotPose), len, wid, release, dyn);
   }
 
   private Command alignCore(
@@ -349,8 +340,6 @@ public class Repulsor {
                           dyn,
                           robot_x,
                           robot_y,
-                          coral_offset,
-                          algae_offset,
                           cat,
                           suppressFallback,
                           shooterReleaseHeightMeters == null

@@ -249,20 +249,10 @@ public class FieldPlanner {
       List<? extends Obstacle> dynamicObstacles,
       double robot_x,
       double robot_y,
-      double coral_offset,
-      double algae_offset,
       CategorySpec cat,
       double shooterReleaseHeightMeters) {
     return calculate(
-        pose,
-        dynamicObstacles,
-        robot_x,
-        robot_y,
-        coral_offset,
-        algae_offset,
-        cat,
-        false,
-        shooterReleaseHeightMeters);
+        pose, dynamicObstacles, robot_x, robot_y, cat, false, shooterReleaseHeightMeters);
   }
 
   public RepulsorSample calculate(
@@ -270,8 +260,6 @@ public class FieldPlanner {
       List<? extends Obstacle> dynamicObstacles,
       double robot_x,
       double robot_y,
-      double coral_offset,
-      double algae_offset,
       CategorySpec cat,
       boolean suppressFallback,
       double shooterReleaseHeightMeters) {
@@ -348,8 +336,6 @@ public class FieldPlanner {
                 Optional.of(pose),
                 Math.max(0.0, robot_x) * 2.0,
                 Math.max(0.0, robot_y) * 2.0,
-                coral_offset,
-                algae_offset,
                 shooterReleaseHeightMeters,
                 effectiveDynamics);
 

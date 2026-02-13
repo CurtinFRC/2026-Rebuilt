@@ -31,7 +31,7 @@ public class BehaviourContext {
   public final FieldPlanner planner;
   public final VisionPlanner vision;
   public final DriveRepulsor drive;
-  public final double robot_x, robot_y, coral_offset, algae_offset;
+  public final double robot_x, robot_y;
   public final Supplier<Pose2d> robotPose;
 
   public BehaviourContext(
@@ -41,8 +41,6 @@ public class BehaviourContext {
       DriveRepulsor drive,
       double robot_x,
       double robot_y,
-      double coral_offset,
-      double algae_offset,
       Supplier<Pose2d> robotPose) {
     this.repulsor = repulsor;
     this.planner = planner;
@@ -50,8 +48,6 @@ public class BehaviourContext {
     this.drive = drive;
     this.robot_x = robot_x;
     this.robot_y = robot_y;
-    this.coral_offset = coral_offset;
-    this.algae_offset = algae_offset;
     this.robotPose = robotPose;
   }
 }

@@ -65,8 +65,6 @@ public final class TestBehaviour extends Behaviour {
         Optional.ofNullable(robotPose),
         Math.max(0.0, ctx.robot_x) * 2.0,
         Math.max(0.0, ctx.robot_y) * 2.0,
-        ctx.coral_offset,
-        ctx.algae_offset,
         0.0,
         ctx.vision.getObstacles());
   }
@@ -97,8 +95,6 @@ public final class TestBehaviour extends Behaviour {
                       ctx.vision.getObstacles(),
                       ctx.robot_x,
                       ctx.robot_y,
-                      ctx.coral_offset,
-                      ctx.algae_offset,
                       CategorySpec.kCollect,
                       false,
                       0.0);

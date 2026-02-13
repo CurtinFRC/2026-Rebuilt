@@ -31,28 +31,28 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 public class _Reefscape2025 {
   protected _Reefscape2025() {}
 
-  public static final GameSetpoint A = new ReefTagScoreSetpoint("A", 18, true, true);
-  public static final GameSetpoint B = new ReefTagScoreSetpoint("B", 18, false, true);
-  public static final GameSetpoint C = new ReefTagScoreSetpoint("C", 17, true, true);
-  public static final GameSetpoint D = new ReefTagScoreSetpoint("D", 17, false, true);
-  public static final GameSetpoint E = new ReefTagScoreSetpoint("E", 22, true, true);
-  public static final GameSetpoint F = new ReefTagScoreSetpoint("F", 22, false, true);
-  public static final GameSetpoint G = new ReefTagScoreSetpoint("G", 21, true, true);
-  public static final GameSetpoint H = new ReefTagScoreSetpoint("H", 21, false, true);
-  public static final GameSetpoint I = new ReefTagScoreSetpoint("I", 20, true, true);
-  public static final GameSetpoint J = new ReefTagScoreSetpoint("J", 20, false, true);
-  public static final GameSetpoint K = new ReefTagScoreSetpoint("K", 19, true, true);
-  public static final GameSetpoint L = new ReefTagScoreSetpoint("L", 19, false, true);
+  public static final GameSetpoint A =
+      new ReefTagScoreSetpoint("A", 18, true, 0.0); // i dont remember the offsets, idrc anyways
+  public static final GameSetpoint B = new ReefTagScoreSetpoint("B", 18, false, 0.0);
+  public static final GameSetpoint C = new ReefTagScoreSetpoint("C", 17, true, 0.0);
+  public static final GameSetpoint D = new ReefTagScoreSetpoint("D", 17, false, 0.0);
+  public static final GameSetpoint E = new ReefTagScoreSetpoint("E", 22, true, 0.0);
+  public static final GameSetpoint F = new ReefTagScoreSetpoint("F", 22, false, 0.0);
+  public static final GameSetpoint G = new ReefTagScoreSetpoint("G", 21, true, 0.0);
+  public static final GameSetpoint H = new ReefTagScoreSetpoint("H", 21, false, 0.0);
+  public static final GameSetpoint I = new ReefTagScoreSetpoint("I", 20, true, 0.0);
+  public static final GameSetpoint J = new ReefTagScoreSetpoint("J", 20, false, 0.0);
+  public static final GameSetpoint K = new ReefTagScoreSetpoint("K", 19, true, 0.0);
+  public static final GameSetpoint L = new ReefTagScoreSetpoint("L", 19, false, 0.0);
 
-  public static final GameSetpoint CLOSE = new ReefTagScoreSetpoint("CLOSE", 18, true, false);
+  public static final GameSetpoint CLOSE = new ReefTagScoreSetpoint("CLOSE", 18, true, 0.0);
   public static final GameSetpoint CLOSE_LEFT =
-      new ReefTagScoreSetpoint("CLOSE_LEFT", 19, true, false);
+      new ReefTagScoreSetpoint("CLOSE_LEFT", 19, true, 0.0);
   public static final GameSetpoint CLOSE_RIGHT =
-      new ReefTagScoreSetpoint("CLOSE_RIGHT", 17, true, false);
-  public static final GameSetpoint FAR_RIGHT =
-      new ReefTagScoreSetpoint("FAR_RIGHT", 22, true, false);
-  public static final GameSetpoint FAR_LEFT = new ReefTagScoreSetpoint("FAR_LEFT", 20, true, false);
-  public static final GameSetpoint FAR = new ReefTagScoreSetpoint("FAR", 21, true, false);
+      new ReefTagScoreSetpoint("CLOSE_RIGHT", 17, true, 0.0);
+  public static final GameSetpoint FAR_RIGHT = new ReefTagScoreSetpoint("FAR_RIGHT", 22, true, 0.0);
+  public static final GameSetpoint FAR_LEFT = new ReefTagScoreSetpoint("FAR_LEFT", 20, true, 0.0);
+  public static final GameSetpoint FAR = new ReefTagScoreSetpoint("FAR", 21, true, 0.0);
 
   public static final GameSetpoint LEFT_HP =
       new StaticPoseSetpoint(
@@ -86,13 +86,13 @@ public class _Reefscape2025 {
   private static final class ReefTagScoreSetpoint extends GameSetpoint {
     private final int tagID;
     private final boolean isLeft;
-    private final boolean isCoral;
+    private final double offset;
 
-    ReefTagScoreSetpoint(String name, int tagID, boolean isLeft, boolean isCoral) {
+    ReefTagScoreSetpoint(String name, int tagID, boolean isLeft, double offset) {
       super(name, SetpointType.kScore);
       this.tagID = tagID;
       this.isLeft = isLeft;
-      this.isCoral = isCoral;
+      this.offset = offset;
     }
 
     @Override
@@ -102,7 +102,7 @@ public class _Reefscape2025 {
 
       Pose2d tag2d = tagPose3dOpt.get().toPose2d();
 
-      double offset = isCoral ? ctx.coralOffsetMeters() : ctx.algaeOffsetMeters();
+      double offset = this.offset;
       Pose2d mappedPose = standoffFromTag(tag2d, ctx.robotLengthMeters(), ctx.robotWidthMeters());
 
       double yaw = mappedPose.getRotation().getRadians();
