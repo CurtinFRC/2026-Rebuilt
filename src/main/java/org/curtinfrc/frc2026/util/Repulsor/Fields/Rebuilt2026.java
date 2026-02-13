@@ -209,7 +209,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double railXWindow = 1.2;
     double corridorHalfWidthGuess = Math.max(0.22, gapHeight * 0.45);
     double railStrength = 2.1;
-    double railMaxForce = 2.2;
+    double railMaxForce = 3.2;
 
     return List.of(
         new RectangleObstacle(

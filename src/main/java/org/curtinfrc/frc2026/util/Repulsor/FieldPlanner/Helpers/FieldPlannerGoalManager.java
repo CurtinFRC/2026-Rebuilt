@@ -24,6 +24,8 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
+import org.curtinfrc.frc2026.util.Repulsor.ExtraPathing;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractorObstacle;
 
 public final class FieldPlannerGoalManager {
@@ -85,7 +87,7 @@ public final class FieldPlannerGoalManager {
     this.goal = active;
   }
 
-  public boolean updateStagedGoal(Translation2d curPos) {
+  public boolean updateStagedGoal(Translation2d curPos, List<? extends Obstacle> obstacles) {
     if (gatedAttractors.isEmpty()) {
       goal = requestedGoal;
       stagedAttractor = null;
@@ -101,7 +103,7 @@ public final class FieldPlannerGoalManager {
     }
 
     Translation2d reqT = requestedGoal.getTranslation();
-    GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
+    GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT, obstacles);
 
     boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || (firstBlock != null);
     if (stagedComplete && lastStagedPoint != null) {
@@ -173,7 +175,7 @@ public final class FieldPlannerGoalManager {
       boolean gateCleared = stagedGatePassed;
 
       if (stagedModeTicks >= STAGED_MAX_TICKS) {
-        GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT);
+        GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT, obstacles);
         if (nowFirst == null || stagedGatePassed) {
           reached = true;
           gateCleared = true;
@@ -320,7 +322,7 @@ public final class FieldPlannerGoalManager {
   }
 
   private GatedAttractorObstacle firstOccludingGateAlongSegment(
-      Translation2d pos, Translation2d target) {
+      Translation2d pos, Translation2d target, List<? extends Obstacle> obstacles) {
     if (gatedAttractors.isEmpty() || pos == null || target == null) return null;
 
     GatedAttractorObstacle best = null;
@@ -336,7 +338,7 @@ public final class FieldPlannerGoalManager {
       Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
 
       if (!FieldPlannerGeometry.segmentIntersectsPolygonOuter(pos, target, poly)) continue;
-
+      if (!ExtraPathing.isClearPath("WaypointByp", pos, target, obstacles, org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y, false)) continue;
       double t = firstIntersectionT(pos, target, poly);
       if (t < bestT - tieEps) {
         bestT = t;

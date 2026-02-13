@@ -284,7 +284,7 @@ public class FieldPlanner {
       ds.forcedGoalPose("main").ifPresent(this::setRequestedGoal);
     }
 
-    boolean slowDown = goalManager.updateStagedGoal(curTrans);
+    boolean slowDown = goalManager.updateStagedGoal(curTrans, dynamicObstacles);
     distToGoal = curTrans.getDistance(goalManager.getGoalTranslation());
 
     ClearMemo memo = new ClearMemo();
@@ -337,7 +337,7 @@ public class FieldPlanner {
         Alliance preferred =
             DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
-                ? Alliance.kBlue
+                ? Alliance.kBlue  
                 : Alliance.kRed;
 
         var cands =
