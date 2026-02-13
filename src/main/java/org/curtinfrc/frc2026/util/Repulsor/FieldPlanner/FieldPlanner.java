@@ -337,7 +337,7 @@ public class FieldPlanner {
         Alliance preferred =
             DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
-                ? Alliance.kBlue  
+                ? Alliance.kBlue
                 : Alliance.kRed;
 
         var cands =

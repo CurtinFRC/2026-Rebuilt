@@ -338,7 +338,14 @@ public final class FieldPlannerGoalManager {
       Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
 
       if (!FieldPlannerGeometry.segmentIntersectsPolygonOuter(pos, target, poly)) continue;
-      if (!ExtraPathing.isClearPath("WaypointByp", pos, target, obstacles, org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y, false)) continue;
+      if (!ExtraPathing.isClearPath(
+          "WaypointByp",
+          pos,
+          target,
+          obstacles,
+          org.curtinfrc.frc2026.Constants.ROBOT_X,
+          org.curtinfrc.frc2026.Constants.ROBOT_Y,
+          false)) continue;
       double t = firstIntersectionT(pos, target, poly);
       if (t < bestT - tieEps) {
         bestT = t;
