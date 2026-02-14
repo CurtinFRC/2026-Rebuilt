@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026.drive;
 
 import static edu.wpi.first.units.Units.*;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
@@ -32,6 +33,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.DoubleSupplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
@@ -51,7 +53,6 @@ public class Drive extends SubsystemBase {
   private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
   private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
   private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
-
   private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
 
   static final Lock odometryLock = new ReentrantLock();
@@ -62,7 +63,7 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 7;
+  public static final double hubHeadingKP = 15;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0;
 
@@ -331,18 +332,13 @@ public class Drive extends SubsystemBase {
     // Get current position using the getPose method.
     Pose2d currentPosition = getPose();
 
-    // Hub position from onshape in metres
-    Pose2d hubPosition = new Pose2d(11.78013, 4.03348, Rotation2d.kZero);
-
     double targetAngle =
-        hubPosition
-            .getTranslation()
+        ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint)
+            .toTranslation2d()
             .minus(currentPosition.getTranslation())
             .getAngle()
             .getRadians();
-    // Measuring x and y differences to use trig to calculate angle in radians.
-
-    // Using trig to caluclate angle with atan2 in radians.
+  
     return targetAngle + Math.PI;
   }
 
@@ -357,7 +353,6 @@ public class Drive extends SubsystemBase {
           Pose2d target =
               new Pose2d(
                   currentPosition.getX(), currentPosition.getY(), new Rotation2d(angleToHub()));
-          // targetAngle = Math.toDegrees(targetAngle);
 
           // Getting robot current angle in radians
           double robotAngle = currentPosition.getRotation().getRadians();
