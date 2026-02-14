@@ -421,23 +421,25 @@ public class Drive extends SubsystemBase {
               DriverStation.getAlliance().isPresent()
                   && DriverStation.getAlliance().get() == Alliance.Red;
           if (aligningSupplier.getAsBoolean()) {
-              ChassisSpeeds speeds =
-                  new ChassisSpeeds(
-                      linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                      linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                      angleSpeed);
-              runVelocity(
-                  ChassisSpeeds.fromFieldRelativeSpeeds(
-                      speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    angleSpeed);
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           } else {
-              ChassisSpeeds speeds =
-                  new ChassisSpeeds(
-                      linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                      linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                      omega * getMaxAngularSpeedRadPerSec());
-              runVelocity(
-                  ChassisSpeeds.fromFieldRelativeSpeeds(
-                      speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    omega * getMaxAngularSpeedRadPerSec());
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           }
         });
   }

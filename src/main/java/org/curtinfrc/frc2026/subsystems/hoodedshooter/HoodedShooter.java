@@ -6,6 +6,7 @@ import static edu.wpi.first.units.Units.Rotations;
 import static edu.wpi.first.units.Units.RotationsPerSecond;
 import static edu.wpi.first.units.Units.Volts;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -25,12 +26,14 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.sim.BallSim;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
   // TODO fix
-  public static final Translation2d HUB_LOCATION = new Translation2d(11.78013, 4.03348);
+  public static final Translation2d HUB_LOCATION =
+      ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
   // new Translation2d(
   //     FieldConstants.Hub.topCenterPoint.getX(), FieldConstants.Hub.topCenterPoint.getY());
 
@@ -179,22 +182,23 @@ public class HoodedShooter extends SubsystemBase {
     return hoodedShooterReady;
   }
 
-  public Translation2d getVirtualHubLocation() {
-    double realDistanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
+  public Translation2d getVirtualHubLocation(Supplier<Translation2d> hub_location) {
+    double realDistanceLength =
+        hub_location.get().minus(robotPose.get().getTranslation()).getNorm();
     Translation2d robotVel =
         new Translation2d(
             robotVelocity.get().vxMetersPerSecond, robotVelocity.get().vyMetersPerSecond);
     double airTime = DISTANCE_TO_BALL_FLIGHT_TIME.get(realDistanceLength);
 
     Translation2d hubCompensationOffset = robotVel.times(-airTime);
-    Translation2d compensatedHubLocation = HUB_LOCATION.plus(hubCompensationOffset);
-    return (realDistanceLength > 1) ? compensatedHubLocation : HUB_LOCATION;
+    Translation2d compensatedHubLocation = hub_location.get().plus(hubCompensationOffset);
+    return (realDistanceLength > 1) ? compensatedHubLocation : hub_location.get();
   }
 
   public Command shootAtHub() {
     return run(
         () -> {
-          Translation2d compensatedHubLocation = getVirtualHubLocation();
+          Translation2d compensatedHubLocation = getVirtualHubLocation(() -> HUB_LOCATION);
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();

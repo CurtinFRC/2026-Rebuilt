@@ -185,7 +185,7 @@ wrapper {
 }
 
 // Spotless formatting
-// project.compileJava.dependsOn(spotlessApply)
+project.compileJava.dependsOn(spotlessApply)
 spotless {
     java {
         target fileTree(".") {

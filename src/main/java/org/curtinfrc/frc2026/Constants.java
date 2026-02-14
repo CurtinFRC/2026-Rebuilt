@@ -1,4 +1,3 @@
-
 package org.curtinfrc.frc2026;
 
 import edu.wpi.first.wpilibj.RobotBase;

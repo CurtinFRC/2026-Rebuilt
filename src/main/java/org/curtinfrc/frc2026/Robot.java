@@ -5,6 +5,7 @@ import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -17,7 +18,6 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -72,6 +72,9 @@ public class Robot extends LoggedRobot {
   private Mag mag;
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
+
+  private Translation2d shoot_target = HoodedShooter.HUB_LOCATION;
+
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
 
@@ -80,6 +83,7 @@ public class Robot extends LoggedRobot {
 
   @AutoLogOutput(key = "Intaking")
   private boolean intaking = false;
+
   private Trigger intakingTrigger = new Trigger(() -> intaking);
 
   public Robot() {
@@ -227,13 +231,15 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
             () -> aligning,
-            hoodedShooter::getVirtualHubLocation));
+            () -> hoodedShooter.getVirtualHubLocation(() -> shoot_target)));
 
     controller // intake and store
-        .leftBumper().onTrue(Commands.runOnce(() -> aligning = !aligning));
+        .leftBumper()
+        .onTrue(Commands.runOnce(() -> aligning = !aligning));
 
     controller // intake and store
-        .leftTrigger().onTrue(Commands.runOnce(() -> intaking = !intaking));
+        .leftTrigger()
+        .onTrue(Commands.runOnce(() -> intaking = !intaking));
 
     intakingTrigger
         .whileTrue(
