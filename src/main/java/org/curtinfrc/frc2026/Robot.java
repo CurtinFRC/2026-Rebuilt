@@ -199,11 +199,11 @@ public class Robot extends LoggedRobot {
     autoChooser = new AutoChooser();
 
     SmartDashboard.putData("autoChooser", autoChooser);
-    autoChooser.addCmd("Dev Test", this::testDrive);
-    autoChooser.addCmd("Print Test", this::printTest);
     autoChooser.addCmd("Sim Test 2x2", this::simTestDrive);
     autoChooser.addCmd("Dev Test Positive X", this::positiveXDrive);
-    autoChooser.addCmd("Test Intake", this::.RawIdle);
+    autoChooser.addCmd("Drive Left Intake Test", this::testLeftDriveIntakeShootIndex);
+    autoChooser.addCmd("Slow Test", this::slow);
+    autoChooser.addCmd("All In One", this::shootFromCorner);
     autoChooser.select("Forward");
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -244,14 +244,6 @@ public class Robot extends LoggedRobot {
         .onFalse(hoodedShooter.stopHoodedShooter());
   }
 
-  private Command printTest() {
-    return Commands.run(
-        () -> {
-          System.out.println("Test");
-        },
-        drive);
-  }
-
   private Command positiveXDrive() {
     return autoFactory
         .trajectoryCmd("testDevPositiveX")
@@ -264,12 +256,37 @@ public class Robot extends LoggedRobot {
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
-  private Command testDrive() {
+  private Command slow() {
     return autoFactory
-        .trajectoryCmd("testDev")
+        .trajectoryCmd("Slow")
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
+  private Command testLeftDriveIntakeShootIndex() {
+    return Commands.parallel(
+        autoFactory
+            .trajectoryCmd("VerySmallMoveLeft")
+            .andThen((drive.joystickDrive(() -> 0, () -> 0, () -> 0))),
+        intake.RawControlConsume(4),
+        hoodedShooter.setShooterVoltage(4),
+        mag.spinIndexer(4));
+  }
+
+  private Command shootFromCorner() {
+    return Commands.sequence(
+        Commands.parallel(
+            intake.RawControlConsume(4), hoodedShooter.setShooterVoltage(4), mag.spinIndexer(4)),
+        Commands.waitSeconds(5),
+        hoodedShooter.stopShooter());
+
+    //
+    //
+
+    // ,
+    // autoFactory
+    //     .trajectoryCmd("AllInOne")
+    //     .andThen((drive.joystickDrive(() -> 0, () -> 0, () -> 0)))
+  }
 
   /** This function is called periodically during all modes. */
   @Override
