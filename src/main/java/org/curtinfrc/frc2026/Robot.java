@@ -2,6 +2,7 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -45,6 +46,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -73,7 +75,8 @@ public class Robot extends LoggedRobot {
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
 
-  private Translation2d shoot_target = HoodedShooter.HUB_LOCATION;
+  private Translation2d shoot_target =
+      ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft.toTranslation2d());
 
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
