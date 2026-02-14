@@ -16,6 +16,8 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,6 +51,7 @@ import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVision;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVisionSim;
+import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.LogFileUtil;
 import org.littletonrobotics.junction.LoggedRobot;
 import org.littletonrobotics.junction.Logger;
@@ -71,6 +74,13 @@ public class Robot extends LoggedRobot {
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+
+  @AutoLogOutput(key = "Aligning")
+  private boolean aligning = false;
+
+  @AutoLogOutput(key = "Intaking")
+  private boolean intaking = false;
+  private Trigger intakingTrigger = new Trigger(() -> intaking);
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -215,10 +225,17 @@ public class Robot extends LoggedRobot {
         drive.locationHeadingjoyStickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
+            () -> -controller.getRightX(),
+            () -> aligning,
             hoodedShooter::getVirtualHubLocation));
 
     controller // intake and store
-        .x()
+        .leftBumper().onTrue(Commands.runOnce(() -> aligning = !aligning));
+
+    controller // intake and store
+        .leftTrigger().onTrue(Commands.runOnce(() -> intaking = !intaking));
+
+    intakingTrigger
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(0.7),

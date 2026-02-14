@@ -185,12 +185,12 @@ wrapper {
 }
 
 // Spotless formatting
-project.compileJava.dependsOn(spotlessApply)
+// project.compileJava.dependsOn(spotlessApply)
 spotless {
     java {
         target fileTree(".") {
             include "**/*.java"
-            exclude "**/build/**", "**/build-*/**"
+            exclude "**/build/**", "**/build-*/**", '**/bin/**'
         }
         toggleOffOn()
         googleJavaFormat()

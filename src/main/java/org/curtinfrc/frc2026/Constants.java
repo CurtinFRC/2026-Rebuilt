@@ -1,3 +1,4 @@
+
 package org.curtinfrc.frc2026;
 
 import edu.wpi.first.wpilibj.RobotBase;
@@ -8,7 +9,7 @@ public final class Constants {
   public static final int middleMagRollerMotorID = 20;
   public static final int indexerMagRollerMotorID = 15;
 
-  public static final RobotType robotType = RobotType.SIM;
+  public static final RobotType robotType = RobotType.DEV;
   public static boolean tuningMode = true;
 
   public static final Mode getMode() {

@@ -29,6 +29,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
@@ -383,6 +384,8 @@ public class Drive extends SubsystemBase {
   public Command locationHeadingjoyStickDrive(
       DoubleSupplier xSupplier,
       DoubleSupplier ySupplier,
+      DoubleSupplier rotationSupplier,
+      BooleanSupplier aligningSupplier,
       Supplier<Translation2d> locationTransform) {
     return run(
         () -> {
@@ -403,22 +406,39 @@ public class Drive extends SubsystemBase {
           Logger.recordOutput("TargetAngle", angleToLocation(locationTransform.get()));
           Logger.recordOutput("RobotAngle", robotAngle);
 
+          // Apply rotation deadband
+          double omega = rotationSupplier.getAsDouble();
+
+          // Square rotation value for more precise control
+          omega = Math.copySign(omega * omega, omega);
+
           // Get linear velocity
           Translation2d linearVelocity =
               getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
           // Convert to field relative speeds & send command
-          ChassisSpeeds speeds =
-              new ChassisSpeeds(
-                  linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                  linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                  angleSpeed);
           boolean isFlipped =
               DriverStation.getAlliance().isPresent()
                   && DriverStation.getAlliance().get() == Alliance.Red;
-          runVelocity(
-              ChassisSpeeds.fromFieldRelativeSpeeds(
-                  speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          if (aligningSupplier.getAsBoolean()) {
+              ChassisSpeeds speeds =
+                  new ChassisSpeeds(
+                      linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                      linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                      angleSpeed);
+              runVelocity(
+                  ChassisSpeeds.fromFieldRelativeSpeeds(
+                      speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          } else {
+              ChassisSpeeds speeds =
+                  new ChassisSpeeds(
+                      linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                      linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                      omega * getMaxAngularSpeedRadPerSec());
+              runVelocity(
+                  ChassisSpeeds.fromFieldRelativeSpeeds(
+                      speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          }
         });
   }
 }
