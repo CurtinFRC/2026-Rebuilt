@@ -112,6 +112,8 @@ class NT4Reader:
         self._connected_at: Optional[float] = None
         self._last_connect_check = 0.0
 
+        self.method = self.inst.getStringTopic("/AdvantageKit/RealOutputs/Method").subscribe("N/A")
+
         self._last_discovery = 0.0
         self._discovery_period_s = 0.25
 

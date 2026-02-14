@@ -57,6 +57,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
+import org.curtinfrc.frc2026.util.Repulsor.State.StateManager;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.GameElement;
@@ -266,6 +267,10 @@ public class Repulsor {
   }
 
   public void update() {
+    DeltaTime.update();
+
+    StateManager.update(DeltaTime.get());
+
     for (var vision : m_fieldVisions) {
       vision.update(m_drive.getPose());
     }

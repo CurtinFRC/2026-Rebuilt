@@ -125,17 +125,17 @@ public final class PredictiveFieldStateOps {
   public static final double DIST_COST = 0.10;
   public static final double PRESSURE_GAIN = 0.72;
   public static final double CONGEST_COST = 0.95;
-  public static final double CAPACITY_GAIN = 0.35;
+  public static final double CAPACITY_GAIN = 0.45;
   public static final double HEADING_GAIN = 0.18;
 
-  public static final double COLLECT_VALUE_GAIN = 10.10;
+  public static final double COLLECT_VALUE_GAIN = 1.10;
   public static final double COLLECT_ETA_COST = 1.05;
   public static final double COLLECT_ENEMY_PRESS_COST = 1.15;
   public static final double COLLECT_ALLY_CONGEST_COST = 0.95;
   public static final double COLLECT_ENEMY_INTENT_COST = 0.75;
   public static final double COLLECT_ALLY_INTENT_COST = 0.55;
   public static final double COLLECT_VALUE_SAT_K = 0.75;
-  public static final double COLLECT_AGE_DECAY = 0.75; // 1.25
+  public static final double COLLECT_AGE_DECAY = 1.25;
   public static final double COLLECT_LOCAL_AVOID_R = 0.9;
   public static final double COLLECT_ACTIVITY_SIGMA = 1.05;
   public static final double COLLECT_ACTIVITY_ALLY_W = 0.80;
@@ -188,7 +188,7 @@ public final class PredictiveFieldStateOps {
   static final int COLLECT_GRID_FALLBACK_MAX = 1400;
 
   public static final double DEPLETED_TTL_S = 3.25;
-  public static final double DEPLETED_PEN_W = 1.75;
+  public static final double DEPLETED_PEN_W = 2.75;
   public static final double DEPLETED_MARK_NEAR_M = 0.65;
   public static final double DEPLETED_MARK_EMPTY_UNITS = 0.07;
 
@@ -488,7 +488,7 @@ public final class PredictiveFieldStateOps {
             * Math.max(
                 org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y);
     final double robotWallMargin = robotHalf + 0.03;
-    final double wallClearMin = robotWallMargin + 0.35;
+    final double wallClearMin = robotWallMargin + 0.05;
     final java.util.function.ToDoubleFunction<Translation2d> wallPenalty =
         (pt) -> {
           if (pt == null) return 0.0;

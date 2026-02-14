@@ -310,6 +310,7 @@ class SceneRenderer:
             f"[A] Age filter: {'ON' if self.show_age_filtered_fuel else 'OFF'}",
             f"Field image: {'ON' if self.show_field_image else 'OFF'}",
             f"Pieces: {int(nt4.pieces.get()) if nt4 else 'N/A'}",
+            f"Method: {nt4.method.get() if nt4 else 'N/A'}",
         ]
         top = window.height - 10
         scale = 2.0

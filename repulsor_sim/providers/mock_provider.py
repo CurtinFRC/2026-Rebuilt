@@ -104,6 +104,7 @@ CAMERAS: List[CameraConfig] = [
 
     CameraConfig(name="cam_right_rear",  x=-0.25, y=-0.25, z=0.5, yaw_deg=-135, pitch_deg=0),
     CameraConfig(name="cam_right_front", x=-0.25, y=0.25, z=0.5, yaw_deg=135,  pitch_deg=0),
+    # CameraConfig(name="idk", x=0, y=0, z=0, yaw_deg=0, pitch_deg=0, hfov_deg=360, vfov_deg=360, min_range=0, max_range=30.0),
 ]
 
 @dataclass

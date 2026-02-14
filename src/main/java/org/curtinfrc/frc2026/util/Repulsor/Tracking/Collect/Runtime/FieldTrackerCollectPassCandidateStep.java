@@ -29,6 +29,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveLoop;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Internal.NearestPoint;
+import org.littletonrobotics.junction.Logger;
 
 public final class FieldTrackerCollectPassCandidateStep {
   private FieldTrackerCollectPassCandidateStep() {}
@@ -159,8 +160,9 @@ public final class FieldTrackerCollectPassCandidateStep {
               goalUnits,
               Math.min(160, Math.max(32, ctx.usePts().length)));
 
-      if (best != null) {
+      if (best != null && collectValid.test(best.point)) {
         loop.lastBest = best;
+        Logger.recordOutput("Method", "CollectNearest");
         break;
       }
 
@@ -180,6 +182,7 @@ public final class FieldTrackerCollectPassCandidateStep {
               FieldTrackerCollectObjectiveLoop.COLLECT_REFINE_GRID);
 
       if (best != null && collectValid.test(best.point)) {
+        Logger.recordOutput("Method", "CollectHierarchical");
         break;
       }
 
@@ -192,6 +195,7 @@ public final class FieldTrackerCollectPassCandidateStep {
               Math.max(24, ctx.usePts().length));
 
       if (best != null && collectValid.test(best.point)) {
+        Logger.recordOutput("Method", "CollectPoints");
         break;
       }
 
@@ -214,6 +218,7 @@ public final class FieldTrackerCollectPassCandidateStep {
                   0.0,
                   0.0,
                   -1e9);
+          Logger.recordOutput("Method", "CollectHotspot");
           break;
         }
       }

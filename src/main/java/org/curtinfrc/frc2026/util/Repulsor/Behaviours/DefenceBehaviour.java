@@ -31,12 +31,12 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 
-public final class DefenseBehaviour extends Behaviour {
+public final class DefenceBehaviour extends Behaviour {
   private final int prio;
   private final Supplier<RepulsorSetpoint> defenseGoal;
   private final Supplier<Double> speedCap;
 
-  public DefenseBehaviour(
+  public DefenceBehaviour(
       int priority, Supplier<RepulsorSetpoint> defenseGoal, Supplier<Double> speedCap) {
     this.prio = priority;
     this.defenseGoal = defenseGoal;
@@ -55,7 +55,7 @@ public final class DefenseBehaviour extends Behaviour {
 
   @Override
   public boolean shouldRun(EnumSet<BehaviourFlag> flags, BehaviourContext ctx) {
-    return flags.contains(BehaviourFlag.DEFENSE_MODE);
+    return flags.contains(BehaviourFlag.DEFENCE_MODE);
   }
 
   private static SetpointContext makeCtx(BehaviourContext ctx, Pose2d robotPose) {

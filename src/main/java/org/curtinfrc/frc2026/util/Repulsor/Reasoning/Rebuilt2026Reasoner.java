@@ -64,7 +64,7 @@ public final class Rebuilt2026Reasoner
 
     b.addPhaseFor("shuttle_15s", EnumSet.of(BehaviourFlag.SHUTTLE_MODE), 15.0);
     b.addPhase("autopath", EnumSet.of(BehaviourFlag.AUTOPATH_MODE), 0.0, 1e9, PH_AUTOPATH);
-    b.addPhase("defense", EnumSet.of(BehaviourFlag.DEFENSE_MODE), 0.0, 1e9, PH_DEFENSE);
+    b.addPhase("defense", EnumSet.of(BehaviourFlag.DEFENCE_MODE), 0.0, 1e9, PH_DEFENSE);
 
     b.addTransition(
         PH_AUTOPATH,
@@ -155,6 +155,7 @@ public final class Rebuilt2026Reasoner
     if (seq.signals().getOr(TESTING, false)) {
       EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.AUTOPATH_MODE);
       // EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.TEST_MODE);
+      // EnumSet<BehaviourFlag> out = EnumSet.of(BehaviourFlag.SHUTTLE_MODE);
       seq.signals().flush();
       return out;
     }

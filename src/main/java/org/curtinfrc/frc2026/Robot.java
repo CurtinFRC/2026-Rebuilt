@@ -64,7 +64,7 @@ import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
-import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenseBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenceBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
@@ -198,18 +198,15 @@ public class Robot extends LoggedRobot {
             List.of(
                 new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE));
 
-    Supplier<RepulsorSetpoint> shuttleGoalSup =
-        () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.OUTPOST_COLLECT, HeightSetpoint.NONE);
-
     Supplier<RepulsorSetpoint> defenseGoalSup =
         () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
 
     repulsor.addBehaviours(
-        new DefenseBehaviour(30, defenseGoalSup, () -> 2.8),
-        new ShuttleBehaviour(20, shuttleGoalSup, () -> 3.2),
+        new DefenceBehaviour(30, defenseGoalSup, () -> 2.8),
+        new ShuttleBehaviour(20, () -> simHasPiece, () -> 5.2),
         new TestBehaviour(),
         new AutoPathBehaviour(
-            10,
+            1000,
             inScoreSup,
             inCollectSup,
             nextScoreSup,
@@ -217,7 +214,7 @@ public class Robot extends LoggedRobot {
             atHPSup,
             () -> simHasPiece,
             sp -> sp.point().name(),
-            () -> 3.5));
+            () -> 5.2));
 
     Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
     reasoner.setTesting(true);
