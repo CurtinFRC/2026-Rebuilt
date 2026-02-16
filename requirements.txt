@@ -7,3 +7,4 @@ numpy>=1.23
 robotpy
 trimesh[easy]
 rtree
+opencv-python
