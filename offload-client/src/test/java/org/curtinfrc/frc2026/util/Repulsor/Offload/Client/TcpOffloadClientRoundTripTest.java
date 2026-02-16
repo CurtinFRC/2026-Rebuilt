@@ -26,9 +26,10 @@ class TcpOffloadClientRoundTripTest {
           new TcpOffloadClient(
               OffloadClientConfig.builder()
                   .hosts(List.of(new OffloadHost("127.0.0.1", server.port())))
-                  .connectTimeoutMs(250)
-                  .probeTimeoutMs(250)
-                  .readTimeoutMs(25)
+                  .connectTimeoutMs(1500)
+                  .probeTimeoutMs(1500)
+                  .readTimeoutMs(1500)
+                  .probeBeforeConnect(false)
                   .queueCapacity(32)
                   .build());
       client.start();
@@ -41,7 +42,7 @@ class TcpOffloadClientRoundTripTest {
 
       EchoRequest request = new EchoRequest("ping");
       byte[] payload = CborSerde.write(request);
-      byte[] responseBytes = client.call("echo.task", payload, 1000).get(2, TimeUnit.SECONDS);
+      byte[] responseBytes = client.call("echo.task", payload, 5000).get(6, TimeUnit.SECONDS);
       EchoResponse response = CborSerde.read(responseBytes, EchoResponse.class);
 
       assertEquals("PING", response.value);

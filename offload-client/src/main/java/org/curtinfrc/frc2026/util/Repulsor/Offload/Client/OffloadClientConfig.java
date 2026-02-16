@@ -11,18 +11,21 @@ public final class OffloadClientConfig {
   private final int readTimeoutMs;
   private final int queueCapacity;
   private final int probeTimeoutMs;
+  private final boolean probeBeforeConnect;
 
   private OffloadClientConfig(
       List<OffloadHost> hosts,
       int connectTimeoutMs,
       int readTimeoutMs,
       int queueCapacity,
-      int probeTimeoutMs) {
+      int probeTimeoutMs,
+      boolean probeBeforeConnect) {
     this.hosts = List.copyOf(hosts);
     this.connectTimeoutMs = connectTimeoutMs;
     this.readTimeoutMs = readTimeoutMs;
     this.queueCapacity = queueCapacity;
     this.probeTimeoutMs = probeTimeoutMs;
+    this.probeBeforeConnect = probeBeforeConnect;
   }
 
   public List<OffloadHost> hosts() {
@@ -45,6 +48,10 @@ public final class OffloadClientConfig {
     return probeTimeoutMs;
   }
 
+  public boolean probeBeforeConnect() {
+    return probeBeforeConnect;
+  }
+
   public static Builder builder() {
     return new Builder();
   }
@@ -55,6 +62,7 @@ public final class OffloadClientConfig {
     private int readTimeoutMs = 5;
     private int queueCapacity = 128;
     private int probeTimeoutMs = 50;
+    private boolean probeBeforeConnect = true;
 
     public Builder hosts(List<OffloadHost> values) {
       hosts.clear();
@@ -87,6 +95,11 @@ public final class OffloadClientConfig {
       return this;
     }
 
+    public Builder probeBeforeConnect(boolean value) {
+      probeBeforeConnect = value;
+      return this;
+    }
+
     public OffloadClientConfig build() {
       if (hosts.isEmpty()) {
         return new OffloadClientConfig(
@@ -94,10 +107,16 @@ public final class OffloadClientConfig {
             connectTimeoutMs,
             readTimeoutMs,
             queueCapacity,
-            probeTimeoutMs);
+            probeTimeoutMs,
+            probeBeforeConnect);
       }
       return new OffloadClientConfig(
-          hosts, connectTimeoutMs, readTimeoutMs, queueCapacity, probeTimeoutMs);
+          hosts,
+          connectTimeoutMs,
+          readTimeoutMs,
+          queueCapacity,
+          probeTimeoutMs,
+          probeBeforeConnect);
     }
   }
 }

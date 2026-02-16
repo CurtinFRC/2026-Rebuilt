@@ -123,7 +123,7 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
       return;
     }
 
-    ProbeResult best = selectBestHost();
+    ProbeResult best = config.probeBeforeConnect() ? selectBestHost() : new ProbeResult(config.hosts().get(0), 0L);
     Socket newSocket = new Socket();
     newSocket.connect(
         new InetSocketAddress(best.host().host(), best.host().port()), config.connectTimeoutMs());
