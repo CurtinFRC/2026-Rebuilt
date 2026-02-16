@@ -22,7 +22,12 @@ package org.curtinfrc.frc2026.util.Repulsor.Shooting;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotAutoRequestDTO;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotOffloadMapper;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotPlannerOffloadEntrypoints_Offloaded;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.RepulsorOffloadRuntime;
 
 public final class DragShotPlanner {
   private DragShotPlanner() {}
@@ -79,7 +84,100 @@ public final class DragShotPlanner {
       double robotHalfWidthMeters,
       List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
-    return DragShotPlannerCore.findBestShotAuto(
+    DragShotAutoRequestDTO request =
+        DragShotOffloadMapper.toRequest(
+            gamePiece,
+            targetFieldPosition,
+            targetHeightMeters,
+            robotPose,
+            shooterReleaseHeightMeters,
+            robotHalfLengthMeters,
+            robotHalfWidthMeters,
+            dynamicObstacles,
+            constraints);
+
+    if (request == null) {
+      return DragShotPlannerLocalAccess.findBestShotAutoLocal(
+          gamePiece,
+          targetFieldPosition,
+          targetHeightMeters,
+          robotPose,
+          shooterReleaseHeightMeters,
+          robotHalfLengthMeters,
+          robotHalfWidthMeters,
+          dynamicObstacles,
+          constraints);
+    }
+
+    RepulsorOffloadRuntime.ensureInitialized();
+    return DragShotOffloadMapper.fromResponse(
+        DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAuto(request));
+  }
+
+  public static CompletableFuture<Optional<ShotSolution>> findBestShotAutoAsync(
+      GamePiecePhysics gamePiece,
+      Translation2d targetFieldPosition,
+      double targetHeightMeters,
+      edu.wpi.first.math.geometry.Pose2d robotPose,
+      double shooterReleaseHeightMeters,
+      double robotHalfLengthMeters,
+      double robotHalfWidthMeters,
+      List<? extends Obstacle> dynamicObstacles,
+      Constraints constraints) {
+    DragShotAutoRequestDTO request =
+        DragShotOffloadMapper.toRequest(
+            gamePiece,
+            targetFieldPosition,
+            targetHeightMeters,
+            robotPose,
+            shooterReleaseHeightMeters,
+            robotHalfLengthMeters,
+            robotHalfWidthMeters,
+            dynamicObstacles,
+            constraints);
+
+    if (request == null) {
+      return CompletableFuture.completedFuture(
+          DragShotPlannerLocalAccess.findBestShotAutoLocal(
+              gamePiece,
+              targetFieldPosition,
+              targetHeightMeters,
+              robotPose,
+              shooterReleaseHeightMeters,
+              robotHalfLengthMeters,
+              robotHalfWidthMeters,
+              dynamicObstacles,
+              constraints));
+    }
+
+    RepulsorOffloadRuntime.ensureInitialized();
+    return DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAutoAsync(request)
+        .thenApply(DragShotOffloadMapper::fromResponse)
+        .exceptionally(
+            ignored ->
+                DragShotPlannerLocalAccess.findBestShotAutoLocal(
+                    gamePiece,
+                    targetFieldPosition,
+                    targetHeightMeters,
+                    robotPose,
+                    shooterReleaseHeightMeters,
+                    robotHalfLengthMeters,
+                    robotHalfWidthMeters,
+                    dynamicObstacles,
+                    constraints));
+  }
+
+  public static Optional<ShotSolution> findBestShotAutoLocal(
+      GamePiecePhysics gamePiece,
+      Translation2d targetFieldPosition,
+      double targetHeightMeters,
+      edu.wpi.first.math.geometry.Pose2d robotPose,
+      double shooterReleaseHeightMeters,
+      double robotHalfLengthMeters,
+      double robotHalfWidthMeters,
+      List<? extends Obstacle> dynamicObstacles,
+      Constraints constraints) {
+    return DragShotPlannerLocalAccess.findBestShotAutoLocal(
         gamePiece,
         targetFieldPosition,
         targetHeightMeters,

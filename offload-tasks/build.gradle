@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':offload-api')
+    compileOnly project(':')
+}
+
+jar {
+    dependsOn(":jar", ":offload-api:jar")
+    from {
+        zipTree(project(":").tasks.named("jar").get().archiveFile.get().asFile)
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+                'Implementation-Title': 'repulsor-offload-tasks',
+                'Implementation-Version': '1.0.0'
+                )
+    }
+}

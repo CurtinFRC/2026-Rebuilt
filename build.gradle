@@ -72,6 +72,10 @@ task(replayWatch, type: JavaExec) {
 // Defining my dependencies. In this case, WPILib (+ friends), and vendor libraries.
 // Also defines JUnit 4.
 dependencies {
+    implementation project(':offload-api')
+    implementation project(':offload-client')
+
+    annotationProcessor project(':offload-processor')
     annotationProcessor wpi.java.deps.wpilibAnnotations()
     implementation wpi.java.deps.wpilib()
     implementation wpi.java.vendor.java()
@@ -122,6 +126,8 @@ jar {
             it.isDirectory() ? it : zipTree(it)
         }
     }
+    dependsOn(":offload-api:jar", ":offload-client:jar")
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     from sourceSets.main.allSource
     manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
@@ -182,6 +188,63 @@ task(eventDeploy) {
 }
 createVersionFile.dependsOn(eventDeploy)
 project.compileJava.dependsOn(spotlessApply)
+
+project.tasks.named("deploy") {
+    dependsOn(deployOffloadToCoprocessors)
+}
+
+task(buildOffloadTasksJar) {
+    group = "offload"
+    description = "Build the offload task plugin JAR."
+    dependsOn(":offload-tasks:jar")
+}
+
+task(generateOffloadManifest, type: Copy) {
+    group = "offload"
+    description = "Copy generated offload-manifest.json to build/offload."
+    dependsOn("compileJava")
+    from(layout.buildDirectory.file("classes/java/main/offload-manifest.json"))
+    into(layout.buildDirectory.dir("offload"))
+    rename { "offload-manifest.json" }
+}
+
+task(deployOffloadToCoprocessors) {
+    group = "offload"
+    description = "Deploy offload plugins + manifest to configured coprocessors and restart service."
+    dependsOn(buildOffloadTasksJar, generateOffloadManifest)
+
+    doLast {
+        def hostCsv = (project.findProperty("offloadHosts") ?: System.getenv("OFFLOAD_HOSTS") ?: "").toString()
+        def hosts = hostCsv.split(",").collect { it.trim() }.findAll { !it.isEmpty() }
+        if (hosts.isEmpty()) {
+            throw new GradleException("No coprocessor hosts configured. Set -PoffloadHosts=host1,host2 or OFFLOAD_HOSTS.")
+        }
+
+        def user = (project.findProperty("offloadUser") ?: System.getenv("OFFLOAD_USER") ?: "lvuser").toString()
+        def pluginDir = (project.findProperty("offloadPluginDir") ?: "/opt/offload/plugins").toString()
+        def serviceName = (project.findProperty("offloadServiceName") ?: "offload-server").toString()
+
+        def taskJar = project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile
+        def manifestFile = layout.buildDirectory.file("offload/offload-manifest.json").get().asFile
+
+        hosts.each { host ->
+            println "Deploying offload artifacts to ${user}@${host}:${pluginDir}"
+            exec {
+                commandLine "ssh", "${user}@${host}", "mkdir -p ${pluginDir}"
+            }
+            exec {
+                commandLine "scp", taskJar.absolutePath, "${user}@${host}:${pluginDir}/offload-tasks.jar"
+            }
+            exec {
+                commandLine "scp", manifestFile.absolutePath, "${user}@${host}:${pluginDir}/offload-manifest.json"
+            }
+            exec {
+                commandLine "ssh", "${user}@${host}", "sudo systemctl restart ${serviceName}"
+            }
+        }
+    }
+}
+
 spotless {
     java {
         target fileTree(".") {
@@ -193,7 +256,7 @@ spotless {
         replaceRegex("removeBOM", "^\\uFEFF", "")
 
         toggleOffOn()
-        googleJavaFormat()
+        googleJavaFormat('1.24.0')
         trimTrailingWhitespace()
         endWithNewline()
     }

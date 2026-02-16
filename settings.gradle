@@ -28,3 +28,11 @@ pluginManagement {
 
 Properties props = System.getProperties();
 props.setProperty("org.gradle.internal.native.headers.unresolved.dependencies.ignore", "true");
+
+rootProject.name = "2026-Rebuilt"
+
+include(":offload-api")
+include(":offload-processor")
+include(":offload-client")
+include(":offload-server")
+include(":offload-tasks")
