@@ -20,13 +20,13 @@ public final class Constants {
   public static enum Mode {
     REAL,
     SIM,
-    REPLAY
+    REPLAY;
   }
 
   public static enum RobotType {
     COMP,
     DEV,
-    SIM
+    SIM;
   }
 
   public static void main(String... args) {
