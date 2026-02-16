@@ -10,14 +10,10 @@ public interface HoodIO {
     public double motorTemperature;
 
     public double positionRotations;
-    public double hoodPositionDegrees;
     public double encoderPositionRotations;
     public double angularVelocityRotationsPerSecond;
     public double currentAmps;
     public double appliedVolts;
-
-    public boolean atTargetPosition;
-    public double positionSetPoint;
   }
 
   public default void updateInputs(HoodIOInputs inputs) {}

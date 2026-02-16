@@ -9,6 +9,10 @@ import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.simulation.DCMotorSim;
+import java.util.ArrayList;
+import java.util.List;
+import org.curtinfrc.frc2026.sim.BallSim;
+import org.littletonrobotics.junction.Logger;
 
 public class ShooterIOSim extends ShooterIODev {
   private static final double DT = 0.001;
@@ -18,6 +22,8 @@ public class ShooterIOSim extends ShooterIODev {
   private final DCMotor motorType = DCMotor.getKrakenX60Foc(3);
   private final DCMotorSim motorSimModel;
   private final Notifier simNotifier;
+
+  private final List<BallSim> simBalls = new ArrayList<>();
 
   public ShooterIOSim() {
     super();
@@ -40,5 +46,14 @@ public class ShooterIOSim extends ShooterIODev {
     motorSim.setSupplyVoltage(RobotController.getBatteryVoltage());
     motorSim.setRawRotorPosition(motorSimModel.getAngularPositionRotations());
     motorSim.setRotorVelocity(motorSimModel.getAngularVelocityRPM());
+
+    for (Integer ball = 0; ball < simBalls.size(); ball++) {
+      Logger.recordOutput("Balls/Ball " + ball.toString(), simBalls.get(ball).update(0.02));
+    }
+  }
+
+  @Override
+  public void addSimBall(BallSim ball) {
+    simBalls.add(ball);
   }
 }

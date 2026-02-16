@@ -1,12 +1,5 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
-import static edu.wpi.first.units.Units.Radians;
-import static edu.wpi.first.units.Units.RadiansPerSecond;
-import static edu.wpi.first.units.Units.Rotations;
-import static edu.wpi.first.units.Units.RotationsPerSecond;
-import static edu.wpi.first.units.Units.Volts;
-
-import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -15,16 +8,14 @@ import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
-import edu.wpi.first.units.measure.MutAngle;
-import edu.wpi.first.units.measure.MutAngularVelocity;
-import edu.wpi.first.units.measure.MutVoltage;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
-import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import java.util.function.Supplier;
+import org.curtinfrc.frc2026.Constants;
+import org.curtinfrc.frc2026.Constants.Mode;
 import org.curtinfrc.frc2026.sim.BallSim;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.LoggedTunableNumber;
@@ -38,6 +29,9 @@ public class HoodedShooter extends SubsystemBase {
   //     FieldConstants.Hub.topCenterPoint.getX(), FieldConstants.Hub.topCenterPoint.getY());
 
   public static final double WHEEL_DIAMETER = 0.101;
+
+  public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1;
+  public static final double READY_HOOD_POSITION_TOLERANCE = 1.0;
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
       new InterpolatingDoubleTreeMap();
@@ -56,9 +50,12 @@ public class HoodedShooter extends SubsystemBase {
   private final Supplier<Pose2d> robotPose;
   private final Supplier<ChassisSpeeds> robotVelocity;
 
-  private final LoggedTunableNumber hoodSetpoint = new LoggedTunableNumber("HoodSetpoint", 90);
-  private final LoggedTunableNumber shooterSetpoint =
+  private final LoggedTunableNumber tunableHoodSetpoint =
+      new LoggedTunableNumber("HoodSetpoint", 90);
+  private final LoggedTunableNumber tunableShooterSetpoint =
       new LoggedTunableNumber("ShooterSetpoint", 19.5);
+  private double shooterTarget = 0;
+  private double hoodTarget = 0;
 
   private final Alert hoodMotorDisconnectedAlert;
   private final Alert hoodMotorTempAlert;
@@ -66,16 +63,11 @@ public class HoodedShooter extends SubsystemBase {
   private final Alert[] shooterMotorTempAlerts = new Alert[3];
 
   public final Trigger hoodedShooterReady =
-      new Trigger(() -> hoodInputs.atTargetPosition && shooterInputs.atTargetVelocity);
-
-  private final MutVoltage appliedVoltageMut = Volts.mutable(0);
-  private final MutAngle angleRadiansMut = Radians.mutable(0);
-  private final MutAngularVelocity angularVelocityRadiansMut = RadiansPerSecond.mutable(0);
-
-  private final SysIdRoutine sysIdRoutineShooter;
-  private final SysIdRoutine sysIdRoutineHood;
-
-  public BallSim ballSim = new BallSim(0.0, new Rotation2d(0.0), new Pose3d());
+      new Trigger(
+          () ->
+              Math.abs(hoodTarget - hoodInputs.positionRotations) <= READY_HOOD_POSITION_TOLERANCE
+                  && Math.abs(shooterTarget - shooterInputs.velocityMetresPerSecond)
+                      <= READY_SHOOTER_VELOCITY_TOLERANCE);
 
   public HoodedShooter(
       ShooterIO shooterIO,
@@ -87,25 +79,21 @@ public class HoodedShooter extends SubsystemBase {
     this.robotPose = robotPose;
     this.robotVelocity = robotVelocity;
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(2.45, 82.0); // Actually 80.5
+    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 19.5);
+    DISTANCE_TO_HOOD_ANGLE.put(2.45, 82.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.15);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(3.6, 75.0); // Actually 75.5
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5);
+    DISTANCE_TO_HOOD_ANGLE.put(3.6, 75.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(3.6, 1.2);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.8, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(3.8, 73.0); // Actually 73.5
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.8, 19.5);
+    DISTANCE_TO_HOOD_ANGLE.put(3.8, 73.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(3.8, 1.43);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5); // Actually 23.5
-    DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0); // Actually 64.5
+    DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5);
+    DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
-
-    // DISTANCE_TO_SHOOTER_VELOCITY.put(5.66, 19.5); // Actually 23.5
-    // DISTANCE_TO_HOOD_ANGLE.put(5.66, 63.0); // Actually 63.5
-    // DISTANCE_TO_BALL_FLIGHT_TIME.put(5.66, 1.0);
 
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
@@ -119,42 +107,6 @@ public class HoodedShooter extends SubsystemBase {
               "Shooter motor " + String.valueOf(motor) + " temperature above 60°C.",
               AlertType.kWarning);
     }
-
-    sysIdRoutineShooter =
-        new SysIdRoutine(
-            new SysIdRoutine.Config(),
-            new SysIdRoutine.Mechanism(
-                shooterIO::setVoltageV,
-                log -> {
-                  log.motor("shooter")
-                      .voltage(appliedVoltageMut.mut_replace(shooterInputs.appliedVolts, Volts))
-                      .angularPosition(
-                          angleRadiansMut.mut_replace(shooterInputs.positionRotations, Rotations))
-                      .angularVelocity(
-                          angularVelocityRadiansMut.mut_replace(
-                              shooterInputs.velocityMetresPerSecond
-                                  / (HoodedShooter.WHEEL_DIAMETER * Math.PI),
-                              RotationsPerSecond));
-                },
-                this,
-                "shooter"));
-
-    sysIdRoutineHood =
-        new SysIdRoutine(
-            new SysIdRoutine.Config(),
-            new SysIdRoutine.Mechanism(
-                hoodIO::setVoltageV,
-                log -> {
-                  log.motor("hood")
-                      .voltage(appliedVoltageMut.mut_replace(hoodInputs.appliedVolts, Volts))
-                      .angularPosition(
-                          angleRadiansMut.mut_replace(hoodInputs.positionRotations, Rotations))
-                      .angularVelocity(
-                          angularVelocityRadiansMut.mut_replace(
-                              hoodInputs.angularVelocityRotationsPerSecond, RotationsPerSecond));
-                },
-                this,
-                "hood"));
   }
 
   @Override
@@ -163,12 +115,6 @@ public class HoodedShooter extends SubsystemBase {
     shooterIO.updateInputs(shooterInputs);
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
-    Logger.recordOutput("Ball", ballSim.update(0.02));
-
-    double distanceLength = HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm();
-    Logger.recordOutput("distanceFromHub", distanceLength);
-    Logger.recordOutput(
-        "hoodedShooterReady", hoodInputs.atTargetPosition && shooterInputs.atTargetVelocity);
 
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
@@ -202,22 +148,26 @@ public class HoodedShooter extends SubsystemBase {
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
-          // double hoodAngle = hoodSetpoint.get();
-          // double shooterVelocity = shooterSetpoint.get();
-          double hoodAngle = DISTANCE_TO_HOOD_ANGLE.get(compensatedDistanceLength);
-          double shooterVelocity = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
 
-          Logger.recordOutput("targetShooterVelocity", shooterVelocity);
+          if (Constants.tuningMode == true) {
+            hoodTarget = tunableHoodSetpoint.get();
+            shooterTarget = tunableShooterSetpoint.get();
+          } else {
+            hoodTarget = DISTANCE_TO_HOOD_ANGLE.get(compensatedDistanceLength);
+            shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
+          }
 
-          hoodIO.setPosition(hoodAngle);
-          shooterIO.setVelocity(shooterVelocity);
+          hoodIO.setPosition(hoodTarget);
+          shooterIO.setVelocity(shooterTarget);
 
-          ballSim =
-              new BallSim(
-                  shooterVelocity,
-                  Rotation2d.fromDegrees(hoodAngle + 90),
-                  new Pose3d(robotPose.get())
-                      .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero)));
+          if (Constants.getMode() == Mode.SIM) {
+            shooterIO.addSimBall(
+                new BallSim(
+                    shooterTarget,
+                    Rotation2d.fromDegrees(hoodTarget + 90),
+                    new Pose3d(robotPose.get())
+                        .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
+          }
         });
   }
 
@@ -263,56 +213,5 @@ public class HoodedShooter extends SubsystemBase {
           hoodIO.setVoltage(0);
           shooterIO.setVelocity(0);
         });
-  }
-
-  private boolean hoodSoftLimitedForward() {
-    return hoodInputs.positionRotations
-        > HoodIODev.FORWARD_LIMIT_ROTATIONS - HoodIODev.LIMIT_BUFFER_ROTATIONS;
-  }
-
-  private boolean hoodSoftLimitedReverse() {
-    return hoodInputs.positionRotations
-        < HoodIODev.REVERSE_LIMIT_ROTATIONS + HoodIODev.LIMIT_BUFFER_ROTATIONS;
-  }
-
-  public Command shooterSysIdQuasistaticForward() {
-    return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kForward);
-  }
-
-  public Command shooterSysIdQuasistaticBackward() {
-    return sysIdRoutineShooter.quasistatic(SysIdRoutine.Direction.kReverse);
-  }
-
-  public Command shooterSysIdDynamicForward() {
-    return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kForward);
-  }
-
-  public Command shooterSysIdDynamicBackward() {
-    return sysIdRoutineShooter.dynamic(SysIdRoutine.Direction.kReverse);
-  }
-
-  // do not use
-  public Command hoodSysIdQuasistaticForward() {
-    return sysIdRoutineHood
-        .quasistatic(SysIdRoutine.Direction.kForward)
-        .until(() -> hoodSoftLimitedForward());
-  }
-
-  public Command hoodSysIdQuasistaticBackward() {
-    return sysIdRoutineHood
-        .quasistatic(SysIdRoutine.Direction.kReverse)
-        .until(() -> hoodSoftLimitedReverse());
-  }
-
-  public Command hoodSysIdDynamicForward() {
-    return sysIdRoutineHood
-        .dynamic(SysIdRoutine.Direction.kForward)
-        .until(() -> hoodSoftLimitedForward());
-  }
-
-  public Command hoodSysIdDynamicBackward() {
-    return sysIdRoutineHood
-        .dynamic(SysIdRoutine.Direction.kReverse)
-        .until(() -> hoodSoftLimitedReverse());
   }
 }

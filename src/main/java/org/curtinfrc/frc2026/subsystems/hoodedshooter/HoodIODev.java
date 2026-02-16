@@ -40,7 +40,6 @@ public class HoodIODev implements HoodIO {
   public static final double MOTOR_TO_SENSOR_RATIO = 2.66666667;
   public static final double FORWARD_LIMIT_ROTATIONS = 0.33888889;
   public static final double REVERSE_LIMIT_ROTATIONS = 0;
-  public static final double LIMIT_BUFFER_ROTATIONS = 0.05;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0.175;
   public static final double ENCODER_MAGNET_OFFSET = 0;
   public static final double ZERO_DEGREE_OFFSET_DEGREES = 53;
@@ -49,10 +48,10 @@ public class HoodIODev implements HoodIO {
   public static final double KP = 80.55;
   public static final double KI = 0;
   public static final double KD = 3.37;
-  public static final double KS = 0.47;
+  public static final double KS_OUT = 0.42;
+  public static final double KS_STOWED = 0.12;
   public static final double KV = 2.76;
-  public static final double KA_OUT = 0.02;
-  public static final double KA_STOWED = 0.02;
+  public static final double KA = 0.02;
   public static final double KG = 0.5;
 
   public static final double MM_CRUISE_VELOCITY = 2700;
@@ -85,9 +84,9 @@ public class HoodIODev implements HoodIO {
                   .withKP(KP)
                   .withKI(KI)
                   .withKD(KD)
-                  .withKS(KS)
+                  .withKS(KS_OUT)
                   .withKV(KV)
-                  .withKA(KA_OUT)
+                  .withKA(KA)
                   .withKG(KG)
                   .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
                   .withGravityType(GravityTypeValue.Arm_Cosine))
@@ -96,9 +95,9 @@ public class HoodIODev implements HoodIO {
                   .withKP(KP)
                   .withKI(KI)
                   .withKD(KD)
-                  .withKS(KS)
+                  .withKS(KS_STOWED)
                   .withKV(KV)
-                  .withKA(KA_STOWED)
+                  .withKA(KA)
                   .withKG(KG)
                   .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
                   .withGravityType(GravityTypeValue.Arm_Cosine))
@@ -121,7 +120,6 @@ public class HoodIODev implements HoodIO {
   private final StatusSignal<Voltage> voltage = motor.getMotorVoltage();
   private final StatusSignal<Angle> encoderPosition = encoder.getPosition();
   private final StatusSignal<Temperature> temperature = motor.getDeviceTemp();
-  private double setpoint = ZERO_DEGREE_OFFSET_DEGREES;
 
   private final VoltageOut voltageRequest =
       new VoltageOut(0).withEnableFOC(true).withIgnoreSoftwareLimits(false);
@@ -136,9 +134,6 @@ public class HoodIODev implements HoodIO {
         50.0, velocity, voltage, current, position, encoderPosition);
     motor.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, voltage, current, position, encoderPosition);
-
-    PhoenixUtil.refreshAll();
-    encoder.setPosition(0);
   }
 
   @Override
@@ -153,14 +148,8 @@ public class HoodIODev implements HoodIO {
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
     inputs.positionRotations = position.getValueAsDouble();
-    inputs.hoodPositionDegrees =
-        (encoderPosition.getValueAsDouble() * 360 / GEAR_RATIO) + ZERO_DEGREE_OFFSET_DEGREES;
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
-
-    inputs.positionSetPoint = setpoint;
-    inputs.atTargetPosition =
-        Math.abs(setpoint - inputs.hoodPositionDegrees) < POSITION_TOLERANCE_DEGREES;
   }
 
   @Override
@@ -174,20 +163,17 @@ public class HoodIODev implements HoodIO {
   }
 
   @Override
-  public void setPosition(double position) {
-    setpoint = position;
-    if (position / 360 < STOWED_OUT_POSITION_THRESHOLD) {
+  public void setPosition(double positionDegrees) {
+    if (positionDegrees / 360 < STOWED_OUT_POSITION_THRESHOLD) {
       motor.setControl(
           positionRequest
-              .withPosition((position - ZERO_DEGREE_OFFSET_DEGREES) / 360)
-              .withSlot(1)
-              .withFeedForward(-0.35));
+              .withPosition((positionDegrees - ZERO_DEGREE_OFFSET_DEGREES) / 360)
+              .withSlot(1));
     } else {
       motor.setControl(
           positionRequest
-              .withPosition((position - ZERO_DEGREE_OFFSET_DEGREES) / 360)
-              .withSlot(0)
-              .withFeedForward(0.05));
+              .withPosition((positionDegrees - ZERO_DEGREE_OFFSET_DEGREES) / 360)
+              .withSlot(0));
     }
   }
 }

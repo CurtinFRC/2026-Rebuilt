@@ -258,7 +258,7 @@ public class Robot extends LoggedRobot {
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
-    hoodedShooter.readyToShoot().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    hoodedShooter.hoodedShooterReady.whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
@@ -271,12 +271,6 @@ public class Robot extends LoggedRobot {
     controllerDisconnected.set(!controller.isConnected());
     logRunningCommands();
     logRequiredSubsystems();
-    Logger.recordOutput(
-        "range",
-        new Pose2d(11.78013, 4.03348, Rotation2d.kZero)
-            .minus(drive.getPose())
-            .getTranslation()
-            .getNorm());
     Logger.recordOutput(
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
@@ -293,15 +287,7 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {
-    // CommandScheduler.getInstance()
-    //     .schedule(
-    //         hoodedShooter
-    //             .hoodSysIdDynamicForward()
-    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
-  }
+  public void autonomousInit() {}
 
   /** This function is called periodically during autonomous. */
   @Override

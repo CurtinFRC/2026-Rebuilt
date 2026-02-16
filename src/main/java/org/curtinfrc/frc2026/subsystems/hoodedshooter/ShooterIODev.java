@@ -33,7 +33,6 @@ public class ShooterIODev implements ShooterIO {
   public static final double VELOCITY_TOLERANCE = 1;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double EFFICIENCY = 0.85;
   private static final double KP = 0.0;
   private static final double KI = 0.0;
   private static final double KD = 0.0;
@@ -62,7 +61,6 @@ public class ShooterIODev implements ShooterIO {
   private final StatusSignal<AngularVelocity> velocity = leaderMotor.getVelocity();
   private final StatusSignal<AngularAcceleration> acceleration = leaderMotor.getAcceleration();
   private final StatusSignal<Angle> position = leaderMotor.getPosition();
-  private double setpoint = 19.5;
 
   private final List<StatusSignal<Temperature>> motorTemperatures =
       List.of(
@@ -99,10 +97,6 @@ public class ShooterIODev implements ShooterIO {
     inputs.currentAmps = current.getValueAsDouble();
     inputs.velocityMetresPerSecond = convertRPSToVelocity(velocity.getValueAsDouble());
     inputs.positionRotations = position.getValueAsDouble();
-
-    inputs.velocitySetPoint = setpoint;
-    inputs.atTargetVelocity =
-        Math.abs(setpoint - inputs.velocityMetresPerSecond) < VELOCITY_TOLERANCE;
   }
 
   @Override
@@ -112,8 +106,7 @@ public class ShooterIODev implements ShooterIO {
 
   @Override
   public void setVelocity(double velocity) {
-    setpoint = velocity + 4;
-    double rps = convertVelocityToRPS(velocity / EFFICIENCY);
+    double rps = convertVelocityToRPS(velocity);
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
 
