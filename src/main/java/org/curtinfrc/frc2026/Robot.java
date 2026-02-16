@@ -4,8 +4,6 @@ import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;

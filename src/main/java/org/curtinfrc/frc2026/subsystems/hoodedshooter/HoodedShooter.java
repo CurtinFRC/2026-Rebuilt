@@ -1,5 +1,6 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -22,11 +23,8 @@ import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
-  // TODO fix
   public static final Translation2d HUB_LOCATION =
       ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
-  // new Translation2d(
-  //     FieldConstants.Hub.topCenterPoint.getX(), FieldConstants.Hub.topCenterPoint.getY());
 
   public static final double WHEEL_DIAMETER = 0.101;
 
