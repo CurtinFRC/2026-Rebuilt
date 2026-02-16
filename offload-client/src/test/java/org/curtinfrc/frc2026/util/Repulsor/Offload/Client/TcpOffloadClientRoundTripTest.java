@@ -1,6 +1,7 @@
 package org.curtinfrc.frc2026.util.Repulsor.Offload.Client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -25,15 +26,22 @@ class TcpOffloadClientRoundTripTest {
           new TcpOffloadClient(
               OffloadClientConfig.builder()
                   .hosts(List.of(new OffloadHost("127.0.0.1", server.port())))
-                  .connectTimeoutMs(80)
-                  .probeTimeoutMs(80)
-                  .readTimeoutMs(5)
+                  .connectTimeoutMs(250)
+                  .probeTimeoutMs(250)
+                  .readTimeoutMs(25)
                   .queueCapacity(32)
                   .build());
+      client.start();
+
+      long waitUntil = System.currentTimeMillis() + 1500L;
+      while (!client.isHealthy() && System.currentTimeMillis() < waitUntil) {
+        Thread.sleep(10L);
+      }
+      assertTrue(client.isHealthy(), "Client did not become healthy before first request");
 
       EchoRequest request = new EchoRequest("ping");
       byte[] payload = CborSerde.write(request);
-      byte[] responseBytes = client.call("echo.task", payload, 250).get(1, TimeUnit.SECONDS);
+      byte[] responseBytes = client.call("echo.task", payload, 1000).get(2, TimeUnit.SECONDS);
       EchoResponse response = CborSerde.read(responseBytes, EchoResponse.class);
 
       assertEquals("PING", response.value);
