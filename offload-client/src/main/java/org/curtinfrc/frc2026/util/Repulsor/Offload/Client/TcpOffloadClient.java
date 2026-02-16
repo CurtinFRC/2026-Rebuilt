@@ -128,12 +128,14 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
     newSocket.connect(
         new InetSocketAddress(best.host().host(), best.host().port()), config.connectTimeoutMs());
     newSocket.setTcpNoDelay(true);
-    newSocket.setSoTimeout(config.readTimeoutMs());
+    int handshakeTimeoutMs = Math.max(config.readTimeoutMs(), config.connectTimeoutMs());
+    newSocket.setSoTimeout(handshakeTimeoutMs);
 
     DataInputStream newInput = new DataInputStream(newSocket.getInputStream());
     DataOutputStream newOutput = new DataOutputStream(newSocket.getOutputStream());
 
     OffloadHelloResponse hello = hello(newInput, newOutput);
+    newSocket.setSoTimeout(config.readTimeoutMs());
 
     socket = newSocket;
     input = newInput;
