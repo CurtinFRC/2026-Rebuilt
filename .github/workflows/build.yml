@@ -17,4 +17,4 @@ jobs:
       - name: Check Formatting
         run: ./gradlew spotlessCheck
       - name: Build robot code
-        run: ./gradlew build
+        run: ./gradlew build -PvisionSkipNuitka=true

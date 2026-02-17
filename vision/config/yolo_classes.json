@@ -1,0 +1,57 @@
+{
+  "default": {
+    "type": "unknown",
+    "repulsor_class_id": -1,
+    "oid_prefix": "obj",
+    "estimator": "plane",
+    "plane_z_m": 0.0,
+    "frac_from_top": 0.0,
+    "min_abs_dz": 0.0,
+    "max_range_m": 9.0,
+    "enabled": false
+  },
+  "classes": {
+    "0": {
+      "type": "fuel",
+      "repulsor_class_id": 0,
+      "oid_prefix": "fuel",
+      "estimator": "fuel",
+      "ball_radius_m": 0.15,
+      "frac_from_top": 0.1,
+      "min_abs_dz": 0.02,
+      "max_range_m": 9.0,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "enabled": true
+    },
+    "1": {
+      "type": "robot_blue",
+      "repulsor_class_id": 1,
+      "oid_prefix": "robot_blue",
+      "estimator": "plane",
+      "plane_z_m": 0.0,
+      "frac_from_top": 0.8,
+      "min_abs_dz": 0.02,
+      "max_range_m": 12.0,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "enabled": true
+    },
+    "2": {
+      "type": "robot_red",
+      "repulsor_class_id": 2,
+      "oid_prefix": "robot_red",
+      "estimator": "plane",
+      "plane_z_m": 0.0,
+      "frac_from_top": 0.8,
+      "min_abs_dz": 0.02,
+      "max_range_m": 12.0,
+      "roll": 0.0,
+      "pitch": 0.0,
+      "yaw": 0.0,
+      "enabled": true
+    }
+  }
+}

@@ -11,6 +11,10 @@ java {
 }
 
 def ROBOT_MAIN_CLASS = "org.curtinfrc.frc2026.Main"
+def visionSkipNuitkaRaw = (project.findProperty("visionSkipNuitka")
+        ?: System.getenv("VISION_SKIP_NUITKA")
+        ?: "false").toString().trim().toLowerCase()
+def visionSkipNuitka = ["1", "true", "yes", "y", "on"].contains(visionSkipNuitkaRaw)
 
 // Define my targets (RoboRIO) and artifacts (deployable files)
 // This is added by GradleRIO's backing project DeployUtils.
@@ -191,6 +195,7 @@ project.compileJava.dependsOn(spotlessApply)
 
 project.tasks.named("deploy") {
     dependsOn(deployOffloadToCoprocessors)
+    dependsOn(deployVisionToCoprocessor)
 }
 
 task(buildOffloadTasksJar) {
@@ -243,6 +248,197 @@ task(deployOffloadToCoprocessors) {
             }
         }
     }
+}
+
+task(compileVisionNuitka) {
+    group = "vision"
+    description = "Compile vision runtime to a standalone binary with Nuitka."
+    onlyIf { !visionSkipNuitka }
+    doLast {
+        def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "python").toString()
+        def nuitkaScript = (project.findProperty("visionNuitkaScript") ?: System.getenv("VISION_NUITKA_SCRIPT") ?: "vision/run.py").toString()
+        def outputDir = layout.buildDirectory.dir("visionNuitka").get().asFile
+        delete(outputDir)
+        outputDir.mkdirs()
+        def configDir = file("vision/config").absolutePath.replace("\\", "/")
+        def extraArgsRaw = (project.findProperty("visionNuitkaArgs") ?: System.getenv("VISION_NUITKA_ARGS") ?: "").toString().trim()
+        def cmd = [
+            pythonCmd,
+            "-m",
+            "nuitka",
+            "--standalone",
+            "--follow-imports",
+            "--assume-yes-for-downloads",
+            "--remove-output",
+            "--output-dir=${outputDir.absolutePath.replace("\\", "/")}",
+            "--output-filename=vision_runtime",
+            "--include-data-dir=${configDir}=vision/config",
+            nuitkaScript
+        ]
+        if (!extraArgsRaw.isEmpty()) {
+            cmd.addAll(extraArgsRaw.split("\\s+").findAll { !it.isEmpty() })
+        }
+        exec {
+            commandLine cmd
+        }
+        def distDirs = outputDir.listFiles()?.findAll { it.isDirectory() && it.name.endsWith(".dist") } ?: []
+        if (distDirs.isEmpty()) {
+            throw new GradleException("Nuitka output missing .dist directory in ${outputDir}")
+        }
+        def distDir = distDirs.max { it.lastModified() }
+        project.ext.set("visionNuitkaDistDir", distDir.absolutePath)
+    }
+}
+
+task(prepareVisionBundle) {
+    group = "vision"
+    description = "Bundle Nuitka-compiled vision runtime and config for deployment."
+    dependsOn(compileVisionNuitka)
+    doLast {
+        def bundleDir = layout.buildDirectory.dir("visionBundle").get().asFile
+        delete(bundleDir)
+        bundleDir.mkdirs()
+        def distPath = project.ext.has("visionNuitkaDistDir") ? project.ext.get("visionNuitkaDistDir").toString() : ""
+        if (distPath.isEmpty()) {
+            def outputDir = layout.buildDirectory.dir("visionNuitka").get().asFile
+            def distDirs = outputDir.listFiles()?.findAll { it.isDirectory() && it.name.endsWith(".dist") } ?: []
+            if (!distDirs.isEmpty()) {
+                distPath = distDirs.max { it.lastModified() }.absolutePath
+            }
+        }
+        if (distPath.isEmpty()) {
+            throw new GradleException("Missing Nuitka dist directory in build/visionNuitka. Run compileVisionNuitka first.")
+        }
+        def distDir = file(distPath)
+        if (!distDir.exists() || !distDir.isDirectory()) {
+            throw new GradleException("Nuitka dist directory not found: ${distDir}")
+        }
+        copy {
+            from(distDir)
+            into(new File(bundleDir, "vision-runtime"))
+        }
+        copy {
+            from("vision/config")
+            into(new File(bundleDir, "vision/config"))
+        }
+        def modelsDir = file("vision/models")
+        if (modelsDir.exists() && modelsDir.isDirectory()) {
+            copy {
+                from(modelsDir)
+                into(new File(bundleDir, "vision/models"))
+            }
+        }
+        def launcher = new File(bundleDir, "run-vision.sh")
+        launcher.text = """#!/usr/bin/env sh
+set -e
+ROOT="\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)"
+OS="\$(uname -s 2>/dev/null || echo unknown)"
+if [ "\$OS" = "Linux" ]; then
+  EXE="\$(find "\$ROOT/vision-runtime" -maxdepth 1 -type f \\( -perm -111 -o -name "*.bin" \\) ! -name "*.exe" | head -n 1)"
+else
+  EXE="\$(find "\$ROOT/vision-runtime" -maxdepth 1 -type f \\( -perm -111 -o -name "*.bin" -o -name "*.exe" \\) | head -n 1)"
+fi
+if [ -z "\$EXE" ]; then
+  echo "No compatible vision executable found in \$ROOT/vision-runtime"
+  exit 1
+fi
+exec "\$EXE" --config "\$ROOT/vision/config/runtime.json"
+"""
+    }
+}
+
+task(generateVisionServiceUnit) {
+    group = "vision"
+    description = "Generate systemd unit file for the vision runtime."
+    dependsOn(prepareVisionBundle)
+    doLast {
+        def deployDir = (project.findProperty("visionDeployDir") ?: System.getenv("VISION_DEPLOY_DIR") ?: "/opt/repulsor-vision").toString()
+        def serviceName = (project.findProperty("visionServiceName") ?: System.getenv("VISION_SERVICE_NAME") ?: "repulsor-vision").toString()
+        def serviceUser = (project.findProperty("visionServiceUser") ?: System.getenv("VISION_SERVICE_USER") ?: "").toString().trim()
+        def serviceGroup = (project.findProperty("visionServiceGroup") ?: System.getenv("VISION_SERVICE_GROUP") ?: "").toString().trim()
+        def userLine = serviceUser.isEmpty() ? "" : "User=${serviceUser}\n"
+        def groupLine = serviceGroup.isEmpty() ? "" : "Group=${serviceGroup}\n"
+        def unitDir = layout.buildDirectory.dir("visionBundle/service").get().asFile
+        unitDir.mkdirs()
+        def unitFile = new File(unitDir, "${serviceName}.service")
+        unitFile.text = """[Unit]
+Description=Repulsor Vision Runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${deployDir}
+ExecStart=${deployDir}/run-vision.sh
+Restart=always
+RestartSec=1
+${userLine}${groupLine}
+
+[Install]
+WantedBy=multi-user.target
+"""
+    }
+}
+
+task(deployVisionToCoprocessor) {
+    group = "vision"
+    description = "Deploy Nuitka-compiled vision runtime/config to one coprocessor and restart its service."
+    dependsOn(generateVisionServiceUnit)
+    doLast {
+        def host = (project.findProperty("visionHost") ?: System.getenv("VISION_HOST") ?: "").toString().trim()
+        if (host.isEmpty()) {
+            def offloadHosts = (project.findProperty("offloadHosts") ?: System.getenv("OFFLOAD_HOSTS") ?: "").toString()
+            def first = offloadHosts.split(",").collect { it.trim() }.find { !it.isEmpty() }
+            if (first != null) {
+                host = first
+            }
+        }
+        if (host.isEmpty()) {
+            throw new GradleException("No vision coprocessor host configured. Set -PvisionHost=<host> or VISION_HOST.")
+        }
+
+        def user = (project.findProperty("visionUser") ?: System.getenv("VISION_USER") ?: System.getenv("OFFLOAD_USER") ?: System.getenv("USER") ?: "").toString().trim()
+        if (user.isEmpty()) {
+            throw new GradleException("No vision SSH user configured. Set -PvisionUser=<user> or VISION_USER.")
+        }
+        def deployDir = (project.findProperty("visionDeployDir") ?: System.getenv("VISION_DEPLOY_DIR") ?: "/opt/repulsor-vision").toString()
+        def serviceName = (project.findProperty("visionServiceName") ?: System.getenv("VISION_SERVICE_NAME") ?: "repulsor-vision").toString()
+        def remote = "${user}@${host}"
+        def bundleDir = layout.buildDirectory.dir("visionBundle").get().asFile
+        def unitFile = new File(layout.buildDirectory.dir("visionBundle/service").get().asFile, "${serviceName}.service")
+        def remoteTmpUnit = "/tmp/${serviceName}.service"
+        def remoteCmd = """set -e
+mkdir -p ${deployDir}
+chmod +x ${deployDir}/run-vision.sh || true
+if [ -d ${deployDir}/vision-runtime ]; then
+  chmod +x ${deployDir}/vision-runtime/* || true
+fi
+sudo mv ${remoteTmpUnit} /etc/systemd/system/${serviceName}.service
+sudo chmod 644 /etc/systemd/system/${serviceName}.service
+sudo systemctl daemon-reload
+sudo systemctl enable ${serviceName}
+sudo systemctl restart ${serviceName}
+sudo systemctl is-active --quiet ${serviceName}
+"""
+
+        println "Deploying vision bundle to ${remote}:${deployDir}"
+        exec {
+            commandLine "ssh", remote, "mkdir -p ${deployDir}"
+        }
+        exec {
+            commandLine "scp", "-r", "${bundleDir.absolutePath}/.", "${remote}:${deployDir}/"
+        }
+        exec {
+            commandLine "scp", unitFile.absolutePath, "${remote}:${remoteTmpUnit}"
+        }
+        exec {
+            commandLine "ssh", remote, remoteCmd
+        }
+    }
+}
+
+project.tasks.named("build") {
+    dependsOn("compileVisionNuitka")
 }
 
 spotless {

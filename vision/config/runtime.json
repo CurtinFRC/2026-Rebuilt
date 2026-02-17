@@ -1,0 +1,88 @@
+{
+  "nt": {
+    "server": "localhost",
+    "port": 5810,
+    "client_name": "vision",
+    "table_path": "FieldVision/main",
+    "pose_base_path": "AdvantageKit/RealOutputs/Odometry",
+    "pose_struct_key": "Robot",
+    "connect_timeout_s": 2.0
+  },
+  "loop_hz": 20.0,
+  "max_objects_per_tick": 256,
+  "class_map_path": "yolo_classes.json",
+  "cameras": [
+    {
+      "name": "cam0",
+      "usb_index": 0,
+      "width": 1280,
+      "height": 720,
+      "fps": 20.0,
+      "hfov_deg": 95.0,
+      "vfov_deg": 60.0,
+      "max_range_m": 9.0,
+      "pose_mode": "robot",
+      "robot_pose": {
+        "x": 0.35,
+        "y": 0.0,
+        "z": 1.35,
+        "yaw_deg": 0.0,
+        "pitch_deg": -12.0,
+        "roll_deg": 0.0
+      },
+      "calibration": {
+        "K": [
+          [
+            900.0,
+            0.0,
+            640.0
+          ],
+          [
+            0.0,
+            900.0,
+            360.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "dist": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "axis_cam_from_cv": [
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      ],
+      "pipeline": {
+        "type": "yolo",
+        "model_path": "../models/yolo.onnx",
+        "output_format": "yolov8",
+        "input_width": 640,
+        "input_height": 640,
+        "conf_threshold": 0.25,
+        "nms_threshold": 0.45,
+        "max_detections": 300
+      }
+    }
+  ]
+}

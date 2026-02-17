@@ -1,2 +1,5 @@
+from lib.runtime import main as runtime_main
+
+
 def main():
-    pass
+    runtime_main()
