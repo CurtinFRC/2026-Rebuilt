@@ -1,7 +1,7 @@
 package org.curtinfrc.frc2026.util.Repulsor.Offload;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -19,34 +19,36 @@ import org.junit.jupiter.api.Test;
 class DragShotOffloadIntegrationTest {
   @Test
   void shouldUseRemoteThenFallbackWhenServerIsDown() throws Exception {
+    OffloadRpc.clearGateway();
     try (MockOffloadServer server = new MockOffloadServer()) {
       TcpOffloadClient client =
           new TcpOffloadClient(
               OffloadClientConfig.builder()
                   .hosts(List.of(new OffloadHost("127.0.0.1", server.port())))
-                  .connectTimeoutMs(80)
-                  .probeTimeoutMs(80)
-                  .readTimeoutMs(5)
+                  .connectTimeoutMs(250)
+                  .probeTimeoutMs(250)
+                  .readTimeoutMs(50)
+                  .probeBeforeConnect(false)
                   .queueCapacity(16)
                   .build());
       OffloadRpc.setGateway(client);
       client.start();
 
-      long waitUntil = System.currentTimeMillis() + 500L;
+      long waitUntil = System.currentTimeMillis() + 3000L;
       while (!client.isHealthy() && System.currentTimeMillis() < waitUntil) {
         Thread.sleep(10L);
       }
+      assertTrue(client.isHealthy(), "Client did not become healthy before offload call");
 
-      SampleMathRequestDTO request = new SampleMathRequestDTO(7);
-
-      SampleMathResponseDTO remote = SampleMathOffloadEntrypoints_Offloaded.doubleValue(request);
-      assertEquals(100, remote.getOutput());
+      int remote = SampleMathOffloadEntrypoints_Offloaded.doubleValue_offload(7);
+      assertEquals(100, remote);
 
       client.close();
 
-      SampleMathResponseDTO fallback = SampleMathOffloadEntrypoints_Offloaded.doubleValue(request);
-      assertNotNull(fallback);
-      assertEquals(14, fallback.getOutput());
+      int fallback = SampleMathOffloadEntrypoints_Offloaded.doubleValue_offload(7);
+      assertEquals(14, fallback);
+    } finally {
+      OffloadRpc.clearGateway();
     }
   }
 
@@ -93,8 +95,10 @@ class DragShotOffloadIntegrationTest {
             continue;
           }
 
-          if ("repulsor.sample.math.double.v1".equals(request.taskId())) {
-            SampleMathResponseDTO response = new SampleMathResponseDTO(100);
+          if (OffloadTaskIds.SAMPLE_DOUBLE_VALUE.equals(request.taskId())) {
+            SampleMathOffloadEntrypoints_doubleValue_OffloadResponse response =
+                new SampleMathOffloadEntrypoints_doubleValue_OffloadResponse();
+            response.setResult(OffloadValueCodec.encode("int", 100));
             OffloadProtocol.writeResponse(
                 output,
                 request.correlationId(),

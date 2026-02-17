@@ -24,10 +24,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotAutoRequestDTO;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotOffloadMapper;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.DragShotPlannerOffloadEntrypoints_Offloaded;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.RepulsorOffloadRuntime;
 
 public final class DragShotPlanner {
   private DragShotPlanner() {}
@@ -84,34 +81,16 @@ public final class DragShotPlanner {
       double robotHalfWidthMeters,
       List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
-    DragShotAutoRequestDTO request =
-        DragShotOffloadMapper.toRequest(
-            gamePiece,
-            targetFieldPosition,
-            targetHeightMeters,
-            robotPose,
-            shooterReleaseHeightMeters,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles,
-            constraints);
-
-    if (request == null) {
-      return DragShotPlannerLocalAccess.findBestShotAutoLocal(
-          gamePiece,
-          targetFieldPosition,
-          targetHeightMeters,
-          robotPose,
-          shooterReleaseHeightMeters,
-          robotHalfLengthMeters,
-          robotHalfWidthMeters,
-          dynamicObstacles,
-          constraints);
-    }
-
-    RepulsorOffloadRuntime.ensureInitialized();
-    return DragShotOffloadMapper.fromResponse(
-        DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAuto(request));
+    return DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAuto_offload(
+        gamePiece,
+        targetFieldPosition,
+        targetHeightMeters,
+        robotPose,
+        shooterReleaseHeightMeters,
+        robotHalfLengthMeters,
+        robotHalfWidthMeters,
+        dynamicObstacles,
+        constraints);
   }
 
   public static CompletableFuture<Optional<ShotSolution>> findBestShotAutoAsync(
@@ -124,47 +103,16 @@ public final class DragShotPlanner {
       double robotHalfWidthMeters,
       List<? extends Obstacle> dynamicObstacles,
       Constraints constraints) {
-    DragShotAutoRequestDTO request =
-        DragShotOffloadMapper.toRequest(
-            gamePiece,
-            targetFieldPosition,
-            targetHeightMeters,
-            robotPose,
-            shooterReleaseHeightMeters,
-            robotHalfLengthMeters,
-            robotHalfWidthMeters,
-            dynamicObstacles,
-            constraints);
-
-    if (request == null) {
-      return CompletableFuture.completedFuture(
-          DragShotPlannerLocalAccess.findBestShotAutoLocal(
-              gamePiece,
-              targetFieldPosition,
-              targetHeightMeters,
-              robotPose,
-              shooterReleaseHeightMeters,
-              robotHalfLengthMeters,
-              robotHalfWidthMeters,
-              dynamicObstacles,
-              constraints));
-    }
-
-    RepulsorOffloadRuntime.ensureInitialized();
-    return DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAutoAsync(request)
-        .thenApply(DragShotOffloadMapper::fromResponse)
-        .exceptionally(
-            ignored ->
-                DragShotPlannerLocalAccess.findBestShotAutoLocal(
-                    gamePiece,
-                    targetFieldPosition,
-                    targetHeightMeters,
-                    robotPose,
-                    shooterReleaseHeightMeters,
-                    robotHalfLengthMeters,
-                    robotHalfWidthMeters,
-                    dynamicObstacles,
-                    constraints));
+    return DragShotPlannerOffloadEntrypoints_Offloaded.findBestShotAuto_offloadAsync(
+        gamePiece,
+        targetFieldPosition,
+        targetHeightMeters,
+        robotPose,
+        shooterReleaseHeightMeters,
+        robotHalfLengthMeters,
+        robotHalfWidthMeters,
+        dynamicObstacles,
+        constraints);
   }
 
   public static Optional<ShotSolution> findBestShotAutoLocal(

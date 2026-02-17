@@ -23,6 +23,14 @@ public final class OffloadRpc {
     gateway = Objects.requireNonNull(offloadGateway);
   }
 
+  public static boolean isGatewayConfigured() {
+    return gateway != NOOP_GATEWAY;
+  }
+
+  public static void clearGateway() {
+    gateway = NOOP_GATEWAY;
+  }
+
   public static OffloadGateway gateway() {
     return gateway;
   }

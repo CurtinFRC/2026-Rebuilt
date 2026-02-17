@@ -15,7 +15,6 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.SquareObstacle
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.VerticalObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
-import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlannerLocalAccess;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotSolution;
 import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner;
@@ -23,109 +22,38 @@ import org.curtinfrc.frc2026.util.Repulsor.VisionPlanner;
 public final class DragShotOffloadMapper {
   private DragShotOffloadMapper() {}
 
-  public static DragShotAutoRequestDTO toRequest(
-      GamePiecePhysics gamePiece,
-      Translation2d targetFieldPosition,
-      double targetHeightMeters,
-      Pose2d robotPose,
-      double shooterReleaseHeightMeters,
-      double robotHalfLengthMeters,
-      double robotHalfWidthMeters,
-      List<? extends Obstacle> dynamicObstacles,
-      Constraints constraints) {
-
-    DragShotAutoRequestDTO request = new DragShotAutoRequestDTO();
-    request.setGamePiece(toGamePieceDto(gamePiece));
-    request.setTargetFieldPosition(toTranslationDto(targetFieldPosition));
-    request.setTargetHeightMeters(targetHeightMeters);
-    request.setRobotPose(toPoseDto(robotPose));
-    request.setShooterReleaseHeightMeters(shooterReleaseHeightMeters);
-    request.setRobotHalfLengthMeters(robotHalfLengthMeters);
-    request.setRobotHalfWidthMeters(robotHalfWidthMeters);
-    request.setConstraints(toConstraintsDto(constraints));
-
-    List<ObstacleDTO> obstacleDtos = new ArrayList<>();
-    if (dynamicObstacles != null) {
-      for (Obstacle obstacle : dynamicObstacles) {
-        ObstacleDTO dto = toObstacleDto(obstacle);
-        if (dto == null) {
-          return null;
-        }
-        obstacleDtos.add(dto);
-      }
+  public static Translation2dDTO toTranslationDto(Translation2d translation) {
+    if (translation == null) {
+      return new Translation2dDTO();
     }
-    request.setDynamicObstacles(obstacleDtos);
-
-    return request;
+    return new Translation2dDTO(translation.getX(), translation.getY());
   }
 
-  public static DragShotAutoResponseDTO executeLocal(DragShotAutoRequestDTO request) {
-    if (request == null) {
-      return DragShotAutoResponseDTO.empty();
+  public static Translation2d fromTranslationDto(Translation2dDTO dto) {
+    if (dto == null) {
+      return new Translation2d();
     }
-
-    GamePiecePhysics gamePiece = fromGamePieceDto(request.getGamePiece());
-    Translation2d targetFieldPosition = fromTranslationDto(request.getTargetFieldPosition());
-    Pose2d robotPose = fromPoseDto(request.getRobotPose());
-    List<Obstacle> dynamicObstacles = fromObstacleDtos(request.getDynamicObstacles());
-    Constraints constraints = fromConstraintsDto(request.getConstraints());
-
-    Optional<ShotSolution> solution =
-        DragShotPlannerLocalAccess.findBestShotAutoLocal(
-            gamePiece,
-            targetFieldPosition,
-            request.getTargetHeightMeters(),
-            robotPose,
-            request.getShooterReleaseHeightMeters(),
-            request.getRobotHalfLengthMeters(),
-            request.getRobotHalfWidthMeters(),
-            dynamicObstacles,
-            constraints);
-
-    return toResponse(solution);
+    return new Translation2d(dto.getX(), dto.getY());
   }
 
-  public static Optional<ShotSolution> fromResponse(DragShotAutoResponseDTO response) {
-    if (response == null || !response.isPresent() || response.getSolution() == null) {
-      return Optional.empty();
+  public static Pose2dDTO toPoseDto(Pose2d pose) {
+    if (pose == null) {
+      return new Pose2dDTO();
     }
-
-    ShotSolutionDTO dto = response.getSolution();
-    ShotSolution solution =
-        new ShotSolution(
-            fromTranslationDto(dto.getShooterPosition()),
-            Rotation2d.fromRadians(dto.getShooterYawRadians()),
-            dto.getLaunchSpeedMetersPerSecond(),
-            Rotation2d.fromRadians(dto.getLaunchAngleRadians()),
-            dto.getTimeToPlaneSeconds(),
-            fromTranslationDto(dto.getImpactFieldPosition()),
-            dto.getVerticalErrorMeters());
-
-    return Optional.of(solution);
+    return new Pose2dDTO(
+        pose.getTranslation().getX(),
+        pose.getTranslation().getY(),
+        pose.getRotation().getRadians());
   }
 
-  public static DragShotAutoResponseDTO toResponse(Optional<ShotSolution> solutionOptional) {
-    if (solutionOptional == null || solutionOptional.isEmpty()) {
-      return DragShotAutoResponseDTO.empty();
+  public static Pose2d fromPoseDto(Pose2dDTO dto) {
+    if (dto == null) {
+      return new Pose2d();
     }
-
-    ShotSolution solution = solutionOptional.get();
-    ShotSolutionDTO dto = new ShotSolutionDTO();
-    dto.setShooterPosition(toTranslationDto(solution.shooterPosition()));
-    dto.setShooterYawRadians(solution.shooterYaw().getRadians());
-    dto.setLaunchSpeedMetersPerSecond(solution.launchSpeedMetersPerSecond());
-    dto.setLaunchAngleRadians(solution.launchAngle().getRadians());
-    dto.setTimeToPlaneSeconds(solution.timeToPlaneSeconds());
-    dto.setImpactFieldPosition(toTranslationDto(solution.impactFieldPosition()));
-    dto.setVerticalErrorMeters(solution.verticalErrorMeters());
-
-    DragShotAutoResponseDTO response = new DragShotAutoResponseDTO();
-    response.setPresent(true);
-    response.setSolution(dto);
-    return response;
+    return new Pose2d(dto.getX(), dto.getY(), Rotation2d.fromRadians(dto.getThetaRadians()));
   }
 
-  private static GamePiecePhysicsDTO toGamePieceDto(GamePiecePhysics gamePiece) {
+  public static GamePiecePhysicsDTO toGamePieceDto(GamePiecePhysics gamePiece) {
     if (gamePiece == null) {
       return new GamePiecePhysicsDTO();
     }
@@ -136,7 +64,7 @@ public final class DragShotOffloadMapper {
         gamePiece.airDensityKgPerM3());
   }
 
-  private static GamePiecePhysics fromGamePieceDto(GamePiecePhysicsDTO dto) {
+  public static GamePiecePhysics fromGamePieceDto(GamePiecePhysicsDTO dto) {
     if (dto == null) {
       return new SnapshotGamePiecePhysics(0, 0, 0, 1.225);
     }
@@ -147,7 +75,7 @@ public final class DragShotOffloadMapper {
         dto.getAirDensityKgPerM3());
   }
 
-  private static ConstraintsDTO toConstraintsDto(Constraints constraints) {
+  public static ConstraintsDTO toConstraintsDto(Constraints constraints) {
     if (constraints == null) {
       return new ConstraintsDTO();
     }
@@ -159,7 +87,7 @@ public final class DragShotOffloadMapper {
         constraints.shotStyle().name());
   }
 
-  private static Constraints fromConstraintsDto(ConstraintsDTO dto) {
+  public static Constraints fromConstraintsDto(ConstraintsDTO dto) {
     if (dto == null) {
       return new Constraints(0, 0, 0, 0);
     }
@@ -179,35 +107,84 @@ public final class DragShotOffloadMapper {
         style);
   }
 
-  private static Pose2dDTO toPoseDto(Pose2d pose) {
-    if (pose == null) {
-      return new Pose2dDTO();
+  public static ShotSolutionDTO toShotSolutionDto(ShotSolution solution) {
+    if (solution == null) {
+      return null;
     }
-    return new Pose2dDTO(
-        pose.getTranslation().getX(),
-        pose.getTranslation().getY(),
-        pose.getRotation().getRadians());
+
+    ShotSolutionDTO dto = new ShotSolutionDTO();
+    dto.setShooterPosition(toTranslationDto(solution.shooterPosition()));
+    dto.setShooterYawRadians(solution.shooterYaw().getRadians());
+    dto.setLaunchSpeedMetersPerSecond(solution.launchSpeedMetersPerSecond());
+    dto.setLaunchAngleRadians(solution.launchAngle().getRadians());
+    dto.setTimeToPlaneSeconds(solution.timeToPlaneSeconds());
+    dto.setImpactFieldPosition(toTranslationDto(solution.impactFieldPosition()));
+    dto.setVerticalErrorMeters(solution.verticalErrorMeters());
+    return dto;
   }
 
-  private static Pose2d fromPoseDto(Pose2dDTO dto) {
+  public static ShotSolution fromShotSolutionDto(ShotSolutionDTO dto) {
     if (dto == null) {
-      return new Pose2d();
+      return null;
     }
-    return new Pose2d(dto.getX(), dto.getY(), Rotation2d.fromRadians(dto.getThetaRadians()));
+
+    return new ShotSolution(
+        fromTranslationDto(dto.getShooterPosition()),
+        Rotation2d.fromRadians(dto.getShooterYawRadians()),
+        dto.getLaunchSpeedMetersPerSecond(),
+        Rotation2d.fromRadians(dto.getLaunchAngleRadians()),
+        dto.getTimeToPlaneSeconds(),
+        fromTranslationDto(dto.getImpactFieldPosition()),
+        dto.getVerticalErrorMeters());
   }
 
-  private static Translation2dDTO toTranslationDto(Translation2d translation) {
-    if (translation == null) {
-      return new Translation2dDTO();
+  public static DragShotAutoResponseDTO toOptionalShotSolutionDto(
+      Optional<ShotSolution> solutionOptional) {
+    if (solutionOptional == null || solutionOptional.isEmpty()) {
+      return DragShotAutoResponseDTO.empty();
     }
-    return new Translation2dDTO(translation.getX(), translation.getY());
+
+    DragShotAutoResponseDTO response = new DragShotAutoResponseDTO();
+    response.setPresent(true);
+    response.setSolution(toShotSolutionDto(solutionOptional.get()));
+    return response;
   }
 
-  private static Translation2d fromTranslationDto(Translation2dDTO dto) {
-    if (dto == null) {
-      return new Translation2d();
+  public static Optional<ShotSolution> fromOptionalShotSolutionDto(
+      DragShotAutoResponseDTO response) {
+    if (response == null || !response.isPresent() || response.getSolution() == null) {
+      return Optional.empty();
     }
-    return new Translation2d(dto.getX(), dto.getY());
+
+    ShotSolution solution = fromShotSolutionDto(response.getSolution());
+    return solution == null ? Optional.empty() : Optional.of(solution);
+  }
+
+  public static List<ObstacleDTO> toObstacleDtos(List<? extends Obstacle> dynamicObstacles) {
+    List<ObstacleDTO> output = new ArrayList<>();
+    if (dynamicObstacles == null) {
+      return output;
+    }
+
+    for (Obstacle obstacle : dynamicObstacles) {
+      ObstacleDTO dto = toObstacleDto(obstacle);
+      if (dto != null) {
+        output.add(dto);
+      }
+    }
+    return output;
+  }
+
+  public static List<Obstacle> fromObstacleDtos(List<ObstacleDTO> obstacleDtos) {
+    List<Obstacle> output = new ArrayList<>();
+    if (obstacleDtos == null) {
+      return output;
+    }
+
+    for (ObstacleDTO dto : obstacleDtos) {
+      output.add(new SerializedObstacle(dto));
+    }
+    return output;
   }
 
   private static ObstacleDTO toObstacleDto(Obstacle obstacle) {
@@ -266,18 +243,6 @@ public final class DragShotOffloadMapper {
     }
 
     return null;
-  }
-
-  private static List<Obstacle> fromObstacleDtos(List<ObstacleDTO> obstacleDtos) {
-    List<Obstacle> output = new ArrayList<>();
-    if (obstacleDtos == null) {
-      return output;
-    }
-
-    for (ObstacleDTO dto : obstacleDtos) {
-      output.add(new SerializedObstacle(dto));
-    }
-    return output;
   }
 
   private static final class SnapshotGamePiecePhysics extends GamePiecePhysics {

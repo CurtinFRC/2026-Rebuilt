@@ -8,12 +8,21 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.TcpOffloadClient;
 
 public final class RepulsorOffloadRuntime {
+  static {
+    OffloadBootstrap.registerInitializer(RepulsorOffloadRuntime::ensureInitialized);
+  }
+
   private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
   private static TcpOffloadClient client;
 
   private RepulsorOffloadRuntime() {}
 
   public static void ensureInitialized() {
+    if (OffloadRpc.isGatewayConfigured()) {
+      INITIALIZED.set(true);
+      return;
+    }
+
     if (!INITIALIZED.compareAndSet(false, true)) {
       return;
     }

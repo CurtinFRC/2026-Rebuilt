@@ -4,9 +4,12 @@ package org.curtinfrc.frc2026.util.Repulsor.Offload;
 public final class SampleMathOffloadEntrypoints {
   private SampleMathOffloadEntrypoints() {}
 
-  @Offloadable(id = "repulsor.sample.math.double.v1", version = 1, timeoutMs = 20, fallback = true)
-  public static SampleMathResponseDTO doubleValue(SampleMathRequestDTO request) {
-    int input = request == null ? 0 : request.getInput();
-    return new SampleMathResponseDTO(input * 2);
+  @Offloadable(
+      id = OffloadTaskIds.SAMPLE_DOUBLE_VALUE,
+      version = 1,
+      timeoutMs = 250,
+      fallback = true)
+  public static int doubleValue(int input) {
+    return input * 2;
   }
 }
