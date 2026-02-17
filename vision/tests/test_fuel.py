@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 import numpy as np
 import cv2
 
-from fuel_estimator import (
+from lib.fuel_estimator import (
     CameraCalibration,
     CameraPoseField,
     YoloBBox,
@@ -18,7 +18,6 @@ from fuel_estimator import (
     intersect_ray_with_plane_z,
     estimate_fuel_center_field,
 )
-
 
 def _rng(seed: int) -> np.random.Generator:
     return np.random.default_rng(seed)
@@ -206,7 +205,3 @@ class TestFuelEstimator(unittest.TestCase):
                     none_count += 1
 
         self.assertGreaterEqual(none_count, int(0.7 * total))
-
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)

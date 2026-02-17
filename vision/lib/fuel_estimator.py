@@ -156,7 +156,7 @@ def estimate_fuel_center_field_debug(
     print("t:", t)
 
     pt = intersect_ray_with_plane_z(o_f, d_f, ball_radius_m)
-    print(fmt_xyz(pt, "pt"))
+    # print(fmt_xyz(pt, "pt"))
     return pt
 
 
