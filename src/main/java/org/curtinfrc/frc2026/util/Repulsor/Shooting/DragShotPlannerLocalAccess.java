@@ -30,4 +30,20 @@ public final class DragShotPlannerLocalAccess {
         dynamicObstacles,
         constraints);
   }
+
+  public static Optional<ShotSolution> calculateStaticShotAngleAndSpeedLocal(
+      GamePiecePhysics gamePiece,
+      Translation2d shooterFieldPosition,
+      Translation2d targetFieldPosition,
+      double targetHeightMeters,
+      double shooterReleaseHeightMeters,
+      Constraints constraints) {
+    return DragShotPlannerCore.calculateStaticShotAngleAndSpeed(
+        gamePiece,
+        shooterFieldPosition,
+        targetFieldPosition,
+        targetHeightMeters,
+        shooterReleaseHeightMeters,
+        constraints);
+  }
 }

@@ -116,4 +116,20 @@ final class DragShotPlannerCore {
         state,
         budgetNanos);
   }
+
+  static Optional<ShotSolution> calculateStaticShotAngleAndSpeed(
+      GamePiecePhysics gamePiece,
+      Translation2d shooterFieldPosition,
+      Translation2d targetFieldPosition,
+      double targetHeightMeters,
+      double shooterReleaseHeightMeters,
+      Constraints constraints) {
+    return DragShotPlannerStaticPositionSearch.calculateShotAngleAndSpeedFromStaticPosition(
+        gamePiece,
+        shooterFieldPosition,
+        targetFieldPosition,
+        targetHeightMeters,
+        shooterReleaseHeightMeters,
+        constraints);
+  }
 }

@@ -40,4 +40,25 @@ public final class DragShotPlannerOffloadEntrypoints {
         dynamicObstacles,
         constraints);
   }
+
+  @Offloadable(
+      id = OffloadTaskIds.DRAG_SHOT_CALC_STATIC_SHOT_ANGLE_SPEED,
+      version = 1,
+      timeoutMs = 20,
+      fallback = true)
+  public static Optional<ShotSolution> calculateStaticShotAngleAndSpeed(
+      GamePiecePhysics gamePiece,
+      Translation2d shooterFieldPosition,
+      Translation2d targetFieldPosition,
+      double targetHeightMeters,
+      double shooterReleaseHeightMeters,
+      Constraints constraints) {
+    return DragShotPlannerLocalAccess.calculateStaticShotAngleAndSpeedLocal(
+        gamePiece,
+        shooterFieldPosition,
+        targetFieldPosition,
+        targetHeightMeters,
+        shooterReleaseHeightMeters,
+        constraints);
+  }
 }
