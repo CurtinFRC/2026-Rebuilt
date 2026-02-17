@@ -105,7 +105,7 @@ public class AutoPathBehaviour extends Behaviour {
 
   @Override
   public boolean shouldRun(EnumSet<BehaviourFlag> flags, BehaviourContext ctx) {
-    return !flags.contains(BehaviourFlag.DEFENCE_MODE);
+    return flags.contains(BehaviourFlag.AUTOPATH_MODE);
   }
 
   private static double shortestAngleRad(double from, double to) {

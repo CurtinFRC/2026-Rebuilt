@@ -18,11 +18,15 @@
  */
 package org.curtinfrc.frc2026.util.Repulsor.Predictive;
 
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.PredictiveFieldStateOffloadEntrypoints_Offloaded;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.ShuttleRecoveryDynamicObjectDTO;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.ShuttleRecoveryPointDTO;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.CollectProbe;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
@@ -168,5 +172,25 @@ public class PredictiveFieldStateRuntime {
   public PointCandidate rankCollectPoints(
       Translation2d ourPos, double ourSpeedCap, Translation2d[] points, int goalUnits, int limit) {
     return ops.rankCollectPoints(ourPos, ourSpeedCap, points, goalUnits, limit);
+  }
+
+  public ShuttleRecoveryPointDTO selectShuttleRecoveryPointLocal(
+      Pose2d robotPoseBlue,
+      double ourSpeedCap,
+      int goalUnits,
+      boolean flipRedToBlue,
+      List<ShuttleRecoveryDynamicObjectDTO> dynamicObjects) {
+    return PredictiveFieldStateLocalAccess.selectShuttleRecoveryPointLocal(
+        robotPoseBlue, ourSpeedCap, goalUnits, flipRedToBlue, dynamicObjects);
+  }
+
+  public ShuttleRecoveryPointDTO selectShuttleRecoveryPointOffloaded(
+      Pose2d robotPoseBlue,
+      double ourSpeedCap,
+      int goalUnits,
+      boolean flipRedToBlue,
+      List<ShuttleRecoveryDynamicObjectDTO> dynamicObjects) {
+    return PredictiveFieldStateOffloadEntrypoints_Offloaded.selectShuttleRecoveryPoint_offload(
+        robotPoseBlue, ourSpeedCap, goalUnits, flipRedToBlue, dynamicObjects);
   }
 }

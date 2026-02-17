@@ -66,6 +66,7 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenceBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleRecoveryBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
@@ -204,6 +205,7 @@ public class Robot extends LoggedRobot {
     repulsor.addBehaviours(
         new DefenceBehaviour(30, defenseGoalSup, () -> 2.8),
         new ShuttleBehaviour(20, () -> simHasPiece, () -> 5.2),
+        new ShuttleRecoveryBehaviour(25, () -> simHasPiece, () -> 5.2),
         new TestBehaviour(),
         new AutoPathBehaviour(
             1000,
@@ -217,7 +219,7 @@ public class Robot extends LoggedRobot {
             () -> 5.2));
 
     Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
-    reasoner.setTesting(true);
+    reasoner.setTesting(false);
     repulsor.setReasoner(reasoner);
 
     repulsor.setup();

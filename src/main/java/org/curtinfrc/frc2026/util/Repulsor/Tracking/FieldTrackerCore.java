@@ -22,6 +22,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Tracking;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.wpilibj.DriverStation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -31,6 +32,8 @@ import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldLayoutProvider;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.Rebuilt2026;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.FieldTrackerOffloadEntrypoints_Offloaded;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.ShuttleRecoveryDynamicObjectDTO;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.ResourceSpec;
@@ -254,6 +257,30 @@ public class FieldTrackerCore {
     return dynamicTracker.snapshotDynamics();
   }
 
+  private List<ShuttleRecoveryDynamicObjectDTO> snapshotRecoveryDynamics() {
+    List<DynamicObject> raw = snapshotDynamics();
+    if (raw.isEmpty()) {
+      return List.of();
+    }
+
+    ArrayList<ShuttleRecoveryDynamicObjectDTO> out = new ArrayList<>(raw.size());
+    for (DynamicObject object : raw) {
+      if (object == null || object.pos == null) {
+        continue;
+      }
+      ShuttleRecoveryDynamicObjectDTO dto = new ShuttleRecoveryDynamicObjectDTO();
+      dto.setId(object.id);
+      dto.setType(object.type);
+      dto.setX(object.pos.getX());
+      dto.setY(object.pos.getY());
+      dto.setVx(object.vel != null ? object.vel.getX() : 0.0);
+      dto.setVy(object.vel != null ? object.vel.getY() : 0.0);
+      dto.setAgeS(object.ageS);
+      out.add(dto);
+    }
+    return out;
+  }
+
   public Pose2d nextObjectiveGoalBlue(
       Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits, CategorySpec cat) {
     return collectPlanner.nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, cat);
@@ -261,6 +288,18 @@ public class FieldTrackerCore {
 
   public Pose2d nextCollectionGoalBlue(Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {
     return nextObjectiveGoalBlue(robotPoseBlue, ourSpeedCap, goalUnits, CategorySpec.kCollect);
+  }
+
+  public Pose2d nextAllianceShuttleRecoveryGoalBlue(
+      Pose2d robotPoseBlue, double ourSpeedCap, int goalUnits) {
+    if (robotPoseBlue == null) {
+      return Pose2d.kZero;
+    }
+    boolean flipRedToBlue =
+        DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue)
+            == DriverStation.Alliance.Red;
+    return FieldTrackerOffloadEntrypoints_Offloaded.nextShuttleRecoveryGoalBlue_offload(
+        robotPoseBlue, ourSpeedCap, goalUnits, flipRedToBlue, snapshotRecoveryDynamics());
   }
 
   public FieldVision createFieldVision(String name) {

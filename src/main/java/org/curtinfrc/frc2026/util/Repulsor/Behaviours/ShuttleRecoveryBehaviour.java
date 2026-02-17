@@ -1,22 +1,3 @@
-/*
- * Copyright (C) 2026 Paul Hodges
- *
- * This file is part of Repulsor.
- *
- * Repulsor is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * Repulsor is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Repulsor. If not, see https://www.gnu.org/licenses/.
- */
-
 package org.curtinfrc.frc2026.util.Repulsor.Behaviours;
 
 import static edu.wpi.first.units.Units.Meters;
@@ -53,7 +34,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotSolution;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 
-public class ShuttleBehaviour extends Behaviour {
+public final class ShuttleRecoveryBehaviour extends Behaviour {
   private static final double SHOOT_BEHIND_HUB_METERS = 2.95;
   private static final double SHOOT_LATERAL_STEP_METERS = 0.45;
   private static final double SHOOT_POS_TOL_METERS = 0.34;
@@ -66,6 +47,7 @@ public class ShuttleBehaviour extends Behaviour {
   private static final double MOTION_COMP_MAX_SPEED_MPS = 4.5;
   private static final double DEFAULT_TIME_TO_PLANE_SEC = 0.18;
   private static final long MAGAZINE_CAPACITY = 16L;
+  private static final int RECOVERY_GOAL_UNITS = 2;
 
   private static final double[] SHOOT_LATERAL_OFFSETS =
       new double[] {0.0, SHOOT_LATERAL_STEP_METERS, -SHOOT_LATERAL_STEP_METERS, 0.9, -0.9};
@@ -75,6 +57,7 @@ public class ShuttleBehaviour extends Behaviour {
   private final int prio;
   private final Supplier<Boolean> hasPiece;
   private final Supplier<Double> ourSpeedCap;
+
   private final NetworkTablesValue<Double> shotAngle =
       NetworkTablesValue.ofDouble(
           NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotAngle"), 0.0);
@@ -88,9 +71,9 @@ public class ShuttleBehaviour extends Behaviour {
           false);
   private final NetworkTablesValue<Long> pieceCount =
       NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
-  private Pose2d lastCollectBluePose;
 
-  public ShuttleBehaviour(int priority, Supplier<Boolean> hasPiece, Supplier<Double> ourSpeedCap) {
+  public ShuttleRecoveryBehaviour(
+      int priority, Supplier<Boolean> hasPiece, Supplier<Double> ourSpeedCap) {
     this.prio = priority;
     this.hasPiece = hasPiece;
     this.ourSpeedCap = ourSpeedCap;
@@ -98,7 +81,7 @@ public class ShuttleBehaviour extends Behaviour {
 
   @Override
   public String name() {
-    return "Shuttle";
+    return "ShuttleRecovery";
   }
 
   @Override
@@ -108,7 +91,7 @@ public class ShuttleBehaviour extends Behaviour {
 
   @Override
   public boolean shouldRun(EnumSet<BehaviourFlag> flags, BehaviourContext ctx) {
-    return flags.contains(BehaviourFlag.SHUTTLE_MODE);
+    return flags.contains(BehaviourFlag.SHUTTLE_RECOVERY_MODE);
   }
 
   @Override
@@ -117,21 +100,20 @@ public class ShuttleBehaviour extends Behaviour {
     RepulsorSetpoint collectRoute =
         new RepulsorSetpoint(
             new MutablePoseSetpoint(
-                "SHUTTLE_COLLECT_ROUTE", SetpointType.kOther, collectBluePoseRef),
+                "SHUTTLE_RECOVERY_COLLECT_ROUTE", SetpointType.kOther, collectBluePoseRef),
             HeightSetpoint.NONE);
 
     AtomicReference<Pose2d> shuttleBluePoseRef = new AtomicReference<>(Pose2d.kZero);
     RepulsorSetpoint shuttleShootRoute =
         new RepulsorSetpoint(
-            new MutablePoseSetpoint("SHUTTLE_SHOOT_ROUTE", SetpointType.kScore, shuttleBluePoseRef),
+            new MutablePoseSetpoint(
+                "SHUTTLE_RECOVERY_SHOOT_ROUTE", SetpointType.kScore, shuttleBluePoseRef),
             HeightSetpoint.NET);
 
     AtomicReference<Pose2d> lastRobotPose = new AtomicReference<>(null);
     AtomicLong lastRobotPoseNs = new AtomicLong(0L);
     AtomicReference<Double> lastTimeToPlaneSec = new AtomicReference<>(DEFAULT_TIME_TO_PLANE_SEC);
     AtomicReference<ShotSolution> lastValidShot = new AtomicReference<>(null);
-
-    final int collectGoalUnits = 2;
 
     return Commands.run(
             () -> {
@@ -189,15 +171,9 @@ public class ShuttleBehaviour extends Behaviour {
                 activeGoal = shuttleShootRoute;
               } else {
                 category = CategorySpec.kCollect;
-                activeGoal =
-                    chooseCollect(
-                        ctx, robotPose, cap, collectGoalUnits, collectBluePoseRef, collectRoute);
-              }
-
-              if (activeGoal == null) {
-                shooterPassthrough.set(false);
-                ctx.drive.runVelocity(new ChassisSpeeds());
-                return;
+                Pose2d collectGoal = chooseRecoveryCollectGoalBlue(robotPose, cap);
+                collectBluePoseRef.set(collectGoal);
+                activeGoal = collectRoute;
               }
 
               ctx.repulsor.setCurrentGoal(activeGoal);
@@ -235,59 +211,20 @@ public class ShuttleBehaviour extends Behaviour {
             });
   }
 
-  private static SetpointContext makeCtx(BehaviourContext ctx, Pose2d robotPose) {
-    double release;
-    try {
-      var ht = ctx.repulsor.getTargetHeight();
-      var d = ht != null ? ht.getHeight() : null;
-      release = d != null ? Math.max(0.0, d.in(Meters)) : 0.0;
-    } catch (Exception ignored) {
-      release = 0.0;
-    }
-    return new SetpointContext(
-        Optional.of(robotPose),
-        Math.max(0.0, ctx.robot_x) * 2.0,
-        Math.max(0.0, ctx.robot_y) * 2.0,
-        release,
-        ctx.vision.getObstacles());
-  }
+  private Pose2d chooseRecoveryCollectGoalBlue(Pose2d robotPose, double cap) {
+    DriverStation.Alliance wpAlliance =
+        DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue);
+    Pose2d robotPoseBlue =
+        wpAlliance == DriverStation.Alliance.Red ? SetpointUtil.flipToRed(robotPose) : robotPose;
 
-  private static double shortestAngleRad(double from, double to) {
-    return MathUtil.angleModulus(to - from);
-  }
-
-  private static boolean nearPose(Pose2d a, Pose2d b, double posTol, double degTol) {
-    if (a.getTranslation().getDistance(b.getTranslation()) > posTol) {
-      return false;
+    Pose2d nextBlue =
+        FieldTrackerCore.getInstance()
+            .nextAllianceShuttleRecoveryGoalBlue(robotPoseBlue, cap, RECOVERY_GOAL_UNITS);
+    if (nextBlue == null) {
+      return new Pose2d(
+          Constants.FIELD_LENGTH * 0.25, Constants.FIELD_WIDTH * 0.5, robotPoseBlue.getRotation());
     }
-    double e =
-        Math.abs(shortestAngleRad(a.getRotation().getRadians(), b.getRotation().getRadians()));
-    return e <= Math.toRadians(degTol);
-  }
-
-  private static boolean isReadyToShoot(Pose2d robotPose, Pose2d goalPose) {
-    return nearPose(robotPose, goalPose, SHOOT_POS_TOL_METERS, SHOOT_YAW_TOL_DEG);
-  }
-
-  private static Translation2d estimateFieldVelocity(
-      Pose2d prevPose, long prevNs, Pose2d nowPose, long nowNs) {
-    if (prevPose == null || prevNs == 0L || nowNs <= prevNs) {
-      return new Translation2d();
-    }
-    double dt = (nowNs - prevNs) * 1e-9;
-    if (dt < 1e-4) {
-      return new Translation2d();
-    }
-    double vx = (nowPose.getX() - prevPose.getX()) / dt;
-    double vy = (nowPose.getY() - prevPose.getY()) / dt;
-
-    double speed = Math.hypot(vx, vy);
-    if (speed > MOTION_COMP_MAX_SPEED_MPS && speed > 1e-6) {
-      double s = MOTION_COMP_MAX_SPEED_MPS / speed;
-      vx *= s;
-      vy *= s;
-    }
-    return new Translation2d(vx, vy);
+    return new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
   }
 
   private ShuttleAim computeShuttleAim(
@@ -395,6 +332,61 @@ public class ShuttleBehaviour extends Behaviour {
     return Optional.ofNullable(best);
   }
 
+  private static SetpointContext makeCtx(BehaviourContext ctx, Pose2d robotPose) {
+    double release;
+    try {
+      var ht = ctx.repulsor.getTargetHeight();
+      var d = ht != null ? ht.getHeight() : null;
+      release = d != null ? Math.max(0.0, d.in(Meters)) : 0.0;
+    } catch (Exception ignored) {
+      release = 0.0;
+    }
+    return new SetpointContext(
+        Optional.of(robotPose),
+        Math.max(0.0, ctx.robot_x) * 2.0,
+        Math.max(0.0, ctx.robot_y) * 2.0,
+        release,
+        ctx.vision.getObstacles());
+  }
+
+  private static double shortestAngleRad(double from, double to) {
+    return MathUtil.angleModulus(to - from);
+  }
+
+  private static boolean nearPose(Pose2d a, Pose2d b, double posTol, double degTol) {
+    if (a.getTranslation().getDistance(b.getTranslation()) > posTol) {
+      return false;
+    }
+    double e =
+        Math.abs(shortestAngleRad(a.getRotation().getRadians(), b.getRotation().getRadians()));
+    return e <= Math.toRadians(degTol);
+  }
+
+  private static boolean isReadyToShoot(Pose2d robotPose, Pose2d goalPose) {
+    return nearPose(robotPose, goalPose, SHOOT_POS_TOL_METERS, SHOOT_YAW_TOL_DEG);
+  }
+
+  private static Translation2d estimateFieldVelocity(
+      Pose2d prevPose, long prevNs, Pose2d nowPose, long nowNs) {
+    if (prevPose == null || prevNs == 0L || nowNs <= prevNs) {
+      return new Translation2d();
+    }
+    double dt = (nowNs - prevNs) * 1e-9;
+    if (dt < 1e-4) {
+      return new Translation2d();
+    }
+    double vx = (nowPose.getX() - prevPose.getX()) / dt;
+    double vy = (nowPose.getY() - prevPose.getY()) / dt;
+
+    double speed = Math.hypot(vx, vy);
+    if (speed > MOTION_COMP_MAX_SPEED_MPS && speed > 1e-6) {
+      double s = MOTION_COMP_MAX_SPEED_MPS / speed;
+      vx *= s;
+      vy *= s;
+    }
+    return new Translation2d(vx, vy);
+  }
+
   private static Pose2d fallbackShuttlePose(
       Translation2d hubTarget, DriverStation.Alliance alliance) {
     Translation2d behind = behindDirection(alliance);
@@ -446,34 +438,6 @@ public class ShuttleBehaviour extends Behaviour {
         }
       };
     }
-  }
-
-  private RepulsorSetpoint chooseCollect(
-      BehaviourContext ctx,
-      Pose2d robotPose,
-      double cap,
-      int goalUnits,
-      AtomicReference<Pose2d> collectBluePoseRef,
-      RepulsorSetpoint collectRoute) {
-    DriverStation.Alliance wpA = DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue);
-
-    Pose2d robotPoseBlue =
-        wpA == DriverStation.Alliance.Red ? SetpointUtil.flipToRed(robotPose) : robotPose;
-
-    Pose2d nextBlue =
-        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
-    if (nextBlue == null) {
-      nextBlue =
-          new Pose2d(
-              Constants.FIELD_LENGTH * 0.5,
-              Constants.FIELD_WIDTH * 0.5,
-              robotPoseBlue.getRotation());
-    }
-
-    nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
-    lastCollectBluePose = nextBlue;
-    collectBluePoseRef.set(nextBlue);
-    return collectRoute;
   }
 
   private static long safePieceCount(NetworkTablesValue<Long> countValue) {

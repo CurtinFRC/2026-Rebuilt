@@ -23,5 +23,6 @@ public enum BehaviourFlag {
   DEFENCE_MODE,
   AUTOPATH_MODE,
   SHUTTLE_MODE,
+  SHUTTLE_RECOVERY_MODE,
   TEST_MODE
 }
