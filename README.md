@@ -13,4 +13,3 @@ and includes its own license file at:
 
 Repulsor is the autonomous planning and field-intelligence subsystem for this robot code.
 See [https://github.com/CurtinFRC/Repulsor/blob/main/src/main/java/org/curtinfrc/frc2026/util/Repulsor/README.md](https://github.com/CurtinFRC/Repulsor/blob/main/src/main/java/org/curtinfrc/frc2026/util/Repulsor/README.md) for architecture and usage notes.
-
