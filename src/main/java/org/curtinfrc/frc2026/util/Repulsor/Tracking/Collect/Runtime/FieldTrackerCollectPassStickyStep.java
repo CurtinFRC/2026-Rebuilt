@@ -68,7 +68,6 @@ public final class FieldTrackerCollectPassStickyStep {
 
     final double keepMarginF = keepMargin;
     final boolean centerF = ctx.robotInCenterBand();
-    final int lockHalfF = ctx.lockHalf();
 
     ToDoubleBiFunction<Translation2d, Translation2d> transitionExtra =
         (from, to) -> {
@@ -79,7 +78,6 @@ public final class FieldTrackerCollectPassStickyStep {
           int q = sideSignXBand(to.getX(), 0.10);
 
           if (centerF && p != 0 && q != 0 && p != q) extra += keepMarginF * 0.90 + 0.18;
-          if (lockHalfF != 0 && q != 0 && q != lockHalfF) extra += keepMarginF * 0.55 + 0.10;
           if (from.getDistance(to) <= FieldTrackerCollectObjectiveLoop.COLLECT_SWITCH_CLOSE_M)
             extra += keepMarginF * 1.55 + 0.18;
 

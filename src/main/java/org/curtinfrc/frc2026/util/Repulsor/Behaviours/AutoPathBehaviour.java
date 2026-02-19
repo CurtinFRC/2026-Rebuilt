@@ -23,6 +23,7 @@ import static edu.wpi.first.units.Units.Meters;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -561,8 +562,8 @@ public class AutoPathBehaviour extends Behaviour {
       int goalUnits,
       AtomicReference<Pose2d> collectBluePoseRef,
       RepulsorSetpoint collectRoute) {
-    Pose2d nextBlue =
-        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPose, cap, goalUnits);
+    FieldTrackerCore tracker = FieldTrackerCore.getInstance();
+    Pose2d nextBlue = tracker.nextCollectionGoalBlue(robotPose, cap, goalUnits);
 
     if (nextBlue == null) {
       nextBlue =
@@ -570,10 +571,33 @@ public class AutoPathBehaviour extends Behaviour {
               Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPose.getRotation());
     }
 
+    nextBlue = recoverFromCollectHold(tracker, robotPose, nextBlue);
     nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
 
     collectBluePoseRef.set(nextBlue);
 
     return collectRoute;
+  }
+
+  private Pose2d recoverFromCollectHold(
+      FieldTrackerCore tracker, Pose2d robotPose, Pose2d currentCandidate) {
+    if (tracker == null || robotPose == null || currentCandidate == null) return currentCandidate;
+
+    final double HOLD_GOAL_NEAR_M = 0.75;
+    final double FAR_FUEL_MIN_DIST_M = 1.30;
+
+    double candidateDist =
+        robotPose.getTranslation().getDistance(currentCandidate.getTranslation());
+    if (candidateDist > HOLD_GOAL_NEAR_M) return currentCandidate;
+
+    double fieldDiag = Math.hypot(Constants.FIELD_LENGTH, Constants.FIELD_WIDTH);
+    Translation2d farFuel =
+        tracker.getPredictor().nearestCollectResource(robotPose.getTranslation(), fieldDiag);
+    if (farFuel == null) return currentCandidate;
+
+    double fuelDist = robotPose.getTranslation().getDistance(farFuel);
+    if (fuelDist < FAR_FUEL_MIN_DIST_M) return currentCandidate;
+
+    return new Pose2d(farFuel, farFuel.minus(robotPose.getTranslation()).getAngle());
   }
 }

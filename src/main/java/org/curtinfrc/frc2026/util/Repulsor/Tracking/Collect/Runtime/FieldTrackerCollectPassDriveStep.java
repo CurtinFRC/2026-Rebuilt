@@ -294,12 +294,18 @@ public final class FieldTrackerCollectPassDriveStep {
       }
     }
 
-    if (ctx.nearbyFuelCount() < FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_MIN_COUNT)
+    boolean targetIsFarForNearbyFuelCheck =
+        ctx.robotPos().getDistance(desiredDriveTarget)
+            > FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M;
+
+    if (!targetIsFarForNearbyFuelCheck
+        && ctx.nearbyFuelCount() < FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_MIN_COUNT)
       loop.collectNoFuelSec += ctx.dt();
     else loop.collectNoFuelSec = 0.0;
 
     boolean patchDone =
-        loop.collectNoFuelSec >= FieldTrackerCollectObjectiveLoop.COLLECT_DONE_NO_FUEL_SEC;
+        !targetIsFarForNearbyFuelCheck
+            && loop.collectNoFuelSec >= FieldTrackerCollectObjectiveLoop.COLLECT_DONE_NO_FUEL_SEC;
     boolean stuckTooLong =
         loop.collectStuckSec >= FieldTrackerCollectObjectiveLoop.COLLECT_DONE_STUCK_SEC;
 

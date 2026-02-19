@@ -214,27 +214,6 @@ public final class FieldTrackerCollectPassSetup {
 
     List<DynamicObject> dynUse = dynAll;
 
-    if (lockHalf != 0 && dynAll != null && !dynAll.isEmpty()) {
-      double mid = Constants.FIELD_LENGTH * 0.5;
-      ArrayList<DynamicObject> filtered = new ArrayList<>(dynAll.size());
-
-      for (int i = 0; i < dynAll.size(); i++) {
-        DynamicObject o = dynAll.get(i);
-        if (o == null || o.pos == null) continue;
-
-        double x = o.pos.getX();
-
-        if (Math.abs(x - mid) <= FieldTrackerCollectObjectiveLoop.COLLECT_HALF_KEEP_MID_BAND_M) {
-          filtered.add(o);
-          continue;
-        }
-
-        if (FieldTrackerCollectObjectiveMath.sideSignX(x) == lockHalf) filtered.add(o);
-      }
-
-      if (!filtered.isEmpty()) dynUse = filtered;
-    }
-
     loop.predictor.setDynamicObjects(dynAll);
 
     long nowNs = System.nanoTime();
