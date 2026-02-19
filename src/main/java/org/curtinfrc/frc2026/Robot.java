@@ -73,7 +73,7 @@ public class Robot extends LoggedRobot {
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
 
-  private Translation2d shoot_target =
+  private Translation2d shotTarget =
       ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft.toTranslation2d());
 
   private final Alert controllerDisconnected =
@@ -232,7 +232,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
             () -> aligning,
-            () -> hoodedShooter.getVirtualHubLocation(() -> shoot_target)));
+            () -> hoodedShooter.getVirtualHubLocation(() -> shotTarget)));
 
     controller // intake and store
         .leftBumper()
@@ -248,7 +248,7 @@ public class Robot extends LoggedRobot {
                 intake.RawControlConsume(0.7),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand()));
 
     controller // spinup shooter and aim
         .rightTrigger()

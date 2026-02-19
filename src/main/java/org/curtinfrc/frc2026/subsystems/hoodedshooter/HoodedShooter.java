@@ -23,9 +23,6 @@ import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
-  public static final Translation2d HUB_LOCATION =
-      ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
-
   public static final double WHEEL_DIAMETER = 0.101;
 
   public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1;
@@ -37,7 +34,6 @@ public class HoodedShooter extends SubsystemBase {
       new InterpolatingDoubleTreeMap();
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_BALL_FLIGHT_TIME =
       new InterpolatingDoubleTreeMap();
-  public static final double SCORING_SHOOTER_VELOCITY = 25;
 
   private final HoodIO hoodIO;
   private final HoodIOInputsAutoLogged hoodInputs = new HoodIOInputsAutoLogged();
@@ -142,7 +138,10 @@ public class HoodedShooter extends SubsystemBase {
   public Command shootAtHub() {
     return run(
         () -> {
-          Translation2d compensatedHubLocation = getVirtualHubLocation(() -> HUB_LOCATION);
+          Translation2d hubLocation =
+              ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
+
+          Translation2d compensatedHubLocation = getVirtualHubLocation(() -> hubLocation);
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();

@@ -47,8 +47,8 @@ public class ShooterIOSim extends ShooterIODev {
     motorSim.setRawRotorPosition(motorSimModel.getAngularPositionRotations());
     motorSim.setRotorVelocity(motorSimModel.getAngularVelocityRPM());
 
-    for (Integer ball = 0; ball < simBalls.size(); ball++) {
-      Logger.recordOutput("Balls/Ball " + ball.toString(), simBalls.get(ball).update(0.02));
+    for (int ball = 0; ball < simBalls.size(); ball++) {
+      Logger.recordOutput("Balls/Ball " + String.valueOf(ball), simBalls.get(ball).update(0.02));
     }
   }
 
