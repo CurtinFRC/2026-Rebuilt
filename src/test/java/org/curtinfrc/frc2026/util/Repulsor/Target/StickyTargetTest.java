@@ -160,6 +160,10 @@ class StickyTargetTest {
     fx.setScore(START, 1.00);
     fx.setScore(CLOSE, 10.00);
 
+    assertEquals(START, fx.update(START), EPS);
+    fx.advance(0.08);
+    assertEquals(START, fx.update(START), EPS);
+
     assertEquals(START, fx.update(CLOSE), EPS);
     tick(fx, CLOSE, 0.01, 29, false);
     assertEquals(START, fx.update(CLOSE), EPS);
@@ -203,6 +207,10 @@ class StickyTargetTest {
     fx.setValid(START, true);
     fx.setValid(CLOSE, true);
 
+    assertEquals(START, fx.update(START), EPS);
+    fx.advance(0.08);
+    assertEquals(START, fx.update(START), EPS);
+
     assertEquals(START, fx.update(CLOSE), EPS);
 
     for (int i = 0; i < 60; i++) {
@@ -219,6 +227,10 @@ class StickyTargetTest {
     fx.setScore(CLOSE, 2.00);
     fx.setValid(START, true);
     fx.setValid(CLOSE, true);
+
+    assertEquals(START, fx.update(START), EPS);
+    fx.advance(0.08);
+    assertEquals(START, fx.update(START), EPS);
 
     assertEquals(START, fx.update(CLOSE), EPS);
 
@@ -271,6 +283,13 @@ class StickyTargetTest {
 
     fx1.setScore(CLOSE, 1.2);
     fx2.setScore(CLOSE, 2.0);
+
+    assertEquals(START, fx1.update(START), EPS);
+    assertEquals(START, fx2.update(START), EPS);
+    fx1.advance(0.08);
+    fx2.advance(0.08);
+    assertEquals(START, fx1.update(START), EPS);
+    assertEquals(START, fx2.update(START), EPS);
 
     assertEquals(START, fx1.update(CLOSE), EPS);
     assertEquals(START, fx2.update(CLOSE), EPS);

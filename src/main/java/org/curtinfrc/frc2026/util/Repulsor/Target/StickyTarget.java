@@ -423,9 +423,7 @@ public final class StickyTarget<T> {
       }
     }
 
-    boolean bestIsSticky =
-        StickyTargetMath.eq(
-            best, st.sticky, distanceFn, StickyTargetMath.adaptiveEps(baseEps, 0.0, motionBoost));
+    boolean bestIsSticky = StickyTargetMath.eq(best, st.sticky, distanceFn, idEps);
     if (bestIsSticky) {
       st.stickyLastBestSeenSec = now;
       st.candidate = null;
@@ -469,6 +467,9 @@ public final class StickyTarget<T> {
 
     boolean candStable = candAge >= candidateStableSec;
     boolean candStableShort = candAge >= Math.min(candidateStableSec, 0.22);
+    double immediateStableReq =
+        Math.max(0.0, candidateStableSec - TargetConfig.BEST_VALID_DEBOUNCE_SEC);
+    boolean candStableImmediate = candAge >= immediateStableReq;
     boolean bestStableEnough = bestStableAge >= TargetConfig.MIN_SWITCH_STABLE_SEC;
 
     boolean holdPassed = (now - st.stickySinceSec) >= Math.max(0.0, minHoldSec);
@@ -521,11 +522,15 @@ public final class StickyTarget<T> {
 
     double closePairHoldSecReq =
         Math.max(0.0, candidateStableSec * TargetConfig.CLOSE_PAIR_HOLD_SCALE);
+    double closePairNorm = pairDist / Math.max(1e-6, closeThresh);
+    if (closePairNorm < 0.0) closePairNorm = 0.0;
+    if (closePairNorm > 1.0) closePairNorm = 1.0;
     double closePairAdvReq =
         Math.max(
             0.02,
             Math.min(immediateDelta, Math.max(keepMargin, 0.0))
-                * TargetConfig.CLOSE_PAIR_ADV_REQ_MULT);
+                * TargetConfig.CLOSE_PAIR_ADV_REQ_MULT
+                * Math.max(0.12, closePairNorm));
     boolean closePairAssist =
         closePair
             && !freezeOnFlicker
@@ -534,6 +539,7 @@ public final class StickyTarget<T> {
             && !hardLocked
             && bestStableEnough
             && candAge >= closePairHoldSecReq
+            && advantage < (immediateDelta * 2.0)
             && advantage >= closePairAdvReq;
 
     boolean shouldSwitch = false;
@@ -546,7 +552,7 @@ public final class StickyTarget<T> {
       closeAssistSwitch = true;
     } else if (!freezeOnFlicker
         && bestStableEnough
-        && candStableShort
+        && candStableImmediate
         && advantage >= immediateDelta) {
       shouldSwitch = true;
     } else if (!switchBackBlocked && !freezeOnFlicker) {
