@@ -51,6 +51,7 @@ public final class FieldPlannerGoalManager {
   private static final double STAGED_GOAL_SIDE_PROJ_M = 0.05;
   private static final double STAGED_DEEP_CENTER_BAND_M = 1.40;
   private static final double STAGED_CENTER_RETURN_STAGE_TRIGGER_M = 2.2;
+  private static final double STAGED_CENTER_RETURN_INTERSECTION_TRIGGER_M = 3.0;
   private static final double STAGED_CENTER_RETURN_EXIT_MIN_M = 0.70;
   private static final double STAGED_CENTER_RETURN_EXIT_MAX_M = 2.40;
   private static final double STAGED_CENTER_RETURN_GATE_MIN_OFFSET_M = 2.0;
@@ -163,7 +164,11 @@ public final class FieldPlannerGoalManager {
 
         Translation2d pick = stagingPullPoint(stagedGate, curPos, reqT);
 
-        if (pick != null && curPos.getDistance(pick) > STAGED_REACH_EXIT_M) {
+        boolean mustStageForOccludingGate = stageForOccludingGate;
+        if (pick != null
+            && (mustStageForOccludingGate
+                || shouldStage
+                || curPos.getDistance(pick) > STAGED_REACH_EXIT_M)) {
           stagedAttractor = pick;
           lastStagedPoint = pick;
           stagedReachTicks = 0;
@@ -486,6 +491,14 @@ public final class FieldPlannerGoalManager {
     double mid = Constants.FIELD_LENGTH * 0.5;
     boolean deepCenter = Math.abs(pos.getX() - mid) <= STAGED_DEEP_CENTER_BAND_M;
     if (!deepCenter) return false;
+
+    Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
+    double t = firstIntersectionT(pos, target, poly);
+    if (Double.isFinite(t) && t >= 0.0 && t <= 1.0) {
+      double segDist = pos.getDistance(target);
+      double hitDist = segDist * t;
+      return hitDist > STAGED_CENTER_RETURN_INTERSECTION_TRIGGER_M;
+    }
 
     return pos.getDistance(gate.center) > STAGED_CENTER_RETURN_STAGE_TRIGGER_M;
   }

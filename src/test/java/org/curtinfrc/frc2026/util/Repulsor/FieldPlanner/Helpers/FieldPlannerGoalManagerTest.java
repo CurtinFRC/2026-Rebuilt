@@ -176,6 +176,25 @@ class FieldPlannerGoalManagerTest {
     assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
   }
 
+  @Test
+  void nearGateStillStagesWhenGateOccludesPath() {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+    Translation2d gateCenter = new Translation2d(mid - 3.6, 4.0);
+    GatedAttractorObstacle gate =
+        gate(gateCenter, new Translation2d(gateCenter.getX() + 0.2, gateCenter.getY()));
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
+    List<? extends Obstacle> obstacles = List.of(gate);
+
+    Pose2d requested = new Pose2d(new Translation2d(mid - 6.0, 4.0), Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    // Robot is already close to the staging point, but the gate still occludes the path.
+    // Staging should still be active rather than being skipped.
+    assertFalse(
+        manager.updateStagedGoal(new Translation2d(gateCenter.getX() + 0.33, 4.0), obstacles));
+    assertTrue(Math.abs(manager.getGoalTranslation().getX() - requested.getX()) > EPS);
+  }
+
   private static GatedAttractorObstacle gate(Translation2d center, Translation2d bypassPoint) {
     Translation2d[] gatePoly =
         new Translation2d[] {
