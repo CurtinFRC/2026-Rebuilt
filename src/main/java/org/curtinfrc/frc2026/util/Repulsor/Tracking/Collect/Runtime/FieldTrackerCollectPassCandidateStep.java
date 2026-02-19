@@ -39,9 +39,26 @@ public final class FieldTrackerCollectPassCandidateStep {
     HashMap<Long, CollectProbe> probeCache = new HashMap<>(512);
     HashMap<Long, Boolean> footprintCache = new HashMap<>(512);
     HashMap<Long, Boolean> nearFuelCache = new HashMap<>(512);
+    HashMap<Long, Boolean> liveFuelNearStrictCache = new HashMap<>(512);
+    HashMap<Long, Boolean> liveFuelNearRelaxedCache = new HashMap<>(512);
     HashMap<Long, Boolean> validCache = new HashMap<>(512);
     HashMap<Long, Boolean> validRelaxedCache = new HashMap<>(512);
     HashMap<Long, Double> scoreCache = new HashMap<>(512);
+    final double LIVE_FUEL_STRICT_R_M = 0.35;
+    final double LIVE_FUEL_RELAXED_R_M = 0.55;
+
+    boolean hasLiveCollectDynamics = false;
+    if (ctx.dynUse() != null && !ctx.dynUse().isEmpty()) {
+      for (int i = 0; i < ctx.dynUse().size(); i++) {
+        var o = ctx.dynUse().get(i);
+        if (o == null || o.type == null || o.pos == null) continue;
+        if (loop.isCollectType(o.type)) {
+          hasLiveCollectDynamics = true;
+          break;
+        }
+      }
+    }
+    final boolean hasLiveCollectDynamicsFinal = hasLiveCollectDynamics;
 
     java.util.function.ToLongFunction<Translation2d> pointKey =
         p -> {
@@ -89,6 +106,34 @@ public final class FieldTrackerCollectPassCandidateStep {
           return ok1;
         };
 
+    Predicate<Translation2d> hasLiveFuelNearStrict =
+        p -> {
+          if (!hasLiveCollectDynamicsFinal) return true;
+          if (p == null) return false;
+          long key = pointKey.applyAsLong(p);
+          Boolean cached = liveFuelNearStrictCache.get(key);
+          if (cached != null) return cached;
+          boolean ok1 =
+              loop.countLiveCollectResourcesWithin(ctx.dynUse(), p, LIVE_FUEL_STRICT_R_M) > 0;
+          if (liveFuelNearStrictCache.size() > 2048) liveFuelNearStrictCache.clear();
+          liveFuelNearStrictCache.put(key, ok1);
+          return ok1;
+        };
+
+    Predicate<Translation2d> hasLiveFuelNearRelaxed =
+        p -> {
+          if (!hasLiveCollectDynamicsFinal) return true;
+          if (p == null) return false;
+          long key = pointKey.applyAsLong(p);
+          Boolean cached = liveFuelNearRelaxedCache.get(key);
+          if (cached != null) return cached;
+          boolean ok1 =
+              loop.countLiveCollectResourcesWithin(ctx.dynUse(), p, LIVE_FUEL_RELAXED_R_M) > 0;
+          if (liveFuelNearRelaxedCache.size() > 2048) liveFuelNearRelaxedCache.clear();
+          liveFuelNearRelaxedCache.put(key, ok1);
+          return ok1;
+        };
+
     Predicate<Translation2d> collectValid =
         p -> {
           if (p == null) return false;
@@ -109,6 +154,10 @@ public final class FieldTrackerCollectPassCandidateStep {
             return false;
           }
           if (!hasNearFuel.test(p)) {
+            validCache.put(key, false);
+            return false;
+          }
+          if (!hasLiveFuelNearStrict.test(p)) {
             validCache.put(key, false);
             return false;
           }
@@ -133,6 +182,10 @@ public final class FieldTrackerCollectPassCandidateStep {
                   < Math.max(
                       0.02,
                       FieldTrackerCollectObjectiveLoop.COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) {
+            validRelaxedCache.put(key, false);
+            return false;
+          }
+          if (!hasLiveFuelNearRelaxed.test(p)) {
             validRelaxedCache.put(key, false);
             return false;
           }

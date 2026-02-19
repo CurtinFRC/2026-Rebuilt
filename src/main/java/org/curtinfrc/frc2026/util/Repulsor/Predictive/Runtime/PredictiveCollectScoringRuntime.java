@@ -268,6 +268,10 @@ public final class PredictiveCollectScoringRuntime {
 
   public static boolean defaultCollectResourcePositionFilter(
       PredictiveFieldStateOps ops, Translation2d p) {
-    return !isInvalidFuelBand(ops, p);
+    if (p == null) return false;
+    return p.getX() >= 0.0
+        && p.getX() <= Constants.FIELD_LENGTH
+        && p.getY() >= 0.0
+        && p.getY() <= Constants.FIELD_WIDTH;
   }
 }
