@@ -17,7 +17,7 @@ class StickyTargetTest {
   private static final double START = 0.0;
   private static final double CLOSE = 0.12;
   private static final double MID = 1.116;
-  private static final double USER_CASE = 0.707;
+  private static final double USER_CASE = 0.882;
   private static final double FAR = 0.80;
   private static final ToDoubleBiFunction<Double, Double> DIST = (a, b) -> Math.abs(a - b);
 

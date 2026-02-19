@@ -8,6 +8,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
+import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractorObstacle;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,54 @@ class FieldPlannerGoalManagerTest {
     // Robot starts in center band and drives to alliance side. Path at y=4 does not occlude this
     // gate.
     assertTrue(manager.updateStagedGoal(new Translation2d(8.2, 4.0), obstacles));
+    assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
+    assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
+  }
+
+  @Test
+  void doesNotForceStageEarlyWhenLeavingDeepCenterAndOccludingGateIsFar() {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+    Translation2d robot = new Translation2d(mid, 4.0);
+    Translation2d goal = new Translation2d(mid - 4.8, 4.0);
+    GatedAttractorObstacle gate =
+        gate(new Translation2d(mid - 2.8, 4.0), new Translation2d(mid - 2.6, 4.0));
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
+    List<? extends Obstacle> obstacles = List.of(gate);
+
+    Pose2d requested = new Pose2d(goal, Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    assertTrue(manager.updateStagedGoal(robot, obstacles));
+    assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
+    assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
+  }
+
+  @Test
+  void centerReturnUsesExitStageBeforeReleasingRequestedGoal() {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+    Translation2d gateCenter = new Translation2d(mid - 3.6, 4.0);
+    GatedAttractorObstacle gate =
+        gate(gateCenter, new Translation2d(gateCenter.getX() + 0.2, gateCenter.getY()));
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
+    List<? extends Obstacle> obstacles = List.of(gate);
+
+    Pose2d requested = new Pose2d(new Translation2d(mid - 6.0, 4.0), Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    double firstStageX = gateCenter.getX() - 0.2;
+
+    assertTrue(manager.updateStagedGoal(new Translation2d(mid, 4.0), obstacles));
+    assertFalse(manager.updateStagedGoal(new Translation2d(mid - 2.0, 4.0), obstacles));
+    assertFalse(manager.updateStagedGoal(new Translation2d(firstStageX, 4.0), obstacles));
+    assertFalse(manager.updateStagedGoal(new Translation2d(firstStageX, 4.0), obstacles));
+
+    double exitX = manager.getGoalTranslation().getX();
+    assertTrue(exitX < firstStageX - 0.5);
+
+    assertFalse(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
+    assertFalse(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
+    assertTrue(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
+
     assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
     assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
   }
