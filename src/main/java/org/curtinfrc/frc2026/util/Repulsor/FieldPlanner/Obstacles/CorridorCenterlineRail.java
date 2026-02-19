@@ -24,6 +24,8 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public class CorridorCenterlineRail extends Obstacle {
+  private static final double CENTER_DEADBAND_FRAC = 0.15;
+
   private final double xCenter;
   private final double xHalfWindow;
   private final double yCenter;
@@ -64,8 +66,14 @@ public class CorridorCenterlineRail extends Obstacle {
     double ey = position.getY() - yCenter;
 
     double e = ey / yHalfWidth;
+    double absE = Math.abs(e);
 
-    double f = -strength * wx * (e) / (0.35 + e * e);
+    if (absE <= CENTER_DEADBAND_FRAC) return new Force();
+
+    double eased = (absE - CENTER_DEADBAND_FRAC) / (1.0 - CENTER_DEADBAND_FRAC);
+    double signed = Math.copySign(clamp01(eased), e);
+
+    double f = -strength * wx * signed / (0.45 + signed * signed);
 
     if (f > maxForce) f = maxForce;
     if (f < -maxForce) f = -maxForce;

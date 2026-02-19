@@ -148,7 +148,7 @@ public class TargetConfig {
   /*
    * Extra distance margin used to identify close target pairs.
    */
-  public static final double CLOSE_PAIR_DIST_ADD = 0.15;
+  public static final double CLOSE_PAIR_DIST_ADD = 0.30;
   /*
    * Required confidence multiplier when comparing close target pairs.
    */

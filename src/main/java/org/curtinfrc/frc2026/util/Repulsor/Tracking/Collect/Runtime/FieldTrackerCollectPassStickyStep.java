@@ -88,15 +88,26 @@ public final class FieldTrackerCollectPassStickyStep {
 
     Translation2d selectedResource;
     boolean forcedFuelReplacement = false;
+    boolean stickyShouldYieldForFuel = false;
 
     if (pass == 0) {
       boolean prevHasFuel = prevSticky != null && cand.footprintHasFuel().test(prevSticky);
+      boolean prevInvalid = prevSticky != null && !cand.collectValid().test(prevSticky);
       boolean bestHasFuel =
           bestCandidate != null
               && cand.footprintHasFuel().test(bestCandidate)
               && cand.collectValid().test(bestCandidate);
+      double prevScore = prevSticky != null ? cand.scoreResource().apply(prevSticky) : -1e18;
+      double bestScore = bestCandidate != null ? cand.scoreResource().apply(bestCandidate) : -1e18;
+      boolean strongFuelAdvantage =
+          prevSticky != null
+              && bestHasFuel
+              && (bestScore - prevScore) >= Math.max(0.18, keepMargin * 0.30);
 
-      if (prevSticky != null && !prevHasFuel && bestHasFuel) {
+      stickyShouldYieldForFuel =
+          prevSticky != null && bestHasFuel && (!prevHasFuel || prevInvalid || strongFuelAdvantage);
+
+      if (stickyShouldYieldForFuel) {
         selectedResource = bestCandidate;
         loop.collectStickySelector.force(bestCandidate);
         forcedFuelReplacement = true;
@@ -139,6 +150,14 @@ public final class FieldTrackerCollectPassStickyStep {
           || (tooSoon && loop.collectStickyStillSec < 0.10)) {
         selectedResource = prevSticky;
         loop.collectStickySelector.force(prevSticky);
+      }
+
+      if (stickyShouldYieldForFuel
+          && bestCandidate != null
+          && stickySame(prevSticky, selectedResource)) {
+        selectedResource = bestCandidate;
+        loop.collectStickySelector.force(bestCandidate);
+        forcedFuelReplacement = true;
       }
     }
 

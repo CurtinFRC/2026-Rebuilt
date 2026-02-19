@@ -196,20 +196,24 @@ public final class Rebuilt2026 implements FieldDefinition {
     double leftPullXOut = leftRectX - sidePullDx;
     double rightPullXOut = rightRectX + sidePullDx;
 
-    double sideBiasStrength = biasStrength * 0.50;
-    double sideBiasRange = biasRange * 0.60;
+    double sideBiasStrength = biasStrength * 0.35;
+    double sideBiasRange = biasRange * 0.70;
 
-    double sideBypassStrengthScale = bypassStrengthScale * 0.85;
-    double sideBypassRange = bypassRange * 0.65;
+    double sideBypassStrengthScale = bypassStrengthScale * 0.75;
+    double sideBypassRange = bypassRange * 0.75;
 
     double leftPullXIn = leftRectX + sidePullDx;
 
     double rightPullXIn = rightRectX - sidePullDx;
 
-    double railXWindow = 1.2;
-    double corridorHalfWidthGuess = Math.max(0.22, gapHeight * 0.45);
-    double railStrength = 2.1;
-    double railMaxForce = 3.2;
+    double railXWindow = 1.4;
+    double corridorHalfWidthGuess = Math.max(0.24, gapHeight * 0.42);
+    double railStrength = 1.8;
+    double railMaxForce = 2.6;
+    double centerRailX = 0.5 * (leftRectX + rightRectX);
+    double centerRailWindow = Math.max(1.2, (rightRectX - leftRectX) * 0.45);
+    double outerRailXOffset = sidePullDx * 0.9;
+    double outerRailWindow = 1.0;
 
     return List.of(
         new RectangleObstacle(
@@ -335,6 +339,48 @@ public final class Rebuilt2026 implements FieldDefinition {
         new CorridorCenterlineRail(
             rightRectX,
             railXWindow,
+            gapBottomY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            centerRailX,
+            centerRailWindow,
+            gapTopY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            centerRailX,
+            centerRailWindow,
+            gapBottomY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            leftRectX - outerRailXOffset,
+            outerRailWindow,
+            gapTopY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            leftRectX - outerRailXOffset,
+            outerRailWindow,
+            gapBottomY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            rightRectX + outerRailXOffset,
+            outerRailWindow,
+            gapTopY,
+            corridorHalfWidthGuess,
+            railStrength,
+            railMaxForce),
+        new CorridorCenterlineRail(
+            rightRectX + outerRailXOffset,
+            outerRailWindow,
             gapBottomY,
             corridorHalfWidthGuess,
             railStrength,
