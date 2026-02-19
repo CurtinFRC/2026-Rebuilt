@@ -110,11 +110,6 @@ public class ShooterIODev implements ShooterIO {
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
 
-  @Override
-  public void setVoltageV(Voltage voltage) {
-    leaderMotor.setControl(voltageRequest.withOutput(voltage));
-  }
-
   public static double convertVelocityToRPS(double velocity) {
     return velocity / (HoodedShooter.WHEEL_DIAMETER * Math.PI);
   }

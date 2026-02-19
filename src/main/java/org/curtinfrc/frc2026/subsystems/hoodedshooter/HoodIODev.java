@@ -158,11 +158,6 @@ public class HoodIODev implements HoodIO {
   }
 
   @Override
-  public void setVoltageV(Voltage voltage) {
-    motor.setControl(voltageRequest.withOutput(voltage));
-  }
-
-  @Override
   public void setPosition(double positionDegrees) {
     if (positionDegrees / 360 < STOWED_OUT_POSITION_THRESHOLD) {
       motor.setControl(
