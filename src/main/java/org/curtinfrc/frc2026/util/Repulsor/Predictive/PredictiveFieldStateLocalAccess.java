@@ -69,7 +69,7 @@ public final class PredictiveFieldStateLocalAccess {
     return ShuttleRecoveryPointDTO.of(nearest.getX(), nearest.getY(), yaw.getDegrees(), -1.0);
   }
 
-  private static List<DynamicObject> normalizeDynamicObjects(
+  static List<DynamicObject> normalizeDynamicObjects(
       List<ShuttleRecoveryDynamicObjectDTO> input, boolean flipRedToBlue) {
     if (input == null || input.isEmpty()) {
       return List.of();
@@ -103,7 +103,7 @@ public final class PredictiveFieldStateLocalAccess {
     return out;
   }
 
-  private static Translation2d[] buildAllianceZoneGrid() {
+  static Translation2d[] buildAllianceZoneGrid() {
     ArrayList<Translation2d> points = new ArrayList<>();
     double xMin = ZONE_EDGE_MARGIN_M;
     double xMax = Constants.FIELD_LENGTH * ZONE_X_MAX_FRAC;
@@ -118,7 +118,7 @@ public final class PredictiveFieldStateLocalAccess {
     return points.toArray(new Translation2d[0]);
   }
 
-  private static Translation2d nearestFuelInZone(List<DynamicObject> objects, Translation2d from) {
+  static Translation2d nearestFuelInZone(List<DynamicObject> objects, Translation2d from) {
     Translation2d best = null;
     double bestDist = Double.POSITIVE_INFINITY;
 
@@ -142,7 +142,7 @@ public final class PredictiveFieldStateLocalAccess {
     return best;
   }
 
-  private static boolean inAllianceZoneBlue(Translation2d point) {
+  static boolean inAllianceZoneBlue(Translation2d point) {
     return point != null
         && point.getX() >= ZONE_EDGE_MARGIN_M
         && point.getX() <= Constants.FIELD_LENGTH * ZONE_X_MAX_FRAC
@@ -150,7 +150,7 @@ public final class PredictiveFieldStateLocalAccess {
         && point.getY() <= Constants.FIELD_WIDTH - ZONE_EDGE_MARGIN_M;
   }
 
-  private static boolean inField(Translation2d point) {
+  static boolean inField(Translation2d point) {
     return point.getX() >= 0.0
         && point.getX() <= Constants.FIELD_LENGTH
         && point.getY() >= 0.0

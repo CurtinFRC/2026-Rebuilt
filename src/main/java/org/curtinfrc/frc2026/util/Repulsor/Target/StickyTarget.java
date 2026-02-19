@@ -21,6 +21,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Target;
 
 import edu.wpi.first.wpilibj.Timer;
 import java.util.Optional;
+import java.util.function.DoubleSupplier;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleBiFunction;
 import java.util.function.ToDoubleFunction;
@@ -29,6 +30,7 @@ public final class StickyTarget<T> {
   private final double candidateStableSec;
   private final double maxStaleSec;
   private final double switchBackCooldownSec;
+  private final DoubleSupplier nowSecSupplier;
 
   private final StickyTargetState<T> st = new StickyTargetState<>();
   private final StickyTargetEma<T> ema = new StickyTargetEma<>();
@@ -38,15 +40,29 @@ public final class StickyTarget<T> {
   private final StickyTargetPingPong<T> pingPong = new StickyTargetPingPong<>();
 
   public StickyTarget(double candidateStableSec, double maxStaleSec, double switchBackCooldownSec) {
+    this(candidateStableSec, maxStaleSec, switchBackCooldownSec, Timer::getFPGATimestamp);
+  }
+
+  StickyTarget(
+      double candidateStableSec,
+      double maxStaleSec,
+      double switchBackCooldownSec,
+      DoubleSupplier nowSecSupplier) {
     this.candidateStableSec = Math.max(0.0, candidateStableSec);
     this.maxStaleSec = Math.max(0.0, maxStaleSec);
     this.switchBackCooldownSec = Math.max(0.0, switchBackCooldownSec);
+    this.nowSecSupplier = nowSecSupplier != null ? nowSecSupplier : Timer::getFPGATimestamp;
 
     double base =
         this.maxStaleSec > 1e-6 ? this.maxStaleSec : TargetConfig.DEFAULT_SEEN_TIMEOUT_SEC;
     setSeenTimeoutSec(Math.max(0.12, Math.min(2.5, base)));
 
     clear();
+  }
+
+  private double nowSec() {
+    double now = nowSecSupplier.getAsDouble();
+    return Double.isFinite(now) ? now : Timer.getFPGATimestamp();
   }
 
   public Optional<T> get() {
@@ -65,13 +81,13 @@ public final class StickyTarget<T> {
 
   public void noteSeen(T value) {
     if (value == null) return;
-    double now = Timer.getFPGATimestamp();
+    double now = nowSec();
     seen.noteSeen(now, value);
   }
 
   public void noteSeen(Iterable<T> values) {
     if (values == null) return;
-    double now = Timer.getFPGATimestamp();
+    double now = nowSec();
     seen.noteSeen(now, values);
   }
 
@@ -85,7 +101,7 @@ public final class StickyTarget<T> {
   }
 
   public void force(T value) {
-    double now = Timer.getFPGATimestamp();
+    double now = nowSec();
 
     st.sticky = value;
     st.candidate = null;
@@ -113,7 +129,7 @@ public final class StickyTarget<T> {
   }
 
   public void forceInvalidate() {
-    double now = Timer.getFPGATimestamp();
+    double now = nowSec();
 
     st.sticky = null;
     st.candidate = null;
@@ -204,7 +220,7 @@ public final class StickyTarget<T> {
       double stillSec,
       double robotFlickerSec) {
 
-    final double now = Timer.getFPGATimestamp();
+    final double now = nowSec();
     final double dt =
         st.lastUpdateSec > 0.0 ? StickyTargetMath.clampDt(now - st.lastUpdateSec) : 0.02;
     st.lastUpdateSec = now;
@@ -224,7 +240,7 @@ public final class StickyTarget<T> {
 
     double baseEps = Math.max(0.0, sameEps);
     double eqEps = StickyTargetMath.adaptiveEps(baseEps, 0.0, motionBoost);
-    double idEps = Math.max(eqEps, 0.12);
+    double idEps = Math.max(0.04, Math.min(0.10, eqEps));
 
     best = bestOkRaw0 ? canon.canonicalize(now, best, distanceFn, idEps) : best;
     if (stickyOkRaw0) st.sticky = canon.canonicalize(now, st.sticky, distanceFn, idEps);
@@ -332,13 +348,16 @@ public final class StickyTarget<T> {
 
       double switchBackEps =
           Math.max(TargetConfig.SWITCH_BACK_EPS_MIN, Math.max(0.0, baseEps) * 3.0);
+      boolean stickyGeomInvalid = !stickyGeomOk;
       boolean blocked =
           pingPong.isBlocked(now, best, distanceFn, switchBackEps)
               || (st.lastSticky != null
                   && StickyTargetMath.eq(best, st.lastSticky, distanceFn, switchBackEps)
                   && (now - st.lastSwitchSec) < switchBackCooldownSec);
 
-      if (blocked) {
+      // If current sticky target is geometrically invalid (e.g., no longer a valid collect point),
+      // do not let switch-back/ping-pong protection pin us to it.
+      if (blocked && !stickyGeomInvalid) {
         recordOut(now, st.sticky, distanceFn, idEps);
         return st.sticky;
       }
@@ -500,10 +519,31 @@ public final class StickyTarget<T> {
             && !pingBlock
             && !hardLocked;
 
+    double closePairHoldSecReq =
+        Math.max(0.0, candidateStableSec * TargetConfig.CLOSE_PAIR_HOLD_SCALE);
+    double closePairAdvReq =
+        Math.max(
+            0.02,
+            Math.min(immediateDelta, Math.max(keepMargin, 0.0))
+                * TargetConfig.CLOSE_PAIR_ADV_REQ_MULT);
+    boolean closePairAssist =
+        closePair
+            && !freezeOnFlicker
+            && !switchBackBlocked
+            && !pingBlock
+            && !hardLocked
+            && bestStableEnough
+            && candAge >= closePairHoldSecReq
+            && advantage >= closePairAdvReq;
+
     boolean shouldSwitch = false;
+    boolean closeAssistSwitch = false;
 
     if (forceMoveOn) {
       shouldSwitch = true;
+    } else if (closePairAssist) {
+      shouldSwitch = true;
+      closeAssistSwitch = true;
     } else if (!freezeOnFlicker
         && bestStableEnough
         && candStableShort
@@ -525,27 +565,35 @@ public final class StickyTarget<T> {
     }
 
     if (shouldSwitch) {
-      double sinceSwitch = now - st.lastSwitchSec;
-      double req = Math.max(immediateDelta, keepMargin) * TargetConfig.EARLY_SWITCH_MULT;
+      double req;
+      double hardOverride;
+      if (closeAssistSwitch) {
+        req = closePairAdvReq;
+        hardOverride = closePairAdvReq * TargetConfig.CLOSE_PAIR_HARDLOCK_REQ_MULT;
+      } else {
+        double sinceSwitch = now - st.lastSwitchSec;
+        req = Math.max(immediateDelta, keepMargin) * TargetConfig.EARLY_SWITCH_MULT;
 
-      if (closePair) req *= TargetConfig.CLOSE_PAIR_REQ_MULT;
+        if (closePair) req *= TargetConfig.CLOSE_PAIR_REQ_MULT;
 
-      if (hardLocked) req *= 2.10;
-      else if (st.lastSwitchSec > 0.0 && sinceSwitch < TargetConfig.BASE_HARD_LOCK_SEC) req *= 1.45;
+        if (hardLocked) req *= 2.10;
+        else if (st.lastSwitchSec > 0.0 && sinceSwitch < TargetConfig.BASE_HARD_LOCK_SEC)
+          req *= 1.45;
 
-      if (isSwitchBack) {
-        req *= 2.15;
-        if (!candStable) req *= 1.35;
-        if (!bestStableEnough) req *= 2.0;
+        if (isSwitchBack) {
+          req *= 2.15;
+          if (!candStable) req *= 1.35;
+          if (!bestStableEnough) req *= 2.0;
+        }
+
+        if (pairDist >= 2.0) req *= 1.25;
+        if (pingBlock) req *= 2.25;
+        if (freezeOnFlicker) req *= 3.0;
+
+        hardOverride =
+            Math.max(
+                req, Math.max(immediateDelta, keepMargin) * TargetConfig.HARD_LOCK_OVERRIDE_MULT);
       }
-
-      if (pairDist >= 2.0) req *= 1.25;
-      if (pingBlock) req *= 2.25;
-      if (freezeOnFlicker) req *= 3.0;
-
-      double hardOverride =
-          Math.max(
-              req, Math.max(immediateDelta, keepMargin) * TargetConfig.HARD_LOCK_OVERRIDE_MULT);
 
       if (hardLocked && !forcedRefresh && advantage < hardOverride) {
         shouldSwitch = false;

@@ -45,6 +45,7 @@ public final class FieldPlannerGoalManager {
 
   private static final double STAGED_GATE_PAD_M = 0.25;
   private static final double STAGED_PASSED_X_HYST_M = 0.35;
+  private static final double STAGED_GOAL_SIDE_PROJ_M = 0.05;
 
   private Pose2d goal = Pose2d.kZero;
   private Pose2d requestedGoal = Pose2d.kZero;
@@ -169,10 +170,19 @@ public final class FieldPlannerGoalManager {
       boolean reached = stagedReachTicks >= STAGED_REACH_TICKS;
 
       if (stagedGate != null) {
-        stagedGatePassed = stagedGatePassed || gateIsBehind(curPos, reqT, stagedGate);
+        boolean gateOccludingNow =
+            stagedGate.gatePoly != null
+                && FieldPlannerGeometry.segmentIntersectsPolygonOuter(
+                    curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
+        stagedGatePassed =
+            stagedGatePassed
+                || gateIsBehind(curPos, reqT, stagedGate)
+                || gateOnGoalSide(curPos, reqT, stagedGate)
+                || !gateOccludingNow;
       }
 
       boolean gateCleared = stagedGatePassed;
+      if (!reached && gateCleared && d <= STAGED_REACH_EXIT_M) reached = true;
 
       if (stagedModeTicks >= STAGED_MAX_TICKS) {
         GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT, obstacles);
@@ -208,7 +218,6 @@ public final class FieldPlannerGoalManager {
         stagedUsingBypass = false;
         stagedGatePassed = false;
         stagedLatchedPull = null;
-        lastStagedPoint = null;
         stagedReachTicks = 0;
         stagedModeTicks = 0;
         stagedComplete = true;
@@ -319,6 +328,17 @@ public final class FieldPlannerGoalManager {
     Translation2d toGate = gate.center.minus(pos);
     double proj = toGate.getX() * dir.getX() + toGate.getY() * dir.getY();
     return proj < -STAGED_PASSED_X_HYST_M;
+  }
+
+  private static boolean gateOnGoalSide(
+      Translation2d pos, Translation2d goal, GatedAttractorObstacle gate) {
+    if (pos == null || goal == null || gate == null || gate.center == null) return false;
+    Translation2d gateToGoal = goal.minus(gate.center);
+    double n = gateToGoal.getNorm();
+    if (n <= 1e-6) return false;
+    Translation2d gateToPos = pos.minus(gate.center);
+    double proj = (gateToPos.getX() * gateToGoal.getX() + gateToPos.getY() * gateToGoal.getY()) / n;
+    return proj >= STAGED_GOAL_SIDE_PROJ_M;
   }
 
   private GatedAttractorObstacle firstOccludingGateAlongSegment(

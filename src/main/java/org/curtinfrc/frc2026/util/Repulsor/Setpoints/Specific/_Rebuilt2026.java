@@ -494,15 +494,15 @@ public class _Rebuilt2026 {
 
     @Override
     public Pose2d bluePose(SetpointContext ctx) {
-      Translation2d target = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
-      return computeShootPose(ctx, SetpointUtil.flipToBlue(target));
+      Translation2d blueTarget = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
+      return computeShootPose(ctx, blueTarget);
     }
 
     @Override
     public Pose2d redPose(SetpointContext ctx) {
       Translation2d blueTarget = hubAimpointFromAnchorTagBlueCached(blueHubAnchorTagId);
-      // Translation2d redTarget = SetpointUtil.flipToRed(blueTarget);
-      return computeShootPose(ctx, blueTarget);
+      Translation2d redTarget = SetpointUtil.flipToRed(blueTarget);
+      return computeShootPose(ctx, redTarget);
     }
 
     @Override

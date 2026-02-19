@@ -32,7 +32,7 @@ public final class FieldTrackerLocalAccess {
     return fallbackGoal(robotPoseBlue);
   }
 
-  private static Pose2d fallbackGoal(Pose2d robotPoseBlue) {
+  static Pose2d fallbackGoal(Pose2d robotPoseBlue) {
     double x = Math.max(0.7, Math.min(Constants.FIELD_LENGTH * 0.28, robotPoseBlue.getX()));
     double y = Math.max(0.7, Math.min(Constants.FIELD_WIDTH - 0.7, robotPoseBlue.getY()));
     return new Pose2d(x, y, robotPoseBlue.getRotation());

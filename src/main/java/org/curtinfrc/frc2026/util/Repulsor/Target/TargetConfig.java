@@ -152,5 +152,17 @@ public class TargetConfig {
   /*
    * Required confidence multiplier when comparing close target pairs.
    */
-  public static final double CLOSE_PAIR_REQ_MULT = 1.15;
+  public static final double CLOSE_PAIR_REQ_MULT = 0.75;
+  /*
+   * Hold-time scale used when evaluating nearby candidates.
+   */
+  public static final double CLOSE_PAIR_HOLD_SCALE = 0.45;
+  /*
+   * Advantage multiplier for nearby candidate retargeting assist.
+   */
+  public static final double CLOSE_PAIR_ADV_REQ_MULT = 0.20;
+  /*
+   * Hard-lock requirement multiplier for nearby candidate retargeting assist.
+   */
+  public static final double CLOSE_PAIR_HARDLOCK_REQ_MULT = 0.90;
 }

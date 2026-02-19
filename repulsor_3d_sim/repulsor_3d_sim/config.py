@@ -89,7 +89,8 @@ def load_config() -> ViewerConfig:
         field_image_path=_s("FIELD_IMAGE_PATH", "field.png"),
         show_field_image=_b("SHOW_FIELD_IMAGE", True),
         field_image_alpha=_f("FIELD_IMAGE_ALPHA", 0.92),
-        field_image_flip_x=_b("FIELD_IMAGE_FLIP_X", False),
+        # Default flip aligns field texture orientation with blue-origin field coordinates.
+        field_image_flip_x=_b("FIELD_IMAGE_FLIP_X", True),
         field_image_flip_y=_b("FIELD_IMAGE_FLIP_Y", False),
         collect_age_decay=_f("COLLECT_AGE_DECAY", 1.25),
         resource_hard_max_age_s=_f("RESOURCE_HARD_MAX_AGE_S", 0.95),

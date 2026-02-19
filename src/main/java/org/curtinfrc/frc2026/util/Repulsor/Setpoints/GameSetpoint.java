@@ -51,8 +51,8 @@ public abstract class GameSetpoint {
   public abstract Pose2d bluePose(SetpointContext ctx);
 
   public Pose2d redPose(SetpointContext ctx) {
-    return ChoreoAllianceFlipUtil.flip(bluePose(ctx));
-    // return canFlip ? SetpointUtil.flipToRed(bluePose(ctx)) : bluePose(ctx);
+    Pose2d blue = bluePose(ctx);
+    return canFlip ? ChoreoAllianceFlipUtil.flip(blue) : blue;
   }
 
   public final Pose2d poseForAlliance(Alliance alliance, SetpointContext ctx) {

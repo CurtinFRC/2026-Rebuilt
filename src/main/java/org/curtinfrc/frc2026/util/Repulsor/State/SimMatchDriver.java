@@ -13,7 +13,7 @@ public final class SimMatchDriver {
     DriverStationSim.setDsAttached(true);
     DriverStationSim.setFmsAttached(true);
 
-    DriverStationSim.setAllianceStationId(AllianceStationID.Blue1);
+    DriverStationSim.setAllianceStationId(AllianceStationID.Red1);
     DriverStationSim.setGameSpecificMessage("R");
 
     DriverStationSim.setAutonomous(runAuto);

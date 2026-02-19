@@ -66,8 +66,6 @@ public class AutoPathBehaviour extends Behaviour {
   private final Function<RepulsorSetpoint, String> stationKeyFn;
   private final Supplier<Double> ourSpeedCap;
 
-  private Pose2d lastCollectBluePose = null;
-
   private final NetworkTablesValue<Long> pieceCount =
       NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
 
@@ -136,6 +134,33 @@ public class AutoPathBehaviour extends Behaviour {
         Math.max(0.0, ctx.robot_y) * 2.0,
         release,
         ctx.vision.getObstacles());
+  }
+
+  static DriverStation.Alliance currentDriverStationAllianceOrBlue() {
+    return DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue);
+  }
+
+  static Alliance toRepulsorAlliance(DriverStation.Alliance alliance) {
+    return alliance == DriverStation.Alliance.Red ? Alliance.kRed : Alliance.kBlue;
+  }
+
+  static Alliance preferredAllianceFromDriverStation() {
+    return toRepulsorAlliance(currentDriverStationAllianceOrBlue());
+  }
+
+  static Pose2d resolvePlannerGoalPose(
+      RepulsorSetpoint setpoint,
+      SetpointContext setpointContext,
+      DriverStation.Alliance driverAlliance) {
+    if (setpoint == null) {
+      return Pose2d.kZero;
+    }
+    // Planner goals must reflect the active alliance; setpoints own the flip semantics.
+    return setpoint.getForAlliance(driverAlliance, setpointContext);
+  }
+
+  static Pose2d resolvePlannerGoalPose(RepulsorSetpoint setpoint, SetpointContext setpointContext) {
+    return resolvePlannerGoalPose(setpoint, setpointContext, currentDriverStationAllianceOrBlue());
   }
 
   private Command buildShootReadyCommand(BehaviourContext ctx) {
@@ -255,6 +280,7 @@ public class AutoPathBehaviour extends Behaviour {
     return Commands.run(
             () -> {
               Pose2d robotPose = ctx.robotPose.get();
+              DriverStation.Alliance driverAlliance = currentDriverStationAllianceOrBlue();
               boolean piece = hasPiece.get();
               double cap = ourSpeedCap != null ? Math.max(0.25, ourSpeedCap.get()) : 3.5;
               CategorySpec cat = piece ? CategorySpec.kScore : CategorySpec.kCollect;
@@ -339,7 +365,7 @@ public class AutoPathBehaviour extends Behaviour {
                 shooterPassthrough.set(false);
               }
 
-              Pose2d goalPose = sp.getBlue(makeCtx(ctx, robotPose));
+              Pose2d goalPose = resolvePlannerGoalPose(sp, makeCtx(ctx, robotPose), driverAlliance);
 
               if (cat == CategorySpec.kScore && piece) {
                 double d = robotPose.getTranslation().getDistance(goalPose.getTranslation());
@@ -513,12 +539,11 @@ public class AutoPathBehaviour extends Behaviour {
             });
   }
 
-  private RepulsorSetpoint pickPredicted(BehaviourContext ctx) {
-    Alliance alliance =
-        DriverStation.getAlliance().isPresent()
-                && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
-            ? Alliance.kBlue
-            : Alliance.kRed;
+  RepulsorSetpoint pickPredicted(BehaviourContext ctx) {
+    return pickPredicted(ctx, preferredAllianceFromDriverStation());
+  }
+
+  RepulsorSetpoint pickPredicted(BehaviourContext ctx, Alliance alliance) {
     FieldTrackerCore ft = FieldTrackerCore.getInstance();
     ft.updatePredictorWorld(alliance);
     double cap = ourSpeedCap != null ? Math.max(0.1, ourSpeedCap.get()) : 3.5;
@@ -536,10 +561,6 @@ public class AutoPathBehaviour extends Behaviour {
       int goalUnits,
       AtomicReference<Pose2d> collectBluePoseRef,
       RepulsorSetpoint collectRoute) {
-
-    edu.wpi.first.wpilibj.DriverStation.Alliance wpA =
-        DriverStation.getAlliance().orElse(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue);
-
     Pose2d nextBlue =
         FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPose, cap, goalUnits);
 
@@ -551,7 +572,6 @@ public class AutoPathBehaviour extends Behaviour {
 
     nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
 
-    lastCollectBluePose = nextBlue;
     collectBluePoseRef.set(nextBlue);
 
     return collectRoute;

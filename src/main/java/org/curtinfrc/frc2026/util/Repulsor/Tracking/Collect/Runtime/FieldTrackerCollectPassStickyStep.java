@@ -43,6 +43,7 @@ public final class FieldTrackerCollectPassStickyStep {
       FieldTrackerCollectPassCandidateResult cand,
       int pass) {
     Translation2d bestCandidate = cand.bestCandidate();
+    Translation2d prevSticky = loop.collectStickyPoint;
 
     double distToCand = ctx.robotPos().getDistance(bestCandidate);
     double distToCur =
@@ -86,30 +87,42 @@ public final class FieldTrackerCollectPassStickyStep {
         };
 
     Translation2d selectedResource;
+    boolean forcedFuelReplacement = false;
 
     if (pass == 0) {
-      selectedResource =
-          loop.collectStickySelector.update(
-              bestCandidate,
-              cand.scoreResource().apply(bestCandidate),
-              cand.scoreResource()::apply,
-              cand.collectValid(),
-              holdS,
-              keepMargin,
-              immediateDelta,
-              transitionExtra,
-              (p, q) -> p.getDistance(q),
-              FieldTrackerCollectObjectiveLoop.COLLECT_STICKY_SAME_M,
-              loop.collectStickyStillSec,
-              loop.collectStickyRobotFlickerSec);
+      boolean prevHasFuel = prevSticky != null && cand.footprintHasFuel().test(prevSticky);
+      boolean bestHasFuel =
+          bestCandidate != null
+              && cand.footprintHasFuel().test(bestCandidate)
+              && cand.collectValid().test(bestCandidate);
+
+      if (prevSticky != null && !prevHasFuel && bestHasFuel) {
+        selectedResource = bestCandidate;
+        loop.collectStickySelector.force(bestCandidate);
+        forcedFuelReplacement = true;
+      } else {
+        selectedResource =
+            loop.collectStickySelector.update(
+                bestCandidate,
+                cand.scoreResource().apply(bestCandidate),
+                cand.scoreResource()::apply,
+                cand.collectValid(),
+                holdS,
+                keepMargin,
+                immediateDelta,
+                transitionExtra,
+                (p, q) -> p.getDistance(q),
+                FieldTrackerCollectObjectiveLoop.COLLECT_STICKY_SAME_M,
+                loop.collectStickyStillSec,
+                loop.collectStickyRobotFlickerSec);
+      }
     } else {
       Translation2d cur = loop.collectStickyPoint;
       selectedResource = (cur != null && cand.collectValid().test(cur)) ? cur : bestCandidate;
     }
 
-    Translation2d prevSticky = loop.collectStickyPoint;
-
     if (pass == 0
+        && !forcedFuelReplacement
         && prevSticky != null
         && selectedResource != null
         && !stickySame(prevSticky, selectedResource)) {
@@ -129,10 +142,9 @@ public final class FieldTrackerCollectPassStickyStep {
       }
     }
 
-    prevSticky = loop.collectStickyPoint;
     boolean switched = stickySwitched(prevSticky, selectedResource);
 
-    if (switched && loop.collectStickyLastSwitchNs != 0L) {
+    if (switched && !forcedFuelReplacement && loop.collectStickyLastSwitchNs != 0L) {
       double sinceLastSwitchS = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs);
       double movedSinceLastSwitch =
           loop.collectStickyLastSwitchRobotPos != null
