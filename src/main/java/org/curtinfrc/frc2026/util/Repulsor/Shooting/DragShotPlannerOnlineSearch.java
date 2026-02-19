@@ -130,7 +130,8 @@ final class DragShotPlannerOnlineSearch {
                         targetFieldPosition,
                         robotHalfLengthMeters,
                         robotHalfWidthMeters,
-                        dynamicObstacles);
+                        dynamicObstacles,
+                        true);
               } finally {
                 DragShotPlannerUtil.closeQuietly(_pCached);
               }
@@ -193,7 +194,8 @@ final class DragShotPlannerOnlineSearch {
                   targetFieldPosition,
                   robotHalfLengthMeters,
                   robotHalfWidthMeters,
-                  dynamicObstacles);
+                  dynamicObstacles,
+                  true);
         } finally {
           DragShotPlannerUtil.closeQuietly(_p2);
         }
@@ -276,7 +278,8 @@ final class DragShotPlannerOnlineSearch {
                     targetFieldPosition,
                     robotHalfLengthMeters,
                     robotHalfWidthMeters,
-                    dynamicObstacles);
+                    dynamicObstacles,
+                    true);
           } finally {
             DragShotPlannerUtil.closeQuietly(_p3);
           }

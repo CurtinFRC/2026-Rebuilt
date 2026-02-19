@@ -19,31 +19,33 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
-import org.curtinfrc.frc2026.util.Repulsor.Constants;
 
 public final class SetpointUtil {
   public static Alliance currentAllianceOrBlue() {
+    // System.out.println("Current alliance: " + DriverStation.getAlliance());
     return DriverStation.getAlliance().orElse(Alliance.Blue);
   }
 
   private static Pose2d flipAcrossField(Pose2d p) {
-    if (p == null) return Pose2d.kZero;
-    double x = p.getX();
-    double y = p.getY();
-    double r = p.getRotation().getRadians();
-    double fx = Constants.FIELD_LENGTH - x;
-    double fr = Math.PI - r;
-    return new Pose2d(fx, y, Rotation2d.fromRadians(fr));
+    // if (p == null) return Pose2d.kZero;
+    // double x = p.getX();
+    // double y = p.getY();
+    // double r = p.getRotation().getRadians();
+    // double fx = Constants.FIELD_LENGTH - x;
+    // double fr = Math.PI - r;
+    // return new Pose2d(fx, y, Rotation2d.fromRadians(fr));
+    return ChoreoAllianceFlipUtil.flip(p);
   }
 
   private static Translation2d flipAcrossField(Translation2d t) {
-    if (t == null) return new Translation2d(0.0, 0.0);
-    return new Translation2d(Constants.FIELD_LENGTH - t.getX(), t.getY());
+    // if (t == null) return new Translation2d(0.0, 0.0);
+    // return new Translation2d(Constants.FIELD_LENGTH - t.getX(), t.getY());
+    return ChoreoAllianceFlipUtil.flip(t);
   }
 
   public static Pose2d flipToRed(Pose2d bluePose) {

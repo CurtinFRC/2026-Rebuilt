@@ -38,7 +38,8 @@ final class DragShotPlannerObstacles {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles,
+      boolean checkBounds) {
     AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValid");
     try {
       return isShooterPoseValidInternal(
@@ -46,7 +47,8 @@ final class DragShotPlannerObstacles {
           targetFieldPosition,
           robotHalfLengthMeters,
           robotHalfWidthMeters,
-          dynamicObstacles);
+          dynamicObstacles,
+          checkBounds);
     } finally {
       DragShotPlannerUtil.closeQuietly(_p);
     }
@@ -57,7 +59,8 @@ final class DragShotPlannerObstacles {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles,
+      boolean checkBounds) {
 
     AutoCloseable _p = Profiler.section("DragShotPlanner.isShooterPoseValidInternal.body");
     try {
@@ -70,7 +73,11 @@ final class DragShotPlannerObstacles {
       final double SHOOT_X_END_BAND_M = 13.49;
       double minBand = SHOOT_X_END_BAND_M;
       double maxBand = Constants.FIELD_LENGTH - SHOOT_X_END_BAND_M;
-      if (x < minBand && x > maxBand) {
+      if (x < minBand && x > maxBand && checkBounds) {
+        return false;
+      }
+
+      if (!(x < minBand || x > maxBand) && checkBounds) {
         return false;
       }
 

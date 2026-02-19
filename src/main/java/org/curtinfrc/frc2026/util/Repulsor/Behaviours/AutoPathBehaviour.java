@@ -50,7 +50,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.MutablePoseSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
@@ -71,6 +70,9 @@ public class AutoPathBehaviour extends Behaviour {
 
   private final NetworkTablesValue<Long> pieceCount =
       NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
+
+  private final NetworkTablesValue<Boolean> shooterPassthrough =
+      NetworkTablesValue.ofBoolean(NetworkTableInstance.getDefault(), "/ShooterPassthrough", false);
 
   public AutoPathBehaviour(
       int priority,
@@ -140,14 +142,14 @@ public class AutoPathBehaviour extends Behaviour {
     return Commands.runOnce(
             () -> {
               FieldTrackerCore.getInstance().resetAll();
+              shooterPassthrough.set(true);
             })
+        .andThen(Commands.waitUntil(() -> pieceCount.get() == 0))
         .andThen(
-            Commands.waitSeconds(2)
-                .andThen(
-                    Commands.runOnce(
-                        () -> {
-                          pieceCount.set(0L);
-                        })));
+            Commands.runOnce(
+                () -> {
+                  shooterPassthrough.set(false);
+                }));
   }
 
   private boolean isReadyToShoot(
@@ -272,6 +274,7 @@ public class AutoPathBehaviour extends Behaviour {
                 shootLatched.set(false);
                 shootGoalLocked.set(false);
                 lockedShootPose.set(null);
+                shooterPassthrough.set(false);
               }
               lastCat.set(cat);
 
@@ -288,7 +291,6 @@ public class AutoPathBehaviour extends Behaviour {
                   desired = fromNT;
                 } else {
                   RepulsorSetpoint pred = pickPredicted(ctx);
-                  // desired = (pred != null) ? pred : scoreFallback;
                   FieldTrackerCore.getInstance().resetAll();
                   desired = scoreFallback;
                 }
@@ -304,8 +306,6 @@ public class AutoPathBehaviour extends Behaviour {
                     chooseCollect(
                         ctx, robotPose, cap, COLLECT_GOAL_UNITS, collectBluePoseRef, collectRoute);
 
-                // Logger.recordOutput("Repulsor/Goal1", hp.get(makeCtx(ctx, robotPose)));
-
                 desired = (hp != null) ? hp : collectRoute;
               }
 
@@ -319,6 +319,7 @@ public class AutoPathBehaviour extends Behaviour {
                 shootLatched.set(false);
                 shootGoalLocked.set(false);
                 lockedShootPose.set(null);
+                shooterPassthrough.set(false);
                 ctx.drive.runVelocity(new ChassisSpeeds());
                 return;
               }
@@ -335,9 +336,10 @@ public class AutoPathBehaviour extends Behaviour {
                 shootLatched.set(false);
                 shootGoalLocked.set(false);
                 lockedShootPose.set(null);
+                shooterPassthrough.set(false);
               }
 
-              Pose2d goalPose = sp.get(makeCtx(ctx, robotPose));
+              Pose2d goalPose = sp.getBlue(makeCtx(ctx, robotPose));
 
               if (cat == CategorySpec.kScore && piece) {
                 double d = robotPose.getTranslation().getDistance(goalPose.getTranslation());
@@ -411,6 +413,7 @@ public class AutoPathBehaviour extends Behaviour {
                   if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
                     shootReadyCmd.cancel();
                   }
+                  shooterPassthrough.set(false);
                 }
               }
 
@@ -492,12 +495,6 @@ public class AutoPathBehaviour extends Behaviour {
                 }
               }
 
-              // Logger.recordOutput("autopath_goal_x", goalPose.getX());
-              // Logger.recordOutput("autopath_goal_y", goalPose.getY());
-              // Logger.recordOutput("autopath_goal_theta", goalPose.getRotation().getRadians());
-              // Logger.recordOutput("autopath_dist_to_goal", distToGoal);
-              // Logger.recordOutput("autopath_shoot_lock", shootGoalLocked.get());
-
               ctx.drive.runVelocity(
                   sample.asChassisSpeeds(
                       ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation()));
@@ -508,6 +505,7 @@ public class AutoPathBehaviour extends Behaviour {
               if (shootReadyCmd != null && shootReadyCmd.isScheduled()) {
                 shootReadyCmd.cancel();
               }
+              shooterPassthrough.set(false);
               if (lastEpisodeGoal.get() != null) {
                 finalizeEpisode.accept(!interrupted);
               }
@@ -542,26 +540,15 @@ public class AutoPathBehaviour extends Behaviour {
     edu.wpi.first.wpilibj.DriverStation.Alliance wpA =
         DriverStation.getAlliance().orElse(edu.wpi.first.wpilibj.DriverStation.Alliance.Blue);
 
-    Pose2d robotPoseBlue =
-        wpA == edu.wpi.first.wpilibj.DriverStation.Alliance.Red
-            ? SetpointUtil.flipToRed(robotPose)
-            : robotPose;
-
     Pose2d nextBlue =
-        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
+        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPose, cap, goalUnits);
 
     if (nextBlue == null) {
       nextBlue =
           new Pose2d(
-              Constants.FIELD_LENGTH * 0.5,
-              Constants.FIELD_WIDTH * 0.5,
-              robotPoseBlue.getRotation());
+              Constants.FIELD_LENGTH * 0.5, Constants.FIELD_WIDTH * 0.5, robotPose.getRotation());
     }
 
-    // Rotation2d locked =
-    //     (lastCollectBluePose != null)
-    //         ? lastCollectBluePose.getRotation()
-    //         : robotPoseBlue.getRotation();
     nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
 
     lastCollectBluePose = nextBlue;

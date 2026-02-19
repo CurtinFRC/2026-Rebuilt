@@ -45,7 +45,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.MutablePoseSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Specific._Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
@@ -65,7 +64,12 @@ public class ShuttleBehaviour extends Behaviour {
   private static final double MOTION_COMP_MAX_LEAD_SEC = 0.45;
   private static final double MOTION_COMP_MAX_SPEED_MPS = 4.5;
   private static final double DEFAULT_TIME_TO_PLANE_SEC = 0.18;
+
+  private static final double OMEGA_COMFORT_RADPS = 3.0;
+  private static final double PRETURN_LEAD_SEC = 0.20;
+
   private static final long MAGAZINE_CAPACITY = 16L;
+  private static final long MAG_SAFETY_MARGIN = 1L;
 
   private static final double[] SHOOT_LATERAL_OFFSETS =
       new double[] {0.0, SHOOT_LATERAL_STEP_METERS, -SHOOT_LATERAL_STEP_METERS, 0.9, -0.9};
@@ -75,19 +79,24 @@ public class ShuttleBehaviour extends Behaviour {
   private final int prio;
   private final Supplier<Boolean> hasPiece;
   private final Supplier<Double> ourSpeedCap;
+
   private final NetworkTablesValue<Double> shotAngle =
       NetworkTablesValue.ofDouble(
           NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotAngle"), 0.0);
+
   private final NetworkTablesValue<Double> shotSpeed =
       NetworkTablesValue.ofDouble(
           NetworkTableInstance.getDefault(), NetworkTablesValue.toAdvantageKit("/ShotSpeed"), 0.0);
+
   private final NetworkTablesValue<Boolean> shooterPassthrough =
       NetworkTablesValue.ofBoolean(
           NetworkTableInstance.getDefault(),
           NetworkTablesValue.toAdvantageKit("/ShooterPassthrough"),
           false);
+
   private final NetworkTablesValue<Long> pieceCount =
       NetworkTablesValue.ofInteger(NetworkTableInstance.getDefault(), "/PieceCount", 0L);
+
   private Pose2d lastCollectBluePose;
 
   public ShuttleBehaviour(int priority, Supplier<Boolean> hasPiece, Supplier<Double> ourSpeedCap) {
@@ -138,6 +147,7 @@ public class ShuttleBehaviour extends Behaviour {
               Pose2d robotPose = ctx.robotPose.get();
               long nowNs = System.nanoTime();
               SetpointContext spCtx = makeCtx(ctx, robotPose);
+
               Translation2d fieldVelocity =
                   estimateFieldVelocity(
                       lastRobotPose.get(), lastRobotPoseNs.get(), robotPose, nowNs);
@@ -145,8 +155,22 @@ public class ShuttleBehaviour extends Behaviour {
               lastRobotPoseNs.set(nowNs);
 
               long currentPieceCount = safePieceCount(pieceCount);
-              boolean piece = Boolean.TRUE.equals(hasPiece.get()) || currentPieceCount > 0L;
+              boolean piecePresent = Boolean.TRUE.equals(hasPiece.get()) || currentPieceCount > 0L;
+
               double cap = ourSpeedCap != null ? Math.max(0.25, ourSpeedCap.get()) : 3.5;
+
+              Pose2d collectGoalBlue =
+                  FieldTrackerCore.getInstance()
+                      .nextCollectionGoalBlue(robotPose, cap, collectGoalUnits);
+              if (collectGoalBlue == null) {
+                collectGoalBlue =
+                    new Pose2d(
+                        Constants.FIELD_LENGTH * 0.5,
+                        Constants.FIELD_WIDTH * 0.5,
+                        robotPose.getRotation());
+              }
+              collectGoalBlue =
+                  new Pose2d(collectGoalBlue.getTranslation(), collectGoalBlue.getRotation());
 
               ShuttleAim aim =
                   computeShuttleAim(
@@ -172,29 +196,24 @@ public class ShuttleBehaviour extends Behaviour {
                 }
               }
 
+              Choice choice =
+                  chooseOpportunistic(
+                      robotPose, cap, currentPieceCount, piecePresent, collectGoalBlue, aim);
+
               CategorySpec category;
               RepulsorSetpoint activeGoal;
 
-              if (piece) {
+              if (choice == Choice.SHOOT) {
                 category = CategorySpec.kScore;
                 Pose2d shootFieldPose = aim.shootPose();
-
-                DriverStation.Alliance alliance =
-                    DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue);
-                Pose2d bluePose =
-                    alliance == DriverStation.Alliance.Red
-                        ? SetpointUtil.flipToBlue(shootFieldPose)
-                        : shootFieldPose;
-                shuttleBluePoseRef.set(bluePose);
+                shuttleBluePoseRef.set(shootFieldPose);
                 activeGoal = shuttleShootRoute;
-              } else {
+              } else if (choice == Choice.COLLECT) {
                 category = CategorySpec.kCollect;
-                activeGoal =
-                    chooseCollect(
-                        ctx, robotPose, cap, collectGoalUnits, collectBluePoseRef, collectRoute);
-              }
-
-              if (activeGoal == null) {
+                lastCollectBluePose = collectGoalBlue;
+                collectBluePoseRef.set(collectGoalBlue);
+                activeGoal = collectRoute;
+              } else {
                 shooterPassthrough.set(false);
                 ctx.drive.runVelocity(new ChassisSpeeds());
                 return;
@@ -205,11 +224,14 @@ public class ShuttleBehaviour extends Behaviour {
               ctx.planner.setRequestedGoal(goalPose);
 
               boolean readyToShoot =
-                  piece && isReadyToShoot(robotPose, goalPose) && aim.shotSolution().isPresent();
-              boolean allowPassthrough = readyToShoot && currentPieceCount > 0L;
+                  currentPieceCount > 0L
+                      && isReadyToShoot(robotPose, goalPose)
+                      && aim.shotSolution().isPresent();
+              boolean preturn = choice == Choice.SHOOT && shouldPreTurn(robotPose, goalPose, cap);
+              boolean allowPassthrough = readyToShoot;
               shooterPassthrough.set(allowPassthrough);
 
-              if (!piece && currentPieceCount >= MAGAZINE_CAPACITY) {
+              if (choice == Choice.COLLECT && currentPieceCount >= MAGAZINE_CAPACITY) {
                 shooterPassthrough.set(false);
               }
 
@@ -223,9 +245,22 @@ public class ShuttleBehaviour extends Behaviour {
                       false,
                       0.0);
 
-              ctx.drive.runVelocity(
+              ChassisSpeeds speeds =
                   sample.asChassisSpeeds(
-                      ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation()));
+                      ctx.repulsor.getDrive().getOmegaPID(), robotPose.getRotation());
+
+              if (preturn && !readyToShoot) {
+                double yawErr =
+                    shortestAngleRad(
+                        robotPose.getRotation().getRadians(), goalPose.getRotation().getRadians());
+                double omega =
+                    MathUtil.clamp(
+                        yawErr * 3.2, -OMEGA_COMFORT_RADPS * 1.25, OMEGA_COMFORT_RADPS * 1.25);
+                speeds =
+                    new ChassisSpeeds(speeds.vxMetersPerSecond, speeds.vyMetersPerSecond, omega);
+              }
+
+              ctx.drive.runVelocity(speeds);
             },
             ctx.drive)
         .finallyDo(
@@ -327,6 +362,7 @@ public class ShuttleBehaviour extends Behaviour {
             halfW,
             obstacles,
             alliance);
+
     if (solved.isPresent()) {
       ShotSolution solution = solved.get();
       lastTimeToPlaneSec.set(
@@ -366,7 +402,8 @@ public class ShuttleBehaviour extends Behaviour {
                   new Translation2d(
                       lateral.getX() * lateralOffset, lateral.getY() * lateralOffset)));
 
-      if (!DragShotPlanner.isShooterPoseValid(shooterPos, hubTarget, halfL, halfW, obstacles)) {
+      if (!DragShotPlanner.isShooterPoseValid(
+          shooterPos, hubTarget, halfL, halfW, obstacles, false)) {
         continue;
       }
 
@@ -378,6 +415,7 @@ public class ShuttleBehaviour extends Behaviour {
               _Rebuilt2026.HUB_OPENING_FRONT_EDGE_HEIGHT_M,
               shooterReleaseHeightMeters,
               _Rebuilt2026.HUB_SHOT_CONSTRAINTS);
+
       if (solved.isEmpty()) {
         continue;
       }
@@ -448,40 +486,84 @@ public class ShuttleBehaviour extends Behaviour {
     }
   }
 
-  private RepulsorSetpoint chooseCollect(
-      BehaviourContext ctx,
-      Pose2d robotPose,
-      double cap,
-      int goalUnits,
-      AtomicReference<Pose2d> collectBluePoseRef,
-      RepulsorSetpoint collectRoute) {
-    DriverStation.Alliance wpA = DriverStation.getAlliance().orElse(DriverStation.Alliance.Blue);
-
-    Pose2d robotPoseBlue =
-        wpA == DriverStation.Alliance.Red ? SetpointUtil.flipToRed(robotPose) : robotPose;
-
-    Pose2d nextBlue =
-        FieldTrackerCore.getInstance().nextCollectionGoalBlue(robotPoseBlue, cap, goalUnits);
-    if (nextBlue == null) {
-      nextBlue =
-          new Pose2d(
-              Constants.FIELD_LENGTH * 0.5,
-              Constants.FIELD_WIDTH * 0.5,
-              robotPoseBlue.getRotation());
-    }
-
-    nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
-    lastCollectBluePose = nextBlue;
-    collectBluePoseRef.set(nextBlue);
-    return collectRoute;
-  }
-
   private static long safePieceCount(NetworkTablesValue<Long> countValue) {
     Long value = countValue.get();
     if (value == null) {
       return 0L;
     }
     return Math.max(0L, value);
+  }
+
+  private static boolean shouldPreTurn(Pose2d robotPose, Pose2d goalPose, double capMps) {
+    double dist = robotPose.getTranslation().getDistance(goalPose.getTranslation());
+    double v = Math.max(0.5, capMps);
+    double eta = dist / v;
+    double yawErr =
+        Math.abs(
+            shortestAngleRad(
+                robotPose.getRotation().getRadians(), goalPose.getRotation().getRadians()));
+    double turnTime = yawErr / Math.max(1e-6, OMEGA_COMFORT_RADPS);
+    return turnTime >= Math.max(0.0, eta - PRETURN_LEAD_SEC);
+  }
+
+  private static Choice chooseOpportunistic(
+      Pose2d robotPose,
+      double capMps,
+      long pieceCount,
+      boolean piecePresent,
+      Pose2d collectGoalBlue,
+      ShuttleAim aim) {
+    if (!piecePresent && pieceCount <= 0L) {
+      return Choice.COLLECT;
+    }
+
+    if (pieceCount >= MAGAZINE_CAPACITY - MAG_SAFETY_MARGIN) {
+      return aim.shotSolution().isPresent() ? Choice.SHOOT : Choice.COLLECT;
+    }
+
+    Pose2d shootPose = aim.shootPose();
+    boolean shotOk = aim.shotSolution().isPresent();
+
+    double v = Math.max(0.6, capMps);
+
+    double dCollect = robotPose.getTranslation().getDistance(collectGoalBlue.getTranslation());
+    double dShoot = robotPose.getTranslation().getDistance(shootPose.getTranslation());
+
+    double etaCollect = dCollect / v;
+    double etaShoot = dShoot / v;
+
+    double yawErrShoot =
+        Math.abs(
+            shortestAngleRad(
+                robotPose.getRotation().getRadians(), shootPose.getRotation().getRadians()));
+    double alignTime = yawErrShoot / Math.max(1e-6, OMEGA_COMFORT_RADPS);
+
+    double fullness = MathUtil.clamp(pieceCount / (double) MAGAZINE_CAPACITY, 0.0, 1.0);
+
+    double shootPenalty = shotOk ? 0.0 : 2.5 + 2.0 * fullness;
+    double collectPenalty = 0.0;
+
+    double shootBenefit = 0.55 * fullness + 0.05 * Math.min(16.0, pieceCount);
+    double collectBenefit = 0.12 * (1.0 - fullness);
+
+    double shootCost = etaShoot + 0.65 * alignTime + shootPenalty - shootBenefit;
+    double collectCost = etaCollect + collectPenalty - collectBenefit;
+
+    if (pieceCount > 0L && isReadyToShoot(robotPose, shootPose) && shotOk) {
+      return Choice.SHOOT;
+    }
+
+    if (pieceCount <= 0L) {
+      return Choice.COLLECT;
+    }
+
+    return shootCost <= collectCost ? Choice.SHOOT : Choice.COLLECT;
+  }
+
+  private enum Choice {
+    COLLECT,
+    SHOOT,
+    STOP
   }
 
   private record ShuttleAim(Pose2d shootPose, Optional<ShotSolution> shotSolution) {}

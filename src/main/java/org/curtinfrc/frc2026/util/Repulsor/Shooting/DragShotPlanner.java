@@ -38,13 +38,15 @@ public final class DragShotPlanner {
       Translation2d targetFieldPosition,
       double robotHalfLengthMeters,
       double robotHalfWidthMeters,
-      List<? extends Obstacle> dynamicObstacles) {
+      List<? extends Obstacle> dynamicObstacles,
+      boolean checkBounds) {
     return DragShotPlannerCore.isShooterPoseValid(
         shooterPos,
         targetFieldPosition,
         robotHalfLengthMeters,
         robotHalfWidthMeters,
-        dynamicObstacles);
+        dynamicObstacles,
+        checkBounds);
   }
 
   public static Optional<ShotSolution> findBestShotFromLibrary(

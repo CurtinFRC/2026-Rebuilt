@@ -94,7 +94,8 @@ final class DragShotPlannerLibrarySearch {
                     targetFieldPosition,
                     robotHalfLengthMeters,
                     robotHalfWidthMeters,
-                    dynamicObstacles);
+                    dynamicObstacles,
+                    true);
           } finally {
             DragShotPlannerUtil.closeQuietly(_p1);
           }

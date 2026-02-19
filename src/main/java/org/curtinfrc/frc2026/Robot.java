@@ -204,7 +204,7 @@ public class Robot extends LoggedRobot {
         () -> new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
 
     repulsor.addBehaviours(
-        new DefenceBehaviour(30, defenseGoalSup, () -> 2.8),
+        new DefenceBehaviour(30, defenseGoalSup, () -> 5.2),
         new ShuttleBehaviour(20, () -> simHasPiece, () -> 5.2),
         new ShuttleRecoveryBehaviour(25, () -> simHasPiece, () -> 5.2),
         new TestBehaviour(),
@@ -220,7 +220,7 @@ public class Robot extends LoggedRobot {
             () -> 5.2));
 
     Rebuilt2026Reasoner reasoner = new Rebuilt2026Reasoner();
-    reasoner.setTesting(false);
+    reasoner.setTesting(true);
     repulsor.setReasoner(reasoner);
 
     repulsor.setup();

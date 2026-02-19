@@ -19,6 +19,7 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Setpoints;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 
@@ -50,7 +51,8 @@ public abstract class GameSetpoint {
   public abstract Pose2d bluePose(SetpointContext ctx);
 
   public Pose2d redPose(SetpointContext ctx) {
-    return canFlip ? SetpointUtil.flipToRed(bluePose(ctx)) : bluePose(ctx);
+    return ChoreoAllianceFlipUtil.flip(bluePose(ctx));
+    // return canFlip ? SetpointUtil.flipToRed(bluePose(ctx)) : bluePose(ctx);
   }
 
   public final Pose2d poseForAlliance(Alliance alliance, SetpointContext ctx) {

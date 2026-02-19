@@ -303,7 +303,8 @@ public final class ShuttleRecoveryBehaviour extends Behaviour {
                   new Translation2d(
                       lateral.getX() * lateralOffset, lateral.getY() * lateralOffset)));
 
-      if (!DragShotPlanner.isShooterPoseValid(shooterPos, hubTarget, halfL, halfW, obstacles)) {
+      if (!DragShotPlanner.isShooterPoseValid(
+          shooterPos, hubTarget, halfL, halfW, obstacles, true)) {
         continue;
       }
 

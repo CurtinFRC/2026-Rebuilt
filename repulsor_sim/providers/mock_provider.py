@@ -21,13 +21,16 @@ from repulsor_sim.types import (
 )
 from repulsor_sim.providers.base import RepulsorProvider
 
+
 def _clamp(v: float, lo: float, hi: float) -> float:
     return lo if v < lo else hi if v > hi else v
+
 
 def _box_muller(rng: random.Random) -> float:
     u1 = max(1e-12, rng.random())
     u2 = rng.random()
     return math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+
 
 def _wrap_rad(a: float) -> float:
     while a > math.pi:
@@ -36,8 +39,10 @@ def _wrap_rad(a: float) -> float:
         a += 2.0 * math.pi
     return a
 
+
 def _deg2rad(d: float) -> float:
     return d * math.pi / 180.0
+
 
 @dataclass
 class _Camera:
@@ -58,6 +63,7 @@ class _Camera:
     dropout: float
     next_update_s: float = 0.0
 
+
 @dataclass
 class _Detected:
     oid: str
@@ -67,11 +73,13 @@ class _Detected:
     z: float
     score: float
 
+
 @dataclass
 class _TrackedWorld:
     obj: WorldObject
     last_seen_s: float
     last_update_s: float
+
 
 @dataclass
 class _TrackedObstacle:
@@ -79,9 +87,9 @@ class _TrackedObstacle:
     last_seen_s: float
     last_update_s: float
 
+
 @dataclass(frozen=True)
 class CameraConfig:
-    # ROBOT-RELATIVE camera pose (meters, degrees).
     name: str
     x: float
     y: float
@@ -94,18 +102,18 @@ class CameraConfig:
     min_range: float = 0
     max_range: float = 5.0
     update_hz: float = 15.0
-    noise_xy: float = 0#.01
-    noise_z: float = 0#.03
+    noise_xy: float = 0
+    noise_z: float = 0
     dropout: float = 0
 
-CAMERAS: List[CameraConfig] = [
-    CameraConfig(name="cam_left_rear",  x=0, y=-0.25, z=0.5, yaw_deg=-90 + 45,  pitch_deg=0),
-    CameraConfig(name="cam_left_front", x= 0, y=0.25, z=0.5, yaw_deg=90 - 45,   pitch_deg=0),
 
-    CameraConfig(name="cam_right_rear",  x=-0.25, y=-0.25, z=0.5, yaw_deg=-135, pitch_deg=0),
-    CameraConfig(name="cam_right_front", x=-0.25, y=0.25, z=0.5, yaw_deg=135,  pitch_deg=0),
-    # CameraConfig(name="idk", x=0, y=0, z=0, yaw_deg=0, pitch_deg=0, hfov_deg=360, vfov_deg=360, min_range=0, max_range=30.0),
+CAMERAS: List[CameraConfig] = [
+    CameraConfig(name="cam_left_rear", x=0, y=-0.25, z=0.5, yaw_deg=-90 + 45, pitch_deg=0),
+    CameraConfig(name="cam_left_front", x=0, y=0.25, z=0.5, yaw_deg=90 - 45, pitch_deg=0),
+    CameraConfig(name="cam_right_rear", x=-0.25, y=-0.25, z=0.5, yaw_deg=-135, pitch_deg=0),
+    CameraConfig(name="cam_right_front", x=-0.25, y=0.25, z=0.5, yaw_deg=135, pitch_deg=0),
 ]
+
 
 @dataclass
 class _FuelObj:
@@ -113,6 +121,7 @@ class _FuelObj:
     x: float
     y: float
     z: float
+
 
 @dataclass
 class _RobotObj:
@@ -122,6 +131,7 @@ class _RobotObj:
     y: float
     sx: float
     sy: float
+
 
 @dataclass
 class _ShotBall:
@@ -135,6 +145,7 @@ class _ShotBall:
     landed: bool
     age_s: float = 0.0
     roll_decel_scale: float = 1.0
+
 
 class MockProvider(RepulsorProvider):
     def __init__(self):
@@ -157,7 +168,10 @@ class MockProvider(RepulsorProvider):
         self._picked_up: Dict[str, _FuelObj] = {}
         self._nt_inst = None
         self._piece_pub = None
-        self._piece_sub = None
+
+        self._pass_sub = None
+        self._shot_speed_sub = None
+        self._shot_angle_sub = None
 
         self._forbidden: List[Tuple[float, float, float, float]] = []
         self._cams: List[_Camera] = []
@@ -174,10 +188,16 @@ class MockProvider(RepulsorProvider):
         self._pickup_enabled = True
         self._pickup_front_only = True
         self._pickup_use_body = True
+
         self._shots: List[_ShotBall] = []
         self._shot_oid = 0
         self._last_step_s = None
-        self._last_ext_piece = 0
+
+        self._last_passthrough = False
+        self._feed_rps = 12.0
+        self._feed_accum = 0.0
+        self._shot_min_speed = 0.1
+
         self._shot_speed = 5.5
         self._shot_pitch = _deg2rad(25.0)
         self._shot_spread = _deg2rad(6.0)
@@ -203,10 +223,12 @@ class MockProvider(RepulsorProvider):
         self.cfg = cfg
         seed = int(getattr(cfg, "seed", 1337))
         self.rng = random.Random(seed)
+
         self._fuel_target_count = int(os.getenv("MOCK_FUEL_COUNT", "400"))
         self._pickup_enabled = os.getenv("MOCK_PICKUP_ENABLED", "1").strip() != "0"
         self._pickup_front_only = os.getenv("MOCK_PICKUP_FRONT_ONLY", "1").strip() != "0"
         self._pickup_use_body = os.getenv("MOCK_PICKUP_USE_BODY", "1").strip() != "0"
+
         self._shot_speed = float(os.getenv("MOCK_SHOT_SPEED", "5.5"))
         self._shot_pitch = _deg2rad(float(os.getenv("MOCK_SHOT_PITCH_DEG", "25.0")))
         self._shot_spread = _deg2rad(float(os.getenv("MOCK_SHOT_SPREAD_DEG", "6.0")))
@@ -225,12 +247,20 @@ class MockProvider(RepulsorProvider):
         self._shot_bump_transfer = float(os.getenv("MOCK_SHOT_BUMP_TRANSFER", "0.55"))
         self._shot_bump_max = float(os.getenv("MOCK_SHOT_BUMP_MAX", "2.2"))
         self._shot_bump_max_per_step = int(os.getenv("MOCK_SHOT_BUMP_MAX_PER_STEP", "6"))
+        self._feed_rps = float(os.getenv("MOCK_SHOOTER_FEED_RPS", "12.0"))
+        self._feed_rps = max(0.5, self._feed_rps)
+        self._shot_min_speed = float(os.getenv("MOCK_SHOT_MIN_SPEED", "0.1"))
+        self._shot_min_speed = max(0.01, self._shot_min_speed)
+
         off_x = float(os.getenv("MOCK_SHOT_OFFSET_X", "0.45"))
         off_y = float(os.getenv("MOCK_SHOT_OFFSET_Y", "0.0"))
         off_z = float(os.getenv("MOCK_SHOT_OFFSET_Z", "0.55"))
         self._shot_offset = (off_x, off_y, off_z)
+
         self._shots.clear()
         self._last_step_s = None
+        self._last_passthrough = False
+        self._feed_accum = 0.0
 
         self.cx = cfg.field_length_m * 0.5
         self.cy = cfg.field_width_m * 0.5
@@ -256,6 +286,7 @@ class MockProvider(RepulsorProvider):
             (left_rect_x, rect_cy, rect_half_x, rect_half_y),
             (right_rect_x, rect_cy, rect_half_x, rect_half_y),
         ]
+
         self._cams = self._build_cameras()
         self._camera_infos = [
             CameraInfo(
@@ -272,6 +303,7 @@ class MockProvider(RepulsorProvider):
             )
             for c in CAMERAS
         ]
+
         self._tracked_objects.clear()
         self._tracked_obstacles.clear()
         self._obj_publish_hz = float(os.getenv("MOCK_VISION_OBJ_HZ", "10"))
@@ -286,8 +318,9 @@ class MockProvider(RepulsorProvider):
 
         self._nt_inst = NetworkTableInstance.getDefault()
         self._piece_pub = self._nt_inst.getIntegerTopic("/PieceCount").publish()
-        self._piece_sub = self._nt_inst.getIntegerTopic("/PieceCount").subscribe(0)
-        self._last_ext_piece = int(self._piece_sub.get())
+        self._pass_sub = self._nt_inst.getBooleanTopic("/ShooterPassthrough").subscribe(False)
+        self._shot_speed_sub = self._nt_inst.getDoubleTopic("/ShotSpeed").subscribe(float(self._shot_speed))
+        self._shot_angle_sub = self._nt_inst.getDoubleTopic("/ShotAngle").subscribe(math.degrees(self._shot_pitch))
 
         self.piece_count = 0
         self.last_piece_count = 0
@@ -324,7 +357,6 @@ class MockProvider(RepulsorProvider):
         if cams:
             return cams
 
-        # Fallback if list is empty (robot-relative)
         return [
             _Camera(
                 name="cam_front",
@@ -387,7 +419,6 @@ class MockProvider(RepulsorProvider):
         if dist2 < (cam.min_range * cam.min_range) or dist2 > (cam.max_range * cam.max_range):
             return None
 
-        # # world -> camera frame (R^T * v_world)
         x_cam = r00 * dx + r10 * dy + r20 * dz
         y_cam = r01 * dx + r11 * dy + r21 * dz
         z_cam = r02 * dx + r12 * dy + r22 * dz
@@ -449,7 +480,6 @@ class MockProvider(RepulsorProvider):
             cam_y = robot_y + cam.x * sin_r + cam.y * cos_r
             cam_z = cam.z
             cam_yaw = _wrap_rad(robot_yaw + cam.yaw)
-            # Pitch in config uses negative = down; flip to match math convention here.
             cam_pitch = -cam.pitch
             cam_roll = cam.roll
 
@@ -460,7 +490,6 @@ class MockProvider(RepulsorProvider):
             cr = math.cos(cam_roll)
             sr = math.sin(cam_roll)
 
-            # R = Rz(yaw) * Ry(pitch) * Rx(roll)
             r00 = cyaw * cp
             r01 = cyaw * sp * sr - syaw * cr
             r02 = cyaw * sp * cr + syaw * sr
@@ -493,20 +522,15 @@ class MockProvider(RepulsorProvider):
                 if prev is None or det.score < prev.score:
                     detections[det.oid] = det
 
-        # Update tracked world objects
         for oid, det in detections.items():
             tr = self._tracked_objects.get(oid)
             if tr is None:
                 obj = WorldObject(oid=oid, class_id=det.class_id, x=det.x, y=det.y, z=det.z)
-                self._tracked_objects[oid] = _TrackedWorld(
-                    obj=obj, last_seen_s=now_s, last_update_s=now_s
-                )
+                self._tracked_objects[oid] = _TrackedWorld(obj=obj, last_seen_s=now_s, last_update_s=now_s)
             else:
                 tr.last_seen_s = now_s
                 if now_s - tr.last_update_s >= self._obj_publish_period_s:
-                    tr.obj = WorldObject(
-                        oid=oid, class_id=det.class_id, x=det.x, y=det.y, z=det.z
-                    )
+                    tr.obj = WorldObject(oid=oid, class_id=det.class_id, x=det.x, y=det.y, z=det.z)
                     tr.last_update_s = now_s
 
         for oid in list(self._tracked_objects.keys()):
@@ -514,7 +538,6 @@ class MockProvider(RepulsorProvider):
             if now_s - tr.last_seen_s > self._visibility_timeout_s:
                 del self._tracked_objects[oid]
 
-        # Update tracked obstacles (robots only)
         for oid, det in detections.items():
             if det.class_id not in (CLASS_ROBOT_BLUE, CLASS_ROBOT_RED):
                 continue
@@ -522,9 +545,7 @@ class MockProvider(RepulsorProvider):
             tr = self._tracked_obstacles.get(oid)
             if tr is None:
                 obs = VisionObstacle(oid=oid, kind="robot", x=det.x, y=det.y, sx=sx, sy=sy)
-                self._tracked_obstacles[oid] = _TrackedObstacle(
-                    obs=obs, last_seen_s=now_s, last_update_s=now_s
-                )
+                self._tracked_obstacles[oid] = _TrackedObstacle(obs=obs, last_seen_s=now_s, last_update_s=now_s)
             else:
                 tr.last_seen_s = now_s
                 if now_s - tr.last_update_s >= self._obs_publish_period_s:
@@ -557,7 +578,7 @@ class MockProvider(RepulsorProvider):
             w = self.rng.uniform(0.6, 1.8)
             out.append((x, y, w))
         return out
-    
+
     def _build_forbidden_regions(self) -> List[Tuple[float, float, float, float]]:
         assert self.cfg is not None
         L = float(self.cfg.field_length_m)
@@ -623,8 +644,6 @@ class MockProvider(RepulsorProvider):
         low = scores[len(scores) // 2 :]
 
         def alloc(bucket, lo, hi, frac):
-            assert self.cfg is not None
-            assert self.rng is not None
             nonlocal budget
             want = int(self._fuel_target_count * frac)
             want = min(want, budget)
@@ -701,12 +720,8 @@ class MockProvider(RepulsorProvider):
             idx += 1
 
         while len(self.fuel) < total:
-            x = _clamp(
-                self.cx + self.rng.uniform(-width * 0.55, width * 0.55), self.x0, self.x1
-            )
-            y = _clamp(
-                self.cy + self.rng.uniform(-height * 0.55, height * 0.55), self.y0, self.y1
-            )
+            x = _clamp(self.cx + self.rng.uniform(-width * 0.55, width * 0.55), self.x0, self.x1)
+            y = _clamp(self.cy + self.rng.uniform(-height * 0.55, height * 0.55), self.y0, self.y1)
             if self._in_forbidden(x, y):
                 continue
             oid = f"fuel_{oid_num}"
@@ -744,30 +759,60 @@ class MockProvider(RepulsorProvider):
 
     def _pickup_radius2(self) -> float:
         assert self.cfg is not None
-        r = max(0.25, max(0.85) * 0.5)
+        r = max(0.25, 0.85 * 0.5)
         return r * r
 
-    def _maybe_shoot(self, pose: Pose2d | None) -> None:
+    def _maybe_fire(self, pose: Pose2d | None, dt: float) -> None:
         assert self.cfg is not None
         assert self.rng is not None
-        if self._piece_sub is None:
+        if self._pass_sub is None or self._shot_speed_sub is None or self._shot_angle_sub is None:
             return
-        ext = int(self._piece_sub.get())
-        if ext < 0:
-            ext = 0
-        if ext == 0 and self._last_ext_piece > 0 and self.piece_count > 0:
-            shots = max(0, self.piece_count)
-            for _ in range(shots):
-                self._spawn_shot(pose)
-            self.piece_count = 0
-        self._last_ext_piece = ext
+        if dt <= 0.0:
+            return
 
-    def _spawn_shot(self, pose: Pose2d | None) -> None:
+        passthrough = bool(self._pass_sub.get())
+        if not passthrough:
+            self._last_passthrough = False
+            self._feed_accum = 0.0
+            return
+
+        if not self._last_passthrough:
+            self._feed_accum = 0.0
+        self._last_passthrough = True
+
+        speed_cmd = float(self._shot_speed_sub.get())
+        if not math.isfinite(speed_cmd):
+            speed_cmd = float(self._shot_speed)
+        speed_cmd = max(float(self._shot_min_speed), speed_cmd)
+
+        ang_deg = float(self._shot_angle_sub.get())
+        if not math.isfinite(ang_deg):
+            ang_deg = math.degrees(self._shot_pitch)
+        pitch_cmd = _deg2rad(ang_deg)
+        pitch_cmd = _clamp(pitch_cmd, _deg2rad(-5.0), _deg2rad(80.0))
+
+        self._feed_accum += dt * self._feed_rps
+        n = int(self._feed_accum)
+        if n <= 0:
+            return
+        self._feed_accum -= n
+
+        shots_to_spawn = min(n, max(0, int(self.piece_count)))
+        if shots_to_spawn <= 0:
+            return
+
+        for _ in range(shots_to_spawn):
+            self._spawn_shot(pose, speed_cmd, pitch_cmd)
+            self.piece_count = max(0, int(self.piece_count) - 1)
+
+            self._piece_pub.set(self.piece_count)
+
+    def _spawn_shot(self, pose: Pose2d | None, speed_cmd: float, pitch_cmd: float) -> None:
         assert self.cfg is not None
         assert self.rng is not None
 
         if self._picked_up:
-            oid, fo = self._picked_up.popitem()
+            oid, _ = self._picked_up.popitem()
             oid_use = oid
         else:
             oid_use = f"shot_{self._shot_oid}"
@@ -790,9 +835,10 @@ class MockProvider(RepulsorProvider):
         sz = max(self.cfg.fuel_z_m, oz)
 
         yaw_spread = yaw + (self.rng.uniform(-1.0, 1.0) * self._shot_spread)
-        pitch = self._shot_pitch + (self.rng.uniform(-1.0, 1.0) * self._shot_pitch_jitter)
-        speed = self._shot_speed * (1.0 + self.rng.uniform(-self._shot_speed_jitter, self._shot_speed_jitter))
-        speed = max(0.1, speed)
+        pitch = pitch_cmd + (self.rng.uniform(-1.0, 1.0) * self._shot_pitch_jitter)
+        speed = speed_cmd * (1.0 + self.rng.uniform(-self._shot_speed_jitter, self._shot_speed_jitter))
+        speed = max(float(self._shot_min_speed), speed)
+
         vxy = speed * math.cos(pitch)
         vx = vxy * math.cos(yaw_spread)
         vy = vxy * math.sin(yaw_spread)
@@ -970,12 +1016,8 @@ class MockProvider(RepulsorProvider):
 
     def _pickup_half_extents(self) -> tuple[float, float]:
         assert self.cfg is not None
-        hx = float(
-            os.getenv("MOCK_PICKUP_HALF_X", getattr(self.cfg, "pickup_half_extent_x_m", 0.85 / 2))
-        )
-        hy = float(
-            os.getenv("MOCK_PICKUP_HALF_Y", getattr(self.cfg, "pickup_half_extent_y_m", 0.85 / 2))
-        )
+        hx = float(os.getenv("MOCK_PICKUP_HALF_X", getattr(self.cfg, "pickup_half_extent_x_m", 0.85 / 2)))
+        hy = float(os.getenv("MOCK_PICKUP_HALF_Y", getattr(self.cfg, "pickup_half_extent_y_m", 0.85 / 2)))
         hx = max(0.01, hx)
         hy = max(0.01, hy)
         return hx, hy
@@ -988,7 +1030,6 @@ class MockProvider(RepulsorProvider):
                 return float(ox), float(oy) if oy != "" else 0.0
             except ValueError:
                 return 0.0, 0.0
-        # default: slightly forward
         return 0.6 * hx, 0.0
 
     def _pickup_body_half_extents(self, hx: float, hy: float) -> tuple[float, float]:
@@ -1024,11 +1065,9 @@ class MockProvider(RepulsorProvider):
         for oid, fo in self.fuel.items():
             dxw = fo.x - px
             dyw = fo.y - py
-            # world -> robot frame
             x_r = dxw * cy + dyw * sy
             y_r = -dxw * sy + dyw * cy
 
-            # body intersection (centered)
             if self._pickup_use_body:
                 dx_b = max(abs(x_r) - bx, 0.0)
                 dy_b = max(abs(y_r) - by, 0.0)
@@ -1063,12 +1102,12 @@ class MockProvider(RepulsorProvider):
         dt = max(0.0, float(now_s - self._last_step_s))
         self._last_step_s = now_s
 
-        self._maybe_shoot(pose)
+        self._maybe_fire(pose, dt)
         self._update_shots(dt)
         if pose is not None:
             self._maybe_pickup(pose)
 
-        if (self.piece_count != self.last_piece_count):
+        if self.piece_count != self.last_piece_count:
             self.last_piece_count = self.piece_count
             self._piece_pub.set(int(self.piece_count))
 
@@ -1083,12 +1122,9 @@ class MockProvider(RepulsorProvider):
             objs.append(o)
             truth_objs.append(o)
 
-        # include robots as world objects for vision dedupe and camera visibility
         robot_sizes: Dict[str, Tuple[float, float]] = {}
         for ro in self.robots:
-            objs.append(
-                WorldObject(oid=ro.oid, class_id=ro.class_id, x=ro.x, y=ro.y, z=0.0)
-            )
+            objs.append(WorldObject(oid=ro.oid, class_id=ro.class_id, x=ro.x, y=ro.y, z=0.0))
             robot_sizes[ro.oid] = (ro.sx, ro.sy)
 
         vis_objects, vis_obstacles = self._simulate_vision(now_s, objs, robot_sizes, pose)

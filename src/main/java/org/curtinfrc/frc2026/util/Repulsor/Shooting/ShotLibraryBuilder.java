@@ -148,7 +148,8 @@ public final class ShotLibraryBuilder {
                   targetFieldPosition,
                   robotHalfLengthMeters,
                   robotHalfWidthMeters,
-                  null);
+                  null,
+                  true);
         } finally {
           DragShotPlannerUtil.closeQuietly(_p1);
         }

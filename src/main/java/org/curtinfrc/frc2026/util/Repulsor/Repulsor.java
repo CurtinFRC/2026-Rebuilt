@@ -57,6 +57,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
+import org.curtinfrc.frc2026.util.Repulsor.State.SimMatchDriver;
 import org.curtinfrc.frc2026.util.Repulsor.State.StateManager;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
@@ -204,6 +205,8 @@ public class Repulsor {
     FieldTrackerCore ft = FieldTrackerCore.getInstance();
     FieldVision front = ft.createFieldVision("main");
     m_fieldVisions.add(front);
+
+    SimMatchDriver.simInit(false);
   }
 
   public Repulsor(
@@ -270,6 +273,8 @@ public class Repulsor {
     DeltaTime.update();
 
     StateManager.update(DeltaTime.get());
+
+    SimMatchDriver.simPeriodic(DeltaTime.get());
 
     for (var vision : m_fieldVisions) {
       vision.update(m_drive.getPose());

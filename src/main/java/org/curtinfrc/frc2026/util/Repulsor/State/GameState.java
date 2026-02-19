@@ -40,6 +40,7 @@ public class GameState extends StaticState {
     Optional<DriverStation.Alliance> readAlliance = DriverStation.getAlliance();
     if (alliance.isEmpty() && readAlliance.isPresent()) {
       alliance = readAlliance;
+      noAllianceAlert.set(false);
     } else {
       noAllianceAlert.set(true);
     }
@@ -56,7 +57,8 @@ public class GameState extends StaticState {
 
     if (inactiveFirst.isEmpty() && !noGameDataAlert.get()) {
       inactiveFirst =
-          Optional.of((gameData == "B") ? DriverStation.Alliance.Blue : DriverStation.Alliance.Red);
+          Optional.of(
+              ("B".equals(gameData)) ? DriverStation.Alliance.Blue : DriverStation.Alliance.Red);
     }
   }
 
