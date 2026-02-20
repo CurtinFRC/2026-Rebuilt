@@ -326,9 +326,7 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  public double angleToLocation(Translation2d locationTransform) {
-    // Get current position using the getPose method.
-    Pose2d currentPosition = getPose();
+  public static double angleToLocation(Translation2d locationTransform, Pose2d currentPosition) {
     Pose2d locationPose =
         new Pose2d(locationTransform.getX(), locationTransform.getY(), Rotation2d.kZero);
 
@@ -355,7 +353,7 @@ public class Drive extends SubsystemBase {
               new Pose2d(
                   currentPosition.getX(),
                   currentPosition.getY(),
-                  new Rotation2d(angleToLocation(locationTransform)));
+                  new Rotation2d(angleToLocation(locationTransform, currentPosition)));
           // targetAngle = Math.toDegrees(targetAngle);
 
           // Getting robot current angle in radians
@@ -364,9 +362,10 @@ public class Drive extends SubsystemBase {
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
           double angleSpeed =
-              hubHeadingController.calculate(robotAngle, angleToLocation(locationTransform));
+              hubHeadingController.calculate(
+                  robotAngle, angleToLocation(locationTransform, currentPosition));
 
-          Logger.recordOutput("Target Angle", angleToLocation(locationTransform));
+          Logger.recordOutput("Target Angle", angleToLocation(locationTransform, currentPosition));
           Logger.recordOutput("Robot Angle", robotAngle);
           Logger.recordOutput("targetPose", target);
 
@@ -399,9 +398,11 @@ public class Drive extends SubsystemBase {
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
           double angleSpeed =
-              hubHeadingController.calculate(robotAngle, angleToLocation(locationTransform.get()));
+              hubHeadingController.calculate(
+                  robotAngle, angleToLocation(locationTransform.get(), currentPosition));
 
-          Logger.recordOutput("TargetAngle", angleToLocation(locationTransform.get()));
+          Logger.recordOutput(
+              "TargetAngle", angleToLocation(locationTransform.get(), currentPosition));
           Logger.recordOutput("RobotAngle", robotAngle);
 
           // Apply rotation deadband
