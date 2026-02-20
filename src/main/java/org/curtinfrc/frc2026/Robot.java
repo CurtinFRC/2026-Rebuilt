@@ -3,13 +3,10 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import com.ctre.phoenix6.signals.InvertedValue;
-
 import edu.wpi.first.math.geometry.Pose2d;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.networktables.NetworkTableValue;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -27,7 +24,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
-
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -50,6 +46,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
@@ -79,9 +76,9 @@ public class Robot extends LoggedRobot {
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
 
-
   private NetworkTablesValue<Translation2d> shuttlePose =
-      NetworkTablesValue.ofTranslation2d(NetworkTableInstance.getDefault(), "ShuttlePose", HoodedShooter.HUB_LOCATION);
+      NetworkTablesValue.ofTranslation2d(
+          NetworkTableInstance.getDefault(), "ShuttlePose", HoodedShooter.HUB_LOCATION);
 
   private Supplier<Translation2d> shotTarget = () -> shuttlePose.get();
 
@@ -277,7 +274,22 @@ public class Robot extends LoggedRobot {
     VirtualSubsystem.periodicAll();
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
-    
+
+    final double SHOOT_X_END_BAND_M = 13.49;
+    double minBand = SHOOT_X_END_BAND_M;
+    double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
+    Pose2d pose = drive.getPose();
+    double x = pose.getX();
+
+    if (x < minBand
+        && x > maxBand
+        && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
+      shuttlePose.set(
+          new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
+    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX() && (x >= minBand || x <= maxBand)) {
+      shuttlePose.set(HoodedShooter.HUB_LOCATION);
+    }
+
     logRunningCommands();
     logRequiredSubsystems();
     Logger.recordOutput(
