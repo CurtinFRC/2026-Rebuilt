@@ -17,6 +17,7 @@ import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.sim.BallSim;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.LoggedTunableNumber;
@@ -137,7 +138,7 @@ public class HoodedShooter extends SubsystemBase {
     return (realDistanceLength > 1) ? compensatedHubLocation : hub_location.get();
   }
 
-  public Command shootAtHub() {
+  public Command shootAtHub(Supplier<Translation2d> hub_location) {
     return run(
         () -> {
           Translation2d hubLocation =
@@ -156,8 +157,18 @@ public class HoodedShooter extends SubsystemBase {
             shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
           }
 
-          hoodIO.setPosition(hoodTarget);
-          shooterIO.setVelocity(shooterTarget);
+          double target =
+              Drive.angleToLocation(
+                  this.getVirtualHubLocation(() -> hub_location.get()), robotPose.get());
+          double robotAngle = robotPose.get().getRotation().getDegrees();
+
+          if (Math.abs(target - robotAngle) < 5) { // DEGREE ERROR
+            hoodIO.setPosition(hoodTarget);
+            shooterIO.setVelocity(shooterTarget);
+          } else {
+            hoodIO.setVoltage(0);
+            shooterIO.setVoltage(0);
+          }
 
           if (Constants.getMode() == Mode.SIM) {
             shooterIO.addSimBall(
