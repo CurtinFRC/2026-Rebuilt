@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -113,6 +113,11 @@ public final class NetworkTablesValue<T> {
   public static NetworkTablesValue<Pose2d> ofPose2d(
       NetworkTableInstance inst, String topicName, Pose2d initialValue) {
     return new NetworkTablesValue<>(new Pose2dCodec(), inst, topicName, initialValue);
+  }
+
+  public static NetworkTablesValue<Translation2d> ofTranslation2d(
+      NetworkTableInstance inst, String topicName, Translation2d initialValue) {
+    return new NetworkTablesValue<>(new Translation2dCodec(), inst, topicName, initialValue);
   }
 
   private static final class DoubleCodec implements Codec<Double> {
