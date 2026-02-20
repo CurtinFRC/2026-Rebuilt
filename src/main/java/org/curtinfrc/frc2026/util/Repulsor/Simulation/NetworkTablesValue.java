@@ -19,6 +19,8 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.networktables.BooleanPublisher;
 import edu.wpi.first.networktables.BooleanSubscriber;
 import edu.wpi.first.networktables.BooleanTopic;
@@ -105,6 +107,11 @@ public final class NetworkTablesValue<T> {
   public static NetworkTablesValue<double[]> ofDoubleArray(
       NetworkTableInstance inst, String topicName, double[] initialValue) {
     return new NetworkTablesValue<>(new DoubleArrayCodec(), inst, topicName, initialValue);
+  }
+
+  public static NetworkTablesValue<Pose2d> ofPose2d(
+      NetworkTableInstance inst, String topicName, Pose2d initialValue) {
+    return new NetworkTablesValue<>(new Pose2dCodec(), inst, topicName, initialValue);
   }
 
   private static final class DoubleCodec implements Codec<Double> {
@@ -284,6 +291,75 @@ public final class NetworkTablesValue<T> {
       if (pub != null) pub.close();
       sub = null;
       pub = null;
+    }
+  }
+
+  private static final class Pose2dCodec implements Codec<Pose2d> {
+    private StringPublisher x;
+    private StringPublisher y;
+    private StringPublisher theta;
+    private StringSubscriber xSub;
+    private StringSubscriber ySub;
+    private StringSubscriber thetaSub;
+
+    public Pose2dCodec() {
+      // No-op
+    }
+
+    @Override
+    public Class<Pose2d> type() {
+      return Pose2d.class;
+    }
+
+    @Override
+    public void publish(NetworkTableInstance inst, String topicName, Pose2d initialValue) {
+      x = inst.getStringTopic(topicName + "/x").publish();
+      y = inst.getStringTopic(topicName + "/y").publish();
+      theta = inst.getStringTopic(topicName + "/theta").publish();
+      xSub = inst.getStringTopic(topicName + "/x").subscribe("0.0");
+      ySub = inst.getStringTopic(topicName + "/y").subscribe("0.0");
+      thetaSub = inst.getStringTopic(topicName + "/theta").subscribe("0.0");
+      Pose2d init = initialValue != null ? initialValue : new Pose2d();
+      set(init);
+    }
+
+    @Override
+    public Pose2d get() {
+      double xVal = Double.parseDouble(xSub.get());
+      double yVal = Double.parseDouble(ySub.get());
+      double thetaVal = Double.parseDouble(thetaSub.get());
+      return new Pose2d(xVal, yVal, new Rotation2d(thetaVal));
+    }
+
+    @Override
+    public void set(Pose2d value) {
+      Pose2d val = value != null ? value : new Pose2d();
+      x.set(Double.toString(val.getX()));
+      y.set(Double.toString(val.getY()));
+      theta.set(Double.toString(val.getRotation().getRadians()));
+    }
+
+    @Override
+    public void flush() {
+      if (x != null) x.getTopic().getInstance().flush();
+      if (y != null) y.getTopic().getInstance().flush();
+      if (theta != null) theta.getTopic().getInstance().flush();
+    }
+
+    @Override
+    public void close() {
+      if (xSub != null) xSub.close();
+      if (ySub != null) ySub.close();
+      if (thetaSub != null) thetaSub.close();
+      if (x != null) x.close();
+      if (y != null) y.close();
+      if (theta != null) theta.close();
+      xSub = null;
+      ySub = null;
+      thetaSub = null;
+      x = null;
+      y = null;
+      theta = null;
     }
   }
 
