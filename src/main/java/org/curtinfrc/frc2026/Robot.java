@@ -255,7 +255,7 @@ public class Robot extends LoggedRobot {
                 intake.RawControlConsume(0.7),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand()));
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand(), mag.store(0)));
 
     controller // spinup shooter and aim
         .rightTrigger()
@@ -275,7 +275,7 @@ public class Robot extends LoggedRobot {
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
 
-    final double SHOOT_X_END_BAND_M = 13.49;
+    final double SHOOT_X_END_BAND_M = 12.49;
     double minBand = SHOOT_X_END_BAND_M;
     double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
     Pose2d pose = drive.getPose();
@@ -286,7 +286,8 @@ public class Robot extends LoggedRobot {
         && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
       shuttlePose.set(
           new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
-    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX() && (x >= minBand || x <= maxBand)) {
+    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX()
+        && !(x < minBand && x > maxBand)) {
       shuttlePose.set(HoodedShooter.HUB_LOCATION);
     }
 

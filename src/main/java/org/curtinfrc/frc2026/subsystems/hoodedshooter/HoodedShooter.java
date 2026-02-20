@@ -160,8 +160,10 @@ public class HoodedShooter extends SubsystemBase {
           double target =
               Drive.angleToLocation(
                   this.getVirtualHubLocation(() -> hub_location.get()), robotPose.get());
-          double robotAngle = robotPose.get().getRotation().getDegrees();
+          double robotAngle =
+              robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
 
+          // System.out.println(Math.abs(target - robotAngle));
           if (Math.abs(target - robotAngle) < 5) { // DEGREE ERROR
             hoodIO.setPosition(hoodTarget);
             shooterIO.setVelocity(shooterTarget);

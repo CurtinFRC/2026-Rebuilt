@@ -12,7 +12,6 @@ import edu.wpi.first.wpilibj.simulation.DCMotorSim;
 import java.util.ArrayList;
 import java.util.List;
 import org.curtinfrc.frc2026.sim.BallSim;
-import org.littletonrobotics.junction.Logger;
 
 public class ShooterIOSim extends ShooterIODev {
   private static final double DT = 0.001;
