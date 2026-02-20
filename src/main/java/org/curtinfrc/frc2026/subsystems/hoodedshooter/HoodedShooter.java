@@ -24,6 +24,8 @@ import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
   public static final double WHEEL_DIAMETER = 0.101;
+  public static final Translation2d HUB_LOCATION =
+      ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
 
   public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1;
   public static final double READY_HOOD_POSITION_TOLERANCE = 1.0;
