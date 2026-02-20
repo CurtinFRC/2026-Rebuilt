@@ -228,18 +228,19 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
-            () -> aligning,
+            () -> controller.leftBumper().getAsBoolean(),
             () -> hoodedShooter.getVirtualHubLocation(() -> shotTarget)));
 
-    controller // intake and store
-        .leftBumper()
-        .onTrue(Commands.runOnce(() -> aligning = !aligning));
+    // controller // intake and store
+    //     .leftBumper()
+    //     .onTrue(Commands.runOnce(() -> aligning = !aligning));
 
-    controller // intake and store
+    // controller // intake and store
+    //     .leftTrigger()
+    //     .onTrue(Commands.runOnce(() -> intaking = !intaking));
+
+    controller
         .leftTrigger()
-        .onTrue(Commands.runOnce(() -> intaking = !intaking));
-
-    intakingTrigger
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(0.7),
