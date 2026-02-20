@@ -21,6 +21,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Simulation;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.networktables.BooleanPublisher;
 import edu.wpi.first.networktables.BooleanSubscriber;
 import edu.wpi.first.networktables.BooleanTopic;
@@ -360,6 +361,64 @@ public final class NetworkTablesValue<T> {
       x = null;
       y = null;
       theta = null;
+    }
+  }
+
+  private static final class Translation2dCodec implements Codec<Translation2d> {
+    private StringPublisher x;
+    private StringPublisher y;
+    private StringSubscriber xSub;
+    private StringSubscriber ySub;
+
+    public Translation2dCodec() {
+      // No-op
+    }
+
+    @Override
+    public Class<Translation2d> type() {
+      return Translation2d.class;
+    }
+
+    @Override
+    public void publish(NetworkTableInstance inst, String topicName, Translation2d initialValue) {
+      x = inst.getStringTopic(topicName + "/x").publish();
+      y = inst.getStringTopic(topicName + "/y").publish();
+      xSub = inst.getStringTopic(topicName + "/x").subscribe("0.0");
+      ySub = inst.getStringTopic(topicName + "/y").subscribe("0.0");
+      Translation2d init = initialValue != null ? initialValue : new Translation2d();
+      set(init);
+    }
+
+    @Override
+    public Translation2d get() {
+      double xVal = Double.parseDouble(xSub.get());
+      double yVal = Double.parseDouble(ySub.get());
+      return new Translation2d(xVal, yVal);
+    }
+
+    @Override
+    public void set(Translation2d value) {
+      Translation2d val = value != null ? value : new Translation2d();
+      x.set(Double.toString(val.getX()));
+      y.set(Double.toString(val.getY()));
+    }
+
+    @Override
+    public void flush() {
+      if (x != null) x.getTopic().getInstance().flush();
+      if (y != null) y.getTopic().getInstance().flush();
+    }
+
+    @Override
+    public void close() {
+      if (xSub != null) xSub.close();
+      if (ySub != null) ySub.close();
+      if (x != null) x.close();
+      if (y != null) y.close();
+      xSub = null;
+      ySub = null;
+      x = null;
+      y = null;
     }
   }
 
