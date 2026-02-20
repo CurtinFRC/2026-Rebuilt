@@ -2,10 +2,11 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
-import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.signals.InvertedValue;
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -22,6 +23,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -45,6 +47,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.FieldConstants;
+import org.curtinfrc.frc2026.util.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -73,8 +76,11 @@ public class Robot extends LoggedRobot {
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
 
-  private Translation2d shotTarget =
-      ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft.toTranslation2d());
+  private NetworkTablesValue<Translation2d> shuttlePose =
+      NetworkTablesValue.ofTranslation2d(
+          NetworkTableInstance.getDefault(), "ShuttlePose", HoodedShooter.HUB_LOCATION);
+
+  private Supplier<Translation2d> shotTarget = () -> shuttlePose.get();
 
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -231,28 +237,29 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
-            () -> aligning,
-            () -> hoodedShooter.getVirtualHubLocation(() -> shotTarget)));
+            () -> controller.rightTrigger().getAsBoolean(),
+            () -> hoodedShooter.getVirtualHubLocation(shotTarget)));
 
-    controller // intake and store
-        .leftBumper()
-        .onTrue(Commands.runOnce(() -> aligning = !aligning));
+    // controller // intake and store
+    //     .leftBumper()
+    //     .onTrue(Commands.runOnce(() -> aligning = !aligning));
 
-    controller // intake and store
+    // controller // intake and store
+    //     .leftTrigger()
+    //     .onTrue(Commands.runOnce(() -> intaking = !intaking));
+
+    controller
         .leftTrigger()
-        .onTrue(Commands.runOnce(() -> intaking = !intaking));
-
-    intakingTrigger
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(0.7),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand()));
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand(), mag.store(0)));
 
     controller // spinup shooter and aim
         .rightTrigger()
-        .onTrue(hoodedShooter.shootAtHub())
+        .onTrue(hoodedShooter.shootAtHub(shotTarget))
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
@@ -267,6 +274,23 @@ public class Robot extends LoggedRobot {
     VirtualSubsystem.periodicAll();
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
+
+    final double SHOOT_X_END_BAND_M = 12.49;
+    double minBand = SHOOT_X_END_BAND_M;
+    double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
+    Pose2d pose = drive.getPose();
+    double x = pose.getX();
+
+    if (x < minBand
+        && x > maxBand
+        && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
+      shuttlePose.set(
+          new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
+    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX()
+        && !(x < minBand && x > maxBand)) {
+      shuttlePose.set(HoodedShooter.HUB_LOCATION);
+    }
+
     logRunningCommands();
     logRequiredSubsystems();
     Logger.recordOutput(

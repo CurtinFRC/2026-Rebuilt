@@ -12,7 +12,6 @@ import edu.wpi.first.wpilibj.simulation.DCMotorSim;
 import java.util.ArrayList;
 import java.util.List;
 import org.curtinfrc.frc2026.sim.BallSim;
-import org.littletonrobotics.junction.Logger;
 
 public class ShooterIOSim extends ShooterIODev {
   private static final double DT = 0.001;
@@ -47,9 +46,9 @@ public class ShooterIOSim extends ShooterIODev {
     motorSim.setRawRotorPosition(motorSimModel.getAngularPositionRotations());
     motorSim.setRotorVelocity(motorSimModel.getAngularVelocityRPM());
 
-    for (int ball = 0; ball < simBalls.size(); ball++) {
-      Logger.recordOutput("Balls/Ball " + String.valueOf(ball), simBalls.get(ball).update(0.02));
-    }
+    // for (int ball = 0; ball < simBalls.size(); ball++) {
+    //   Logger.recordOutput("Balls/Ball " + String.valueOf(ball), simBalls.get(ball).update(0.02));
+    // }
   }
 
   @Override
