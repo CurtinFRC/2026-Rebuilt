@@ -3,8 +3,13 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import com.ctre.phoenix6.signals.InvertedValue;
+
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.NetworkTableValue;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -21,6 +26,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
+
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -43,6 +50,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -71,7 +79,11 @@ public class Robot extends LoggedRobot {
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
 
-  private Translation2d shotTarget = HoodedShooter.HUB_LOCATION;
+
+  private NetworkTablesValue<Translation2d> shuttlePose =
+      NetworkTablesValue.ofTranslation2d(NetworkTableInstance.getDefault(), "ShuttlePose", HoodedShooter.HUB_LOCATION);
+
+  private Supplier<Translation2d> shotTarget = () -> shuttlePose.get();
 
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
@@ -229,7 +241,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
             () -> controller.rightTrigger().getAsBoolean(),
-            () -> hoodedShooter.getVirtualHubLocation(() -> shotTarget)));
+            () -> hoodedShooter.getVirtualHubLocation(shotTarget)));
 
     // controller // intake and store
     //     .leftBumper()
@@ -250,7 +262,7 @@ public class Robot extends LoggedRobot {
 
     controller // spinup shooter and aim
         .rightTrigger()
-        .onTrue(hoodedShooter.shootAtHub(() -> shotTarget))
+        .onTrue(hoodedShooter.shootAtHub(shotTarget))
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
@@ -265,6 +277,7 @@ public class Robot extends LoggedRobot {
     VirtualSubsystem.periodicAll();
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
+    
     logRunningCommands();
     logRequiredSubsystems();
     Logger.recordOutput(
