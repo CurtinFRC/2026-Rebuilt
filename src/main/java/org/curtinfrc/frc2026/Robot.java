@@ -2,10 +2,11 @@ package org.curtinfrc.frc2026;
 
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
+import edu.wpi.first.networktables.DoubleSubscriber;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -91,7 +92,17 @@ public class Robot extends LoggedRobot {
   @AutoLogOutput(key = "Intaking")
   private boolean intaking = false;
 
-  private Trigger intakingTrigger = new Trigger(() -> intaking);
+  @AutoLogOutput(key = "Shuttling")
+  private final Trigger shuttling =
+      new Trigger(
+          () -> {
+            var pose = drive.getPose();
+
+            var trenchPose =
+                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftBump.farRightCorner).getX();
+
+            return pose.getTranslation().getX() < trenchPose;
+          });
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -232,13 +243,35 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
+    var table = NetworkTableInstance.getDefault().getTable("SmartDashboard/ShuttlePos");
+    DoubleSubscriber getx = table.getDoubleTopic("X").subscribe(0.0);
+    DoubleSubscriber gety = table.getDoubleTopic("Y").subscribe(0.0);
+
+    Supplier<Translation2d> xandy = () -> new Translation2d(getx.get(), gety.get());
+
     drive.setDefaultCommand(
+        drive.joystickDrive(
+            () -> -controller.getLeftY(),
+            () -> -controller.getLeftX(),
+            () -> -controller.getRightX()));
+
+    shuttling
+        .negate()
+        .whileTrue(
+            drive.locationHeadingjoyStickDrive(
+                () -> -controller.getLeftY(),
+                () -> -controller.getLeftX(),
+                () -> -controller.getRightX(),
+                () -> controller.rightTrigger().getAsBoolean(),
+                () -> hoodedShooter.getVirtualHubLocation(shotTarget)));
+
+    shuttling.whileTrue(
         drive.locationHeadingjoyStickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
             () -> controller.rightTrigger().getAsBoolean(),
-            () -> hoodedShooter.getVirtualHubLocation(shotTarget)));
+            () -> hoodedShooter.getVirtualHubLocation(xandy)));
 
     // controller // intake and store
     //     .leftBumper()
@@ -259,7 +292,14 @@ public class Robot extends LoggedRobot {
 
     controller // spinup shooter and aim
         .rightTrigger()
+        .and(shuttling)
         .onTrue(hoodedShooter.shuttle())
+        .onFalse(hoodedShooter.stopShooter());
+
+    controller // spinup shooter and aim
+        .rightTrigger()
+        .and(shuttling.negate())
+        .onTrue(hoodedShooter.shootAtHub(shotTarget))
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
@@ -275,21 +315,21 @@ public class Robot extends LoggedRobot {
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
 
-    final double SHOOT_X_END_BAND_M = 12.49;
-    double minBand = SHOOT_X_END_BAND_M;
-    double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
-    Pose2d pose = drive.getPose();
-    double x = pose.getX();
-
-    if (x < minBand
-        && x > maxBand
-        && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
-      shuttlePose.set(
-          new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
-    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX()
-        && !(x < minBand && x > maxBand)) {
-      shuttlePose.set(HoodedShooter.HUB_LOCATION);
-    }
+    // final double SHOOT_X_END_BAND_M = 12.49;
+    // double minBand = SHOOT_X_END_BAND_M;
+    // double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
+    // Pose2d pose = drive.getPose();
+    // double x = pose.getX();
+    //
+    // if (x < minBand
+    //     && x > maxBand
+    //     && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
+    //   shuttlePose.set(
+    //       new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
+    // } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX()
+    //     && !(x < minBand && x > maxBand)) {
+    //   shuttlePose.set(HoodedShooter.HUB_LOCATION);
+    // }
 
     logRunningCommands();
     logRequiredSubsystems();

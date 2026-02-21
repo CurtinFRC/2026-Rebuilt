@@ -386,6 +386,7 @@ public class Drive extends SubsystemBase {
       Supplier<Translation2d> locationTransform) {
     return run(
         () -> {
+          Logger.recordOutput("DriveSetpoint", locationTransform.get());
 
           // Get current position using the getPose method.
           Pose2d currentPosition = getPose();

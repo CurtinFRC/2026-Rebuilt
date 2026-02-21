@@ -62,7 +62,7 @@ window = tk.Tk()
 window.geometry("491x292")
 window.configure(bg="#242424")
 window.title("FRC Target coordinator 2000")
-window.iconbitmap(load_asset("icon2.ico"))
+window.iconbitmap(load_asset("assets/icon2.ico"))
 canvas = tk.Canvas(
     window,
     bg="#ffffff",

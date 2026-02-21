@@ -32,8 +32,8 @@ public class HoodedShooter extends SubsystemBase {
   public static final Translation2d HUB_LOCATION =
       ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
 
-  public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1.0;
-  public static final double READY_HOOD_POSITION_TOLERANCE = 1.0;
+  public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 5;
+  public static final double READY_HOOD_POSITION_TOLERANCE = 10;
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
       new InterpolatingDoubleTreeMap();
@@ -52,7 +52,7 @@ public class HoodedShooter extends SubsystemBase {
   private final Supplier<ChassisSpeeds> robotVelocity;
 
   private final LoggedTunableNumber tunableHoodSetpoint =
-      new LoggedTunableNumber("HoodSetpoint", 90);
+      new LoggedTunableNumber("HoodSetpoint", 60);
   private final LoggedTunableNumber tunableShooterSetpoint =
       new LoggedTunableNumber("ShooterSetpoint", 19.5);
   private double shooterTarget = 0;
@@ -160,7 +160,54 @@ public class HoodedShooter extends SubsystemBase {
     NetworkTableValue gety = table.getValue("Y");
 
     Supplier<Translation2d> xandy = () -> new Translation2d(getx.getDouble(), gety.getDouble());
-    return shootAtHub(xandy);
+    return shootAtShuttle(xandy);
+  }
+
+  public Command shootAtShuttle(Supplier<Translation2d> hub_location) {
+    return run(
+        () -> {
+          Translation2d hubLocation =
+              ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
+
+          Translation2d compensatedHubLocation = getVirtualHubLocation(() -> hubLocation);
+
+          double compensatedDistanceLength =
+              compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
+
+          if (Constants.tuningMode == true) {
+            hoodTarget = tunableHoodSetpoint.get();
+            shooterTarget = tunableShooterSetpoint.get();
+          } else {
+            hoodTarget = tunableHoodSetpoint.get();
+            shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
+          }
+
+          Logger.recordOutput("ShooterShot", new Pose2d(hub_location.get(), Rotation2d.kZero));
+
+          double target =
+              Drive.angleToLocation(
+                  this.getVirtualHubLocation(() -> hub_location.get()), robotPose.get());
+          double robotAngle =
+              robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
+
+          // System.out.println(Math.abs(target - robotAngle));
+          if (Math.abs(target - robotAngle) < 5) { // DEGREE ERROR
+            hoodIO.setPosition(hoodTarget);
+            shooterIO.setVelocity(shooterTarget);
+          } else {
+            hoodIO.setVoltage(0);
+            shooterIO.setVoltage(0);
+          }
+
+          if (Constants.getMode() == Mode.SIM) {
+            shooterIO.addSimBall(
+                new BallSim(
+                    shooterTarget,
+                    Rotation2d.fromDegrees(hoodTarget + 90),
+                    new Pose3d(robotPose.get())
+                        .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
+          }
+        });
   }
 
   public Command shootAtHub(Supplier<Translation2d> hub_location) {
@@ -181,6 +228,8 @@ public class HoodedShooter extends SubsystemBase {
             hoodTarget = DISTANCE_TO_HOOD_ANGLE.get(compensatedDistanceLength);
             shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
           }
+
+          Logger.recordOutput("ShooterShot", new Pose2d(hub_location.get(), Rotation2d.kZero));
 
           double target =
               Drive.angleToLocation(
