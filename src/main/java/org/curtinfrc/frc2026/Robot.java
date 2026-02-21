@@ -3,7 +3,10 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import com.ctre.phoenix6.signals.InvertedValue;
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -14,11 +17,13 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.curtinfrc.frc2026.drive.DevTunerConstants;
 import org.curtinfrc.frc2026.drive.Drive;
 import org.curtinfrc.frc2026.drive.GyroIO;
@@ -28,6 +33,7 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
@@ -40,12 +46,15 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.FieldConstants;
+import org.curtinfrc.frc2026.util.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVision;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVisionSim;
+import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.LogFileUtil;
 import org.littletonrobotics.junction.LoggedRobot;
 import org.littletonrobotics.junction.Logger;
@@ -66,8 +75,23 @@ public class Robot extends LoggedRobot {
   private Mag mag;
   private HoodedShooter hoodedShooter;
   private final CommandXboxController controller = new CommandXboxController(0);
+
+  private NetworkTablesValue<Translation2d> shuttlePose =
+      NetworkTablesValue.ofTranslation2d(
+          NetworkTableInstance.getDefault(), "ShuttlePose", HoodedShooter.HUB_LOCATION);
+
+  private Supplier<Translation2d> shotTarget = () -> shuttlePose.get();
+
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+
+  @AutoLogOutput(key = "Aligning")
+  private boolean aligning = false;
+
+  @AutoLogOutput(key = "Intaking")
+  private boolean intaking = false;
+
+  private Trigger intakingTrigger = new Trigger(() -> intaking);
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -116,7 +140,9 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
         }
         case DEV -> {
           drive =
@@ -148,7 +174,9 @@ public class Robot extends LoggedRobot {
                       Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
-          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev());
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIODev(), new HoodIODev(), drive::getPose, drive::getChassisSpeeds);
         }
         case SIM -> {
           drive =
@@ -172,7 +200,9 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
-          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim());
+          hoodedShooter =
+              new HoodedShooter(
+                  new ShooterIOSim(), new HoodIOSim(), drive::getPose, drive::getChassisSpeeds);
         }
       }
     } else {
@@ -183,9 +213,19 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {},
               new ModuleIO() {});
-      vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      vision =
+          new Vision(
+              drive::addVisionMeasurement,
+              drive::getRotation,
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {});
+      intake = new Intake(new IntakeIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
-      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
+      hoodedShooter =
+          new HoodedShooter(
+              new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
     }
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -193,36 +233,37 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.joystickDrive(
+        drive.locationHeadingjoyStickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+            () -> -controller.getRightX(),
+            () -> controller.rightTrigger().getAsBoolean(),
+            () -> hoodedShooter.getVirtualHubLocation(shotTarget)));
+
+    // controller // intake and store
+    //     .leftBumper()
+    //     .onTrue(Commands.runOnce(() -> aligning = !aligning));
+
+    // controller // intake and store
+    //     .leftTrigger()
+    //     .onTrue(Commands.runOnce(() -> intaking = !intaking));
 
     controller
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(1.0),
+                intake.RawControlConsume(0.7),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand(), mag.store(0)));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    controller // spinup shooter and aim
+        .rightTrigger()
+        .onTrue(hoodedShooter.shuttle())
+        .onFalse(hoodedShooter.stopShooter());
 
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
-
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    // index balls when shooter and hood ready
+    hoodedShooter.hoodedShooterReady.whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
@@ -233,6 +274,23 @@ public class Robot extends LoggedRobot {
     VirtualSubsystem.periodicAll();
     CommandScheduler.getInstance().run();
     controllerDisconnected.set(!controller.isConnected());
+
+    final double SHOOT_X_END_BAND_M = 12.49;
+    double minBand = SHOOT_X_END_BAND_M;
+    double maxBand = FieldConstants.fieldLength - SHOOT_X_END_BAND_M;
+    Pose2d pose = drive.getPose();
+    double x = pose.getX();
+
+    if (x < minBand
+        && x > maxBand
+        && shuttlePose.get().getX() == HoodedShooter.HUB_LOCATION.getX()) {
+      shuttlePose.set(
+          new Translation2d(FieldConstants.fieldLength - 2.0, FieldConstants.fieldWidth - 6));
+    } else if (shuttlePose.get().getX() != HoodedShooter.HUB_LOCATION.getX()
+        && !(x < minBand && x > maxBand)) {
+      shuttlePose.set(HoodedShooter.HUB_LOCATION);
+    }
+
     logRunningCommands();
     logRequiredSubsystems();
     Logger.recordOutput(
@@ -251,15 +309,7 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {
-    // CommandScheduler.getInstance()
-    //     .schedule(
-    //         hoodedShooter
-    //             .hoodSysIdDynamicForward()
-    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
-  }
+  public void autonomousInit() {}
 
   /** This function is called periodically during autonomous. */
   @Override
