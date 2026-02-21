@@ -4,6 +4,7 @@ import static edu.wpi.first.units.Units.Volts;
 
 import com.ctre.phoenix6.sim.TalonFXSimState;
 import com.ctre.phoenix6.sim.TalonFXSimState.MotorType;
+import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.system.plant.DCMotor;
 import edu.wpi.first.math.system.plant.LinearSystemId;
 import edu.wpi.first.wpilibj.Notifier;
@@ -12,9 +13,10 @@ import edu.wpi.first.wpilibj.simulation.DCMotorSim;
 import java.util.ArrayList;
 import java.util.List;
 import org.curtinfrc.frc2026.sim.BallSim;
+import org.littletonrobotics.junction.Logger;
 
 public class ShooterIOSim extends ShooterIODev {
-  private static final double DT = 0.001;
+  private static final double DT = 0.02;
   private static final double SHOOTER_JKG = 0.0035;
 
   private final TalonFXSimState motorSim;
@@ -46,9 +48,10 @@ public class ShooterIOSim extends ShooterIODev {
     motorSim.setRawRotorPosition(motorSimModel.getAngularPositionRotations());
     motorSim.setRotorVelocity(motorSimModel.getAngularVelocityRPM());
 
-    // for (int ball = 0; ball < simBalls.size(); ball++) {
-    //   Logger.recordOutput("Balls/Ball " + String.valueOf(ball), simBalls.get(ball).update(0.02));
-    // }
+    for (int ball = 0; ball < simBalls.size(); ball++) {
+      Pose3d ballPose = simBalls.get(ball).update(0.02);
+      Logger.recordOutput("Balls/Ball " + String.valueOf(ball), ballPose);
+    }
   }
 
   @Override
