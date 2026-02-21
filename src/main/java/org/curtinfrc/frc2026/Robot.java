@@ -14,6 +14,7 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.Command.InterruptionBehavior;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
@@ -286,9 +287,11 @@ public class Robot extends LoggedRobot {
         .whileTrue(
             Commands.parallel(
                 intake.RawControlConsume(0.7),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.holdIndexerCommand(), mag.store(0)));
+                mag.store(0.7).asProxy(),
+                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag)).asProxy()))
+        .onFalse(
+            Commands.parallel(
+                intake.RawIdle(), mag.holdIndexerCommand().asProxy(), mag.store(0).asProxy()));
 
     controller // spinup shooter and aim
         .rightTrigger()
@@ -303,7 +306,10 @@ public class Robot extends LoggedRobot {
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
-    hoodedShooter.hoodedShooterReady.whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    hoodedShooter
+        .hoodedShooterReady
+        .whileTrue(mag.moveAll(0.5).withInterruptBehavior(InterruptionBehavior.kCancelIncoming))
+        .onFalse(mag.stop());
   }
 
   /** This function is called periodically during all modes. */
