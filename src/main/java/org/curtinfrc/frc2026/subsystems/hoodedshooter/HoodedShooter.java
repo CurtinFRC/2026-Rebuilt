@@ -32,7 +32,7 @@ public class HoodedShooter extends SubsystemBase {
   public static final Translation2d HUB_LOCATION =
       ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
 
-  public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1;
+  public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1.0;
   public static final double READY_HOOD_POSITION_TOLERANCE = 1.0;
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
@@ -65,10 +65,17 @@ public class HoodedShooter extends SubsystemBase {
 
   public final Trigger hoodedShooterReady =
       new Trigger(
-          () ->
-              Math.abs(hoodTarget - hoodInputs.positionRotations) <= READY_HOOD_POSITION_TOLERANCE
-                  && Math.abs(shooterTarget - shooterInputs.velocityMetresPerSecond)
-                      <= READY_SHOOTER_VELOCITY_TOLERANCE);
+              () ->
+                  Math.abs(
+                              hoodTarget
+                                  - (hoodInputs.encoderPositionRotations
+                                          * 360
+                                          / HoodIODev.GEAR_RATIO
+                                      + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES))
+                          <= READY_HOOD_POSITION_TOLERANCE
+                      && Math.abs(shooterTarget - shooterInputs.velocityMetresPerSecond)
+                          <= READY_SHOOTER_VELOCITY_TOLERANCE)
+          .debounce(0.1);
 
   public HoodedShooter(
       ShooterIO shooterIO,
@@ -116,6 +123,13 @@ public class HoodedShooter extends SubsystemBase {
     shooterIO.updateInputs(shooterInputs);
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
+    Logger.recordOutput("HoodedShooter/hoodedShooterReady", hoodedShooterReady.getAsBoolean());
+    Logger.recordOutput("HoodedShooter/hoodTarget", hoodTarget);
+    Logger.recordOutput("HoodedShooter/shooterTarget", shooterTarget);
+    Logger.recordOutput(
+        "HoodedShooter/hoodPositionDegrees",
+        hoodInputs.encoderPositionRotations / HoodIODev.GEAR_RATIO * 360
+            + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES);
 
     hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
     hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
@@ -123,10 +137,6 @@ public class HoodedShooter extends SubsystemBase {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
       shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);
     }
-  }
-
-  public Trigger readyToShoot() {
-    return hoodedShooterReady;
   }
 
   public Translation2d getVirtualHubLocation(Supplier<Translation2d> hub_location) {
