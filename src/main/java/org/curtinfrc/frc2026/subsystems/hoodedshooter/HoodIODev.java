@@ -134,6 +134,8 @@ public class HoodIODev implements HoodIO {
         50.0, velocity, voltage, current, position, encoderPosition);
     motor.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, voltage, current, position, encoderPosition);
+
+    encoder.setPosition(0);
   }
 
   @Override
