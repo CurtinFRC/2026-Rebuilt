@@ -143,6 +143,9 @@ public class HoodedShooter extends SubsystemBase {
   public Command setHoodVoltage(Supplier<Double> voltage) {
     return run(() -> hoodIO.setVoltage(voltage.get()));
   }
+  public Command shuttle(){
+    return
+  }
 
   public Command setShooterVoltage(double voltage) {
     return run(() -> shooterIO.setVoltage(voltage));
