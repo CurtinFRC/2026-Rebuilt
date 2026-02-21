@@ -188,6 +188,16 @@ public class Robot extends LoggedRobot {
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {});
     }
 
+    CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
+    CommandScheduler.getInstance().onCommandFinish(this::commandEnded);
+    CommandScheduler.getInstance()
+        .onCommandInterrupt(
+            (interrupted, interrupting) -> {
+              interrupting.ifPresent(
+                  interrupter -> runningInterrupters.put(interrupter, interrupted));
+              commandEnded(interrupted);
+            });
+
     DriverStation.silenceJoystickConnectionWarning(true);
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
