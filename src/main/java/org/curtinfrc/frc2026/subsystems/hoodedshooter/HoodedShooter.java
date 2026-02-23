@@ -99,19 +99,19 @@ public class HoodedShooter extends SubsystemBase {
     DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
 
-    for (int motor = 0; motor < 1; motor++) {
-      this.hoodMotorDisconnectedAlerts[motor] =
+    for (int motor = 0; motor < hoodMotorDisconnectedAlerts.length; motor++) {
+      hoodMotorDisconnectedAlerts[motor] =
           new Alert("Hood motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
-      this.hoodMotorTempAlerts[motor] =
+      hoodMotorTempAlerts[motor] =
           new Alert(
               "Hood motor " + String.valueOf(motor) + " temperature above 60°C.",
               AlertType.kWarning);
     }
 
-    for (int motor = 0; motor < 3; motor++) {
-      this.shooterMotorDisconnectedAlerts[motor] =
+    for (int motor = 0; motor < shooterMotorDisconnectedAlerts.length; motor++) {
+      shooterMotorDisconnectedAlerts[motor] =
           new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
-      this.shooterMotorTempAlerts[motor] =
+      shooterMotorTempAlerts[motor] =
           new Alert(
               "Shooter motor " + String.valueOf(motor) + " temperature above 60°C.",
               AlertType.kWarning);
