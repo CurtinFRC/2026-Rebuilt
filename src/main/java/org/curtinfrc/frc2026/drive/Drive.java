@@ -397,16 +397,12 @@ public class Drive extends SubsystemBase {
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(angleToHub) > 90) {
-            angleToHub =
-                angleToLocation(
-                    locationTransform.get(), currentPosition.rotateBy(Rotation2d.k180deg));
+          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
-
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
-          Logger.recordOutput(
-              "TargetAngle", angleToLocation(locationTransform.get(), currentPosition));
+          Logger.recordOutput("TargetAngle", angleToHub);
           Logger.recordOutput("RobotAngle", robotAngle);
 
           // Apply rotation deadband
