@@ -54,8 +54,8 @@ public class HoodedShooter extends SubsystemBase {
   private double shooterTarget = 0;
   private double hoodTarget = 0;
 
-  private final Alert hoodMotorDisconnectedAlert;
-  private final Alert hoodMotorTempAlert;
+  private final Alert[] hoodMotorDisconnectedAlerts = new Alert[1];
+  private final Alert[] hoodMotorTempAlerts = new Alert[1];
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
   private final Alert[] shooterMotorTempAlerts = new Alert[3];
 
@@ -99,9 +99,14 @@ public class HoodedShooter extends SubsystemBase {
     DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
 
-    this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
-    this.hoodMotorTempAlert =
-        new Alert("Hood motor temperature above 60°C.", AlertType.kWarning); // change
+    for (int motor = 0; motor < 1; motor++) {
+      this.hoodMotorDisconnectedAlerts[motor] =
+          new Alert("Hood motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
+      this.hoodMotorTempAlerts[motor] =
+          new Alert(
+              "Hood motor " + String.valueOf(motor) + " temperature above 60°C.",
+              AlertType.kWarning);
+    }
 
     for (int motor = 0; motor < 3; motor++) {
       this.shooterMotorDisconnectedAlerts[motor] =
@@ -127,8 +132,10 @@ public class HoodedShooter extends SubsystemBase {
         hoodInputs.encoderPositionRotations / HoodIODev.GEAR_RATIO * 360
             + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES);
 
-    hoodMotorDisconnectedAlert.set(!hoodInputs.motorConnected);
-    hoodMotorTempAlert.set(hoodInputs.motorTemperature > 60); // in celcius
+    for (int motor = 0; motor < 1; motor++) {
+      hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
+      hoodMotorTempAlerts[motor].set(hoodInputs.motorTemperatures[motor] > 60);
+    }
     for (int motor = 0; motor < 3; motor++) {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
       shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);

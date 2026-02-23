@@ -40,10 +40,12 @@ import org.curtinfrc.frc2026.subsystems.Mag.Mag;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.FieldConstants;
@@ -142,7 +144,10 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           hoodedShooter =
               new HoodedShooter(
-                  new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
+                  new ShooterIOComp() {},
+                  new HoodIOComp() {},
+                  drive::getPose,
+                  drive::getChassisSpeeds);
         }
         case DEV -> {
           drive =

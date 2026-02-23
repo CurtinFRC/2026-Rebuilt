@@ -354,7 +354,6 @@ public class Drive extends SubsystemBase {
                   currentPosition.getX(),
                   currentPosition.getY(),
                   new Rotation2d(angleToLocation(locationTransform, currentPosition)));
-          // targetAngle = Math.toDegrees(targetAngle);
 
           // Getting robot current angle in radians
           double robotAngle = currentPosition.getRotation().getRadians();
@@ -397,9 +396,14 @@ public class Drive extends SubsystemBase {
 
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
-          double angleSpeed =
-              hubHeadingController.calculate(
-                  robotAngle, angleToLocation(locationTransform.get(), currentPosition));
+          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+          if (Math.abs(angleToHub) > 90) {
+            angleToHub =
+                angleToLocation(
+                    locationTransform.get(), currentPosition.rotateBy(Rotation2d.k180deg));
+          }
+
+          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput(
               "TargetAngle", angleToLocation(locationTransform.get(), currentPosition));
