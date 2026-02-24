@@ -8,3 +8,4 @@ robotpy
 trimesh[easy]
 rtree
 opencv-python
+pyright

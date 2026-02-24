@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from ultralytics import YOLO
+import ultralytics
 
 
 def seed_everything(seed: int) -> None:
@@ -96,7 +96,7 @@ def main() -> None:
     if torch.cuda.is_available():
         torch.set_float32_matmul_precision(args.matmul)
 
-    model = YOLO(args.model)
+    model = ultralytics.YOLO(args.model)  # pyright: ignore[reportPrivateImportUsage]
 
     cache_val = args.cache
     if cache_val == "false":

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -21,7 +21,7 @@ def _detect_checkerboard(gray: np.ndarray, pattern_size: tuple[int, int]) -> tup
     if found and corners is not None:
         return True, corners
     flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_FAST_CHECK
-    found2, corners2 = cv2.findChessboardCorners(gray, pattern_size, flags)
+    found2, corners2 = cv2.findChessboardCorners(gray, pattern_size, None, flags)
     if not found2 or corners2 is None:
         return False, None
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
@@ -32,43 +32,47 @@ def _detect_checkerboard(gray: np.ndarray, pattern_size: tuple[int, int]) -> tup
 def _dict_by_name(name: str):
     if not hasattr(cv2, "aruco"):
         raise RuntimeError("cv2.aruco is required for charuco")
-    code = getattr(cv2.aruco, str(name).strip().upper(), None)
+    aruco = cast(Any, cv2.aruco)
+    code = getattr(aruco, str(name).strip().upper(), None)
     if code is None:
         raise ValueError(f"unsupported aruco dictionary: {name}")
-    return cv2.aruco.getPredefinedDictionary(int(code))
+    return aruco.getPredefinedDictionary(int(code))
 
 
 def _make_charuco_board(cols: int, rows: int, marker_ratio: float, dict_name: str):
+    aruco = cast(Any, cv2.aruco)
     dictionary = _dict_by_name(dict_name)
     sx = int(cols) + 1
     sy = int(rows) + 1
     mr = float(marker_ratio)
     if mr <= 0.0 or mr >= 1.0:
         raise ValueError("marker-ratio must be in (0, 1)")
-    if hasattr(cv2.aruco, "CharucoBoard"):
-        board = cv2.aruco.CharucoBoard((sx, sy), 1.0, mr, dictionary)
+    if hasattr(aruco, "CharucoBoard"):
+        board = aruco.CharucoBoard((sx, sy), 1.0, mr, dictionary)
     else:
-        board = cv2.aruco.CharucoBoard_create(sx, sy, 1.0, mr, dictionary)
+        board = aruco.CharucoBoard_create(sx, sy, 1.0, mr, dictionary)
     return board, dictionary
 
 
 def _make_aruco_detector(dictionary):
+    aruco = cast(Any, cv2.aruco)
     params = None
-    if hasattr(cv2.aruco, "DetectorParameters"):
-        params = cv2.aruco.DetectorParameters()
-    elif hasattr(cv2.aruco, "DetectorParameters_create"):
-        params = cv2.aruco.DetectorParameters_create()
-    if hasattr(cv2.aruco, "ArucoDetector") and params is not None:
-        return cv2.aruco.ArucoDetector(dictionary, params), params
+    if hasattr(aruco, "DetectorParameters"):
+        params = aruco.DetectorParameters()
+    elif hasattr(aruco, "DetectorParameters_create"):
+        params = aruco.DetectorParameters_create()
+    if hasattr(aruco, "ArucoDetector") and params is not None:
+        return aruco.ArucoDetector(dictionary, params), params
     return None, params
 
 
 def _detect_markers(gray: np.ndarray, dictionary, detector, detector_params):
+    aruco = cast(Any, cv2.aruco)
     if detector is not None:
         return detector.detectMarkers(gray)
     if detector_params is None:
-        return cv2.aruco.detectMarkers(gray, dictionary)
-    return cv2.aruco.detectMarkers(gray, dictionary, parameters=detector_params)
+        return aruco.detectMarkers(gray, dictionary)
+    return aruco.detectMarkers(gray, dictionary, parameters=detector_params)
 
 
 def _detect_charuco(
@@ -79,17 +83,18 @@ def _detect_charuco(
     detector_params,
     min_corners: int,
 ) -> tuple[bool, np.ndarray | None, np.ndarray | None]:
+    aruco = cast(Any, cv2.aruco)
     corners, ids, rejected = _detect_markers(gray, dictionary, detector, detector_params)
     if ids is None or len(ids) <= 0:
         return False, None, None
-    if hasattr(cv2.aruco, "refineDetectedMarkers"):
+    if hasattr(aruco, "refineDetectedMarkers"):
         try:
-            refined = cv2.aruco.refineDetectedMarkers(gray, board, corners, ids, rejected)
+            refined = aruco.refineDetectedMarkers(gray, board, corners, ids, rejected)
             if isinstance(refined, tuple) and len(refined) >= 3:
                 corners, ids, rejected = refined[0], refined[1], refined[2]
         except Exception:
             pass
-    retval, cc, ci = cv2.aruco.interpolateCornersCharuco(corners, ids, gray, board)
+    retval, cc, ci = aruco.interpolateCornersCharuco(corners, ids, gray, board)
     if retval is None or float(retval) < float(min_corners) or cc is None or ci is None:
         return False, None, None
     return True, cc, ci
@@ -200,10 +205,50 @@ def _pruned_indices(
     thr = min(hard, robust if np.isfinite(robust) and robust > 0.0 else hard)
     keep = [i for i, e in enumerate(per_view_errors) if np.isfinite(float(e)) and float(e) <= thr]
     if len(keep) < int(min_keep):
-        ranked = np.argsort(np.where(np.isfinite(errs), errs, np.inf)).tolist()
-        keep = ranked[: int(min_keep)]
+        ranked = np.argsort(np.where(np.isfinite(errs), errs, np.inf)).astype(np.int64).reshape(-1)
+        keep = [int(x) for x in ranked[: int(min_keep)]]
     keep = sorted(set(int(i) for i in keep if 0 <= int(i) < n))
     return keep, {"threshold_px": float(thr), "median_px": med, "mad_px": mad}
+
+
+def _calibrate_charuco(
+    corners: list[np.ndarray],
+    ids: list[np.ndarray],
+    board: Any,
+    image_size: tuple[int, int],
+    flags: int,
+    criteria: tuple[int, int, float],
+) -> tuple[float, np.ndarray, np.ndarray, list[np.ndarray], list[np.ndarray]]:
+    aruco = cast(Any, cv2.aruco)
+    return aruco.calibrateCameraCharuco(
+        corners,
+        ids,
+        board,
+        image_size,
+        None,
+        None,
+        flags=flags,
+        criteria=criteria,
+    )
+
+
+def _calibrate_checkerboard(
+    object_points: list[np.ndarray],
+    image_points: list[np.ndarray],
+    image_size: tuple[int, int],
+    flags: int,
+    criteria: tuple[int, int, float],
+) -> tuple[float, np.ndarray, np.ndarray, list[np.ndarray], list[np.ndarray]]:
+    cv2_any = cast(Any, cv2)
+    return cv2_any.calibrateCamera(
+        object_points,
+        image_points,
+        image_size,
+        None,
+        None,
+        flags=flags,
+        criteria=criteria,
+    )
 
 
 def main() -> None:
@@ -327,27 +372,10 @@ def main() -> None:
     flags = _calib_flags(str(args.dist_model), bool(args.zero_tangent), n_initial)
 
     if mode == "charuco":
-        rms0, K0, dist0, rvecs0, tvecs0 = cv2.aruco.calibrateCameraCharuco(
-            charuco_corners,
-            charuco_ids,
-            board,
-            image_size,
-            None,
-            None,
-            flags=flags,
-            criteria=criteria,
-        )
+        rms0, K0, dist0, rvecs0, tvecs0 = _calibrate_charuco(charuco_corners, charuco_ids, board, image_size, flags, criteria)
         per_view0 = _per_view_errors_charuco(board, charuco_corners, charuco_ids, rvecs0, tvecs0, K0, dist0)
     else:
-        rms0, K0, dist0, rvecs0, tvecs0 = cv2.calibrateCamera(
-            object_points,
-            image_points,
-            image_size,
-            None,
-            None,
-            flags=flags,
-            criteria=criteria,
-        )
+        rms0, K0, dist0, rvecs0, tvecs0 = _calibrate_checkerboard(object_points, image_points, image_size, flags, criteria)
         per_view0 = _per_view_errors_checkerboard(object_points, image_points, rvecs0, tvecs0, K0, dist0)
 
     keep_idx, prune_meta = _pruned_indices(
@@ -374,29 +402,12 @@ def main() -> None:
         if mode == "charuco":
             cc1 = [charuco_corners[i] for i in keep_idx]
             ci1 = [charuco_ids[i] for i in keep_idx]
-            rms, K, dist, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
-                cc1,
-                ci1,
-                board,
-                image_size,
-                None,
-                None,
-                flags=flags,
-                criteria=criteria,
-            )
+            rms, K, dist, rvecs, tvecs = _calibrate_charuco(cc1, ci1, board, image_size, flags, criteria)
             per_view = _per_view_errors_charuco(board, cc1, ci1, rvecs, tvecs, K, dist)
         else:
             op1 = [object_points[i] for i in keep_idx]
             ip1 = [image_points[i] for i in keep_idx]
-            rms, K, dist, rvecs, tvecs = cv2.calibrateCamera(
-                op1,
-                ip1,
-                image_size,
-                None,
-                None,
-                flags=flags,
-                criteria=criteria,
-            )
+            rms, K, dist, rvecs, tvecs = _calibrate_checkerboard(op1, ip1, image_size, flags, criteria)
             per_view = _per_view_errors_checkerboard(op1, ip1, rvecs, tvecs, K, dist)
         final_files = [used_files[i] for i in keep_idx]
         final_cov = [used_coverage[i] for i in keep_idx]

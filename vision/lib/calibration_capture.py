@@ -4,6 +4,7 @@ import argparse
 import math
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -29,43 +30,47 @@ def _starting_index(out_dir: Path, prefix: str, ext: str) -> int:
 def _dict_by_name(name: str):
     if not hasattr(cv2, "aruco"):
         raise RuntimeError("cv2.aruco is required for charuco")
-    code = getattr(cv2.aruco, str(name).strip().upper(), None)
+    aruco = cast(Any, cv2.aruco)
+    code = getattr(aruco, str(name).strip().upper(), None)
     if code is None:
         raise ValueError(f"unsupported aruco dictionary: {name}")
-    return cv2.aruco.getPredefinedDictionary(int(code))
+    return aruco.getPredefinedDictionary(int(code))
 
 
 def _make_charuco_board(cols: int, rows: int, marker_ratio: float, dict_name: str):
+    aruco = cast(Any, cv2.aruco)
     dictionary = _dict_by_name(dict_name)
     sx = int(cols) + 1
     sy = int(rows) + 1
     mr = float(marker_ratio)
     if mr <= 0.0 or mr >= 1.0:
         raise ValueError("marker-ratio must be in (0, 1)")
-    if hasattr(cv2.aruco, "CharucoBoard"):
-        board = cv2.aruco.CharucoBoard((sx, sy), 1.0, mr, dictionary)
+    if hasattr(aruco, "CharucoBoard"):
+        board = aruco.CharucoBoard((sx, sy), 1.0, mr, dictionary)
     else:
-        board = cv2.aruco.CharucoBoard_create(sx, sy, 1.0, mr, dictionary)
+        board = aruco.CharucoBoard_create(sx, sy, 1.0, mr, dictionary)
     return board, dictionary
 
 
 def _make_aruco_detector(dictionary):
+    aruco = cast(Any, cv2.aruco)
     params = None
-    if hasattr(cv2.aruco, "DetectorParameters"):
-        params = cv2.aruco.DetectorParameters()
-    elif hasattr(cv2.aruco, "DetectorParameters_create"):
-        params = cv2.aruco.DetectorParameters_create()
-    if hasattr(cv2.aruco, "ArucoDetector") and params is not None:
-        return cv2.aruco.ArucoDetector(dictionary, params), params
+    if hasattr(aruco, "DetectorParameters"):
+        params = aruco.DetectorParameters()
+    elif hasattr(aruco, "DetectorParameters_create"):
+        params = aruco.DetectorParameters_create()
+    if hasattr(aruco, "ArucoDetector") and params is not None:
+        return aruco.ArucoDetector(dictionary, params), params
     return None, params
 
 
 def _detect_markers(gray: np.ndarray, dictionary, detector, detector_params):
+    aruco = cast(Any, cv2.aruco)
     if detector is not None:
         return detector.detectMarkers(gray)
     if detector_params is None:
-        return cv2.aruco.detectMarkers(gray, dictionary)
-    return cv2.aruco.detectMarkers(gray, dictionary, parameters=detector_params)
+        return aruco.detectMarkers(gray, dictionary)
+    return aruco.detectMarkers(gray, dictionary, parameters=detector_params)
 
 
 def _detect_checkerboard(gray: np.ndarray, pattern_size: tuple[int, int]) -> tuple[bool, np.ndarray | None]:
@@ -73,7 +78,7 @@ def _detect_checkerboard(gray: np.ndarray, pattern_size: tuple[int, int]) -> tup
     if found and corners is not None:
         return True, corners
     flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_FAST_CHECK
-    found2, corners2 = cv2.findChessboardCorners(gray, pattern_size, flags)
+    found2, corners2 = cv2.findChessboardCorners(gray, pattern_size, None, flags)
     if not found2 or corners2 is None:
         return False, None
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
@@ -89,17 +94,18 @@ def _detect_charuco(
     detector_params,
     min_corners: int,
 ) -> tuple[bool, np.ndarray | None, np.ndarray | None, tuple]:
+    aruco = cast(Any, cv2.aruco)
     corners, ids, rejected = _detect_markers(gray, dictionary, detector, detector_params)
     if ids is None or len(ids) <= 0:
         return False, None, None, (corners, ids, rejected)
-    if hasattr(cv2.aruco, "refineDetectedMarkers"):
+    if hasattr(aruco, "refineDetectedMarkers"):
         try:
-            refined = cv2.aruco.refineDetectedMarkers(gray, board, corners, ids, rejected)
+            refined = aruco.refineDetectedMarkers(gray, board, corners, ids, rejected)
             if isinstance(refined, tuple) and len(refined) >= 3:
                 corners, ids, rejected = refined[0], refined[1], refined[2]
         except Exception:
             pass
-    retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(corners, ids, gray, board)
+    retval, charuco_corners, charuco_ids = aruco.interpolateCornersCharuco(corners, ids, gray, board)
     if retval is None or float(retval) < float(min_corners) or charuco_corners is None or charuco_ids is None:
         return False, None, None, (corners, ids, rejected)
     return True, charuco_corners, charuco_ids, (corners, ids, rejected)
@@ -229,9 +235,9 @@ def main() -> None:
                 )
                 marker_corners, marker_ids, _ = marker_pack
                 if marker_ids is not None and len(marker_ids) > 0:
-                    cv2.aruco.drawDetectedMarkers(vis, marker_corners, marker_ids)
+                    cast(Any, cv2.aruco).drawDetectedMarkers(vis, marker_corners, marker_ids)
                 if found and cc is not None and ci is not None:
-                    cv2.aruco.drawDetectedCornersCharuco(vis, cc, ci, (0, 255, 0))
+                    cast(Any, cv2.aruco).drawDetectedCornersCharuco(vis, cc, ci, (0, 255, 0))
                     points = cc
             else:
                 found, corners = _detect_checkerboard(gray, pattern)

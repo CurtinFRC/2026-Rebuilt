@@ -118,11 +118,14 @@ class TestFuelEstimator(unittest.TestCase):
         a = np.array([1.0, 2.0, 3.0], dtype=np.float64)
         b = np.array([5.0, 6.0, 7.0], dtype=np.float64)
         out1 = ema.update(a)
+        assert out1 is not None
         self.assertTrue(np.allclose(out1, a, atol=0.0))
         out2 = ema.update(b)
+        assert out2 is not None
         expected = (1.0 - 0.25) * a + 0.25 * b
         self.assertTrue(np.allclose(out2, expected, atol=0.0))
         out3 = ema.update(None)
+        assert out3 is not None
         self.assertTrue(np.allclose(out3, expected, atol=0.0))
 
     def test_apply_axis_conversion_none_is_identity(self):
@@ -253,6 +256,7 @@ class TestFuelEstimator(unittest.TestCase):
                         continue
 
                     self.assertIsNotNone(est)
+                    assert est is not None
                     hits += 1
                     self.assertAlmostEqual(float(est[2]), float(ball_radius), places=7)
                     self.assertTrue(_colinear(o_f, d_f, est, atol=2e-4))
@@ -417,6 +421,7 @@ class TestFuelEstimator(unittest.TestCase):
                     self.assertIsNone(est)
                 else:
                     self.assertIsNotNone(est)
+                    assert est is not None
                     self.assertTrue(np.allclose(est, man, atol=3e-6))
                     self.assertAlmostEqual(float(est[2]), float(ball_radius), places=6)
 

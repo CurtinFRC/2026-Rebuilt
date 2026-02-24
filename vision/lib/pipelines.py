@@ -89,15 +89,25 @@ class ColorPipeline(VisionPipeline):
         h, w = frame.shape[:2]
         out: list[Detection2D] = []
         for r in self._ranges:
+            lower_main = np.array([r.h_min, r.s_min, r.v_min], dtype=np.uint8)
+            upper_main = np.array([r.h_max, r.s_max, r.v_max], dtype=np.uint8)
             if r.h_min <= r.h_max:
                 mask = cv2.inRange(
                     hsv,
-                    (r.h_min, r.s_min, r.v_min),
-                    (r.h_max, r.s_max, r.v_max),
+                    lower_main,
+                    upper_main,
                 )
             else:
-                a = cv2.inRange(hsv, (0, r.s_min, r.v_min), (r.h_max, r.s_max, r.v_max))
-                b = cv2.inRange(hsv, (r.h_min, r.s_min, r.v_min), (179, r.s_max, r.v_max))
+                a = cv2.inRange(
+                    hsv,
+                    np.array([0, r.s_min, r.v_min], dtype=np.uint8),
+                    np.array([r.h_max, r.s_max, r.v_max], dtype=np.uint8),
+                )
+                b = cv2.inRange(
+                    hsv,
+                    np.array([r.h_min, r.s_min, r.v_min], dtype=np.uint8),
+                    np.array([179, r.s_max, r.v_max], dtype=np.uint8),
+                )
                 mask = cv2.bitwise_or(a, b)
             if self._open_ks >= 2:
                 k = np.ones((self._open_ks, self._open_ks), dtype=np.uint8)
@@ -353,13 +363,14 @@ class YoloPipeline(VisionPipeline):
         if nms_idx is None or len(nms_idx) == 0:
             return []
         out: list[Detection2D] = []
-        flat_idx = np.array(nms_idx).reshape(-1).tolist()
-        for i in flat_idx[: max(0, self._max_detections)]:
-            x, y, bw, bh = boxes_xywh[int(i)]
+        flat_idx = np.asarray(nms_idx, dtype=np.int32).reshape(-1)
+        for raw_i in flat_idx[: max(0, self._max_detections)]:
+            i = int(raw_i)
+            x, y, bw, bh = boxes_xywh[i]
             out.append(
                 Detection2D(
-                    class_id=int(class_ids[int(i)]),
-                    confidence=float(confidences[int(i)]),
+                    class_id=int(class_ids[i]),
+                    confidence=float(confidences[i]),
                     x1=float(x),
                     y1=float(y),
                     x2=float(x + bw),

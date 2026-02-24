@@ -353,7 +353,11 @@ def _refine_fuel_detection_box(hsv_frame: np.ndarray, det: Detection2D) -> Detec
         return det
 
     # Mask yellow-ish fuel tones. Thresholds are intentionally broad to tolerate lighting shifts.
-    yellow = cv2.inRange(hsv_roi, (12, 55, 45), (45, 255, 255))
+    yellow = cv2.inRange(
+        hsv_roi,
+        np.array([12, 55, 45], dtype=np.uint8),
+        np.array([45, 255, 255], dtype=np.uint8),
+    )
     if cv2.countNonZero(yellow) <= 0:
         return det
     k = np.ones((3, 3), dtype=np.uint8)

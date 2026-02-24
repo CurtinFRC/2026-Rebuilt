@@ -1,7 +1,9 @@
 numpy>=1.23
 opencv-python
 robotpy
+torch
 roboflow
 tensorboard
 ultralytics
 tensorflow
+pyright

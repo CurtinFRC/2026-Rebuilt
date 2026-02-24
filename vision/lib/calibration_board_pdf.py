@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import zlib
 from pathlib import Path
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -35,31 +36,34 @@ def _orient(page_w_pt: float, page_h_pt: float, orientation: str) -> tuple[float
 def _dictionary_by_name(name: str):
     if not hasattr(cv2, "aruco"):
         raise RuntimeError("cv2.aruco is required for charuco")
+    aruco = cast(Any, cv2.aruco)
     n = str(name).strip().upper()
-    code = getattr(cv2.aruco, n, None)
+    code = getattr(aruco, n, None)
     if code is None:
         raise ValueError(f"unsupported aruco dictionary: {name}")
-    return cv2.aruco.getPredefinedDictionary(int(code))
+    return aruco.getPredefinedDictionary(int(code))
 
 
 def _make_charuco_board(squares_x: int, squares_y: int, marker_ratio: float, dictionary):
+    aruco = cast(Any, cv2.aruco)
     mr = float(marker_ratio)
     if mr <= 0.0 or mr >= 1.0:
         raise ValueError("marker-ratio must be in (0, 1)")
-    if hasattr(cv2.aruco, "CharucoBoard"):
-        return cv2.aruco.CharucoBoard((int(squares_x), int(squares_y)), 1.0, mr, dictionary)
-    return cv2.aruco.CharucoBoard_create(int(squares_x), int(squares_y), 1.0, mr, dictionary)
+    if hasattr(aruco, "CharucoBoard"):
+        return aruco.CharucoBoard((int(squares_x), int(squares_y)), 1.0, mr, dictionary)
+    return aruco.CharucoBoard_create(int(squares_x), int(squares_y), 1.0, mr, dictionary)
 
 
 def _draw_charuco_image(squares_x: int, squares_y: int, cell_px: int, marker_ratio: float, dict_name: str, invert: bool) -> np.ndarray:
     dictionary = _dictionary_by_name(dict_name)
     board = _make_charuco_board(squares_x, squares_y, marker_ratio, dictionary)
+    board_any = cast(Any, board)
     width = int(squares_x) * int(cell_px)
     height = int(squares_y) * int(cell_px)
-    if hasattr(board, "generateImage"):
-        img = board.generateImage((width, height), marginSize=0, borderBits=1)
+    if hasattr(board_any, "generateImage"):
+        img = board_any.generateImage((width, height), marginSize=0, borderBits=1)
     else:
-        img = board.draw((width, height), marginSize=0, borderBits=1)
+        img = board_any.draw((width, height), marginSize=0, borderBits=1)
     out = np.asarray(img, dtype=np.uint8)
     if out.ndim == 3:
         out = cv2.cvtColor(out, cv2.COLOR_BGR2GRAY)
