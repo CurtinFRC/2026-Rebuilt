@@ -26,7 +26,7 @@ from lib.fuel_estimator import (
 from lib.nt_client import VisionNTClient
 from lib.pipelines import VisionPipeline, build_pipeline
 from lib.publisher import FieldVisionPublisher
-from lib.runtime_types import CameraInfoOut, FieldObject, TrackedDetection
+from lib.runtime_types import CameraInfoOut, Detection2D, FieldObject, TrackedDetection
 from lib.tracker import DetectionTracker
 
 
@@ -310,6 +310,152 @@ def _compose_display_window(frames: list[np.ndarray]) -> np.ndarray:
     return out
 
 
+def _iou_xyxy(
+    a_x1: float,
+    a_y1: float,
+    a_x2: float,
+    a_y2: float,
+    b_x1: float,
+    b_y1: float,
+    b_x2: float,
+    b_y2: float,
+) -> float:
+    ix1 = max(float(a_x1), float(b_x1))
+    iy1 = max(float(a_y1), float(b_y1))
+    ix2 = min(float(a_x2), float(b_x2))
+    iy2 = min(float(a_y2), float(b_y2))
+    iw = max(0.0, ix2 - ix1)
+    ih = max(0.0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0.0:
+        return 0.0
+    area_a = max(0.0, float(a_x2) - float(a_x1)) * max(0.0, float(a_y2) - float(a_y1))
+    area_b = max(0.0, float(b_x2) - float(b_x1)) * max(0.0, float(b_y2) - float(b_y1))
+    denom = area_a + area_b - inter
+    if denom <= 0.0:
+        return 0.0
+    return inter / denom
+
+
+def _refine_fuel_detection_box(hsv_frame: np.ndarray, det: Detection2D) -> Detection2D:
+    h, w = hsv_frame.shape[:2]
+    x1 = int(max(0, min(w - 1, int(math.floor(float(det.x1))))))
+    y1 = int(max(0, min(h - 1, int(math.floor(float(det.y1))))))
+    x2 = int(max(0, min(w, int(math.ceil(float(det.x2))))))
+    y2 = int(max(0, min(h, int(math.ceil(float(det.y2))))))
+    roi_w = x2 - x1
+    roi_h = y2 - y1
+    if roi_w < 4 or roi_h < 4:
+        return det
+
+    hsv_roi = hsv_frame[y1:y2, x1:x2]
+    if hsv_roi.size == 0:
+        return det
+
+    # Mask yellow-ish fuel tones. Thresholds are intentionally broad to tolerate lighting shifts.
+    yellow = cv2.inRange(hsv_roi, (12, 55, 45), (45, 255, 255))
+    if cv2.countNonZero(yellow) <= 0:
+        return det
+    k = np.ones((3, 3), dtype=np.uint8)
+    yellow = cv2.morphologyEx(yellow, cv2.MORPH_OPEN, k)
+    yellow = cv2.morphologyEx(yellow, cv2.MORPH_CLOSE, k)
+
+    contours, _ = cv2.findContours(yellow, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return det
+
+    roi_area = float(roi_w * roi_h)
+    min_area = max(12.0, 0.01 * roi_area)
+    roi_cx = 0.5 * float(roi_w)
+    roi_cy = 0.5 * float(roi_h)
+
+    best: tuple[np.ndarray, int, int, int, int, float, float] | None = None
+    best_score = float("-inf")
+    for c in contours:
+        area = float(cv2.contourArea(c))
+        if area < min_area:
+            continue
+        peri = float(cv2.arcLength(c, True))
+        if peri <= 1e-6:
+            continue
+        bx, by, bw, bh = cv2.boundingRect(c)
+        if bw < 2 or bh < 2:
+            continue
+        circularity = float(4.0 * math.pi * area / max(1e-9, peri * peri))
+        aspect = float(min(bw, bh)) / float(max(bw, bh))
+        fill = float(area) / float(max(1, bw * bh))
+        ccx = float(bx) + 0.5 * float(bw)
+        ccy = float(by) + 0.5 * float(bh)
+        center_norm = math.hypot(
+            (ccx - roi_cx) / max(1.0, float(roi_w)),
+            (ccy - roi_cy) / max(1.0, float(roi_h)),
+        )
+        score = area * (1.0 + 0.50 * max(0.0, min(1.0, circularity)) + 0.35 * aspect + 0.20 * fill) - 0.25 * area * center_norm
+        if score > best_score:
+            best_score = score
+            best = (c, bx, by, bw, bh, aspect, circularity)
+
+    if best is None:
+        return det
+
+    best_contour, bx, by, bw, bh, aspect, circularity = best
+    (cx_roi, cy_roi), radius = cv2.minEnclosingCircle(best_contour)
+    if float(radius) <= 1.0:
+        return det
+    side = max(float(max(bw, bh)), float(2.0 * radius))
+    side *= 1.08 if (circularity >= 0.45 and aspect >= 0.45) else 1.15
+    side = min(side, 1.10 * float(max(roi_w, roi_h)))
+
+    cx = float(x1) + float(cx_roi)
+    cy = float(y1) + float(cy_roi)
+    rx1 = max(0.0, min(float(w - 1), cx - 0.5 * side))
+    ry1 = max(0.0, min(float(h - 1), cy - 0.5 * side))
+    rx2 = max(0.0, min(float(w), cx + 0.5 * side))
+    ry2 = max(0.0, min(float(h), cy + 0.5 * side))
+    if rx2 - rx1 < 4.0 or ry2 - ry1 < 4.0:
+        return det
+
+    orig_area = max(1e-6, (float(det.x2) - float(det.x1)) * (float(det.y2) - float(det.y1)))
+    new_area = max(1e-6, (rx2 - rx1) * (ry2 - ry1))
+    area_ratio = new_area / orig_area
+    if area_ratio < 0.08 or area_ratio > 1.50:
+        return det
+    if _iou_xyxy(float(det.x1), float(det.y1), float(det.x2), float(det.y2), rx1, ry1, rx2, ry2) < 0.15:
+        return det
+
+    meta = dict(det.metadata) if det.metadata else {}
+    meta["bbox_refined"] = True
+    meta["bbox_refiner"] = "yellow_ball"
+    return Detection2D(
+        class_id=int(det.class_id),
+        confidence=float(det.confidence),
+        x1=float(rx1),
+        y1=float(ry1),
+        x2=float(rx2),
+        y2=float(ry2),
+        pipeline=str(det.pipeline),
+        metadata=meta,
+    )
+
+
+def _refine_fuel_detections(
+    frame_bgr: np.ndarray,
+    detections: list[Detection2D],
+    class_map: ClassMap,
+) -> list[Detection2D]:
+    if frame_bgr is None or frame_bgr.size == 0 or not detections:
+        return detections
+    hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+    out: list[Detection2D] = []
+    for det in detections:
+        cls = class_map.get(det.class_id)
+        if not cls.enabled or cls.estimator.strip().lower() != "fuel":
+            out.append(det)
+            continue
+        out.append(_refine_fuel_detection_box(hsv, det))
+    return out
+
+
 def run(config_path: str | None = None, display: bool = False) -> None:
     cfg = load_runtime_config(config_path)
     class_map = ClassMap.from_file(cfg.class_map_path)
@@ -344,6 +490,7 @@ def run(config_path: str | None = None, display: bool = False) -> None:
                         display_frames.append(empty)
                     continue
                 detections = cam.pipeline.run(frame, t0)
+                detections = _refine_fuel_detections(frame, detections, class_map)
                 tracked = tracker.update(
                     camera_name=cam.cfg.name,
                     detections=detections,

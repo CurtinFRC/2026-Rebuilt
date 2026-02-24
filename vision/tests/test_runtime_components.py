@@ -5,8 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 from lib.class_map import ClassMap
 from lib.publisher import FieldVisionPublisher
+from lib.runtime import _refine_fuel_detections
 from lib.runtime_types import CameraInfoOut, Detection2D, FieldObject
 from lib.tracker import DetectionTracker
 
@@ -93,6 +97,63 @@ class TestRuntimeComponents(unittest.TestCase):
         self.assertEqual(len(t0), 1)
         self.assertEqual(len(t1), 1)
         self.assertEqual(t0[0].oid, t1[0].oid)
+
+    def test_refine_fuel_detections_tightens_yellow_ball_box(self):
+        raw = {
+            "default": {"type": "unknown", "enabled": False, "oid_prefix": "obj"},
+            "classes": {
+                "0": {"type": "fuel", "oid_prefix": "fuel", "estimator": "fuel", "enabled": True},
+            },
+        }
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "classes.json"
+            p.write_text(json.dumps(raw), encoding="utf-8")
+            cm = ClassMap.from_file(p)
+            frame = np.zeros((220, 220, 3), dtype=np.uint8)
+            cv2.circle(frame, (110, 130), 28, (0, 240, 240), thickness=-1)
+            det = Detection2D(
+                class_id=0,
+                confidence=0.95,
+                x1=40.0,
+                y1=60.0,
+                x2=190.0,
+                y2=205.0,
+                pipeline="yolo",
+            )
+            refined = _refine_fuel_detections(frame, [det], cm)[0]
+            self.assertTrue(refined.metadata.get("bbox_refined", False))
+            old_area = (det.x2 - det.x1) * (det.y2 - det.y1)
+            new_area = (refined.x2 - refined.x1) * (refined.y2 - refined.y1)
+            self.assertLess(new_area, old_area * 0.55)
+            cx = 0.5 * (refined.x1 + refined.x2)
+            cy = 0.5 * (refined.y1 + refined.y2)
+            self.assertLess(abs(cx - 110.0), 12.0)
+            self.assertLess(abs(cy - 130.0), 12.0)
+
+    def test_refine_fuel_detections_skips_non_fuel_classes(self):
+        raw = {
+            "default": {"type": "unknown", "enabled": False, "oid_prefix": "obj"},
+            "classes": {
+                "1": {"type": "robot", "oid_prefix": "robot", "estimator": "plane", "enabled": True},
+            },
+        }
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "classes.json"
+            p.write_text(json.dumps(raw), encoding="utf-8")
+            cm = ClassMap.from_file(p)
+            frame = np.zeros((120, 160, 3), dtype=np.uint8)
+            cv2.circle(frame, (80, 80), 20, (0, 240, 240), thickness=-1)
+            det = Detection2D(
+                class_id=1,
+                confidence=0.90,
+                x1=30.0,
+                y1=30.0,
+                x2=140.0,
+                y2=110.0,
+                pipeline="yolo",
+            )
+            out = _refine_fuel_detections(frame, [det], cm)
+            self.assertEqual(out[0], det)
 
 
 if __name__ == "__main__":
