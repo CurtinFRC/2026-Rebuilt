@@ -1,7 +1,14 @@
-# Instrucions:
-Install python (either from microsoft store or python.org)
+# Instruction:
+Install python if not:
+- https://www.python.org/downloads/
+- https://apps.microsoft.com/detail/9pnrbtzxmb4z?hl=en-US&gl=AU
+
+
 Open directory in VS and open terminal and run
-`pip install -r requirements.txt`
-then to run it click on:
-`python main.pyw`
-on file explorer
+```bash
+pip install -r requirements.txt
+```
+then to run it enter in terminal:
+```bash
+python main.pyw
+```
