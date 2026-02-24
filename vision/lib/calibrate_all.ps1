@@ -1,55 +1,36 @@
-param(
-  [ValidateSet("charuco","checkerboard")]
-  [string]$Pattern = "charuco",
-  [int]$Camera = 0,
-  [int]$Width = 1280,
-  [int]$Height = 720,
-  [double]$Fps = 20.0,
-  [int]$Cols = 9,
-  [int]$Rows = 6,
-  [double]$SquareMm = 25.0,
-  [double]$MarkerRatio = 0.70,
-  [string]$ArucoDict = "DICT_5X5_1000",
-  [int]$MinCharucoCorners = 14,
-  [string]$Page = "A4",
-  [string]$Orientation = "auto",
-  [double]$MarginMm = 10.0,
-  [string]$OutDir = "calib_images",
-  [string]$Prefix = "calib",
-  [string]$Ext = "png",
-  [double]$IntervalS = 1.0,
-  [int]$TargetCount = 30,
-  [string]$OutPdf = "calibration_board.pdf",
-  [string]$OutPng = "calibration_board.png",
-  [string]$OutJson = "calibration.json",
-  [switch]$ManualCapture,
-  [switch]$ShowUsed
-)
-
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
-$boardScript = Join-Path $PSScriptRoot "calibration_board_pdf.py"
+
+$Pattern = "charuco"
+$Camera = 0
+$Width = 1280
+$Height = 720
+$Fps = 20.0
+$Cols = 9
+$Rows = 6
+$SquareMm = 25.0
+$MarkerRatio = 0.70
+$ArucoDict = "DICT_5X5_1000"
+$MinCharucoCorners = 14
+$OutDir = "calib_images"
+$Prefix = "calib"
+$Ext = "png"
+$IntervalS = 1.0
+$TargetCount = 50
+$MinSharpness = 120.0
+$MinCoverage = 0.05
+$MinDiversity = 0.10
+$MaxPerViewError = 0.90
+$MadMult = 2.2
+$MinViewsAfterPrune = 16
+$DistModel = "rational"
+$ZeroTangent = $false
+$AutoCapture = $true
+$ManualIgnoreQuality = $false
+$ShowUsed = $true
+$OutJson = "calibration.json"
+
 $captureScript = Join-Path $PSScriptRoot "calibration_capture.py"
 $solveScript = Join-Path $PSScriptRoot "calibration_solve.py"
-
-$boardArgs = @(
-  $boardScript,
-  "--pattern", "$Pattern",
-  "--cols", "$Cols",
-  "--rows", "$Rows",
-  "--square-mm", "$SquareMm",
-  "--marker-ratio", "$MarkerRatio",
-  "--aruco-dict", "$ArucoDict",
-  "--page", "$Page",
-  "--orientation", "$Orientation",
-  "--margin-mm", "$MarginMm",
-  "--out-pdf", "$OutPdf"
-)
-if ([string]::IsNullOrWhiteSpace($OutPng) -eq $false) {
-  $boardArgs += @("--out-png", "$OutPng")
-}
-python @boardArgs
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $captureArgs = @(
   $captureScript,
@@ -63,14 +44,20 @@ $captureArgs = @(
   "--marker-ratio", "$MarkerRatio",
   "--aruco-dict", "$ArucoDict",
   "--min-charuco-corners", "$MinCharucoCorners",
+  "--min-sharpness", "$MinSharpness",
+  "--min-coverage", "$MinCoverage",
+  "--min-diversity", "$MinDiversity",
   "--out-dir", "$OutDir",
   "--prefix", "$Prefix",
   "--ext", "$Ext",
   "--interval-s", "$IntervalS",
   "--target-count", "$TargetCount"
 )
-if (-not $ManualCapture.IsPresent) {
+if ($AutoCapture) {
   $captureArgs += "--auto"
+}
+if ($ManualIgnoreQuality) {
+  $captureArgs += "--manual-ignore-quality"
 }
 python @captureArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -85,9 +72,18 @@ $solveArgs = @(
   "--marker-ratio", "$MarkerRatio",
   "--aruco-dict", "$ArucoDict",
   "--min-charuco-corners", "$MinCharucoCorners",
+  "--min-sharpness", "$MinSharpness",
+  "--min-coverage", "$MinCoverage",
+  "--max-per-view-error", "$MaxPerViewError",
+  "--mad-mult", "$MadMult",
+  "--min-views-after-prune", "$MinViewsAfterPrune",
+  "--dist-model", "$DistModel",
   "--out-json", "$OutJson"
 )
-if ($ShowUsed.IsPresent) {
+if ($ZeroTangent) {
+  $solveArgs += "--zero-tangent"
+}
+if ($ShowUsed) {
   $solveArgs += "--show-used"
 }
 python @solveArgs
