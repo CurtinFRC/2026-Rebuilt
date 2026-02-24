@@ -1,3 +1,7 @@
 numpy>=1.23
 opencv-python
 robotpy
+roboflow
+tensorboard
+ultralytics
+tensorflow

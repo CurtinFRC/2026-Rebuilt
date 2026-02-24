@@ -77,7 +77,7 @@ final class DragShotPlannerObstacles {
         return false;
       }
 
-      if (!(x < minBand || x > maxBand) && checkBounds) {
+      if (!(x < minBand && x > maxBand) && !checkBounds) {
         return false;
       }
 
