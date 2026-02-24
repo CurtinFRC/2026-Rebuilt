@@ -121,8 +121,18 @@ def _read_calibration(raw: Any, width: int, height: int, hfov_deg: float, vfov_d
     return K, dist
 
 
+def _default_runtime_config_path() -> str:
+    env_path = os.getenv("VISION_CONFIG")
+    if env_path:
+        return env_path
+    for candidate in ("vision/config/runtime.default.json", "vision/config/runtime.json"):
+        if Path(candidate).exists():
+            return candidate
+    return "vision/config/runtime.default.json"
+
+
 def load_runtime_config(path: str | None = None) -> RuntimeConfig:
-    cfg_path = path or os.getenv("VISION_CONFIG", "vision/config/runtime.json")
+    cfg_path = path or _default_runtime_config_path()
     p = Path(cfg_path).resolve()
     raw = json.loads(p.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):

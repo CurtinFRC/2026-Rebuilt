@@ -345,7 +345,7 @@ if [ -z "\$EXE" ]; then
   echo "No compatible vision executable found in \$ROOT/vision-runtime"
   exit 1
 fi
-exec "\$EXE" --config "\$ROOT/vision/config/runtime.json"
+exec "\$EXE" --config "\$ROOT/vision/config/runtime.default.json"
 """
     }
 }

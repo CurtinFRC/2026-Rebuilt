@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -35,6 +36,13 @@ class _CameraRuntime:
     cap: cv2.VideoCapture
     pipeline: VisionPipeline
     calib: CameraCalibration
+
+
+@dataclass(frozen=True)
+class _DisplayDetection:
+    tracked: TrackedDetection
+    type_name: str
+    distance_m: float | None
 
 
 def _open_capture(cfg: CameraRuntimeConfig) -> cv2.VideoCapture:
@@ -195,7 +203,114 @@ def _build_cameras(cfg: RuntimeConfig) -> list[_CameraRuntime]:
     return out
 
 
-def run(config_path: str | None = None) -> None:
+def _color_for_class(class_id: int) -> tuple[int, int, int]:
+    palette: list[tuple[int, int, int]] = [
+        (54, 67, 244),
+        (99, 30, 233),
+        (176, 39, 156),
+        (183, 58, 103),
+        (181, 81, 63),
+        (243, 150, 33),
+        (212, 188, 0),
+        (136, 150, 0),
+        (80, 175, 76),
+        (74, 195, 139),
+        (57, 220, 205),
+        (59, 235, 255),
+    ]
+    return palette[int(class_id) % len(palette)]
+
+
+def _draw_text_with_bg(
+    frame: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    fg: tuple[int, int, int] = (255, 255, 255),
+    bg: tuple[int, int, int] = (10, 10, 10),
+    scale: float = 0.5,
+    thickness: int = 1,
+) -> None:
+    (tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
+    x0 = max(0, int(x))
+    y0 = max(th + baseline + 2, int(y))
+    pad = 3
+    cv2.rectangle(
+        frame,
+        (x0 - pad, y0 - th - baseline - pad),
+        (x0 + tw + pad, y0 + baseline + pad),
+        bg,
+        thickness=-1,
+    )
+    cv2.putText(
+        frame,
+        text,
+        (x0, y0),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        fg,
+        thickness,
+        lineType=cv2.LINE_AA,
+    )
+
+
+def _render_camera_frame(frame: np.ndarray, camera_name: str, detections: list[_DisplayDetection]) -> np.ndarray:
+    out = frame.copy()
+    _draw_text_with_bg(out, f"{camera_name} ({len(detections)} dets)", 8, 20, scale=0.6, thickness=2)
+    for item in detections:
+        d = item.tracked.detection
+        x1 = int(round(float(d.x1)))
+        y1 = int(round(float(d.y1)))
+        x2 = int(round(float(d.x2)))
+        y2 = int(round(float(d.y2)))
+        color = _color_for_class(d.class_id)
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, lineType=cv2.LINE_AA)
+        label = f"{item.type_name} {d.confidence:.2f}"
+        if item.distance_m is not None:
+            label += f" {item.distance_m:.2f}m"
+        _draw_text_with_bg(out, label, x1 + 2, y1 - 4, bg=color)
+        _draw_text_with_bg(out, item.tracked.oid, x1 + 2, y2 + 14, bg=color)
+    return out
+
+
+def _compose_display_window(frames: list[np.ndarray]) -> np.ndarray:
+    if not frames:
+        return np.zeros((240, 320, 3), dtype=np.uint8)
+    n = len(frames)
+    cols = 1 if n == 1 else 2
+    rows = int(math.ceil(float(n) / float(cols)))
+    target_h = 720 if n == 1 else 360
+    resized: list[np.ndarray] = []
+    tile_w = 0
+    for f in frames:
+        h, w = f.shape[:2]
+        if h <= 0 or w <= 0:
+            continue
+        new_w = max(1, int(round((float(w) / float(h)) * float(target_h))))
+        tile_w = max(tile_w, new_w)
+        resized.append(cv2.resize(f, (new_w, target_h), interpolation=cv2.INTER_AREA))
+    if not resized:
+        return np.zeros((240, 320, 3), dtype=np.uint8)
+    padded: list[np.ndarray] = []
+    for f in resized:
+        canvas = np.zeros((target_h, tile_w, 3), dtype=np.uint8)
+        canvas[:, : f.shape[1]] = f
+        padded.append(canvas)
+    while len(padded) < rows * cols:
+        padded.append(np.zeros((target_h, tile_w, 3), dtype=np.uint8))
+    row_imgs: list[np.ndarray] = []
+    for r in range(rows):
+        chunk = padded[r * cols : (r + 1) * cols]
+        row_imgs.append(cv2.hconcat(chunk))
+    out = row_imgs[0] if len(row_imgs) == 1 else cv2.vconcat(row_imgs)
+    max_w = 1800
+    if out.shape[1] > max_w:
+        new_h = max(1, int(round(float(out.shape[0]) * (float(max_w) / float(out.shape[1])))))
+        out = cv2.resize(out, (max_w, new_h), interpolation=cv2.INTER_AREA)
+    return out
+
+
+def run(config_path: str | None = None, display: bool = False) -> None:
     cfg = load_runtime_config(config_path)
     class_map = ClassMap.from_file(cfg.class_map_path)
     nt = VisionNTClient(
@@ -213,13 +328,20 @@ def run(config_path: str | None = None) -> None:
     camera_infos = [_camera_info(c.cfg) for c in cameras]
     dt = 1.0 / max(1e-6, float(cfg.loop_hz))
     try:
+        if display:
+            cv2.namedWindow("Vision Runtime", cv2.WINDOW_NORMAL)
         while True:
             t0 = time.time()
             robot_pose = nt.pose()
             objects: list[FieldObject] = []
+            display_frames: list[np.ndarray] = []
             for cam in cameras:
                 frame = _read_frame(cam)
                 if frame is None:
+                    if display:
+                        empty = np.zeros((240, 320, 3), dtype=np.uint8)
+                        _draw_text_with_bg(empty, f"{cam.cfg.name}: no frame", 8, 22, scale=0.6, thickness=2)
+                        display_frames.append(empty)
                     continue
                 detections = cam.pipeline.run(frame, t0)
                 tracked = tracker.update(
@@ -229,11 +351,25 @@ def run(config_path: str | None = None) -> None:
                     now_s=t0,
                 )
                 cam_pose = _camera_pose_field(cam.cfg, robot_pose)
+                display_detections: list[_DisplayDetection] = []
                 for td in tracked:
                     cls = class_map.get(td.detection.class_id)
                     fo = _to_field_object(td, cls, cam, cam_pose)
                     if fo is not None:
                         objects.append(fo)
+                    distance_m: float | None = None
+                    if fo is not None:
+                        obj = np.array([fo.x, fo.y, fo.z], dtype=np.float64)
+                        distance_m = float(np.linalg.norm(obj - cam_pose.p_f))
+                    display_detections.append(
+                        _DisplayDetection(
+                            tracked=td,
+                            type_name=cls.type_name,
+                            distance_m=distance_m,
+                        )
+                    )
+                if display:
+                    display_frames.append(_render_camera_frame(frame, cam.cfg.name, display_detections))
             publisher.publish(
                 table=table,
                 objects=objects,
@@ -242,6 +378,11 @@ def run(config_path: str | None = None) -> None:
                 max_per_tick=cfg.max_objects_per_tick,
             )
             nt.flush()
+            if display:
+                cv2.imshow("Vision Runtime", _compose_display_window(display_frames))
+                key = int(cv2.waitKey(1) & 0xFF)
+                if key in (27, ord("q")):
+                    break
             VisionNTClient.sleep_dt(dt - (time.time() - t0))
     finally:
         for cam in cameras:
@@ -249,10 +390,16 @@ def run(config_path: str | None = None) -> None:
                 cam.cap.release()
             except Exception:
                 pass
+        if display:
+            try:
+                cv2.destroyWindow("Vision Runtime")
+            except Exception:
+                cv2.destroyAllWindows()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", dest="config", default=None)
+    parser.add_argument("--display", dest="display", action="store_true")
     args = parser.parse_args()
-    run(args.config)
+    run(args.config, display=bool(args.display))
