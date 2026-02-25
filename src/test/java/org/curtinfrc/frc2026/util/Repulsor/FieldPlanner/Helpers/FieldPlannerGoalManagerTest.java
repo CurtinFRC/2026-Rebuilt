@@ -214,6 +214,38 @@ class FieldPlannerGoalManagerTest {
     assertTrue(Math.abs(manager.getGoalTranslation().getX() - requested.getX()) > EPS);
   }
 
+  @Test
+  void doesNotSuppressImmediateExitRestageAfterFirstCorridorStage() {
+    double mid = Constants.FIELD_LENGTH * 0.5;
+
+    GatedAttractorObstacle entryGate =
+        gate(new Translation2d(mid - 3.6, 4.0), new Translation2d(mid - 3.4, 4.0));
+    GatedAttractorObstacle exitWaypoint =
+        new GatedAttractorObstacle(
+            new Translation2d(mid + 3.6, 4.0), 1.0, 5.0, null, null, 1.0, 5.0, true);
+
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(entryGate, exitWaypoint));
+    List<? extends Obstacle> obstacles = List.of(entryGate, exitWaypoint);
+
+    Pose2d requested = new Pose2d(new Translation2d(mid + 6.0, 4.0), Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    Translation2d start = new Translation2d(mid - 6.0, 4.0);
+    assertFalse(manager.updateStagedGoal(start, obstacles));
+    Translation2d firstStage = manager.getGoalTranslation();
+    assertTrue(firstStage.getX() > entryGate.center.getX());
+
+    boolean firstDone = false;
+    for (int i = 0; i < 8; i++) {
+      firstDone = manager.updateStagedGoal(firstStage, obstacles);
+      if (firstDone) break;
+    }
+    assertTrue(firstDone);
+
+    assertFalse(manager.updateStagedGoal(firstStage, obstacles));
+    assertTrue(manager.getGoalTranslation().getX() > firstStage.getX() + 0.5);
+  }
+
   private static GatedAttractorObstacle gate(Translation2d center, Translation2d bypassPoint) {
     Translation2d[] gatePoly =
         new Translation2d[] {

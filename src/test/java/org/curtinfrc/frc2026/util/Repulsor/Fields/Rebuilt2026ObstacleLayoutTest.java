@@ -1,8 +1,10 @@
 package org.curtinfrc.frc2026.util.Repulsor.Fields;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.wpi.first.math.geometry.Translation2d;
+import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractorObstacle;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,25 @@ class Rebuilt2026ObstacleLayoutTest {
     }
 
     assertTrue(checked > 0, "Expected gated bypass points in Rebuilt2026 field obstacles");
+  }
+
+  @Test
+  void waypointGatesAreBalancedOnBothCorridorSides() {
+    Rebuilt2026 field = new Rebuilt2026();
+    double mid = Constants.FIELD_LENGTH * 0.5;
+
+    int left = 0;
+    int right = 0;
+    for (Obstacle obs : field.fieldObstacles()) {
+      if (!(obs instanceof GatedAttractorObstacle gate)) continue;
+      if (!gate.waypoint || gate.center == null) continue;
+      if (gate.center.getX() < mid) left++;
+      else if (gate.center.getX() > mid) right++;
+    }
+
+    assertTrue(left > 0, "Expected left-side corridor waypoint gates");
+    assertTrue(right > 0, "Expected right-side corridor waypoint gates");
+    assertEquals(left, right, "Waypoint gates should be balanced left/right for corridor staging");
   }
 
   private static double pointDistanceToPolygonEdges(Translation2d p, Translation2d[] poly) {

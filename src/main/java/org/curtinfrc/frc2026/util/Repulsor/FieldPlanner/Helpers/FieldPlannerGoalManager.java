@@ -138,10 +138,12 @@ public final class FieldPlannerGoalManager {
 
     boolean stageForOccludingGate =
         firstBlock != null && !shouldDeferCenterReturnStage(curPos, reqT, firstBlock);
-    boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || stageForOccludingGate;
+    boolean stageByBand = shouldStageThroughAttractor(curPos, reqT);
+    boolean shouldStage = stageByBand || stageForOccludingGate;
+    boolean allowImmediateCenterExitRestage = stageByBand && isCenterReturnTransition(curPos, reqT);
     if (stagedComplete && lastStagedPoint != null) {
       double d = curPos.getDistance(lastStagedPoint);
-      if (d < STAGED_RESTAGE_DIST_M && !stageForOccludingGate) {
+      if (d < STAGED_RESTAGE_DIST_M && !stageForOccludingGate && !allowImmediateCenterExitRestage) {
         shouldStage = false;
       } else {
         stagedComplete = false;

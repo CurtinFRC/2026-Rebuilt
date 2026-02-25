@@ -24,8 +24,6 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-
-import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;

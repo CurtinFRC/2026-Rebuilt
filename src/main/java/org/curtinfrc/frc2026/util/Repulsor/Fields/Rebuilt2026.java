@@ -309,7 +309,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapTopY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightPullXOut, gapTopY),
             sideBiasStrength,
@@ -317,7 +318,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapTopY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightPullXIn, gapBottomY),
             sideBiasStrength,
@@ -325,7 +327,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapBottomY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightPullXOut, gapBottomY),
             sideBiasStrength,
@@ -333,7 +336,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             rightGate,
             new Translation2d(rightInsideX, gapBottomY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new CorridorCenterlineRail(
             leftRectX, railXWindow, gapTopY, corridorHalfWidthGuess, railStrength, railMaxForce),
         new CorridorCenterlineRail(
