@@ -30,6 +30,7 @@ public class HoodedShooter extends SubsystemBase {
 
   public static final double READY_SHOOTER_VELOCITY_TOLERANCE = 1.0;
   public static final double READY_HOOD_POSITION_TOLERANCE = 1.0;
+  public static final double READY_ROBOT_ROTATION_TOLERANCE = 5.0;
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
       new InterpolatingDoubleTreeMap();
@@ -61,16 +62,17 @@ public class HoodedShooter extends SubsystemBase {
 
   public final Trigger hoodedShooterReady =
       new Trigger(
-              () ->
-                  Math.abs(
-                              hoodTarget
-                                  - (hoodInputs.encoderPositionRotations
-                                          * 360
-                                          / HoodIODev.GEAR_RATIO
-                                      + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES))
-                          <= READY_HOOD_POSITION_TOLERANCE
-                      && Math.abs(shooterTarget - shooterInputs.velocityMetresPerSecond)
-                          <= READY_SHOOTER_VELOCITY_TOLERANCE)
+              () -> {
+                double hoodPosition =
+                    hoodInputs.encoderPositionRotations * 360 / HoodIODev.GEAR_RATIO
+                        + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES;
+                boolean hoodReady =
+                    Math.abs(hoodTarget - hoodPosition) <= READY_HOOD_POSITION_TOLERANCE;
+                boolean shooterReady =
+                    Math.abs(shooterTarget - shooterInputs.velocityMetresPerSecond)
+                        <= READY_SHOOTER_VELOCITY_TOLERANCE;
+                return hoodReady && shooterReady;
+              })
           .debounce(0.1);
 
   public HoodedShooter(
@@ -142,26 +144,22 @@ public class HoodedShooter extends SubsystemBase {
     }
   }
 
-  public Translation2d getVirtualHubLocation(Supplier<Translation2d> hub_location) {
-    double realDistanceLength =
-        hub_location.get().minus(robotPose.get().getTranslation()).getNorm();
+  public Translation2d getVirtualTargetLocation(Supplier<Translation2d> location) {
+    double realDistanceLength = location.get().minus(robotPose.get().getTranslation()).getNorm();
     Translation2d robotVel =
         new Translation2d(
             robotVelocity.get().vxMetersPerSecond, robotVelocity.get().vyMetersPerSecond);
     double airTime = DISTANCE_TO_BALL_FLIGHT_TIME.get(realDistanceLength);
 
     Translation2d hubCompensationOffset = robotVel.times(-airTime);
-    Translation2d compensatedHubLocation = hub_location.get().plus(hubCompensationOffset);
-    return (realDistanceLength > 1) ? compensatedHubLocation : hub_location.get();
+    Translation2d compensatedHubLocation = location.get().plus(hubCompensationOffset);
+    return (realDistanceLength > 1) ? compensatedHubLocation : location.get();
   }
 
-  public Command shootAtHub(Supplier<Translation2d> hub_location) {
+  public Command shootAtTarget(Supplier<Translation2d> shotLocation) {
     return run(
         () -> {
-          Translation2d hubLocation =
-              ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
-
-          Translation2d compensatedHubLocation = getVirtualHubLocation(() -> hubLocation);
+          Translation2d compensatedHubLocation = getVirtualTargetLocation(shotLocation);
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
@@ -175,13 +173,11 @@ public class HoodedShooter extends SubsystemBase {
           }
 
           double target =
-              Drive.angleToLocation(
-                  this.getVirtualHubLocation(() -> hub_location.get()), robotPose.get());
+              Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
           double robotAngle =
               robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
 
-          // System.out.println(Math.abs(target - robotAngle));
-          if (Math.abs(target - robotAngle) < 5) { // DEGREE ERROR
+          if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
             hoodIO.setPosition(hoodTarget);
             shooterIO.setVelocity(shooterTarget);
           } else {

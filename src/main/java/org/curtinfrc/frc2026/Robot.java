@@ -238,7 +238,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX(),
             () -> controller.rightTrigger().getAsBoolean(),
-            () -> hoodedShooter.getVirtualHubLocation(shuttlePose)));
+            () -> hoodedShooter.getVirtualTargetLocation(shuttlePose)));
 
     // controller // intake and store
     //     .leftBumper()
@@ -259,7 +259,7 @@ public class Robot extends LoggedRobot {
 
     controller // spinup shooter and aim
         .rightTrigger()
-        .onTrue(hoodedShooter.shootAtHub(shuttlePose))
+        .onTrue(hoodedShooter.shootAtTarget(shuttlePose))
         .onFalse(hoodedShooter.stopShooter());
 
     // index balls when shooter and hood ready
