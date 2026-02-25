@@ -165,6 +165,14 @@ public class AutoPathBehaviour extends Behaviour {
     return resolvePlannerGoalPose(setpoint, setpointContext, currentDriverStationAllianceOrBlue());
   }
 
+  static RepulsorSetpoint choosePlannerSetpoint(
+      CategorySpec cat, RepulsorSetpoint desired, RepulsorSetpoint plannerOverride) {
+    if (cat == CategorySpec.kCollect) {
+      return desired != null ? desired : plannerOverride;
+    }
+    return plannerOverride != null ? plannerOverride : desired;
+  }
+
   private Command buildShootReadyCommand(BehaviourContext ctx) {
     return Commands.runOnce(
             () -> {
@@ -337,7 +345,7 @@ public class AutoPathBehaviour extends Behaviour {
                 desired = (hp != null) ? hp : collectRoute;
               }
 
-              RepulsorSetpoint sp = (plannerOverride != null) ? plannerOverride : desired;
+              RepulsorSetpoint sp = choosePlannerSetpoint(cat, desired, plannerOverride);
               lastActive.set(sp);
 
               if (sp == null) {

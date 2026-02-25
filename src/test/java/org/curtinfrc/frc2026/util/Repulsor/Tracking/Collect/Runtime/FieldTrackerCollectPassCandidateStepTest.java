@@ -58,4 +58,43 @@ class FieldTrackerCollectPassCandidateStepTest {
 
     assertSame(best, out);
   }
+
+  @Test
+  void preferRicherCandidatePromotesHigherFuelWhenTravelIsComparable() {
+    Translation2d robot = new Translation2d(1.0, 1.0);
+    Translation2d base = new Translation2d(2.0, 1.0);
+    Translation2d rich = new Translation2d(2.3, 1.0);
+
+    Predicate<Translation2d> collectValid = p -> true;
+    Function<Translation2d, Double> units =
+        p -> Math.abs(p.getX() - rich.getX()) < 1e-9 ? 0.28 : 0.10;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - rich.getX()) < 1e-9 ? 1.85 : 1.90;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferRicherCandidate(
+            base, new Translation2d[] {rich}, robot, 3.0, collectValid, units, score);
+
+    assertEquals(rich.getX(), out.getX(), EPS);
+    assertEquals(rich.getY(), out.getY(), EPS);
+  }
+
+  @Test
+  void preferRicherCandidateKeepsBaseWhenRicherWouldDetourTooFar() {
+    Translation2d robot = new Translation2d(1.0, 1.0);
+    Translation2d base = new Translation2d(2.0, 1.0);
+    Translation2d farRich = new Translation2d(5.6, 1.0);
+
+    Predicate<Translation2d> collectValid = p -> true;
+    Function<Translation2d, Double> units =
+        p -> Math.abs(p.getX() - farRich.getX()) < 1e-9 ? 0.35 : 0.10;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - farRich.getX()) < 1e-9 ? 1.95 : 2.00;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferRicherCandidate(
+            base, new Translation2d[] {farRich}, robot, 3.0, collectValid, units, score);
+
+    assertSame(base, out);
+  }
 }

@@ -21,10 +21,12 @@ package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.CollectProbe;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateRuntime;
@@ -114,6 +116,8 @@ public final class FieldTrackerCollectObjectiveLoop {
 
   public static final double COLLECT_LIVE_FUEL_NEAR_TARGET_R_M = 0.65;
   public static final double COLLECT_LIVE_OBS_MAX_AGE_S = 0.45;
+  public static final double COLLECT_PREDICTOR_OBS_MAX_AGE_S = 0.60;
+  public static final double COLLECT_STICKY_INVALID_DROP_SEC = 0.22;
   public static final double COLLECT_REACHED_EMPTY_FORCE_DROP_SEC = 0.18;
   public static final double COLLECT_REACHED_EMPTY_NEAR_TARGET_M = 0.95;
   public double collectReachedEmptySec = 0.0;
@@ -170,8 +174,8 @@ public final class FieldTrackerCollectObjectiveLoop {
   public static final double COLLECT_VALID_NEAR_FUEL_M = 0.25;
   public static final double COLLECT_RESOURCE_SNAP_MIN_UNITS = 0.07;
 
-  public static final double COLLECT_SNAP_TO_POINT_M = 0.14;
-  public static final double COLLECT_SNAP_HYST_M = 0.06;
+  public static final double COLLECT_SNAP_TO_POINT_M = 0.22;
+  public static final double COLLECT_SNAP_HYST_M = 0.10;
   public boolean collectSnapActive = false;
   public Translation2d collectStickyStillLastPos = new Translation2d();
   public double collectStickyStillSec = 0.0;
@@ -186,6 +190,9 @@ public final class FieldTrackerCollectObjectiveLoop {
   public static final double COLLECT_HOTSPOT_SNAP_RADIUS_M = 0.85;
   public static final double COLLECT_MAX_DRIVE_OFFSET_FROM_FUEL_M = 0.12;
   public static final double COLLECT_SNAP_TO_NEAREST_FUEL_M = 0.22;
+  public static final double COLLECT_FORCE_ON_FUEL_SEARCH_M = 0.40;
+  public static final double COLLECT_FORCE_ON_FUEL_PROBE_R_M = 0.45;
+  public static final double COLLECT_FORCE_ON_FUEL_MIN_UNITS = 0.055;
 
   public void clearCollectSticky() {
     collectStickyPoint = null;
@@ -241,6 +248,18 @@ public final class FieldTrackerCollectObjectiveLoop {
     if (o == null || o.pos == null || o.type == null) return false;
     if (!isCollectType(o.type)) return false;
     return o.ageS <= COLLECT_LIVE_OBS_MAX_AGE_S;
+  }
+
+  public List<DynamicObject> filterDynamicsForCollectPredictor(List<DynamicObject> dyn) {
+    if (dyn == null || dyn.isEmpty()) return List.of();
+    ArrayList<DynamicObject> out = new ArrayList<>(dyn.size());
+    for (int i = 0; i < dyn.size(); i++) {
+      DynamicObject o = dyn.get(i);
+      if (o == null || o.pos == null || o.type == null) continue;
+      if (isCollectType(o.type) && o.ageS > COLLECT_PREDICTOR_OBS_MAX_AGE_S) continue;
+      out.add(o);
+    }
+    return out;
   }
 
   public Translation2d relockCollectPointToLiveFuel(
@@ -375,7 +394,26 @@ public final class FieldTrackerCollectObjectiveLoop {
           snapped2 = clampToFieldRobotSafe.apply(snapped2);
           if (!inForbidden.test(snapped2) && !violatesWall.test(snapped2)) return snapped2;
         }
-        return centroid;
+        CollectProbe probe = predictor.probeCollect(centroid, COLLECT_FORCE_ON_FUEL_PROBE_R_M);
+        if (probe != null && probe.count > 0 && probe.units >= COLLECT_FORCE_ON_FUEL_MIN_UNITS) {
+          return centroid;
+        }
+      }
+    }
+
+    if (collectPoint != null) {
+      Translation2d nearCollect =
+          predictor.nearestCollectResource(
+              collectPoint,
+              Math.max(COLLECT_SNAP_TO_NEAREST_FUEL_M, COLLECT_FORCE_ON_FUEL_SEARCH_M));
+      if (nearCollect != null) {
+        Translation2d snappedCollect = clampToFieldRobotSafe.apply(nearCollect);
+        if (inForbidden.test(snappedCollect))
+          snappedCollect = nudgeOutOfForbidden.apply(snappedCollect);
+        snappedCollect = clampToFieldRobotSafe.apply(snappedCollect);
+        if (!inForbidden.test(snappedCollect) && !violatesWall.test(snappedCollect)) {
+          return snappedCollect;
+        }
       }
     }
 

@@ -35,6 +35,10 @@ public final class FieldTrackerCollectPassCandidateStep {
   private FieldTrackerCollectPassCandidateStep() {}
 
   static final double CANONICAL_SCORE_DROP_LIMIT = 0.12;
+  static final double RICHER_UNITS_ABS_GAIN = 0.07;
+  static final double RICHER_UNITS_REL_GAIN = 1.45;
+  static final double RICHER_ETA_DELTA_MAX_S = 0.95;
+  static final double RICHER_SCORE_DROP_LIMIT = 0.30;
 
   static Translation2d maybeCanonicalizeCandidate(
       Translation2d bestCandidate,
@@ -54,6 +58,57 @@ public final class FieldTrackerCollectPassCandidateStep {
     return canonicalized;
   }
 
+  static Translation2d preferRicherCandidate(
+      Translation2d bestCandidate,
+      Translation2d[] usePts,
+      Translation2d robotPos,
+      double cap,
+      Predicate<Translation2d> collectValid,
+      Function<Translation2d, Double> collectUnits,
+      Function<Translation2d, Double> scoreResource) {
+    if (bestCandidate == null || usePts == null || usePts.length == 0 || robotPos == null) {
+      return bestCandidate;
+    }
+    if (!collectValid.test(bestCandidate)) return bestCandidate;
+
+    double safeCap = Math.max(0.2, cap);
+    double baseUnits = collectUnits.apply(bestCandidate);
+    double baseScore = scoreResource.apply(bestCandidate);
+    double baseEta = robotPos.getDistance(bestCandidate) / safeCap;
+
+    Translation2d richest = bestCandidate;
+    double richestUnits = baseUnits;
+    double richestScore = baseScore;
+    double richestEta = baseEta;
+
+    for (Translation2d p : usePts) {
+      if (p == null || !collectValid.test(p)) continue;
+
+      double u = collectUnits.apply(p);
+      if (u < richestUnits + 1e-9) continue;
+
+      double s = scoreResource.apply(p);
+      double eta = robotPos.getDistance(p) / safeCap;
+      if (u > richestUnits + 1e-9
+          || (Math.abs(u - richestUnits) <= 1e-9 && s > richestScore + 1e-9)) {
+        richest = p;
+        richestUnits = u;
+        richestScore = s;
+        richestEta = eta;
+      }
+    }
+
+    if (richest.getDistance(bestCandidate) <= 1e-6) return bestCandidate;
+
+    boolean significantlyRicher =
+        richestUnits >= baseUnits + RICHER_UNITS_ABS_GAIN
+            || richestUnits >= baseUnits * RICHER_UNITS_REL_GAIN;
+    boolean etaAcceptable = richestEta <= baseEta + RICHER_ETA_DELTA_MAX_S;
+    boolean scoreAcceptable = richestScore >= baseScore - RICHER_SCORE_DROP_LIMIT;
+    if (significantlyRicher && etaAcceptable && scoreAcceptable) return richest;
+    return bestCandidate;
+  }
+
   public static FieldTrackerCollectPassCandidateResult choose(
       FieldTrackerCollectObjectiveLoop loop, FieldTrackerCollectPassContext ctx, int goalUnits) {
     HashMap<Long, CollectProbe> probeCache = new HashMap<>(512);
@@ -71,8 +126,7 @@ public final class FieldTrackerCollectPassCandidateStep {
     if (ctx.dynUse() != null && !ctx.dynUse().isEmpty()) {
       for (int i = 0; i < ctx.dynUse().size(); i++) {
         var o = ctx.dynUse().get(i);
-        if (o == null || o.type == null || o.pos == null) continue;
-        if (loop.isCollectType(o.type)) {
+        if (loop.isFreshCollectObservation(o)) {
           hasLiveCollectDynamics = true;
           break;
         }
@@ -435,6 +489,16 @@ public final class FieldTrackerCollectPassCandidateStep {
       double sb = scoreResource.apply(bestCandidate);
       if (sr >= sb - 0.04) bestCandidate = relockCand;
     }
+
+    bestCandidate =
+        preferRicherCandidate(
+            bestCandidate,
+            ctx.usePts(),
+            ctx.robotPos(),
+            ctx.cap(),
+            collectValid,
+            collectUnits,
+            scoreResource);
 
     bestCandidate =
         maybeCanonicalizeCandidate(bestCandidate, ctx.usePts(), collectValid, scoreResource);

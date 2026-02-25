@@ -226,6 +226,38 @@ public final class FieldTrackerCollectPassDriveStep {
             desiredDriveTarget,
             FieldTrackerCollectObjectiveLoop.COLLECT_LIVE_FUEL_NEAR_TARGET_R_M);
 
+    if (driveLooksEmpty
+        && liveFuelNearTarget > 0
+        && desiredCollectPoint != null
+        && cand.collectValid().test(desiredCollectPoint)) {
+      Translation2d reanchored =
+          loop.forceDriveTargetOntoFuel(
+              ctx.robotPos(),
+              ctx.cap(),
+              desiredCollectPoint,
+              desiredCollectPoint,
+              ctx.clampToFieldRobotSafe(),
+              ctx.inForbidden(),
+              ctx.violatesWall(),
+              ctx.nudgeOutOfForbidden());
+      if (reanchored != null) {
+        desiredDriveTarget = reanchored;
+        loop.collectStickyDriveTarget = reanchored;
+        drivePr =
+            loop.predictor.probeCollect(
+                desiredDriveTarget, FieldTrackerCollectObjectiveLoop.COLLECT_EMPTY_DRIVE_PROBE_R_M);
+        driveLooksEmpty =
+            drivePr == null
+                || drivePr.count <= 0
+                || drivePr.units < FieldTrackerCollectObjectiveLoop.COLLECT_EMPTY_DRIVE_MIN_UNITS;
+        liveFuelNearTarget =
+            loop.countLiveCollectResourcesWithin(
+                ctx.dynUse(),
+                desiredDriveTarget,
+                FieldTrackerCollectObjectiveLoop.COLLECT_LIVE_FUEL_NEAR_TARGET_R_M);
+      }
+    }
+
     boolean nearTarget =
         ctx.robotPos().getDistance(desiredDriveTarget)
             <= FieldTrackerCollectObjectiveLoop.COLLECT_REACHED_EMPTY_NEAR_TARGET_M;

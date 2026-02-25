@@ -1,6 +1,7 @@
 package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
@@ -31,5 +32,39 @@ class FieldTrackerCollectObjectiveLoopTest {
 
     int n = loop.countLiveCollectResourcesWithin(dyn, center, 0.10);
     assertEquals(1, n);
+  }
+
+  @Test
+  void filterDynamicsForCollectPredictorDropsOnlyStaleCollectObservations() {
+    FieldTrackerCollectObjectiveLoop loop =
+        new FieldTrackerCollectObjectiveLoop(
+            null,
+            () -> new Translation2d[] {new Translation2d(1.0, 2.0)},
+            List::of,
+            type -> "fuel".equalsIgnoreCase(type));
+
+    DynamicObject staleFuel =
+        new DynamicObject(
+            "stale",
+            "fuel",
+            new Translation2d(1.0, 2.0),
+            new Translation2d(),
+            FieldTrackerCollectObjectiveLoop.COLLECT_PREDICTOR_OBS_MAX_AGE_S + 0.20);
+    DynamicObject freshFuel =
+        new DynamicObject("fresh", "fuel", new Translation2d(1.1, 2.0), new Translation2d(), 0.10);
+    DynamicObject staleOther =
+        new DynamicObject(
+            "other",
+            "robot",
+            new Translation2d(2.0, 2.0),
+            new Translation2d(),
+            FieldTrackerCollectObjectiveLoop.COLLECT_PREDICTOR_OBS_MAX_AGE_S + 0.40);
+
+    List<DynamicObject> filtered =
+        loop.filterDynamicsForCollectPredictor(List.of(staleFuel, freshFuel, staleOther));
+
+    assertEquals(2, filtered.size());
+    assertTrue(filtered.contains(freshFuel));
+    assertTrue(filtered.contains(staleOther));
   }
 }

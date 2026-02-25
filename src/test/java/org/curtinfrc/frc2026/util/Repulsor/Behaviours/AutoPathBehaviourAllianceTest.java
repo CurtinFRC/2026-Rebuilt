@@ -7,6 +7,7 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.DriverStation;
 import java.util.concurrent.atomic.AtomicReference;
+import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.GameSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.MutablePoseSetpoint;
@@ -70,6 +71,32 @@ class AutoPathBehaviourAllianceTest {
 
     assertPoseNear(collectBluePose, blueGoal);
     assertPoseNear(collectBluePose, redGoal);
+  }
+
+  @Test
+  void choosePlannerSetpointIgnoresPlannerOverrideForCollect() {
+    RepulsorSetpoint desired =
+        fixedScoreSetpoint("DESIRED", new Pose2d(2.0, 2.0, Rotation2d.fromDegrees(0.0)));
+    RepulsorSetpoint plannerOverride =
+        fixedScoreSetpoint("OVERRIDE", new Pose2d(7.0, 3.0, Rotation2d.fromDegrees(0.0)));
+
+    RepulsorSetpoint out =
+        AutoPathBehaviour.choosePlannerSetpoint(CategorySpec.kCollect, desired, plannerOverride);
+
+    assertEquals(desired, out);
+  }
+
+  @Test
+  void choosePlannerSetpointUsesPlannerOverrideForScore() {
+    RepulsorSetpoint desired =
+        fixedScoreSetpoint("DESIRED", new Pose2d(2.0, 2.0, Rotation2d.fromDegrees(0.0)));
+    RepulsorSetpoint plannerOverride =
+        fixedScoreSetpoint("OVERRIDE", new Pose2d(7.0, 3.0, Rotation2d.fromDegrees(0.0)));
+
+    RepulsorSetpoint out =
+        AutoPathBehaviour.choosePlannerSetpoint(CategorySpec.kScore, desired, plannerOverride);
+
+    assertEquals(plannerOverride, out);
   }
 
   private static RepulsorSetpoint fixedScoreSetpoint(String name, Pose2d bluePose) {

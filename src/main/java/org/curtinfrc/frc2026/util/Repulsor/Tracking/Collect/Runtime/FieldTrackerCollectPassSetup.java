@@ -212,9 +212,9 @@ public final class FieldTrackerCollectPassSetup {
       }
     }
 
-    List<DynamicObject> dynUse = dynAll;
+    List<DynamicObject> dynUse = loop.filterDynamicsForCollectPredictor(dynAll);
 
-    loop.predictor.setDynamicObjects(dynAll);
+    loop.predictor.setDynamicObjects(dynUse);
 
     long nowNs = System.nanoTime();
     long prevNs = loop.lastObjectiveTickNs;

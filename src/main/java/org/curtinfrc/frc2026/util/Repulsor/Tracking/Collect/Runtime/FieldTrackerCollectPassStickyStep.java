@@ -234,7 +234,9 @@ public final class FieldTrackerCollectPassStickyStep {
       }
       loop.collectStickyInvalidSec += ctx.dt();
 
-      if (loop.collectStickyInvalidSec >= 0.55 && pass == 0) {
+      if (loop.collectStickyInvalidSec
+              >= FieldTrackerCollectObjectiveLoop.COLLECT_STICKY_INVALID_DROP_SEC
+          && pass == 0) {
         loop.predictor.markCollectDepleted(
             desiredCollectPoint, FieldTrackerCollectObjectiveLoop.COLLECT_CELL_M, 1.0);
         loop.clearCollectSticky();
