@@ -273,6 +273,27 @@ class FieldPlannerGoalManagerTest {
     assertTrue(sawExit);
   }
 
+  @Test
+  void entryStageAdvancesToExitQuicklyWhenRobotGetsNearEntryPoint() {
+    GatedAttractorObstacle gate = gate(new Translation2d(8.0, 4.0), new Translation2d(8.2, 4.0));
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
+    List<? extends Obstacle> obstacles = List.of(gate);
+
+    Pose2d requested = new Pose2d(new Translation2d(12.0, 4.0), Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    assertFalse(manager.updateStagedGoal(new Translation2d(6.0, 4.0), obstacles));
+    Translation2d entry = manager.getGoalTranslation();
+    assertTrue(entry.getX() < gate.center.getX());
+
+    Translation2d nearEntry = new Translation2d(entry.getX() + 0.10, entry.getY());
+    assertFalse(manager.updateStagedGoal(nearEntry, obstacles));
+
+    assertTrue(
+        manager.getGoalTranslation().getX() > gate.center.getX(),
+        "Expected immediate advance to exit waypoint after reaching near entry");
+  }
+
   private static GatedAttractorObstacle gate(Translation2d center, Translation2d bypassPoint) {
     Translation2d[] gatePoly =
         new Translation2d[] {

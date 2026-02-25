@@ -36,8 +36,11 @@ public final class FieldPlannerGoalManager {
 
   private static final double STAGED_REACH_ENTER_M = 0.35;
   private static final double STAGED_REACH_EXIT_M = 0.55;
+  private static final double STAGED_ENTRY_REACH_ENTER_M = 0.50;
+  private static final double STAGED_ENTRY_PASSED_PROJ_M = 0.06;
   private static final double STAGED_GATE_CLEAR_EXIT_M = 0.40;
   private static final int STAGED_REACH_TICKS = 3;
+  private static final int STAGED_ENTRY_REACH_TICKS = 1;
   private static final int STAGED_GATE_CLEAR_TICKS = 2;
 
   private static final int STAGED_MAX_TICKS = 40;
@@ -214,15 +217,21 @@ public final class FieldPlannerGoalManager {
 
       Translation2d liveTarget = stagedAttractor;
       if (liveTarget == null) liveTarget = stagedAttractor;
+      double passedProjMeters =
+          stagedExitPhase ? STAGED_PASSED_TARGET_PROJ_M : STAGED_ENTRY_PASSED_PROJ_M;
       boolean passedLiveTargetTowardGoal =
-          hasPassedPointTowardGoal(curPos, liveTarget, reqT, STAGED_PASSED_TARGET_PROJ_M);
+          hasPassedPointTowardGoal(curPos, liveTarget, reqT, passedProjMeters);
 
       double d = curPos.getDistance(liveTarget);
 
-      if (d <= STAGED_REACH_ENTER_M) stagedReachTicks++;
+      double reachEnter = stagedExitPhase ? STAGED_REACH_ENTER_M : STAGED_ENTRY_REACH_ENTER_M;
+      int reachTicksRequired = stagedExitPhase ? STAGED_REACH_TICKS : STAGED_ENTRY_REACH_TICKS;
+
+      if (d <= reachEnter) stagedReachTicks++;
       else if (d >= STAGED_REACH_EXIT_M) stagedReachTicks = 0;
 
-      boolean reached = stagedReachTicks >= STAGED_REACH_TICKS;
+      boolean reached = stagedReachTicks >= reachTicksRequired;
+      if (!reached && !stagedExitPhase && passedLiveTargetTowardGoal) reached = true;
 
       if (stagedGate != null) {
         boolean gateOccludingNow =
