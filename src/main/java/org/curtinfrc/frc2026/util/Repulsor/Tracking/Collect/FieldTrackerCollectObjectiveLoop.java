@@ -24,6 +24,8 @@ import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+
+import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.DynamicObject;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
@@ -292,6 +294,7 @@ public final class FieldTrackerCollectObjectiveLoop {
   }
 
   public Pose2d fallbackCollectPose(Pose2d robotPoseBlue) {
+    // return new Pose2d(Constants.FIELD_LENGTH / 2, Constants.FIELD_WIDTH / 2, new Rotation2d());
     Translation2d p =
         collectStickyDriveTarget != null ? collectStickyDriveTarget : collectStickyPoint;
     if (p == null && lastBest != null) p = lastBest.point;

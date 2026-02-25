@@ -118,6 +118,7 @@ class SceneRenderer:
         self._col_us = (1, 0.27, 0, 0.75)
         self._col_active = (0.15, 0.9, 0.3, 0.9)
         self._col_chosen_collect = (0.15, 0.3, 0.9, 0.9)
+        self._col_final_collect = (0.9, 0.3, 0.15, 0.9)
         self._col_heading = (1.0, 0.1, 0.1, 0.9)
         self._col_cam = (0.20, 0.75, 1.0, 0.85)
         self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
@@ -430,6 +431,16 @@ class SceneRenderer:
         cz = self._field_z + (self._robot_h * 0.5)
         yaw_deg = float(pose3.rotation().degrees())
         draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_chosen_collect)
+
+        pose4 = snap.final_collect
+        if pose4 is None:
+            return
+
+        cx = float(pose4.x)
+        cy = float(pose4.y)
+        cz = self._field_z + (self._robot_h * 0.5)
+        yaw_deg = float(pose4.rotation().degrees())
+        draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_final_collect)
 
     def _draw_robot_heading_arrow(self, cx: float, cy: float, yaw_deg: float) -> None:
         yaw_rad = math.radians(float(yaw_deg))

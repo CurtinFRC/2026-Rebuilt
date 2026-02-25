@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2026 Paul Hodges
  *
  * This file is part of Repulsor.
@@ -55,6 +55,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints.Rebuilt2026;
 import org.curtinfrc.frc2026.util.Repulsor.Simulation.NetworkTablesValue;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.FieldTrackerCore;
 import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
+import org.littletonrobotics.junction.Logger;
 
 public class AutoPathBehaviour extends Behaviour {
   private final int prio;
@@ -574,6 +575,7 @@ public class AutoPathBehaviour extends Behaviour {
     nextBlue = recoverFromCollectHold(tracker, robotPose, nextBlue);
     nextBlue = new Pose2d(nextBlue.getTranslation(), nextBlue.getRotation());
 
+    Logger.recordOutput("FinalCollect", nextBlue);
     collectBluePoseRef.set(nextBlue);
 
     return collectRoute;
@@ -583,8 +585,8 @@ public class AutoPathBehaviour extends Behaviour {
       FieldTrackerCore tracker, Pose2d robotPose, Pose2d currentCandidate) {
     if (tracker == null || robotPose == null || currentCandidate == null) return currentCandidate;
 
-    final double HOLD_GOAL_NEAR_M = 0.75;
-    final double FAR_FUEL_MIN_DIST_M = 1.30;
+    final double HOLD_GOAL_NEAR_M = 0.25;
+    final double FAR_FUEL_MIN_DIST_M = 1.10;
 
     double candidateDist =
         robotPose.getTranslation().getDistance(currentCandidate.getTranslation());

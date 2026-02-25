@@ -52,3 +52,4 @@ class WorldSnapshot:
     extrinsics: Tuple[float, float, float, float, float, float]
     active_goal: Optional[Pose2d]
     chosen_collect: Optional[Pose2d]
+    final_collect: Optional[Pose2d]

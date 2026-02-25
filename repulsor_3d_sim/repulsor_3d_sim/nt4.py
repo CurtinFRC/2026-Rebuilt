@@ -104,6 +104,10 @@ class NT4Reader:
         collect_pose_topic = self.inst.getStructTopic("/AdvantageKit/RealOutputs/Repulsor/ChosenCollect", Pose2d);
         self.collect_pose = collect_pose_topic.subscribe(Pose2d(0.0, 0.0, Rotation2d()))
 
+        final_collect_pose_topic = self.inst.getStructTopic("/AdvantageKit/RealOutputs/FinalCollect", Pose2d);
+        self.final_collect_pose = final_collect_pose_topic.subscribe(Pose2d(0.0, 0.0, Rotation2d()))
+
+
         self._ex = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/x")).subscribe(0.0)
         self._ey = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/y")).subscribe(0.0)
         self._ez = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/z")).subscribe(0.0)
@@ -239,6 +243,15 @@ class NT4Reader:
             return None
         return Pose2d(x, y, Rotation2d.fromDegrees(th_deg))
 
+    def read_pose2d_final_collect(self) -> Optional[Pose2d]:
+        p: Pose2d = self.final_collect_pose.get()
+        x = float(p.x)
+        y = float(p.y)
+        th_deg = float(p.rotation().degrees())
+        if x != x or y != y or th_deg != th_deg:
+            return None
+        return Pose2d(x, y, Rotation2d.fromDegrees(th_deg))
+
     def read_extrinsics(self) -> Tuple[float, float, float, float, float, float]:
         return (
             float(self._ex.get()),
@@ -318,4 +331,5 @@ class NT4Reader:
         ex = self.read_extrinsics()
         active_goal = self.read_pose2d_active()
         chosen_collect = self.read_pose2d_chosen_collect()
-        return WorldSnapshot(fv, rv, cams, truth, pose, ex, active_goal, chosen_collect)
+        final_collect = self.read_pose2d_final_collect()
+        return WorldSnapshot(fv, rv, cams, truth, pose, ex, active_goal, chosen_collect, final_collect)
