@@ -113,6 +113,7 @@ public final class FieldTrackerCollectObjectiveLoop {
   public static final int COLLECT_NEARBY_MIN_COUNT = 1;
 
   public static final double COLLECT_LIVE_FUEL_NEAR_TARGET_R_M = 0.65;
+  public static final double COLLECT_LIVE_OBS_MAX_AGE_S = 0.45;
   public static final double COLLECT_REACHED_EMPTY_FORCE_DROP_SEC = 0.18;
   public static final double COLLECT_REACHED_EMPTY_NEAR_TARGET_M = 0.95;
   public double collectReachedEmptySec = 0.0;
@@ -228,13 +229,18 @@ public final class FieldTrackerCollectObjectiveLoop {
     int n = 0;
     for (int i = 0; i < dyn.size(); i++) {
       DynamicObject o = dyn.get(i);
-      if (o == null || o.pos == null || o.type == null) continue;
-      if (!isCollectType(o.type)) continue;
+      if (!isFreshCollectObservation(o)) continue;
       double dx = o.pos.getX() - center.getX();
       double dy = o.pos.getY() - center.getY();
       if ((dx * dx + dy * dy) <= r2) n++;
     }
     return n;
+  }
+
+  public boolean isFreshCollectObservation(DynamicObject o) {
+    if (o == null || o.pos == null || o.type == null) return false;
+    if (!isCollectType(o.type)) return false;
+    return o.ageS <= COLLECT_LIVE_OBS_MAX_AGE_S;
   }
 
   public Translation2d relockCollectPointToLiveFuel(

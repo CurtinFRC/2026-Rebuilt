@@ -34,6 +34,26 @@ import org.littletonrobotics.junction.Logger;
 public final class FieldTrackerCollectPassCandidateStep {
   private FieldTrackerCollectPassCandidateStep() {}
 
+  static final double CANONICAL_SCORE_DROP_LIMIT = 0.12;
+
+  static Translation2d maybeCanonicalizeCandidate(
+      Translation2d bestCandidate,
+      Translation2d[] usePts,
+      Predicate<Translation2d> collectValid,
+      Function<Translation2d, Double> scoreResource) {
+    if (bestCandidate == null) return null;
+    Translation2d canonicalized =
+        FieldTrackerCollectObjectiveMath.canonicalizeCollectPoint(bestCandidate, usePts);
+    if (canonicalized == null) return bestCandidate;
+    if (canonicalized.getDistance(bestCandidate) <= 1e-6) return bestCandidate;
+    if (!collectValid.test(canonicalized)) return bestCandidate;
+
+    double baseScore = scoreResource.apply(bestCandidate);
+    double canonicalScore = scoreResource.apply(canonicalized);
+    if (canonicalScore < baseScore - CANONICAL_SCORE_DROP_LIMIT) return bestCandidate;
+    return canonicalized;
+  }
+
   public static FieldTrackerCollectPassCandidateResult choose(
       FieldTrackerCollectObjectiveLoop loop, FieldTrackerCollectPassContext ctx, int goalUnits) {
     HashMap<Long, CollectProbe> probeCache = new HashMap<>(512);
@@ -417,7 +437,7 @@ public final class FieldTrackerCollectPassCandidateStep {
     }
 
     bestCandidate =
-        FieldTrackerCollectObjectiveMath.canonicalizeCollectPoint(bestCandidate, ctx.usePts());
+        maybeCanonicalizeCandidate(bestCandidate, ctx.usePts(), collectValid, scoreResource);
 
     return new FieldTrackerCollectPassCandidateResult(
         best, bestCandidate, collectValid, footprintHasFuel, scoreResource, null);

@@ -253,8 +253,7 @@ public final class FieldTrackerCollectPassSetup {
     if (dynUse != null && !dynUse.isEmpty()) {
       for (int i = 0; i < dynUse.size(); i++) {
         DynamicObject o = dynUse.get(i);
-        if (o == null || o.pos == null || o.type == null) continue;
-        if (!loop.isCollectType(o.type)) continue;
+        if (!loop.isFreshCollectObservation(o)) continue;
         double d = o.pos.getDistance(robotPos);
         if (d <= FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M) {
           nearbyFuelCount++;
