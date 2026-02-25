@@ -162,15 +162,20 @@ public final class FieldPlannerGoalManager {
         stagedCenterReturn =
             isCenterReturnTransition(curPos, reqT) && isCorridorSideGate(stagedGate);
         stagedExitPhase = false;
-        stagedExitPoint =
-            stagedCenterReturn ? computeCenterReturnExitPoint(stagedGate, reqT) : null;
+        Translation2d computedExit = stagingExitPoint(stagedGate, curPos, reqT);
+        if (stagedCenterReturn) {
+          Translation2d centerReturnExit = computeCenterReturnExitPoint(stagedGate, reqT);
+          if (centerReturnExit != null) computedExit = centerReturnExit;
+        }
+        stagedExitPoint = computedExit;
 
         stagedUsingBypass =
             (stagedGate.gatePoly != null && stagedGate.bypassPoint != null)
                 && FieldPlannerGeometry.segmentIntersectsPolygonOuter(
                     curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
 
-        Translation2d pick = stagingPullPoint(stagedGate, curPos, reqT);
+        Translation2d pick = stagingEntryPoint(stagedGate, curPos, reqT);
+        if (pick == null) pick = stagingPullPoint(stagedGate, curPos, reqT);
 
         boolean mustStageForOccludingGate = stageForOccludingGate;
         if (pick != null
@@ -207,8 +212,7 @@ public final class FieldPlannerGoalManager {
     if (stagedAttractor != null) {
       stagedModeTicks++;
 
-      Translation2d liveTarget =
-          (stagedGate != null) ? stagingPullPoint(stagedGate, curPos, reqT) : stagedAttractor;
+      Translation2d liveTarget = stagedAttractor;
       if (liveTarget == null) liveTarget = stagedAttractor;
       boolean passedLiveTargetTowardGoal =
           hasPassedPointTowardGoal(curPos, liveTarget, reqT, STAGED_PASSED_TARGET_PROJ_M);
@@ -259,8 +263,16 @@ public final class FieldPlannerGoalManager {
                   && FieldPlannerGeometry.segmentIntersectsPolygonOuter(
                       curPos, reqT, expandPoly(stagedGate.gatePoly, STAGED_GATE_PAD_M));
 
-          Translation2d repick = stagingPullPoint(stagedGate, curPos, reqT);
+          Translation2d repick = stagingEntryPoint(stagedGate, curPos, reqT);
+          if (repick == null) repick = stagingPullPoint(stagedGate, curPos, reqT);
           if (repick != null) {
+            Translation2d nextExit = stagingExitPoint(stagedGate, curPos, reqT);
+            if (stagedCenterReturn) {
+              Translation2d centerReturnExit = computeCenterReturnExitPoint(stagedGate, reqT);
+              if (centerReturnExit != null) nextExit = centerReturnExit;
+            }
+            stagedExitPoint = nextExit;
+            stagedExitPhase = false;
             stagedAttractor = repick;
             lastStagedPoint = repick;
             stagedReachTicks = 0;
@@ -271,6 +283,25 @@ public final class FieldPlannerGoalManager {
             return false;
           }
         }
+      }
+
+      if (reached
+          && !stagedExitPhase
+          && stagedExitPoint != null
+          && (stagedAttractor == null
+              || stagedAttractor.getDistance(stagedExitPoint) > STAGED_REACH_EXIT_M)) {
+        stagedExitPhase = true;
+        stagedAttractor = stagedExitPoint;
+        lastStagedPoint = stagedExitPoint;
+        stagedGate = null;
+        stagedUsingBypass = false;
+        stagedGatePassed = true;
+        stagedLatchedPull = null;
+        stagedReachTicks = 0;
+        stagedModeTicks = 0;
+        stagedGateClearTicks = 0;
+        goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+        return false;
       }
 
       if (reached && gateCleared) {
@@ -548,6 +579,72 @@ public final class FieldPlannerGoalManager {
             yBase, STAGED_FIELD_EDGE_MARGIN_M, Constants.FIELD_WIDTH - STAGED_FIELD_EDGE_MARGIN_M);
 
     return new Translation2d(x, y);
+  }
+
+  private static boolean isRightOfGate(
+      Translation2d point, Translation2d gateCenter, Translation2d fallbackPoint) {
+    if (gateCenter == null) return true;
+    double dx = 0.0;
+    if (point != null) dx = point.getX() - gateCenter.getX();
+    if (Math.abs(dx) <= 1e-6 && fallbackPoint != null)
+      dx = fallbackPoint.getX() - gateCenter.getX();
+    if (Math.abs(dx) <= 1e-6) dx = 1.0;
+    return dx >= 0.0;
+  }
+
+  private static Translation2d clampToField(Translation2d p) {
+    if (p == null) return null;
+    return new Translation2d(
+        MathUtil.clamp(
+            p.getX(),
+            STAGED_FIELD_EDGE_MARGIN_M,
+            Constants.FIELD_LENGTH - STAGED_FIELD_EDGE_MARGIN_M),
+        MathUtil.clamp(
+            p.getY(),
+            STAGED_FIELD_EDGE_MARGIN_M,
+            Constants.FIELD_WIDTH - STAGED_FIELD_EDGE_MARGIN_M));
+  }
+
+  private static Translation2d gateSidePoint(GatedAttractorObstacle gate, boolean rightSide) {
+    if (gate == null || gate.center == null) return null;
+    if (gate.bypassPoint == null) return gate.center;
+
+    Translation2d center = gate.center;
+    Translation2d inside = gate.bypassPoint;
+    Translation2d outside = new Translation2d(2.0 * center.getX() - inside.getX(), inside.getY());
+
+    boolean insideOnRight = inside.getX() >= center.getX();
+    Translation2d rightPoint = insideOnRight ? inside : outside;
+    Translation2d leftPoint = insideOnRight ? outside : inside;
+    return rightSide ? rightPoint : leftPoint;
+  }
+
+  private Translation2d stagingEntryPoint(
+      GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
+    if (gate == null || gate.center == null) return null;
+    if (gate.gatePoly == null || gate.bypassPoint == null) return gate.center;
+
+    boolean robotOnRight = isRightOfGate(pos, gate.center, target);
+    Translation2d pick = gateSidePoint(gate, robotOnRight);
+    if (pick == null) pick = gate.center;
+    return clampToField(pick);
+  }
+
+  private Translation2d stagingExitPoint(
+      GatedAttractorObstacle gate, Translation2d pos, Translation2d target) {
+    if (gate == null || gate.center == null) return null;
+
+    Translation2d pick;
+    if (gate.gatePoly == null || gate.bypassPoint == null) {
+      pick = gate.center;
+    } else {
+      boolean targetOnRight = isRightOfGate(target, gate.center, pos);
+      pick = gateSidePoint(gate, targetOnRight);
+    }
+    if (pick == null) return null;
+
+    pick = extendPullPointThroughGate(pick, gate.center, target);
+    return clampToField(pick);
   }
 
   private Translation2d stagingPullPoint(
