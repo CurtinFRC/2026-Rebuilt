@@ -160,9 +160,9 @@ public final class Rebuilt2026 implements FieldDefinition {
     double gapTopY = Constants.FIELD_WIDTH - (gapHeight * 0.5);
     double gapBottomY = gapHeight * 0.5;
 
-    double rectStrength = 2.5;
-    double rectRangeX = 1.2;
-    double rectRangeY = 1.5;
+    double rectStrength = 4.2;
+    double rectRangeX = 1.55;
+    double rectRangeY = 2.0;
 
     double biasStrength = 0.3;
     double biasRange = 1.2;
@@ -170,7 +170,7 @@ public final class Rebuilt2026 implements FieldDefinition {
     double bypassStrengthScale = 1.2;
     double bypassRange = 1.4;
 
-    double edgeOffset = 0.06;
+    double edgeOffset = 0.48;
 
     double rectHalfX = rectWidth * 0.5;
     Translation2d[] leftGate =
@@ -273,7 +273,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapTopY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(leftPullXOut, gapTopY),
             sideBiasStrength,
@@ -281,7 +282,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapTopY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(leftPullXIn, gapBottomY),
             sideBiasStrength,
@@ -289,7 +291,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapBottomY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(leftPullXOut, gapBottomY),
             sideBiasStrength,
@@ -297,7 +300,8 @@ public final class Rebuilt2026 implements FieldDefinition {
             leftGate,
             new Translation2d(leftInsideX, gapBottomY),
             sideBypassStrengthScale,
-            sideBypassRange),
+            sideBypassRange,
+            true),
         new GatedAttractorObstacle(
             new Translation2d(rightPullXIn, gapTopY),
             sideBiasStrength,

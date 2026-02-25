@@ -116,6 +116,8 @@ class SceneRenderer:
         self._col_truth_fuel = (0.15, 0.95, 0.35, 0.70)
         self._col_other = (1.0, 0.15, 0.15, 0.85)
         self._col_us = (1, 0.27, 0, 0.75)
+        self._col_active = (0.15, 0.9, 0.3, 0.9)
+        self._col_chosen_collect = (0.15, 0.3, 0.9, 0.9)
         self._col_heading = (1.0, 0.1, 0.1, 0.9)
         self._col_cam = (0.20, 0.75, 1.0, 0.85)
         self._col_cam_fov = (0.20, 0.75, 1.0, 0.55)
@@ -405,6 +407,29 @@ class SceneRenderer:
         yaw_deg = float(pose.rotation().degrees())
         draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_us)
         self._draw_robot_heading_arrow(cx, cy, yaw_deg)
+
+
+        pose2 = snap.active_goal
+        # print(pose2)
+        if pose2 is None:
+            return
+
+        cx = float(pose2.x)
+        cy = float(pose2.y)
+        cz = self._field_z + (self._robot_h * 0.5)
+        yaw_deg = float(pose2.rotation().degrees())
+        draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_active)
+        # self._draw_robot_heading_arrow(cx, cy, yaw_deg)
+
+        pose3 = snap.chosen_collect
+        if pose3 is None:
+            return
+
+        cx = float(pose3.x)
+        cy = float(pose3.y)
+        cz = self._field_z + (self._robot_h * 0.5)
+        yaw_deg = float(pose3.rotation().degrees())
+        draw_box((cx, cy, cz), (self._robot_l, self._robot_w, self._robot_h), yaw_deg, self._col_chosen_collect)
 
     def _draw_robot_heading_arrow(self, cx: float, cy: float, yaw_deg: float) -> None:
         yaw_rad = math.radians(float(yaw_deg))

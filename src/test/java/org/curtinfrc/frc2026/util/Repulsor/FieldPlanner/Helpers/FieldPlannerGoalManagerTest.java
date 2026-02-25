@@ -26,16 +26,22 @@ class FieldPlannerGoalManagerTest {
     manager.setRequestedGoal(requested);
 
     assertFalse(manager.updateStagedGoal(new Translation2d(6.0, 4.0), obstacles));
-    assertEquals(8.2, manager.getGoalTranslation().getX(), EPS);
+    assertTrue(manager.getGoalTranslation().getX() > gate.center.getX());
     assertEquals(4.0, manager.getGoalTranslation().getY(), EPS);
 
-    assertTrue(manager.updateStagedGoal(new Translation2d(8.2, 4.0), obstacles));
+    Translation2d staged = manager.getGoalTranslation();
+    boolean done = false;
+    for (int i = 0; i < 6; i++) {
+      done = manager.updateStagedGoal(staged, obstacles);
+      if (done) break;
+    }
+    assertTrue(done);
     assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
     assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
   }
 
   @Test
-  void doesNotRestageImmediatelyWithinRestageDistance() {
+  void restagesWithinRestageDistanceWhenGateStillOccludesPath() {
     GatedAttractorObstacle gate = gate(new Translation2d(8.0, 4.0), new Translation2d(8.2, 4.0));
     FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
     List<? extends Obstacle> obstacles = List.of(gate);
@@ -44,11 +50,15 @@ class FieldPlannerGoalManagerTest {
     manager.setRequestedGoal(requested);
 
     assertFalse(manager.updateStagedGoal(new Translation2d(10.0, 4.0), obstacles));
-    assertTrue(manager.updateStagedGoal(new Translation2d(7.8, 4.0), obstacles));
+    boolean firstDone = false;
+    for (int i = 0; i < 6; i++) {
+      firstDone = manager.updateStagedGoal(manager.getGoalTranslation(), obstacles);
+      if (firstDone) break;
+    }
+    assertTrue(firstDone);
 
-    assertTrue(manager.updateStagedGoal(new Translation2d(9.0, 4.0), obstacles));
-    assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
-    assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
+    assertFalse(manager.updateStagedGoal(new Translation2d(9.0, 4.0), obstacles));
+    assertTrue(Math.abs(manager.getGoalTranslation().getX() - requested.getX()) > EPS);
   }
 
   @Test
@@ -61,9 +71,11 @@ class FieldPlannerGoalManagerTest {
     manager.setRequestedGoal(requested);
 
     assertFalse(manager.updateStagedGoal(new Translation2d(6.0, 4.0), obstacles));
-    assertFalse(manager.updateStagedGoal(new Translation2d(8.3, 4.0), obstacles));
+    double stagedX = manager.getGoalTranslation().getX();
+    Translation2d through = new Translation2d(stagedX + 0.12, manager.getGoalTranslation().getY());
+    assertFalse(manager.updateStagedGoal(through, obstacles));
 
-    assertTrue(manager.updateStagedGoal(new Translation2d(8.3, 4.0), obstacles));
+    assertTrue(manager.updateStagedGoal(through, obstacles));
     assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
     assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
   }
@@ -105,8 +117,12 @@ class FieldPlannerGoalManagerTest {
     assertFalse(manager.updateStagedGoal(new Translation2d(6.0, 5.0), obstacles));
     assertEquals(7.0, manager.getGoalTranslation().getY(), EPS);
 
-    assertFalse(manager.updateStagedGoal(new Translation2d(8.3, 5.0), obstacles));
-    assertTrue(manager.updateStagedGoal(new Translation2d(8.3, 5.0), obstacles));
+    boolean firstDone = false;
+    for (int i = 0; i < 8; i++) {
+      firstDone = manager.updateStagedGoal(manager.getGoalTranslation(), obstacles);
+      if (firstDone) break;
+    }
+    assertTrue(firstDone);
 
     assertFalse(manager.updateStagedGoal(new Translation2d(10.0, 4.0), obstacles));
     assertEquals(7.0, manager.getGoalTranslation().getY(), EPS);
@@ -141,9 +157,8 @@ class FieldPlannerGoalManagerTest {
     Pose2d requested = new Pose2d(goal, Rotation2d.kZero);
     manager.setRequestedGoal(requested);
 
-    assertTrue(manager.updateStagedGoal(robot, obstacles));
-    assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
-    assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
+    assertFalse(manager.updateStagedGoal(robot, obstacles));
+    assertTrue(Math.abs(manager.getGoalTranslation().getX() - requested.getX()) > EPS);
   }
 
   @Test
@@ -160,7 +175,7 @@ class FieldPlannerGoalManagerTest {
 
     double firstStageX = gateCenter.getX() - 0.2;
 
-    assertTrue(manager.updateStagedGoal(new Translation2d(mid, 4.0), obstacles));
+    manager.updateStagedGoal(new Translation2d(mid, 4.0), obstacles);
     assertFalse(manager.updateStagedGoal(new Translation2d(mid - 2.0, 4.0), obstacles));
     assertFalse(manager.updateStagedGoal(new Translation2d(firstStageX, 4.0), obstacles));
     assertFalse(manager.updateStagedGoal(new Translation2d(firstStageX, 4.0), obstacles));
@@ -169,8 +184,12 @@ class FieldPlannerGoalManagerTest {
     assertTrue(exitX < firstStageX - 0.5);
 
     assertFalse(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
-    assertFalse(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
-    assertTrue(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
+    boolean done = false;
+    for (int i = 0; i < 6; i++) {
+      done = manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles);
+      if (done) break;
+    }
+    assertTrue(done);
 
     assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
     assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);

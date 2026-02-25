@@ -77,9 +77,9 @@ final class DragShotPlannerObstacles {
         return false;
       }
 
-      if (!(x < minBand && x > maxBand) && !checkBounds) {
-        return false;
-      }
+      // if (!(x < minBand && x > maxBand) && !checkBounds) {
+      //   return false;
+      // }
 
       double dx = targetFieldPosition.getX() - x;
       double dy = targetFieldPosition.getY() - y;

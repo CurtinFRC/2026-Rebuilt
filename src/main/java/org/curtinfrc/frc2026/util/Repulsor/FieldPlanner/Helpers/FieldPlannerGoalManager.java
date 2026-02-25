@@ -24,9 +24,9 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
-import org.curtinfrc.frc2026.util.Repulsor.ExtraPathing;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractorObstacle;
+import org.littletonrobotics.junction.Logger;
 
 public final class FieldPlannerGoalManager {
   private static final double STAGED_CENTER_BAND_M = 3.648981;
@@ -36,6 +36,7 @@ public final class FieldPlannerGoalManager {
 
   private static final double STAGED_REACH_ENTER_M = 0.35;
   private static final double STAGED_REACH_EXIT_M = 0.55;
+  private static final double STAGED_GATE_CLEAR_EXIT_M = 0.40;
   private static final int STAGED_REACH_TICKS = 3;
   private static final int STAGED_GATE_CLEAR_TICKS = 2;
 
@@ -48,10 +49,14 @@ public final class FieldPlannerGoalManager {
 
   private static final double STAGED_GATE_PAD_M = 0.25;
   private static final double STAGED_PASSED_X_HYST_M = 0.35;
+  private static final double STAGED_PASSED_TARGET_PROJ_M = 0.16;
   private static final double STAGED_GOAL_SIDE_PROJ_M = 0.05;
+  private static final double STAGED_LEAD_THROUGH_SCALE = 0.28;
+  private static final double STAGED_LEAD_THROUGH_MIN_M = 0.45;
+  private static final double STAGED_LEAD_THROUGH_MAX_M = 1.05;
   private static final double STAGED_DEEP_CENTER_BAND_M = 1.40;
-  private static final double STAGED_CENTER_RETURN_STAGE_TRIGGER_M = 2.2;
-  private static final double STAGED_CENTER_RETURN_INTERSECTION_TRIGGER_M = 3.0;
+  private static final double STAGED_CENTER_RETURN_STAGE_TRIGGER_M = 3.0;
+  private static final double STAGED_CENTER_RETURN_INTERSECTION_TRIGGER_M = 4.2;
   private static final double STAGED_CENTER_RETURN_EXIT_MIN_M = 0.70;
   private static final double STAGED_CENTER_RETURN_EXIT_MAX_M = 2.40;
   private static final double STAGED_CENTER_RETURN_GATE_MIN_OFFSET_M = 2.0;
@@ -105,6 +110,7 @@ public final class FieldPlannerGoalManager {
 
   public void setActiveGoal(Pose2d active) {
     this.goal = active;
+    Logger.recordOutput("ActiveGoal", this.goal);
   }
 
   public boolean updateStagedGoal(Translation2d curPos, List<? extends Obstacle> obstacles) {
@@ -128,14 +134,14 @@ public final class FieldPlannerGoalManager {
     }
 
     Translation2d reqT = requestedGoal.getTranslation();
-    GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT, obstacles);
+    GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
 
     boolean stageForOccludingGate =
         firstBlock != null && !shouldDeferCenterReturnStage(curPos, reqT, firstBlock);
     boolean shouldStage = shouldStageThroughAttractor(curPos, reqT) || stageForOccludingGate;
     if (stagedComplete && lastStagedPoint != null) {
       double d = curPos.getDistance(lastStagedPoint);
-      if (d < STAGED_RESTAGE_DIST_M) {
+      if (d < STAGED_RESTAGE_DIST_M && !stageForOccludingGate) {
         shouldStage = false;
       } else {
         stagedComplete = false;
@@ -202,6 +208,8 @@ public final class FieldPlannerGoalManager {
       Translation2d liveTarget =
           (stagedGate != null) ? stagingPullPoint(stagedGate, curPos, reqT) : stagedAttractor;
       if (liveTarget == null) liveTarget = stagedAttractor;
+      boolean passedLiveTargetTowardGoal =
+          hasPassedPointTowardGoal(curPos, liveTarget, reqT, STAGED_PASSED_TARGET_PROJ_M);
 
       double d = curPos.getDistance(liveTarget);
 
@@ -219,19 +227,24 @@ public final class FieldPlannerGoalManager {
             stagedGatePassed
                 || gateIsBehind(curPos, reqT, stagedGate)
                 || gateOnGoalSide(curPos, reqT, stagedGate)
-                || !gateOccludingNow;
+                || !gateOccludingNow
+                || passedLiveTargetTowardGoal;
       }
 
       boolean gateCleared = (stagedGate == null) || stagedGatePassed;
       if (gateCleared) stagedGateClearTicks++;
       else stagedGateClearTicks = 0;
 
-      if (!reached && stagedGate != null && stagedGateClearTicks >= STAGED_GATE_CLEAR_TICKS)
+      if (!reached
+          && stagedGate != null
+          && stagedGateClearTicks >= STAGED_GATE_CLEAR_TICKS
+          && (passedLiveTargetTowardGoal || d <= STAGED_GATE_CLEAR_EXIT_M)) {
         reached = true;
-      if (!reached && stagedGate != null && gateCleared && d <= STAGED_REACH_EXIT_M) reached = true;
+      }
+      if (!reached && stagedGate == null && passedLiveTargetTowardGoal) reached = true;
 
       if (stagedModeTicks >= STAGED_MAX_TICKS) {
-        GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT, obstacles);
+        GatedAttractorObstacle nowFirst = firstOccludingGateAlongSegment(curPos, reqT);
         if (nowFirst == null || stagedGatePassed) {
           reached = true;
           gateCleared = true;
@@ -408,7 +421,7 @@ public final class FieldPlannerGoalManager {
   }
 
   private GatedAttractorObstacle firstOccludingGateAlongSegment(
-      Translation2d pos, Translation2d target, List<? extends Obstacle> obstacles) {
+      Translation2d pos, Translation2d target) {
     if (gatedAttractors.isEmpty() || pos == null || target == null) return null;
 
     GatedAttractorObstacle best = null;
@@ -424,14 +437,6 @@ public final class FieldPlannerGoalManager {
       Translation2d[] poly = expandPoly(gate.gatePoly, STAGED_GATE_PAD_M);
 
       if (!FieldPlannerGeometry.segmentIntersectsPolygonOuter(pos, target, poly)) continue;
-      if (!ExtraPathing.isClearPath(
-          "WaypointByp",
-          pos,
-          target,
-          obstacles,
-          org.curtinfrc.frc2026.Constants.ROBOT_X,
-          org.curtinfrc.frc2026.Constants.ROBOT_Y,
-          false)) continue;
       double t = firstIntersectionT(pos, target, poly);
       if (t < bestT - tieEps) {
         bestT = t;
@@ -570,8 +575,51 @@ public final class FieldPlannerGoalManager {
                 : (insideOnRight ? outside : inside))
             : center;
 
+    pick = extendPullPointThroughGate(pick, center, target);
+
     if (gate == stagedGate) stagedLatchedPull = pick;
     return pick;
+  }
+
+  private static boolean hasPassedPointTowardGoal(
+      Translation2d pos, Translation2d point, Translation2d goal, double projMeters) {
+    if (pos == null || point == null || goal == null) return false;
+
+    Translation2d toGoal = goal.minus(point);
+    double n = toGoal.getNorm();
+    if (n <= 1e-6) return pos.getDistance(point) <= Math.max(0.0, projMeters);
+
+    Translation2d dir = toGoal.div(n);
+    Translation2d toPos = pos.minus(point);
+    double proj = toPos.getX() * dir.getX() + toPos.getY() * dir.getY();
+    return proj >= Math.max(0.0, projMeters);
+  }
+
+  private static Translation2d extendPullPointThroughGate(
+      Translation2d pullPoint, Translation2d gateCenter, Translation2d target) {
+    if (pullPoint == null || gateCenter == null || target == null) return pullPoint;
+
+    double dx = target.getX() - gateCenter.getX();
+    double sign = Math.signum(dx);
+    if (Math.abs(sign) < 1e-9) return pullPoint;
+
+    double lead =
+        MathUtil.clamp(
+            Math.abs(dx) * STAGED_LEAD_THROUGH_SCALE,
+            STAGED_LEAD_THROUGH_MIN_M,
+            STAGED_LEAD_THROUGH_MAX_M);
+
+    double x =
+        MathUtil.clamp(
+            pullPoint.getX() + sign * lead,
+            STAGED_FIELD_EDGE_MARGIN_M,
+            Constants.FIELD_LENGTH - STAGED_FIELD_EDGE_MARGIN_M);
+    double y =
+        MathUtil.clamp(
+            pullPoint.getY(),
+            STAGED_FIELD_EDGE_MARGIN_M,
+            Constants.FIELD_WIDTH - STAGED_FIELD_EDGE_MARGIN_M);
+    return new Translation2d(x, y);
   }
 
   private GatedAttractorObstacle chooseBestGateByScore(

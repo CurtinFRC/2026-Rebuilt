@@ -97,6 +97,13 @@ class NT4Reader:
         pose_topic = self.inst.getStructTopic(_join_topic(self._pose_prefix, cfg.pose_struct_key), Pose2d)
         self._pose_struct = pose_topic.subscribe(Pose2d(0.0, 0.0, Rotation2d()))
 
+
+        active_pose_topic = self.inst.getStructTopic("/AdvantageKit/RealOutputs/ActiveGoal", Pose2d);
+        self.active_pose = active_pose_topic.subscribe(Pose2d(0.0, 0.0, Rotation2d()))
+
+        collect_pose_topic = self.inst.getStructTopic("/AdvantageKit/RealOutputs/Repulsor/ChosenCollect", Pose2d);
+        self.collect_pose = collect_pose_topic.subscribe(Pose2d(0.0, 0.0, Rotation2d()))
+
         self._ex = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/x")).subscribe(0.0)
         self._ey = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/y")).subscribe(0.0)
         self._ez = self.inst.getDoubleTopic(_join_topic(self._fv_prefix, "extrinsics/z")).subscribe(0.0)
@@ -214,6 +221,24 @@ class NT4Reader:
             return None
         return Pose2d(x, y, Rotation2d.fromDegrees(th_deg))
 
+    def read_pose2d_active(self) -> Optional[Pose2d]:
+        p: Pose2d = self.active_pose.get()
+        x = float(p.x)
+        y = float(p.y)
+        th_deg = float(p.rotation().degrees())
+        if x != x or y != y or th_deg != th_deg:
+            return None
+        return Pose2d(x, y, Rotation2d.fromDegrees(th_deg))
+
+    def read_pose2d_chosen_collect(self) -> Optional[Pose2d]:
+        p: Pose2d = self.collect_pose.get()
+        x = float(p.x)
+        y = float(p.y)
+        th_deg = float(p.rotation().degrees())
+        if x != x or y != y or th_deg != th_deg:
+            return None
+        return Pose2d(x, y, Rotation2d.fromDegrees(th_deg))
+
     def read_extrinsics(self) -> Tuple[float, float, float, float, float, float]:
         return (
             float(self._ex.get()),
@@ -291,4 +316,6 @@ class NT4Reader:
         truth: List[FieldVisionObject] = []
         pose = self.read_pose2d()
         ex = self.read_extrinsics()
-        return WorldSnapshot(fv, rv, cams, truth, pose, ex)
+        active_goal = self.read_pose2d_active()
+        chosen_collect = self.read_pose2d_chosen_collect()
+        return WorldSnapshot(fv, rv, cams, truth, pose, ex, active_goal, chosen_collect)
