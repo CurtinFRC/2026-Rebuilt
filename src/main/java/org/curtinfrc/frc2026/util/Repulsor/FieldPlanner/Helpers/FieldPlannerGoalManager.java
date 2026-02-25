@@ -34,13 +34,14 @@ public final class FieldPlannerGoalManager {
   private static final double STAGED_SAME_GOAL_POS_M = 0.05;
   private static final double STAGED_SAME_GOAL_ROT_DEG = 5.0;
 
-  private static final double STAGED_REACH_ENTER_M = 0.35;
   private static final double STAGED_REACH_EXIT_M = 0.55;
   private static final double STAGED_ENTRY_REACH_ENTER_M = 0.50;
   private static final double STAGED_ENTRY_PASSED_PROJ_M = 0.06;
+  private static final double STAGED_EXIT_REACH_ENTER_M = 0.45;
+  private static final double STAGED_EXIT_PASSED_PROJ_M = 0.10;
   private static final double STAGED_GATE_CLEAR_EXIT_M = 0.40;
-  private static final int STAGED_REACH_TICKS = 3;
   private static final int STAGED_ENTRY_REACH_TICKS = 1;
+  private static final int STAGED_EXIT_REACH_TICKS = 1;
   private static final int STAGED_GATE_CLEAR_TICKS = 2;
 
   private static final int STAGED_MAX_TICKS = 40;
@@ -52,7 +53,6 @@ public final class FieldPlannerGoalManager {
 
   private static final double STAGED_GATE_PAD_M = 0.25;
   private static final double STAGED_PASSED_X_HYST_M = 0.35;
-  private static final double STAGED_PASSED_TARGET_PROJ_M = 0.16;
   private static final double STAGED_GOAL_SIDE_PROJ_M = 0.05;
   private static final double STAGED_LEAD_THROUGH_SCALE = 0.28;
   private static final double STAGED_LEAD_THROUGH_MIN_M = 0.45;
@@ -218,14 +218,14 @@ public final class FieldPlannerGoalManager {
       Translation2d liveTarget = stagedAttractor;
       if (liveTarget == null) liveTarget = stagedAttractor;
       double passedProjMeters =
-          stagedExitPhase ? STAGED_PASSED_TARGET_PROJ_M : STAGED_ENTRY_PASSED_PROJ_M;
+          stagedExitPhase ? STAGED_EXIT_PASSED_PROJ_M : STAGED_ENTRY_PASSED_PROJ_M;
       boolean passedLiveTargetTowardGoal =
           hasPassedPointTowardGoal(curPos, liveTarget, reqT, passedProjMeters);
 
       double d = curPos.getDistance(liveTarget);
 
-      double reachEnter = stagedExitPhase ? STAGED_REACH_ENTER_M : STAGED_ENTRY_REACH_ENTER_M;
-      int reachTicksRequired = stagedExitPhase ? STAGED_REACH_TICKS : STAGED_ENTRY_REACH_TICKS;
+      double reachEnter = stagedExitPhase ? STAGED_EXIT_REACH_ENTER_M : STAGED_ENTRY_REACH_ENTER_M;
+      int reachTicksRequired = stagedExitPhase ? STAGED_EXIT_REACH_TICKS : STAGED_ENTRY_REACH_TICKS;
 
       if (d <= reachEnter) stagedReachTicks++;
       else if (d >= STAGED_REACH_EXIT_M) stagedReachTicks = 0;

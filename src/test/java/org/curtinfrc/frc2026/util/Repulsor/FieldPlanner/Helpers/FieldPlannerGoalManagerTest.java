@@ -210,11 +210,9 @@ class FieldPlannerGoalManagerTest {
     double exitX = manager.getGoalTranslation().getX();
     assertTrue(exitX < firstStageX - 0.5);
 
-    assertFalse(manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles));
-    boolean done = false;
-    for (int i = 0; i < 6; i++) {
+    boolean done = manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles);
+    for (int i = 0; i < 6 && !done; i++) {
       done = manager.updateStagedGoal(new Translation2d(exitX, 4.0), obstacles);
-      if (done) break;
     }
     assertTrue(done);
 
@@ -292,6 +290,37 @@ class FieldPlannerGoalManagerTest {
     assertTrue(
         manager.getGoalTranslation().getX() > gate.center.getX(),
         "Expected immediate advance to exit waypoint after reaching near entry");
+  }
+
+  @Test
+  void exitStageReleasesGoalQuicklyWhenRobotGetsNearExitPoint() {
+    GatedAttractorObstacle gate = gate(new Translation2d(8.0, 4.0), new Translation2d(8.2, 4.0));
+    FieldPlannerGoalManager manager = new FieldPlannerGoalManager(List.of(gate));
+    List<? extends Obstacle> obstacles = List.of(gate);
+
+    Pose2d requested = new Pose2d(new Translation2d(12.0, 4.0), Rotation2d.kZero);
+    manager.setRequestedGoal(requested);
+
+    assertFalse(manager.updateStagedGoal(new Translation2d(6.0, 4.0), obstacles));
+    Translation2d entry = manager.getGoalTranslation();
+
+    boolean sawExit = false;
+    for (int i = 0; i < 8; i++) {
+      assertFalse(manager.updateStagedGoal(entry, obstacles));
+      if (manager.getGoalTranslation().getX() > gate.center.getX() + 0.05) {
+        sawExit = true;
+        break;
+      }
+    }
+    assertTrue(sawExit);
+
+    Translation2d exit = manager.getGoalTranslation();
+    Translation2d nearExit = new Translation2d(exit.getX() - 0.12, exit.getY());
+    assertTrue(
+        manager.updateStagedGoal(nearExit, obstacles),
+        "Expected immediate release to requested goal when near exit waypoint");
+    assertEquals(requested.getX(), manager.getGoalTranslation().getX(), EPS);
+    assertEquals(requested.getY(), manager.getGoalTranslation().getY(), EPS);
   }
 
   private static GatedAttractorObstacle gate(Translation2d center, Translation2d bypassPoint) {
