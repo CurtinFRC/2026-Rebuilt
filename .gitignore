@@ -209,3 +209,5 @@ vision/train/data
 **/**/__pycache__/
 *.ndjson
 README_2.md
+*.pdf
+*.png
