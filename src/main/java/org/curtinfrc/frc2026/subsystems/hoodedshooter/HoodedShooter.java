@@ -6,6 +6,11 @@ import static edu.wpi.first.units.Units.Rotations;
 import static edu.wpi.first.units.Units.RotationsPerSecond;
 import static edu.wpi.first.units.Units.Volts;
 
+import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Pose3d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.geometry.Transform3d;
 import edu.wpi.first.units.measure.MutAngle;
 import edu.wpi.first.units.measure.MutAngularVelocity;
 import edu.wpi.first.units.measure.MutVoltage;
@@ -15,6 +20,9 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import java.util.function.Supplier;
+import org.curtinfrc.frc2026.Constants;
+import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.sim.BallSim;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
@@ -25,6 +33,8 @@ public class HoodedShooter extends SubsystemBase {
 
   private final ShooterIO shooterIO;
   private final ShooterIOInputsAutoLogged shooterInputs = new ShooterIOInputsAutoLogged();
+
+  private final Supplier<Pose2d> robotPose;
 
   private final Alert hoodMotorDisconnectedAlert;
   private final Alert hoodMotorTempAlert;
@@ -46,9 +56,10 @@ public class HoodedShooter extends SubsystemBase {
     return hoodInputs.positionRotations < HoodIODev.REVERSE_LIMIT_ROTATIONS + 0.1;
   }
 
-  public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO) {
+  public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO, Supplier<Pose2d> robotPose) {
     this.hoodIO = hoodIO;
     this.shooterIO = shooterIO;
+    this.robotPose = robotPose;
 
     this.hoodMotorDisconnectedAlert = new Alert("Hood motor disconnected.", AlertType.kError);
     this.hoodMotorTempAlert =
@@ -144,6 +155,15 @@ public class HoodedShooter extends SubsystemBase {
         () -> {
           hoodIO.setPosition(position);
           shooterIO.setVelocity(velocity);
+
+          if (Constants.getMode() == Mode.SIM) {
+            shooterIO.addSimBall(
+                new BallSim(
+                    velocity,
+                    Rotation2d.fromDegrees(position + 90),
+                    new Pose3d(robotPose.get())
+                        .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
+          }
         });
   }
 

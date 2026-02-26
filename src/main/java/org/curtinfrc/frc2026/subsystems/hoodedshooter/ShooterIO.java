@@ -1,6 +1,7 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import edu.wpi.first.units.measure.Voltage;
+import org.curtinfrc.frc2026.sim.BallSim;
 import org.littletonrobotics.junction.AutoLog;
 
 public interface ShooterIO {
@@ -22,4 +23,6 @@ public interface ShooterIO {
   public default void setVoltageV(Voltage voltage) {}
 
   public default void setVelocity(double velocity) {}
+
+  public default void addSimBall(BallSim ball) {}
 }
