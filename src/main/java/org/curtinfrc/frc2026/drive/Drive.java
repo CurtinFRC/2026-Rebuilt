@@ -6,6 +6,7 @@ import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -18,6 +19,7 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.numbers.N1;
 import edu.wpi.first.math.numbers.N3;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -26,7 +28,9 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
 import org.littletonrobotics.junction.AutoLogOutput;
@@ -44,7 +48,8 @@ public class Drive extends SubsystemBase {
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
 
-  private static final double ANGLE_MAX_ACCELERATION = 20.0;
+  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
+  private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
   private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
   private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
@@ -54,6 +59,20 @@ public class Drive extends SubsystemBase {
   private final Module[] modules = new Module[4]; // FL, FR, BL, BR
   private final Alert gyroDisconnectedAlert =
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
+
+  // Setting PID values for turning towards Hub.
+  public static final double hubHeadingKP = 10;
+  public static final double hubHeadingKI = 0;
+  private static final double hubHeadingKD = 0.2;
+
+  // Creating a new instance of the class PIDController and plugging in PID values from variables
+  // above.
+  ProfiledPIDController hubHeadingController =
+      new ProfiledPIDController(
+          hubHeadingKP,
+          hubHeadingKI,
+          hubHeadingKD,
+          new TrapezoidProfile.Constraints(MAX_ANGULAR_SPEED - 0.5, ANGLE_MAX_ACCELERATION));
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -78,6 +97,12 @@ public class Drive extends SubsystemBase {
     modules[1] = new Module(frModuleIO, 1, TunerConstants.FrontRight);
     modules[2] = new Module(blModuleIO, 2, TunerConstants.BackLeft);
     modules[3] = new Module(brModuleIO, 3, TunerConstants.BackRight);
+
+    // setting minimum and maximum angle in values in radians.
+    hubHeadingController.enableContinuousInput(-Math.PI, Math.PI);
+
+    // setting error tolerance when turning to an angle and the speed tolerance
+    hubHeadingController.setTolerance(0.02, 0.1);
 
     // Usage reporting for swerve template
     HAL.report(tResourceType.kResourceType_RobotDrive, tInstances.kRobotDriveSwerve_AdvantageKit);
@@ -195,7 +220,7 @@ public class Drive extends SubsystemBase {
 
   /** Returns the measured chassis speeds of the robot. */
   @AutoLogOutput(key = "SwerveChassisSpeeds/Measured")
-  private ChassisSpeeds getChassisSpeeds() {
+  public ChassisSpeeds getChassisSpeeds() {
     return kinematics.toChassisSpeeds(getModuleStates());
   }
 
@@ -296,6 +321,123 @@ public class Drive extends SubsystemBase {
           runVelocity(
               ChassisSpeeds.fromFieldRelativeSpeeds(
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+        });
+  }
+
+  public static double angleToLocation(Translation2d locationTransform, Pose2d currentPosition) {
+    Pose2d locationPose =
+        new Pose2d(locationTransform.getX(), locationTransform.getY(), Rotation2d.kZero);
+
+    double targetAngle =
+        locationPose
+            .getTranslation()
+            .minus(currentPosition.getTranslation())
+            .getAngle()
+            .rotateBy(Rotation2d.k180deg)
+            .getRadians();
+
+    return targetAngle;
+  }
+
+  public Command faceLocation(Supplier<Translation2d> locationSupplier) {
+    return run(
+        () -> {
+          Translation2d locationTransform = locationSupplier.get();
+          // Get current position using the getPose method.
+          Pose2d currentPosition = getPose();
+
+          // Plugging in target angle to target position/pose
+          Pose2d target =
+              new Pose2d(
+                  currentPosition.getX(),
+                  currentPosition.getY(),
+                  new Rotation2d(angleToLocation(locationTransform, currentPosition)));
+
+          // Getting robot current angle in radians
+          double robotAngle = currentPosition.getRotation().getRadians();
+
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleSpeed =
+              hubHeadingController.calculate(
+                  robotAngle, angleToLocation(locationTransform, currentPosition));
+
+          Logger.recordOutput("Target Angle", angleToLocation(locationTransform, currentPosition));
+          Logger.recordOutput("Robot Angle", robotAngle);
+          Logger.recordOutput("targetPose", target);
+
+          // Creating a new instance of the class ChassisSpeeds and plugging in angleSpeed and
+          // setting vxMetersPerSecond to 0 and vyMetersPerSecond to 0 (because we are turning)
+          ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
+
+          // Running it
+          runVelocity(speed);
+        });
+  }
+
+  public Command locationHeadingjoyStickDrive(
+      DoubleSupplier xSupplier,
+      DoubleSupplier ySupplier,
+      DoubleSupplier rotationSupplier,
+      BooleanSupplier aligningSupplier,
+      Supplier<Translation2d> locationTransform) {
+    return run(
+        () -> {
+
+          // Get current position using the getPose method.
+          Pose2d currentPosition = getPose();
+
+          // targetAngle = Math.toDegrees(targetAngle);
+
+          // Getting robot current angle in radians
+          double robotAngle = currentPosition.getRotation().getRadians();
+
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+          }
+          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+
+          Logger.recordOutput("TargetAngle", angleToHub);
+          Logger.recordOutput("RobotAngle", robotAngle);
+
+          // Apply rotation deadband
+          double omega = rotationSupplier.getAsDouble();
+
+          // Square rotation value for more precise control
+          omega = Math.copySign(omega * omega, omega);
+
+          // Get linear velocity
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+          // Convert to field relative speeds & send command
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          if (aligningSupplier.getAsBoolean()) {
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    angleSpeed);
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          } else {
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    omega * getMaxAngularSpeedRadPerSec());
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          }
         });
   }
 }
