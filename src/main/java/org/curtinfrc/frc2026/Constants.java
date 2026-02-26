@@ -9,6 +9,7 @@ public final class Constants {
   public static final int indexerMagRollerMotorID = 15;
 
   public static final RobotType robotType = RobotType.DEV;
+  public static boolean tuningMode = false;
 
   public static final Mode getMode() {
     return switch (robotType) {
