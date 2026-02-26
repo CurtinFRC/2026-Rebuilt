@@ -4,6 +4,7 @@ import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DriverStation;
 import java.util.Optional;
+import org.littletonrobotics.junction.Logger;
 
 public class GameState {
   public static final double TELEOP_GAME_LENGTH = 140.0;
@@ -45,7 +46,11 @@ public class GameState {
   public static double getMatchTime() {
     double gameTime = DriverStation.getMatchTime();
     if (DriverStation.isFMSAttached()) {
-      gameTime = TELEOP_GAME_LENGTH - gameTime;
+      if (DriverStation.isTeleopEnabled()) {
+        gameTime = TELEOP_GAME_LENGTH - gameTime;
+      } else {
+        gameTime = AUTONOMOUS_PERIOD_LENGTH - gameTime;
+      }
     }
     return gameTime;
   }
@@ -70,6 +75,10 @@ public class GameState {
   }
 
   public static boolean isHubActive() {
+    if (DriverStation.isAutonomous()) {
+      return true;
+    }
+
     if (!(inactiveFirst.isPresent() && alliance.isPresent())) {
       return false;
     }
@@ -108,5 +117,8 @@ public class GameState {
   public static void periodic() {
     updateGameData();
     updateAlliance();
+
+    Logger.recordOutput("GameState/gameState", GameState.isHubActive());
+    Logger.recordOutput("GameState/remainingShiftTime", GameState.getRemainingShiftTime());
   }
 }

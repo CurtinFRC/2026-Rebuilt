@@ -260,8 +260,6 @@ public class Robot extends LoggedRobot {
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
     Threads.setCurrentThreadPriority(false, 10);
-    Logger.recordOutput("gameState", GameState.isHubActive());
-    Logger.recordOutput("remainingShiftTime", GameState.getRemainingShiftTime());
   }
 
   /** This function is called once when the robot is disabled. */
