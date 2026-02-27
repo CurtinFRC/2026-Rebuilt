@@ -20,9 +20,9 @@ public class IntakeIOSim implements IntakeIO {
   @Override
   public void updateInputs(IntakeIOInputs inputs) {
     intakeSim.update(0.02);
-    inputs.AppliedVoltage = voltage;
-    inputs.CurrentAmps = intakeSim.getCurrentDrawAmps();
-    inputs.angularVelocity = intakeSim.getAngularVelocityRPM();
+    inputs.frontMotorAppliedVoltage = voltage;
+    inputs.frontMotorCurrentAmps = intakeSim.getCurrentDrawAmps();
+    inputs.frontMotorAngularVelocity = intakeSim.getAngularVelocityRPM();
   }
 
   @Override

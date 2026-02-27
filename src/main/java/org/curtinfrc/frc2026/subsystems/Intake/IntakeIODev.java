@@ -54,9 +54,9 @@ public class IntakeIODev implements IntakeIO {
 
   @Override
   public void updateInputs(IntakeIOInputs inputs) {
-    inputs.AppliedVoltage = voltage.getValueAsDouble();
-    inputs.CurrentAmps = current.getValueAsDouble();
-    inputs.angularVelocity = velocity.getValueAsDouble();
+    inputs.frontMotorAppliedVoltage = voltage.getValueAsDouble();
+    inputs.frontMotorCurrentAmps = current.getValueAsDouble();
+    inputs.frontMotorAngularVelocity = velocity.getValueAsDouble();
   }
 
   @Override
