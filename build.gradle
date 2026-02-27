@@ -15,6 +15,12 @@ def visionSkipNuitkaRaw = (project.findProperty("visionSkipNuitka")
         ?: System.getenv("VISION_SKIP_NUITKA")
         ?: "false").toString().trim().toLowerCase()
 def visionSkipNuitka = ["1", "true", "yes", "y", "on"].contains(visionSkipNuitkaRaw)
+def repulsorOffloadHosts =
+        (project.findProperty("repulsorOffloadHosts")
+        ?: project.findProperty("offloadHosts")
+        ?: System.getenv("REPULSOR_OFFLOAD_HOSTS")
+        ?: System.getenv("OFFLOAD_HOSTS")
+        ?: "").toString().trim()
 
 // Define my targets (RoboRIO) and artifacts (deployable files)
 // This is added by GradleRIO's backing project DeployUtils.
@@ -37,6 +43,9 @@ deploy {
                     jvmArgs.add("-XX:GCTimeRatio=5")
                     jvmArgs.add("-XX:+UseSerialGC")
                     jvmArgs.add("-XX:MaxGCPauseMillis=50")
+                    if (!repulsorOffloadHosts.isEmpty()) {
+                        jvmArgs.add("-Drepulsor.offload.hosts=${repulsorOffloadHosts}")
+                    }
 
                     // The options below may improve performance, but should only be enabled on the RIO 2
                     final MAX_JAVA_HEAP_SIZE_MB = 100;
@@ -98,6 +107,7 @@ dependencies {
     nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
     simulationRelease wpi.sim.enableRelease()
 
+    testImplementation project(':offload-server')
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
@@ -214,6 +224,32 @@ task(generateOffloadManifest, type: Copy) {
     from(layout.buildDirectory.file("classes/java/main/offload-manifest.json"))
     into(layout.buildDirectory.dir("offload"))
     rename { "offload-manifest.json" }
+}
+
+task(localOffloadSmokeTest, type: Test) {
+    group = "offload"
+    description = "Run local end-to-end offload smoke test against a real offload server."
+    dependsOn(buildOffloadTasksJar, generateOffloadManifest)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching "org.curtinfrc.frc2026.util.Repulsor.Offload.LocalOffloadSmokeTest"
+    }
+    doFirst {
+        systemProperty "repulsor.offload.test.taskJar", project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile.absolutePath
+        systemProperty "repulsor.offload.test.manifest", layout.buildDirectory.file("offload/offload-manifest.json").get().asFile.absolutePath
+    }
+}
+
+def requestedTasks = gradle.startParameter.taskNames
+def localOffloadOnlyRequested =
+        !requestedTasks.isEmpty() &&
+        requestedTasks.every { it == "localOffloadSmokeTest" || it.endsWith(":localOffloadSmokeTest") }
+if (localOffloadOnlyRequested) {
+    tasks.named("test") {
+        enabled = false
+    }
 }
 
 task(deployOffloadToCoprocessors) {

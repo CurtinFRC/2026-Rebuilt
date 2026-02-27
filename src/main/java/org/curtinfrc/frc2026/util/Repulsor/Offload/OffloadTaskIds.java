@@ -12,4 +12,5 @@ public final class OffloadTaskIds {
   public static final String FIELD_TRACKER_NEXT_SHUTTLE_RECOVERY_GOAL_BLUE =
       "repulsor.fieldtracker.nextShuttleRecoveryGoalBlue.v1";
   public static final String SAMPLE_DOUBLE_VALUE = "repulsor.sample.math.double.v1";
+  public static final String SAMPLE_WORKER_THREAD_PROBE = "repulsor.sample.workerThreadProbe.v1";
 }

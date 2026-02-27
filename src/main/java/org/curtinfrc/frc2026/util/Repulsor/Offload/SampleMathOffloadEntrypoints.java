@@ -12,4 +12,13 @@ public final class SampleMathOffloadEntrypoints {
   public static int doubleValue(int input) {
     return input * 2;
   }
+
+  @Offloadable(
+      id = OffloadTaskIds.SAMPLE_WORKER_THREAD_PROBE,
+      version = 1,
+      timeoutMs = 250,
+      fallback = true)
+  public static boolean runsOnOffloadWorkerThread(int marker) {
+    return marker == 1 && Thread.currentThread().getName().startsWith("offload-server-worker");
+  }
 }
