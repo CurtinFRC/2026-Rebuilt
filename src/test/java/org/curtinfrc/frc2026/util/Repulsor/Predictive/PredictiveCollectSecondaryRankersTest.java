@@ -133,6 +133,45 @@ class PredictiveCollectSecondaryRankersTest {
     assertTrue(out.point.getDistance(new Translation2d(4.0, 2.0)) <= 0.25);
   }
 
+  @Test
+  void bestCollectHotspotRejectsStaleFuelOnly() {
+    SpatialDyn dyn =
+        makeDyn(
+            List.of(
+                new DynamicObject(
+                    "f1", "fuel", new Translation2d(4.0, 2.0), new Translation2d(), 0.70)),
+            1.0);
+
+    TestApi api = new TestApi(dyn);
+    Translation2d out =
+        PredictiveCollectSecondaryRankers.bestCollectHotspot(
+            api, new Translation2d[] {new Translation2d(4.0, 2.0)}, 0.75);
+
+    assertNull(out);
+  }
+
+  @Test
+  void rankCollectPointsRejectsStaleFuelOnly() {
+    SpatialDyn dyn =
+        makeDyn(
+            List.of(
+                new DynamicObject(
+                    "f1", "fuel", new Translation2d(4.0, 2.0), new Translation2d(), 0.70)),
+            1.0);
+    TestApi api = new TestApi(dyn);
+
+    PointCandidate out =
+        PredictiveCollectSecondaryRankers.rankCollectPoints(
+            api,
+            new Translation2d(3.2, 2.0),
+            3.0,
+            new Translation2d[] {new Translation2d(4.0, 2.0)},
+            1,
+            8);
+
+    assertNull(out);
+  }
+
   private static final class TestApi implements PredictiveCollectSecondaryRankers.Api {
     private final SpatialDyn dyn;
     private Translation2d[] candidates = new Translation2d[0];

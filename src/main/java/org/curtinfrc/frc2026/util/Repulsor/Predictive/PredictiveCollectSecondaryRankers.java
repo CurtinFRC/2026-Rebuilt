@@ -101,6 +101,7 @@ public final class PredictiveCollectSecondaryRankers {
   private static final double SECONDARY_ANCHOR_EVIDENCE_SCALE = 0.65;
   private static final double SECONDARY_ANCHOR_UNITS_SCALE = 0.55;
   private static final double SECONDARY_FINAL_UNITS_SCALE = 0.70;
+  private static final double SECONDARY_RETURN_MAX_AGE_S = 0.45;
   private static final double ACTIVITY_CAP = 1.05;
   private static final int ENEMY_REGIONS_MAX = 24;
 
@@ -108,6 +109,22 @@ public final class PredictiveCollectSecondaryRankers {
 
   private static double nowSec() {
     return System.nanoTime() / 1e9;
+  }
+
+  private static int countFreshResourcesWithin(
+      SpatialDyn dyn, Translation2d center, double r, double maxAgeS) {
+    if (dyn == null || center == null || dyn.resources == null || dyn.resources.isEmpty()) return 0;
+    double rr2 = r * r;
+    int count = 0;
+    for (int i = 0; i < dyn.resources.size(); i++) {
+      var o = dyn.resources.get(i);
+      if (o == null || o.pos == null) continue;
+      if (o.ageS > maxAgeS) continue;
+      double dx = o.pos.getX() - center.getX();
+      double dy = o.pos.getY() - center.getY();
+      if ((dx * dx + dy * dy) <= rr2) count++;
+    }
+    return count;
   }
 
   static Translation2d anchorHierarchicalPointToFuel(
@@ -127,8 +144,12 @@ public final class PredictiveCollectSecondaryRankers {
     int coreCount = dyn.countResourcesWithin(anchored, rCore);
     double evidence = dyn.evidenceMassWithin(anchored, EVIDENCE_R);
     double units = dyn.valueInSquare(anchored, Math.max(0.10, cellM * 0.5));
+    int freshNear =
+        countFreshResourcesWithin(
+            dyn, anchored, Math.max(0.20, rCore * 2.0), SECONDARY_RETURN_MAX_AGE_S);
 
     if (coreCount < 1) return null;
+    if (freshNear < 1) return null;
     if (evidence < minEv * HIERARCHICAL_ANCHOR_EVIDENCE_SCALE) return null;
     if (units < Math.max(0.02, minUnits * HIERARCHICAL_ANCHOR_UNITS_SCALE)) return null;
     return anchored;
@@ -379,7 +400,13 @@ public final class PredictiveCollectSecondaryRankers {
       }
 
       if (eUse.units >= Math.max(0.02, minUnits * 0.70)
-          && eUse.count >= Math.max(1, minCount - 1)) {
+          && eUse.count >= Math.max(1, minCount - 1)
+          && countFreshResourcesWithin(
+                  dyn,
+                  use,
+                  Math.max(0.20, PredictiveFieldStateOps.coreRadiusFor(cellM) * 2.0),
+                  SECONDARY_RETURN_MAX_AGE_S)
+              >= 1) {
         api.setLastReturnedCollect(use, now);
 
         Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
