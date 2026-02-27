@@ -174,7 +174,7 @@ public final class PredictiveCollectScoringRuntime {
     if (touch == null) return true;
 
     CollectProbe touchProbe = ops.probeCollect(touch, 0.55);
-    double touchNeedUnits = Math.max(0.02, minUnits * 0.65);
+    double touchNeedUnits = Math.max(0.02, minUnits * 0.90);
     if (touchProbe == null || touchProbe.count < 1 || touchProbe.units < touchNeedUnits)
       return true;
 
@@ -195,7 +195,7 @@ public final class PredictiveCollectScoringRuntime {
             null,
             null);
 
-    if (cur.units < Math.max(0.02, minUnits * 0.70)) return true;
+    if (cur.units < Math.max(0.02, minUnits * 0.85)) return true;
     if (cur.count < Math.max(1, minCount - 1)) return true;
     if (cur.depleted > 0.90) return true;
     if (cur.evidence < minEvidence(ops, totalEv) * 0.75) return true;

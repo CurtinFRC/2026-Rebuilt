@@ -28,6 +28,33 @@ import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectO
 public final class FieldTrackerCollectPassDriveStep {
   private FieldTrackerCollectPassDriveStep() {}
 
+  static final double HUB_TRAP_SWITCH_STILL_SEC = 0.35;
+  static final double HUB_TRAP_SWITCH_STUCK_SEC = 0.20;
+  static final double HUB_TRAP_SWITCH_NO_FUEL_SEC = 0.12;
+  static final double HUB_TRAP_SWITCH_MAX_HOLD_SEC = 0.95;
+  static final double HUB_TRAP_SWITCH_LIVE_NEAR_R_M = 0.85;
+  static final int HUB_TRAP_SWITCH_MAX_LIVE_COUNT = 2;
+
+  static boolean shouldAutoSwitchFromStill(double stillSec) {
+    return stillSec >= FieldTrackerCollectObjectiveLoop.COLLECT_AUTO_SWITCH_STILL_SEC;
+  }
+
+  static boolean shouldForceSwitchFromHubFrontTrap(
+      boolean trapTarget,
+      double stillSec,
+      double stuckSec,
+      double noFuelSec,
+      int liveFuelNear,
+      double stickyAgeSec) {
+    if (!trapTarget) return false;
+    if (stickyAgeSec >= HUB_TRAP_SWITCH_MAX_HOLD_SEC
+        && liveFuelNear <= HUB_TRAP_SWITCH_MAX_LIVE_COUNT) return true;
+    if (liveFuelNear > HUB_TRAP_SWITCH_MAX_LIVE_COUNT) return false;
+    return stillSec >= HUB_TRAP_SWITCH_STILL_SEC
+        || stuckSec >= HUB_TRAP_SWITCH_STUCK_SEC
+        || noFuelSec >= HUB_TRAP_SWITCH_NO_FUEL_SEC;
+  }
+
   public static Pose2d driveAndFinish(
       FieldTrackerCollectObjectiveLoop loop,
       FieldTrackerCollectPassContext ctx,
@@ -304,11 +331,18 @@ public final class FieldTrackerCollectPassDriveStep {
       loop.collectStuckAnchorNs = ctx.nowNs();
       loop.collectStuckAnchorPos = ctx.robotPos();
       loop.collectStuckSec = 0.0;
+      loop.collectAutoSwitchStillSec = 0.0;
       loop.lastRobotPosForStuck = ctx.robotPos();
     } else {
       stepDist = ctx.robotPos().getDistance(loop.lastRobotPosForStuck);
       speed = stepDist / Math.max(1e-3, ctx.dt());
       loop.lastRobotPosForStuck = ctx.robotPos();
+
+      if (speed <= FieldTrackerCollectObjectiveLoop.COLLECT_STUCK_SPEED_MPS) {
+        loop.collectAutoSwitchStillSec += ctx.dt();
+      } else {
+        loop.collectAutoSwitchStillSec = 0.0;
+      }
 
       double movedFromAnchor = ctx.robotPos().getDistance(loop.collectStuckAnchorPos);
 
@@ -324,6 +358,48 @@ public final class FieldTrackerCollectPassDriveStep {
         if (lowSpeed && nearAnchor) loop.collectStuckSec += ctx.dt();
         else loop.collectStuckSec = 0.0;
       }
+    }
+
+    double stillSwitchSec = Math.max(loop.collectStickyStillSec, loop.collectAutoSwitchStillSec);
+    if (pass == 0 && shouldAutoSwitchFromStill(stillSwitchSec)) {
+      Pose2d hold = ctx.holdPose().apply(desiredDriveTarget);
+      if (desiredCollectPoint != null) {
+        loop.predictor.markCollectDepleted(
+            desiredCollectPoint, FieldTrackerCollectObjectiveLoop.COLLECT_CELL_M, 1.60);
+      }
+      loop.clearCollectSticky();
+      return hold;
+    }
+
+    boolean hubTrapTarget =
+        FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+                desiredCollectPoint, ctx.leftBandX1(), ctx.rightBandX0())
+            || FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+                desiredDriveTarget, ctx.leftBandX1(), ctx.rightBandX0());
+    Translation2d trapProbeCenter =
+        desiredCollectPoint != null ? desiredCollectPoint : desiredDriveTarget;
+    int liveFuelNearTrap =
+        loop.countLiveCollectResourcesWithin(
+            ctx.dynUse(), trapProbeCenter, HUB_TRAP_SWITCH_LIVE_NEAR_R_M);
+    double stickyAgeSec =
+        loop.collectStickyTsNs != 0L
+            ? FieldTrackerCollectObjectiveMath.nowSFromNs(ctx.nowNs() - loop.collectStickyTsNs)
+            : 0.0;
+    if (pass == 0
+        && shouldForceSwitchFromHubFrontTrap(
+            hubTrapTarget,
+            stillSwitchSec,
+            loop.collectStuckSec,
+            loop.collectNoFuelSec,
+            liveFuelNearTrap,
+            stickyAgeSec)) {
+      Pose2d hold = ctx.holdPose().apply(desiredDriveTarget);
+      if (desiredCollectPoint != null) {
+        loop.predictor.markCollectDepleted(
+            desiredCollectPoint, FieldTrackerCollectObjectiveLoop.COLLECT_CELL_M, 1.40);
+      }
+      loop.clearCollectSticky();
+      return hold;
     }
 
     boolean targetIsFarForNearbyFuelCheck =

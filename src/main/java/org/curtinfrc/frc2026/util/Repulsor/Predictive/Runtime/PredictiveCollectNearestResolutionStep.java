@@ -38,6 +38,7 @@ public final class PredictiveCollectNearestResolutionStep {
   static final double EARLY_SWITCH_RICHER_UNITS_REL = 1.55;
   static final double EARLY_SWITCH_ETA_DELTA_MAX_S = 0.85;
   static final double EARLY_SWITCH_SCORE_FLOOR_DELTA = 0.45;
+  static final double ESCAPE_SAME_TARGET_EPS_M = 0.05;
 
   static boolean allowCommitWindowRicherSwitch(CollectEval current, CollectEval candidate) {
     if (current == null || candidate == null) return false;
@@ -51,6 +52,12 @@ public final class PredictiveCollectNearestResolutionStep {
     boolean etaAcceptable = candidate.eta <= current.eta + EARLY_SWITCH_ETA_DELTA_MAX_S;
     boolean scoreAcceptable = candidate.score >= current.score - EARLY_SWITCH_SCORE_FLOOR_DELTA;
     return significantlyRicher && etaAcceptable && scoreAcceptable;
+  }
+
+  static boolean shouldDropEscapedCurrentTarget(
+      boolean escape, Translation2d currentTarget, Translation2d chosenPoint) {
+    if (!escape || currentTarget == null || chosenPoint == null) return false;
+    return currentTarget.getDistance(chosenPoint) <= ESCAPE_SAME_TARGET_EPS_M;
   }
 
   public static PointCandidate resolve(
@@ -99,9 +106,21 @@ public final class PredictiveCollectNearestResolutionStep {
 
     boolean escape =
         ops.currentCollectTarget != null
-            && (ops.currentCollectTarget.getDistance(chosenPt) < 1e-6
-                ? false
-                : ops.shouldEscapeCurrentCollect(ourPos, dyn, totalEv, minUnits, minCount, cellM));
+            && ops.shouldEscapeCurrentCollect(ourPos, dyn, totalEv, minUnits, minCount, cellM);
+
+    if (shouldDropEscapedCurrentTarget(escape, ops.currentCollectTarget, chosenPt)
+        && ops.currentCollectTarget != null) {
+      ops.addDepletedMark(
+          ops.currentCollectTarget, 0.65, 1.10, PredictiveFieldStateOps.DEPLETED_TTL_S, false);
+      ops.recordRegionAttempt(dyn, ops.currentCollectTarget, now, false);
+      ops.currentCollectTarget = null;
+      ops.currentCollectTouch = null;
+      ops.currentCollectScore = -1e18;
+      ops.currentCollectUnits = 0.0;
+      ops.currentCollectEta = 0.0;
+      ops.collectArrivalTs = -1.0;
+      return null;
+    }
 
     if (ops.currentCollectTarget != null
         && !ops.footprintOk(

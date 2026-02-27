@@ -96,10 +96,37 @@ public final class PredictiveCollectSecondaryRankers {
   private static final double DEPLETED_TTL_S = 3.25;
   private static final double DEPLETED_PEN_W = 1.75;
   private static final double EVIDENCE_R = 0.85;
+  private static final double HIERARCHICAL_ANCHOR_MAX_DIST_M = 0.55;
+  private static final double HIERARCHICAL_ANCHOR_EVIDENCE_SCALE = 0.75;
+  private static final double HIERARCHICAL_ANCHOR_UNITS_SCALE = 0.60;
   private static final double ACTIVITY_CAP = 1.05;
   private static final int ENEMY_REGIONS_MAX = 24;
 
   private PredictiveCollectSecondaryRankers() {}
+
+  static Translation2d anchorHierarchicalPointToFuel(
+      SpatialDyn dyn, Translation2d seed, double cellM, double minUnits, double minEv) {
+    if (dyn == null || seed == null) return null;
+
+    double rCore = Math.max(0.05, PredictiveFieldStateOps.coreRadiusFor(cellM));
+    Translation2d nearest =
+        dyn.nearestResourceTo(seed, Math.max(HIERARCHICAL_ANCHOR_MAX_DIST_M, rCore * 4.0));
+    if (nearest == null) return null;
+
+    Translation2d anchored = nearest;
+    Translation2d centroid =
+        dyn.centroidResourcesWithin(nearest, Math.max(0.20, rCore * 3.0), 0.06);
+    if (centroid != null) anchored = centroid;
+
+    int coreCount = dyn.countResourcesWithin(anchored, rCore);
+    double evidence = dyn.evidenceMassWithin(anchored, EVIDENCE_R);
+    double units = dyn.valueInSquare(anchored, Math.max(0.10, cellM * 0.5));
+
+    if (coreCount < 1) return null;
+    if (evidence < minEv * HIERARCHICAL_ANCHOR_EVIDENCE_SCALE) return null;
+    if (units < Math.max(0.02, minUnits * HIERARCHICAL_ANCHOR_UNITS_SCALE)) return null;
+    return anchored;
+  }
 
   static PointCandidate rankCollectHierarchical(
       Api api,
@@ -322,6 +349,26 @@ public final class PredictiveCollectSecondaryRankers {
         if (es.score > e0.score + 1e-9) {
           use = snapped;
           eUse = es;
+        }
+      }
+
+      Translation2d anchored = anchorHierarchicalPointToFuel(dyn, use, cellM, minUnits, minEv);
+      if (anchored == null) {
+        api.addDepletedMark(use, 0.70, 1.20, DEPLETED_TTL_S, false);
+        api.addDepletedRing(use, 0.35, 0.95, 0.75, DEPLETED_TTL_S);
+        continue;
+      }
+
+      if (anchored.getDistance(use) > 1e-6) {
+        CollectEval ea =
+            api.evalCollectPoint(ourPos, cap, anchored, goal, cellM, dyn, enemyIntent, allyIntent);
+        ea.banditBonus = api.regionBanditBonus(dyn, anchored, now);
+        ea.score += ea.banditBonus;
+        if (ea.units < minUnits * 0.55 || ea.count < Math.max(1, minCount - 1)) ea.score -= 2.75;
+        if (ea.evidence < minEv) ea.score -= 2.25;
+        if (ea.score >= eUse.score - 0.20) {
+          use = anchored;
+          eUse = ea;
         }
       }
 

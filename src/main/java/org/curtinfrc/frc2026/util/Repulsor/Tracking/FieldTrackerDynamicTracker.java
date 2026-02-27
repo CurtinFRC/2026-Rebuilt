@@ -20,7 +20,6 @@ package org.curtinfrc.frc2026.util.Repulsor.Tracking;
 
 import edu.wpi.first.math.geometry.Pose3d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.RobotBase;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,7 +51,6 @@ final class FieldTrackerDynamicTracker {
 
   List<DynamicObject> snapshotDynamics() {
     long nowNs = System.nanoTime();
-    boolean isSim = RobotBase.isSimulation();
 
     ArrayList<DynamicObject> out = new ArrayList<>(tracked.size());
     for (TrackedObj o : tracked.values()) {
@@ -66,7 +64,6 @@ final class FieldTrackerDynamicTracker {
       if (ageS < 0.0) continue;
 
       String ty = o.type != null ? o.type : "unknown";
-      if (isSim) ageS = 0.0;
 
       out.add(
           new DynamicObject(

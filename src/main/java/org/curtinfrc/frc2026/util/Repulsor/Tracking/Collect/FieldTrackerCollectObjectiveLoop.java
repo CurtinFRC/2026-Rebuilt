@@ -116,8 +116,8 @@ public final class FieldTrackerCollectObjectiveLoop {
 
   public static final double COLLECT_LIVE_FUEL_NEAR_TARGET_R_M = 0.65;
   public static final double COLLECT_LIVE_OBS_MAX_AGE_S = 0.45;
-  public static final double COLLECT_PREDICTOR_OBS_MAX_AGE_S = 0.60;
-  public static final double COLLECT_STICKY_INVALID_DROP_SEC = 0.22;
+  public static final double COLLECT_PREDICTOR_OBS_MAX_AGE_S = 0.35;
+  public static final double COLLECT_STICKY_INVALID_DROP_SEC = 0.10;
   public static final double COLLECT_REACHED_EMPTY_FORCE_DROP_SEC = 0.18;
   public static final double COLLECT_REACHED_EMPTY_NEAR_TARGET_M = 0.95;
   public double collectReachedEmptySec = 0.0;
@@ -125,6 +125,7 @@ public final class FieldTrackerCollectObjectiveLoop {
   public static final double COLLECT_DONE_NO_FUEL_SEC = 0.35;
   public static final double COLLECT_DONE_STUCK_SEC = 0.35;
   public static final double COLLECT_STUCK_SPEED_MPS = 0.15;
+  public static final double COLLECT_AUTO_SWITCH_STILL_SEC = 1.0;
 
   public static final double COLLECT_EMPTY_DRIVE_DONE_SEC = 0.35;
   public static final double COLLECT_EMPTY_DRIVE_NEAR_ROBOT_M = 1.05;
@@ -163,6 +164,7 @@ public final class FieldTrackerCollectObjectiveLoop {
 
   public double collectNoFuelSec = 0.0;
   public double collectStuckSec = 0.0;
+  public double collectAutoSwitchStillSec = 0.0;
 
   public Translation2d lastRobotPosForStuck = new Translation2d();
 
@@ -212,6 +214,7 @@ public final class FieldTrackerCollectObjectiveLoop {
     collectStickyHalfLock = 0;
     collectNoFuelSec = 0.0;
     collectStuckSec = 0.0;
+    collectAutoSwitchStillSec = 0.0;
     lastRobotPosForStuck = new Translation2d();
     collectEmptyDriveSec = 0.0;
     collectStuckAnchorPos = new Translation2d();

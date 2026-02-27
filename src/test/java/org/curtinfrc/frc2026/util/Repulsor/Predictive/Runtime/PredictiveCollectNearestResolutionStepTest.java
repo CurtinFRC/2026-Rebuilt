@@ -3,6 +3,7 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import edu.wpi.first.math.geometry.Translation2d;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.junit.jupiter.api.Test;
 
@@ -37,5 +38,21 @@ class PredictiveCollectNearestResolutionStepTest {
 
     assertFalse(
         PredictiveCollectNearestResolutionStep.allowCommitWindowRicherSwitch(current, candidate));
+  }
+
+  @Test
+  void shouldDropEscapedCurrentTargetTrueWhenEscapingSamePoint() {
+    Translation2d cur = new Translation2d(2.0, 1.0);
+    Translation2d chosen = new Translation2d(2.02, 1.0);
+    assertTrue(
+        PredictiveCollectNearestResolutionStep.shouldDropEscapedCurrentTarget(true, cur, chosen));
+  }
+
+  @Test
+  void shouldDropEscapedCurrentTargetFalseWhenChosenDiffers() {
+    Translation2d cur = new Translation2d(2.0, 1.0);
+    Translation2d chosen = new Translation2d(2.20, 1.0);
+    assertFalse(
+        PredictiveCollectNearestResolutionStep.shouldDropEscapedCurrentTarget(true, cur, chosen));
   }
 }

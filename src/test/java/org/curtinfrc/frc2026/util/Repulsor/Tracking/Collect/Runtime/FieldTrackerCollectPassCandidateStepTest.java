@@ -1,7 +1,9 @@
 package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.function.Function;
@@ -96,5 +98,93 @@ class FieldTrackerCollectPassCandidateStepTest {
             base, new Translation2d[] {farRich}, robot, 3.0, collectValid, units, score);
 
     assertSame(base, out);
+  }
+
+  @Test
+  void preferLiveFuelCandidateSwitchesOffNonLiveCurrentCandidate() {
+    Translation2d current = new Translation2d(2.0, 1.0);
+    Translation2d live = new Translation2d(2.6, 1.0);
+
+    Predicate<Translation2d> valid = p -> true;
+    Predicate<Translation2d> liveNear = p -> Math.abs(p.getX() - live.getX()) < 1e-9;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - current.getX()) < 1e-9 ? 2.0 : 1.5;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferLiveFuelCandidate(
+            current, new Translation2d[] {current, live}, valid, liveNear, score);
+
+    assertEquals(live.getX(), out.getX(), EPS);
+    assertEquals(live.getY(), out.getY(), EPS);
+  }
+
+  @Test
+  void preferLiveFuelCandidateKeepsCurrentWhenAlreadyLiveAndNotClearlyBetter() {
+    Translation2d current = new Translation2d(2.0, 1.0);
+    Translation2d altLive = new Translation2d(2.6, 1.0);
+
+    Predicate<Translation2d> valid = p -> true;
+    Predicate<Translation2d> liveNear = p -> true;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - altLive.getX()) < 1e-9 ? 1.01 : 1.0;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferLiveFuelCandidate(
+            current, new Translation2d[] {current, altLive}, valid, liveNear, score);
+
+    assertSame(current, out);
+  }
+
+  @Test
+  void preferOutsideHubFrontTrapSwitchesWhenOutsideCandidateIsComparable() {
+    Translation2d trap = new Translation2d(5.0, 2.0);
+    Translation2d outside = new Translation2d(7.0, 2.0);
+
+    Predicate<Translation2d> valid = p -> true;
+    Predicate<Translation2d> isTrap = p -> Math.abs(p.getX() - trap.getX()) < 1e-9;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - trap.getX()) < 1e-9 ? 1.00 : 0.92;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferOutsideHubFrontTrap(
+            trap, new Translation2d[] {trap, outside}, valid, isTrap, score);
+
+    assertEquals(outside.getX(), out.getX(), EPS);
+    assertEquals(outside.getY(), out.getY(), EPS);
+  }
+
+  @Test
+  void preferOutsideHubFrontTrapKeepsTrapWhenOutsideIsMuchWorse() {
+    Translation2d trap = new Translation2d(5.0, 2.0);
+    Translation2d outside = new Translation2d(7.0, 2.0);
+
+    Predicate<Translation2d> valid = p -> true;
+    Predicate<Translation2d> isTrap = p -> Math.abs(p.getX() - trap.getX()) < 1e-9;
+    Function<Translation2d, Double> score =
+        p -> Math.abs(p.getX() - trap.getX()) < 1e-9 ? 1.00 : 0.70;
+
+    Translation2d out =
+        FieldTrackerCollectPassCandidateStep.preferOutsideHubFrontTrap(
+            trap, new Translation2d[] {trap, outside}, valid, isTrap, score);
+
+    assertSame(trap, out);
+  }
+
+  @Test
+  void shouldRequireLiveFuelEvidenceOnlyNearRobotWhenLiveDynamicsExist() {
+    Translation2d robot = new Translation2d(2.0, 2.0);
+    Translation2d near = new Translation2d(3.0, 2.0);
+    Translation2d far = new Translation2d(8.0, 2.0);
+
+    boolean nearReq =
+        FieldTrackerCollectPassCandidateStep.shouldRequireLiveFuelEvidence(robot, near, true, 2.6);
+    boolean farReq =
+        FieldTrackerCollectPassCandidateStep.shouldRequireLiveFuelEvidence(robot, far, true, 2.6);
+    boolean noLiveReq =
+        FieldTrackerCollectPassCandidateStep.shouldRequireLiveFuelEvidence(robot, near, false, 2.6);
+
+    assertTrue(nearReq);
+    assertFalse(farReq);
+    assertFalse(noLiveReq);
   }
 }

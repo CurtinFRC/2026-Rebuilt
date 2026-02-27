@@ -49,4 +49,22 @@ class FieldTrackerCollectObjectiveMathTest {
     assertFalse(FieldTrackerCollectObjectiveMath.stickySwitched(a, nearA));
     assertTrue(FieldTrackerCollectObjectiveMath.stickySwitched(a, b));
   }
+
+  @Test
+  void isHubFrontTrapPointDetectsCenterlineTrapNearInnerBandEdge() {
+    double leftInner = 4.9;
+    double rightInner = 12.7;
+    Translation2d trap = new Translation2d(leftInner + 0.30, Constants.FIELD_WIDTH * 0.5);
+    Translation2d safeFar =
+        new Translation2d((leftInner + rightInner) * 0.5, Constants.FIELD_WIDTH * 0.5);
+    Translation2d safeOffCenterline =
+        new Translation2d(leftInner + 0.30, Constants.FIELD_WIDTH * 0.5 + 1.6);
+
+    assertTrue(FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(trap, leftInner, rightInner));
+    assertFalse(
+        FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(safeFar, leftInner, rightInner));
+    assertFalse(
+        FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+            safeOffCenterline, leftInner, rightInner));
+  }
 }

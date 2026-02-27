@@ -21,8 +21,6 @@ package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.dot;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.holdSForDist;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.nowSFromNs;
-import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.sideSign;
-import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.sideSignXBand;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.stickySame;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.stickySwitched;
 import static org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectObjectiveMath.switchMarginForDist;
@@ -40,13 +38,24 @@ public final class FieldTrackerCollectPassStickyStep {
   static final double STICKY_PREFER_RANKED_SCORE_MARGIN = 0.06;
 
   static Translation2d preferRankedCandidateForSticky(
-      Translation2d bestCandidate, FieldTrackerCollectPassCandidateResult cand) {
+      Translation2d bestCandidate,
+      FieldTrackerCollectPassCandidateResult cand,
+      FieldTrackerCollectPassContext ctx) {
     if (cand == null) return bestCandidate;
     if (cand.best() == null || cand.best().point == null) return bestCandidate;
     Translation2d ranked = cand.best().point;
     if (!cand.collectValid().test(ranked)) return bestCandidate;
     if (bestCandidate == null) return ranked;
     if (!cand.collectValid().test(bestCandidate)) return ranked;
+
+    boolean rankedTrap =
+        FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+            ranked, ctx.leftBandX1(), ctx.rightBandX0());
+    boolean bestTrap =
+        FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+            bestCandidate, ctx.leftBandX1(), ctx.rightBandX0());
+    if (rankedTrap && !bestTrap) return bestCandidate;
+    if (!rankedTrap && bestTrap) return ranked;
 
     double rankedScore = cand.scoreResource().apply(ranked);
     double currentScore = cand.scoreResource().apply(bestCandidate);
@@ -59,7 +68,7 @@ public final class FieldTrackerCollectPassStickyStep {
       FieldTrackerCollectPassContext ctx,
       FieldTrackerCollectPassCandidateResult cand,
       int pass) {
-    Translation2d bestCandidate = preferRankedCandidateForSticky(cand.bestCandidate(), cand);
+    Translation2d bestCandidate = preferRankedCandidateForSticky(cand.bestCandidate(), cand, ctx);
     Translation2d prevSticky = loop.collectStickyPoint;
 
     double distToCand = ctx.robotPos().getDistance(bestCandidate);
@@ -79,24 +88,18 @@ public final class FieldTrackerCollectPassStickyStep {
 
     if (ctx.robotInCenterBand()) {
       holdS = Math.max(holdS, 0.85);
-      keepMargin *= 1.12;
-      immediateDelta *= 1.08;
+      keepMargin *= 1.05;
+      immediateDelta *= 1.03;
     }
 
     final double keepMarginF = keepMargin;
-    final boolean centerF = ctx.robotInCenterBand();
 
     ToDoubleBiFunction<Translation2d, Translation2d> transitionExtra =
         (from, to) -> {
           if (from == null || to == null) return 0.0;
           double extra = 0.0;
-
-          int p = sideSignXBand(from.getX(), 0.10);
-          int q = sideSignXBand(to.getX(), 0.10);
-
-          if (centerF && p != 0 && q != 0 && p != q) extra += keepMarginF * 0.90 + 0.18;
           if (from.getDistance(to) <= FieldTrackerCollectObjectiveLoop.COLLECT_SWITCH_CLOSE_M)
-            extra += keepMarginF * 1.55 + 0.18;
+            extra += keepMarginF * 1.35 + 0.14;
 
           return extra;
         };
@@ -132,10 +135,9 @@ public final class FieldTrackerCollectPassStickyStep {
       Translation2d nextHat = unitOrDefault(toNext, prevHat);
 
       boolean opposite = dot(prevHat, nextHat) < 0.15;
-      boolean tooSoon = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs) < 0.55;
+      boolean tooSoon = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs) < 0.25;
 
-      if ((opposite && !ctx.robotInCenterBand())
-          || (tooSoon && loop.collectStickyStillSec < 0.10)) {
+      if (tooSoon && loop.collectStickyStillSec < 0.10 && !opposite) {
         selectedResource = prevSticky;
         loop.collectStickySelector.force(prevSticky);
       }
@@ -165,11 +167,6 @@ public final class FieldTrackerCollectPassStickyStep {
           switched = false;
         }
       }
-    }
-
-    if (ctx.robotInCenterBand() && loop.collectStickyHalfLock == 0) {
-      int s = sideSign(selectedResource);
-      if (s != 0) loop.collectStickyHalfLock = s;
     }
 
     loop.collectStickyPoint = selectedResource;

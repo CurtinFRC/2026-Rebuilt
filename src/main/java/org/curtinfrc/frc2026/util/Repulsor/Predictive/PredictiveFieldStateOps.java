@@ -199,9 +199,9 @@ public final class PredictiveFieldStateOps {
   public static final int COLLECT_FINE_OFFSETS_GRID = 3;
   public static final double COLLECT_FINE_OFFSETS_SCALE = 0.65;
 
-  public static final double COLLECT_COMMIT_MIN_S = 0.20;
-  public static final double COLLECT_COMMIT_MAX_S = 0.55;
-  public static final double COLLECT_SWITCH_BASE = 0.18;
+  public static final double COLLECT_COMMIT_MIN_S = 0.08;
+  public static final double COLLECT_COMMIT_MAX_S = 0.25;
+  public static final double COLLECT_SWITCH_BASE = 0.08;
   public static final double COLLECT_SWITCH_ETA_W = 0.05;
 
   public static final double COLLECT_PROGRESS_MIN_DROP_M = 0.25;

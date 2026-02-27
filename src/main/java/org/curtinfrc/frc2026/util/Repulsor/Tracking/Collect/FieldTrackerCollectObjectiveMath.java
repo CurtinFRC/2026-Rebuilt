@@ -29,6 +29,8 @@ public final class FieldTrackerCollectObjectiveMath {
   private static final double STICKY_NEAR_DIST_M = 1.40;
   private static final double STICKY_FAR_DIST_M = 4.80;
   private static final double CANONICAL_SNAP_M = 0.45;
+  private static final double HUB_FRONT_TRAP_X_HALF_M = 0.78;
+  private static final double HUB_FRONT_TRAP_CENTERLINE_HALF_Y_M = 1.00;
 
   private FieldTrackerCollectObjectiveMath() {}
 
@@ -176,5 +178,15 @@ public final class FieldTrackerCollectObjectiveMath {
     if (x < 0.0) return 0.0;
     if (x > 1.0) return 1.0;
     return x;
+  }
+
+  public static boolean isHubFrontTrapPoint(
+      Translation2d p, double leftBandX1, double rightBandX0) {
+    if (p == null) return false;
+    double dy = Math.abs(p.getY() - (Constants.FIELD_WIDTH * 0.5));
+    if (dy > HUB_FRONT_TRAP_CENTERLINE_HALF_Y_M) return false;
+    boolean nearLeftInner = Math.abs(p.getX() - leftBandX1) <= HUB_FRONT_TRAP_X_HALF_M;
+    boolean nearRightInner = Math.abs(p.getX() - rightBandX0) <= HUB_FRONT_TRAP_X_HALF_M;
+    return nearLeftInner || nearRightInner;
   }
 }

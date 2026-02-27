@@ -192,25 +192,8 @@ public final class FieldTrackerCollectPassSetup {
 
     List<DynamicObject> dynAll = loop.snapshotDynamicObjects();
 
-    int lockHalf = loop.collectStickyHalfLock;
-    int sensedHalf =
-        FieldTrackerCollectObjectiveMath.sideSignXBand(
-            robotPos.getX(), FieldTrackerCollectObjectiveLoop.COLLECT_HALF_KEEP_MID_BAND_M);
-
-    if (sensedHalf != 0) {
-      if (lockHalf != sensedHalf) {
-        lockHalf = sensedHalf;
-        loop.collectStickyHalfLock = sensedHalf;
-      }
-    } else {
-      if (lockHalf == 0 && loop.collectStickyPoint != null) {
-        int s = FieldTrackerCollectObjectiveMath.sideSign(loop.collectStickyPoint);
-        if (s != 0) {
-          lockHalf = s;
-          loop.collectStickyHalfLock = s;
-        }
-      }
-    }
+    int lockHalf = 0;
+    int sensedHalf = 0;
 
     List<DynamicObject> dynUse = loop.filterDynamicsForCollectPredictor(dynAll);
 

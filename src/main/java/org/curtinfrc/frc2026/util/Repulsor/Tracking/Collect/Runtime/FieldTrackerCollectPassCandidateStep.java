@@ -39,6 +39,13 @@ public final class FieldTrackerCollectPassCandidateStep {
   static final double RICHER_UNITS_REL_GAIN = 1.45;
   static final double RICHER_ETA_DELTA_MAX_S = 0.95;
   static final double RICHER_SCORE_DROP_LIMIT = 0.30;
+  static final double LIVE_FUEL_PREFER_SCORE_MARGIN = 0.02;
+  static final double HUB_FRONT_TRAP_SCORE_PENALTY = 0.52;
+  static final double HUB_FRONT_TRAP_ESCAPE_SCORE_ALLOW_DROP = 0.16;
+  static final double LIVE_FUEL_REQUIRE_NEAR_R_M =
+      FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M + 0.35;
+  static final double LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M =
+      FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M + 1.0;
 
   static Translation2d maybeCanonicalizeCandidate(
       Translation2d bestCandidate,
@@ -109,6 +116,83 @@ public final class FieldTrackerCollectPassCandidateStep {
     return bestCandidate;
   }
 
+  static Translation2d preferLiveFuelCandidate(
+      Translation2d currentCandidate,
+      Translation2d[] usePts,
+      Predicate<Translation2d> collectValid,
+      Predicate<Translation2d> hasLiveFuelNear,
+      Function<Translation2d, Double> scoreResource) {
+    if (usePts == null || usePts.length == 0) return currentCandidate;
+    if (collectValid == null || hasLiveFuelNear == null || scoreResource == null) {
+      return currentCandidate;
+    }
+
+    boolean currentLive =
+        currentCandidate != null
+            && collectValid.test(currentCandidate)
+            && hasLiveFuelNear.test(currentCandidate);
+
+    Translation2d bestLive = null;
+    double bestLiveScore = -1e18;
+
+    for (Translation2d p : usePts) {
+      if (p == null) continue;
+      if (!collectValid.test(p) || !hasLiveFuelNear.test(p)) continue;
+      double s = scoreResource.apply(p);
+      if (s > bestLiveScore + 1e-9) {
+        bestLive = p;
+        bestLiveScore = s;
+      }
+    }
+
+    if (bestLive == null) return currentCandidate;
+    if (!currentLive) return bestLive;
+
+    double curScore = scoreResource.apply(currentCandidate);
+    if (bestLiveScore > curScore + LIVE_FUEL_PREFER_SCORE_MARGIN) return bestLive;
+    return currentCandidate;
+  }
+
+  static Translation2d preferOutsideHubFrontTrap(
+      Translation2d currentCandidate,
+      Translation2d[] usePts,
+      Predicate<Translation2d> collectValid,
+      Predicate<Translation2d> isHubFrontTrap,
+      Function<Translation2d, Double> scoreResource) {
+    if (currentCandidate == null || usePts == null || usePts.length == 0) return currentCandidate;
+    if (collectValid == null || isHubFrontTrap == null || scoreResource == null) {
+      return currentCandidate;
+    }
+    if (!isHubFrontTrap.test(currentCandidate)) return currentCandidate;
+    if (!collectValid.test(currentCandidate)) return currentCandidate;
+
+    Translation2d bestOutside = null;
+    double bestOutsideScore = -1e18;
+    for (Translation2d p : usePts) {
+      if (p == null) continue;
+      if (!collectValid.test(p) || isHubFrontTrap.test(p)) continue;
+      double s = scoreResource.apply(p);
+      if (s > bestOutsideScore + 1e-9) {
+        bestOutside = p;
+        bestOutsideScore = s;
+      }
+    }
+
+    if (bestOutside == null) return currentCandidate;
+    double curScore = scoreResource.apply(currentCandidate);
+    if (bestOutsideScore >= curScore - HUB_FRONT_TRAP_ESCAPE_SCORE_ALLOW_DROP) return bestOutside;
+    return currentCandidate;
+  }
+
+  static boolean shouldRequireLiveFuelEvidence(
+      Translation2d robotPos,
+      Translation2d candidate,
+      boolean hasLiveCollectDynamics,
+      double nearRadiusM) {
+    if (!hasLiveCollectDynamics || robotPos == null || candidate == null) return false;
+    return robotPos.getDistance(candidate) <= Math.max(0.1, nearRadiusM);
+  }
+
   public static FieldTrackerCollectPassCandidateResult choose(
       FieldTrackerCollectObjectiveLoop loop, FieldTrackerCollectPassContext ctx, int goalUnits) {
     HashMap<Long, CollectProbe> probeCache = new HashMap<>(512);
@@ -133,6 +217,10 @@ public final class FieldTrackerCollectPassCandidateStep {
       }
     }
     final boolean hasLiveCollectDynamicsFinal = hasLiveCollectDynamics;
+    final Predicate<Translation2d> isHubFrontTrap =
+        p ->
+            FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+                p, ctx.leftBandX1(), ctx.rightBandX0());
 
     java.util.function.ToLongFunction<Translation2d> pointKey =
         p -> {
@@ -231,7 +319,9 @@ public final class FieldTrackerCollectPassCandidateStep {
             validCache.put(key, false);
             return false;
           }
-          if (!hasLiveFuelNearStrict.test(p)) {
+          if (shouldRequireLiveFuelEvidence(
+                  ctx.robotPos(), p, hasLiveCollectDynamicsFinal, LIVE_FUEL_REQUIRE_NEAR_R_M)
+              && !hasLiveFuelNearStrict.test(p)) {
             validCache.put(key, false);
             return false;
           }
@@ -259,7 +349,12 @@ public final class FieldTrackerCollectPassCandidateStep {
             validRelaxedCache.put(key, false);
             return false;
           }
-          if (!hasLiveFuelNearRelaxed.test(p)) {
+          if (shouldRequireLiveFuelEvidence(
+                  ctx.robotPos(),
+                  p,
+                  hasLiveCollectDynamicsFinal,
+                  LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M)
+              && !hasLiveFuelNearRelaxed.test(p)) {
             validRelaxedCache.put(key, false);
             return false;
           }
@@ -368,6 +463,9 @@ public final class FieldTrackerCollectPassCandidateStep {
                     FieldTrackerCollectObjectiveLoop.COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) {
           continue;
         }
+        if (shouldRequireLiveFuelEvidence(
+                ctx.robotPos(), p, hasLiveCollectDynamicsFinal, LIVE_FUEL_REQUIRE_NEAR_R_M)
+            && !hasLiveFuelNearStrict.test(p)) continue;
         if (!hasNearFuel.test(p)) continue;
         if (!footprintHasFuel.test(p)) continue;
         anyStrict = true;
@@ -388,6 +486,12 @@ public final class FieldTrackerCollectPassCandidateStep {
                       0.02,
                       FieldTrackerCollectObjectiveLoop.COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75))
             continue;
+          if (shouldRequireLiveFuelEvidence(
+                  ctx.robotPos(),
+                  p,
+                  hasLiveCollectDynamicsFinal,
+                  LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M)
+              && !hasLiveFuelNearRelaxed.test(p)) continue;
           if (!footprintHasFuel.test(p)) continue;
           double u = pr.units;
           if (u > bestU) {
@@ -451,8 +555,9 @@ public final class FieldTrackerCollectPassCandidateStep {
           if (ctx.inForbidden().test(d) || ctx.violatesWall().test(d)) return -1e18;
 
           double eta = ctx.robotPos().getDistance(d) / Math.max(0.2, ctx.cap());
+          double trapPenalty = isHubFrontTrap.test(p) ? HUB_FRONT_TRAP_SCORE_PENALTY : 0.0;
 
-          double scoreV = (u * 1.0) - (0.55 * eta);
+          double scoreV = (u * 1.0) - (0.55 * eta) - trapPenalty;
           scoreCache.put(key, scoreV);
           return scoreV;
         };
@@ -502,6 +607,16 @@ public final class FieldTrackerCollectPassCandidateStep {
 
     bestCandidate =
         maybeCanonicalizeCandidate(bestCandidate, ctx.usePts(), collectValid, scoreResource);
+
+    if (hasLiveCollectDynamicsFinal) {
+      bestCandidate =
+          preferLiveFuelCandidate(
+              bestCandidate, ctx.usePts(), collectValid, hasLiveFuelNearStrict, scoreResource);
+    }
+
+    bestCandidate =
+        preferOutsideHubFrontTrap(
+            bestCandidate, ctx.usePts(), collectValid, isHubFrontTrap, scoreResource);
 
     return new FieldTrackerCollectPassCandidateResult(
         best, bestCandidate, collectValid, footprintHasFuel, scoreResource, null);
