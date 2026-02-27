@@ -106,18 +106,38 @@ public final class FieldTrackerCollectPassStickyStep {
 
     Translation2d selectedResource;
     boolean forcedFuelReplacement = false;
-    boolean stickyShouldYieldForFuel = false;
 
     if (pass == 0) {
-      // Follow the freshest best candidate immediately so collect can switch
-      // across field regions without sticky hysteresis pinning.
-      if (bestCandidate != null && cand.collectValid().test(bestCandidate)) {
+      Translation2d cur = loop.collectStickyPoint;
+      boolean curValid = cur != null && cand.collectValid().test(cur);
+      boolean bestValid = bestCandidate != null && cand.collectValid().test(bestCandidate);
+
+      selectedResource = curValid ? cur : (bestValid ? bestCandidate : prevSticky);
+
+      if (bestValid && curValid && !stickySame(cur, bestCandidate)) {
+        boolean curTrap =
+            FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+                cur, ctx.leftBandX1(), ctx.rightBandX0());
+        boolean bestTrap =
+            FieldTrackerCollectObjectiveMath.isHubFrontTrapPoint(
+                bestCandidate, ctx.leftBandX1(), ctx.rightBandX0());
+
+        if (curTrap && !bestTrap) {
+          selectedResource = bestCandidate;
+          forcedFuelReplacement = true;
+        } else {
+          double curScore = cand.scoreResource().apply(cur);
+          double bestScore = cand.scoreResource().apply(bestCandidate);
+          double margin = switchMarginForDist(ctx.robotPos().getDistance(bestCandidate));
+          double sinceLastSwitchS = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs);
+          if (sinceLastSwitchS < 0.35) margin *= 1.45;
+          if (ctx.robotInCenterBand()) margin *= 1.10;
+          if (bestScore > curScore + margin) selectedResource = bestCandidate;
+        }
+      } else if (!curValid && bestValid) {
         selectedResource = bestCandidate;
-      } else {
-        selectedResource = prevSticky;
+        forcedFuelReplacement = true;
       }
-      loop.collectStickySelector.force(selectedResource);
-      forcedFuelReplacement = true;
     } else {
       Translation2d cur = loop.collectStickyPoint;
       selectedResource = (cur != null && cand.collectValid().test(cur)) ? cur : bestCandidate;
@@ -140,14 +160,6 @@ public final class FieldTrackerCollectPassStickyStep {
       if (tooSoon && loop.collectStickyStillSec < 0.10 && !opposite) {
         selectedResource = prevSticky;
         loop.collectStickySelector.force(prevSticky);
-      }
-
-      if (stickyShouldYieldForFuel
-          && bestCandidate != null
-          && stickySame(prevSticky, selectedResource)) {
-        selectedResource = bestCandidate;
-        loop.collectStickySelector.force(bestCandidate);
-        forcedFuelReplacement = true;
       }
     }
 
