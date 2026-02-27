@@ -21,7 +21,6 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAggCont;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.ResourceRegions;
@@ -99,10 +98,17 @@ public final class PredictiveCollectSecondaryRankers {
   private static final double HIERARCHICAL_ANCHOR_MAX_DIST_M = 0.55;
   private static final double HIERARCHICAL_ANCHOR_EVIDENCE_SCALE = 0.75;
   private static final double HIERARCHICAL_ANCHOR_UNITS_SCALE = 0.60;
+  private static final double SECONDARY_ANCHOR_EVIDENCE_SCALE = 0.65;
+  private static final double SECONDARY_ANCHOR_UNITS_SCALE = 0.55;
+  private static final double SECONDARY_FINAL_UNITS_SCALE = 0.70;
   private static final double ACTIVITY_CAP = 1.05;
   private static final int ENEMY_REGIONS_MAX = 24;
 
   private PredictiveCollectSecondaryRankers() {}
+
+  private static double nowSec() {
+    return System.nanoTime() / 1e9;
+  }
 
   static Translation2d anchorHierarchicalPointToFuel(
       SpatialDyn dyn, Translation2d seed, double cellM, double minUnits, double minEv) {
@@ -219,7 +225,7 @@ public final class PredictiveCollectSecondaryRankers {
               - e.allyIntent * COLLECT_ALLY_INTENT_COST
               - activity
               - e.depleted * DEPLETED_PEN_W
-              + api.regionBanditBonus(dyn, cpt, Timer.getFPGATimestamp());
+              + api.regionBanditBonus(dyn, cpt, nowSec());
 
       if (ev < minEv) score -= 2.00;
 
@@ -275,7 +281,7 @@ public final class PredictiveCollectSecondaryRankers {
 
           CollectEval e =
               api.evalCollectPoint(ourPos, cap, p, goal, cellM, dyn, enemyIntent, allyIntent);
-          e.banditBonus = api.regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
+          e.banditBonus = api.regionBanditBonus(dyn, p, nowSec());
           e.score += e.banditBonus;
 
           if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
@@ -325,7 +331,7 @@ public final class PredictiveCollectSecondaryRankers {
       order[best] = tmp;
     }
 
-    double now = Timer.getFPGATimestamp();
+    double now = nowSec();
 
     for (int oi = 0; oi < candN; oi++) {
       int ci = order[oi];
@@ -402,20 +408,37 @@ public final class PredictiveCollectSecondaryRankers {
     SpatialDyn dyn = api.cachedDyn();
     if (dyn == null || dyn.resources.isEmpty()) return null;
 
+    double totalEv = dyn.totalEvidence();
+    double minUnits = Math.max(0.02, api.dynamicMinUnits(totalEv));
+    double minEv = Math.max(0.01, api.minEvidence(totalEv));
+
     double half = Math.max(0.05, cellM * 0.5);
+    double rCore = Math.max(0.05, PredictiveFieldStateOps.coreRadiusFor(cellM));
     Translation2d best = null;
     double bestU = 0.0;
 
     for (Translation2d p : points) {
       if (p == null) continue;
-      double u = dyn.valueInSquare(p, half);
+      Translation2d anchored =
+          anchorHierarchicalPointToFuel(
+              dyn,
+              p,
+              cellM,
+              Math.max(0.02, minUnits * SECONDARY_ANCHOR_UNITS_SCALE),
+              minEv * SECONDARY_ANCHOR_EVIDENCE_SCALE);
+      if (anchored == null) continue;
+
+      int coreCount = dyn.countResourcesWithin(anchored, rCore);
+      if (coreCount < 1) continue;
+
+      double u = dyn.valueInSquare(anchored, half);
       if (u > bestU) {
         bestU = u;
-        best = p;
+        best = anchored;
       }
     }
 
-    double min = Math.max(0.02, COLLECT_FINE_MIN_UNITS * 0.5);
+    double min = Math.max(0.02, minUnits * SECONDARY_FINAL_UNITS_SCALE);
     return bestU >= min ? best : null;
   }
 
@@ -472,17 +495,29 @@ public final class PredictiveCollectSecondaryRankers {
       Translation2d p = targets[i];
       if (p == null) continue;
 
+      Translation2d anchored =
+          anchorHierarchicalPointToFuel(
+              dyn,
+              p,
+              COLLECT_CELL_M,
+              Math.max(0.02, minUnits * SECONDARY_ANCHOR_UNITS_SCALE),
+              minEv * SECONDARY_ANCHOR_EVIDENCE_SCALE);
+      if (anchored == null) continue;
+
       CollectEval e =
-          api.evalCollectPoint(ourPos, cap, p, goal, COLLECT_CELL_M, dyn, enemyIntent, allyIntent);
-      e.banditBonus = api.regionBanditBonus(dyn, p, Timer.getFPGATimestamp());
+          api.evalCollectPoint(
+              ourPos, cap, anchored, goal, COLLECT_CELL_M, dyn, enemyIntent, allyIntent);
+      e.banditBonus = api.regionBanditBonus(dyn, anchored, nowSec());
       e.score += e.banditBonus;
 
       if (e.units < minUnits * 0.55 || e.count < Math.max(1, minCount - 1)) e.score -= 2.75;
       if (e.evidence < minEv) e.score -= 2.25;
+      if (dyn.countResourcesWithin(anchored, PredictiveFieldStateOps.coreRadiusFor(COLLECT_CELL_M))
+          < 1) e.score -= 3.0;
 
       if (bestE == null || e.score > bestE.score + 1e-9) {
         bestE = e;
-        bestP = p;
+        bestP = anchored;
       }
     }
 
@@ -494,7 +529,7 @@ public final class PredictiveCollectSecondaryRankers {
       return null;
     }
 
-    api.setLastReturnedCollect(bestP, Timer.getFPGATimestamp());
+    api.setLastReturnedCollect(bestP, nowSec());
 
     Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
 
