@@ -34,6 +34,25 @@ import org.littletonrobotics.junction.Logger;
 public final class PredictiveCollectNearestResolutionStep {
   private PredictiveCollectNearestResolutionStep() {}
 
+  static final double EARLY_SWITCH_RICHER_UNITS_ABS = 0.08;
+  static final double EARLY_SWITCH_RICHER_UNITS_REL = 1.55;
+  static final double EARLY_SWITCH_ETA_DELTA_MAX_S = 0.85;
+  static final double EARLY_SWITCH_SCORE_FLOOR_DELTA = 0.45;
+
+  static boolean allowCommitWindowRicherSwitch(CollectEval current, CollectEval candidate) {
+    if (current == null || candidate == null) return false;
+    if (!Double.isFinite(current.units) || !Double.isFinite(candidate.units)) return false;
+    if (!Double.isFinite(current.eta) || !Double.isFinite(candidate.eta)) return false;
+    if (!Double.isFinite(current.score) || !Double.isFinite(candidate.score)) return false;
+
+    boolean significantlyRicher =
+        candidate.units >= current.units + EARLY_SWITCH_RICHER_UNITS_ABS
+            || candidate.units >= current.units * EARLY_SWITCH_RICHER_UNITS_REL;
+    boolean etaAcceptable = candidate.eta <= current.eta + EARLY_SWITCH_ETA_DELTA_MAX_S;
+    boolean scoreAcceptable = candidate.score >= current.score - EARLY_SWITCH_SCORE_FLOOR_DELTA;
+    return significantlyRicher && etaAcceptable && scoreAcceptable;
+  }
+
   public static PointCandidate resolve(
       PredictiveFieldStateOps ops,
       Translation2d ourPos,
@@ -144,7 +163,8 @@ public final class PredictiveCollectNearestResolutionStep {
       ops.currentCollectEta = curE.eta;
 
       if (age >= 0.0 && age <= commitS) {
-        if (chosenE.score <= ops.currentCollectScore + switchMargin) {
+        boolean commitOverride = allowCommitWindowRicherSwitch(curE, chosenE);
+        if (!commitOverride && chosenE.score <= ops.currentCollectScore + switchMargin) {
           chosenPt = ops.currentCollectTarget;
           chosenE = curE;
           chosenTouch = curTouch;

@@ -26,6 +26,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAggCont;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.Track;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.CollectProbe;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
 
@@ -159,6 +160,26 @@ public final class PredictiveCollectScoringRuntime {
         ops.currentCollectHeading != null ? ops.currentCollectHeading : new Rotation2d();
     if (!ops.footprintOk(dyn, ops.currentCollectTarget, heading, rCore, footprintMinUnits))
       return true;
+
+    Translation2d touch =
+        ops.currentCollectTouch != null
+            ? ops.currentCollectTouch
+            : ops.resolveCollectTouch(
+                dyn,
+                ops.currentCollectTarget,
+                heading,
+                rCore,
+                PredictiveFieldStateOps.snapRadiusFor(cellM),
+                PredictiveFieldStateOps.microCentroidRadiusFor(cellM));
+    if (touch == null) return true;
+
+    CollectProbe touchProbe = ops.probeCollect(touch, 0.55);
+    double touchNeedUnits = Math.max(0.02, minUnits * 0.65);
+    if (touchProbe == null || touchProbe.count < 1 || touchProbe.units < touchNeedUnits)
+      return true;
+
+    Translation2d touchNear = dyn.nearestResourceTo(touch, Math.max(0.20, rCore * 2.0));
+    if (touchNear == null) return true;
 
     CollectEval cur =
         evalCollectPoint(
