@@ -37,12 +37,29 @@ import org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.FieldTrackerCollectO
 public final class FieldTrackerCollectPassStickyStep {
   private FieldTrackerCollectPassStickyStep() {}
 
+  static final double STICKY_PREFER_RANKED_SCORE_MARGIN = 0.06;
+
+  static Translation2d preferRankedCandidateForSticky(
+      Translation2d bestCandidate, FieldTrackerCollectPassCandidateResult cand) {
+    if (cand == null) return bestCandidate;
+    if (cand.best() == null || cand.best().point == null) return bestCandidate;
+    Translation2d ranked = cand.best().point;
+    if (!cand.collectValid().test(ranked)) return bestCandidate;
+    if (bestCandidate == null) return ranked;
+    if (!cand.collectValid().test(bestCandidate)) return ranked;
+
+    double rankedScore = cand.scoreResource().apply(ranked);
+    double currentScore = cand.scoreResource().apply(bestCandidate);
+    if (rankedScore > currentScore + STICKY_PREFER_RANKED_SCORE_MARGIN) return ranked;
+    return bestCandidate;
+  }
+
   public static FieldTrackerCollectPassStickyResult selectAndPrime(
       FieldTrackerCollectObjectiveLoop loop,
       FieldTrackerCollectPassContext ctx,
       FieldTrackerCollectPassCandidateResult cand,
       int pass) {
-    Translation2d bestCandidate = cand.bestCandidate();
+    Translation2d bestCandidate = preferRankedCandidateForSticky(cand.bestCandidate(), cand);
     Translation2d prevSticky = loop.collectStickyPoint;
 
     double distToCand = ctx.robotPos().getDistance(bestCandidate);
