@@ -34,9 +34,10 @@ public class HoodedShooter extends SubsystemBase {
   private final ShooterIO shooterIO;
   private final ShooterIOInputsAutoLogged shooterInputs = new ShooterIOInputsAutoLogged();
 
+  private final Supplier<Pose2d> robotPose;
+
   private final Alert[] hoodMotorDisconnectedAlerts = new Alert[2];
   private final Alert[] hoodMotorTempAlerts = new Alert[2];
-  private final Supplier<Pose2d> robotPose;
 
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
   private final Alert[] shooterMotorTempAlerts = new Alert[3];

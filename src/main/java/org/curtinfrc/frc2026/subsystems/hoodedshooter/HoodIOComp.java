@@ -11,7 +11,6 @@ import com.ctre.phoenix6.configs.MagnetSensorConfigs;
 import com.ctre.phoenix6.configs.MotionMagicConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
-import com.ctre.phoenix6.configs.Slot1Configs;
 import com.ctre.phoenix6.configs.SoftwareLimitSwitchConfigs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.Follower;
@@ -38,10 +37,10 @@ public class HoodIOComp implements HoodIO {
   public static final int FOLLOWER_ID = 15;
   public static final int ENCODER_ID = 16;
 
-  public static final double POSITION_TOLERANCE_DEGREES = 1.0;
+  public static final double POSITION_TOLERANCE_DEGREES = 0.5;
 
-  public static final double GEAR_RATIO = 1;
-  public static final double MOTOR_TO_SENSOR_RATIO = 1;
+  public static final double GEAR_RATIO = 8.33;
+  public static final double MOTOR_TO_SENSOR_RATIO = 3;
   public static final double FORWARD_LIMIT_ROTATIONS = 0;
   public static final double REVERSE_LIMIT_ROTATIONS = 0;
   public static final double STOWED_OUT_POSITION_THRESHOLD = 0;
@@ -85,17 +84,6 @@ public class HoodIOComp implements HoodIO {
                   .withReverseSoftLimitEnable(true))
           .withSlot0(
               new Slot0Configs()
-                  .withKP(KP)
-                  .withKI(KI)
-                  .withKD(KD)
-                  .withKS(KS)
-                  .withKV(KV)
-                  .withKA(KA)
-                  .withKG(KG)
-                  .withGravityArmPositionOffset(GRAVITY_POSITION_OFFSET)
-                  .withGravityType(GravityTypeValue.Arm_Cosine))
-          .withSlot1(
-              new Slot1Configs()
                   .withKP(KP)
                   .withKI(KI)
                   .withKD(KD)
@@ -169,16 +157,6 @@ public class HoodIOComp implements HoodIO {
 
   @Override
   public void setPosition(double positionDegrees) {
-    if (positionDegrees / 360 < STOWED_OUT_POSITION_THRESHOLD) {
-      leaderMotor.setControl(
-          positionRequest
-              .withPosition((positionDegrees - ZERO_DEGREE_OFFSET_DEGREES) / 360)
-              .withSlot(1));
-    } else {
-      leaderMotor.setControl(
-          positionRequest
-              .withPosition((positionDegrees - ZERO_DEGREE_OFFSET_DEGREES) / 360)
-              .withSlot(0));
-    }
+    positionRequest.withPosition((positionDegrees - ZERO_DEGREE_OFFSET_DEGREES) / 360);
   }
 }
