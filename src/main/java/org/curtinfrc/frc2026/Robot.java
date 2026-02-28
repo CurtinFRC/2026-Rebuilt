@@ -239,6 +239,16 @@ public class Robot extends LoggedRobot {
             // mag.store(0.7),
             // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
             ));
+    // Boolean IntakeToggle = false;
+    // if (IntakeToggle == false) {
+    //     controller.leftBumper().whileTrue(intake.Idle());
+    //     IntakeToggle = true;
+    // } else {
+    //   controller.leftBumper().whileTrue(intake.RawControlConsume(1.0));
+    //   IntakeToggle = false;
+
+    controller.leftBumper().toggleOnTrue(intake.RawControlConsume(1.0));
+
     Trigger automaticLocation =
         new Trigger(
             () -> {
