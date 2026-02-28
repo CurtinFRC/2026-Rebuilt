@@ -33,7 +33,7 @@ public class VisionIOPhotonVisionSim extends VisionIOPhotonVision {
 
     // Add sim camera
     var cameraProperties = new SimCameraProperties();
-    cameraProperties.setFPS(80);
+    cameraProperties.setFPS(30);
     cameraSim = new PhotonCameraSim(camera, cameraProperties, Vision.aprilTagLayout);
     cameraSim.enableRawStream(false);
     cameraSim.enableProcessedStream(false);

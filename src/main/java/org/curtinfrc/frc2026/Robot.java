@@ -1,6 +1,7 @@
 package org.curtinfrc.frc2026;
 
-import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
+import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
+import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
@@ -130,7 +131,13 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVision(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+                      compCameraConfigs[0].name(), compCameraConfigs[0].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[1].name(), compCameraConfigs[1].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[2].name(), compCameraConfigs[2].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[3].name(), compCameraConfigs[3].robotToCamera()));
           hoodedShooter =
               new HoodedShooter(new HoodIOComp() {}, new ShooterIOComp() {}, drive::getPose);
           intake = new Intake(new IntakeIOComp());
@@ -156,13 +163,13 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVision(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()),
+                      devCameraConfigs[0].name(), devCameraConfigs[0].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera()),
+                      devCameraConfigs[1].name(), devCameraConfigs[1].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera()),
+                      devCameraConfigs[2].name(), devCameraConfigs[2].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera()));
+                      devCameraConfigs[3].name(), devCameraConfigs[3].robotToCamera()));
 
           intake = new Intake(new IntakeIODev());
           mag =
@@ -189,13 +196,21 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose),
+                      compCameraConfigs[0].name(),
+                      compCameraConfigs[0].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera(), drive::getPose),
+                      compCameraConfigs[1].name(),
+                      compCameraConfigs[1].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera(), drive::getPose),
+                      compCameraConfigs[2].name(),
+                      compCameraConfigs[2].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
+                      compCameraConfigs[3].name(),
+                      compCameraConfigs[3].robotToCamera(),
+                      drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
           hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim(), drive::getPose);
