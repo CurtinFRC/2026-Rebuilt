@@ -37,8 +37,8 @@ public class ShooterIOComp implements ShooterIO {
   private static final double KP = 0.0;
   private static final double KI = 0.0;
   private static final double KD = 0.0;
-  private static final double KS = 0.24152;
-  private static final double KV = 0.126;
+  private static final double KS = 0.0;
+  private static final double KV = 0.0;
   private static final double KA = 0.0;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
@@ -78,13 +78,18 @@ public class ShooterIOComp implements ShooterIO {
     tryUntilOk(5, () -> leaderMotor.getConfigurator().apply(sharedMotorConfig));
     tryUntilOk(5, () -> followerMotor1.getConfigurator().apply(sharedMotorConfig));
     tryUntilOk(5, () -> followerMotor2.getConfigurator().apply(sharedMotorConfig));
+    tryUntilOk(5, () -> followerMotor3.getConfigurator().apply(sharedMotorConfig));
 
     followerMotor1.setControl(new Follower(ID1, MotorAlignmentValue.Opposed));
     followerMotor2.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
     followerMotor3.setControl(new Follower(ID1, MotorAlignmentValue.Aligned));
 
+    voltage.setUpdateFrequency(1000);
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, acceleration, voltage, current);
     leaderMotor.optimizeBusUtilization();
+    followerMotor1.optimizeBusUtilization();
+    followerMotor2.optimizeBusUtilization();
+    followerMotor3.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, acceleration, voltage, current);
   }
 

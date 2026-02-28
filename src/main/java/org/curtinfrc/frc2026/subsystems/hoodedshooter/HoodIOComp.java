@@ -142,6 +142,8 @@ public class HoodIOComp implements HoodIO {
     BaseStatusSignal.setUpdateFrequencyForAll(
         50.0, velocity, voltage, current, position, encoderPosition);
     leaderMotor.optimizeBusUtilization();
+    followerMotor.optimizeBusUtilization();
+    encoder.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, voltage, current, position, encoderPosition);
   }
 
