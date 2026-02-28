@@ -182,7 +182,7 @@ public class Robot extends LoggedRobot {
     // telem.registerParallel("repulsor_tags", pg);
 
     repulsor =
-        new Repulsor(drive, Constants.ROBOT_X, Constants.ROBOT_Y, 0.55, 0.22, () -> simHasPiece)
+        new Repulsor(drive, Constants.ROBOT_X, Constants.ROBOT_Y, () -> simHasPiece)
             .withFallback(new Fallback().new PID(1, 0, 0))
             // .withVision(visionSim)
             .withShooterReleaseHeightMetersSupplier(() -> 0.5)

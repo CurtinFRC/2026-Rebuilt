@@ -169,6 +169,7 @@ def main() -> None:
     parser.add_argument("--target-count", type=int, default=0)
     parser.add_argument("--min-sharpness", type=float, default=80.0)
     parser.add_argument("--min-coverage", type=float, default=0.03)
+    parser.add_argument("--auto-min-coverage-floor", type=float, default=0.01)
     parser.add_argument("--min-diversity", type=float, default=0.08)
     parser.add_argument("--manual-ignore-quality", action="store_true")
     args = parser.parse_args()
@@ -249,14 +250,17 @@ def main() -> None:
             feat = _feature_from_points(points, w, h) if found else (0.0, 0.0, 0.0, 0.0, 0.0)
             coverage = feat[4]
             div = _diversity_score(feat, prev_saved_feature) if found else 0.0
-            quality_ok = found and sharp >= float(args.min_sharpness) and coverage >= float(args.min_coverage)
+            min_cov = float(args.min_coverage)
+            if auto_mode:
+                min_cov = min(min_cov, float(args.auto_min_coverage_floor))
+            quality_ok = found and sharp >= float(args.min_sharpness) and coverage >= min_cov
             diverse_ok = (not found) or div >= float(args.min_diversity) or prev_saved_feature is None
 
             state = "FOUND" if found else "MISSING"
             cap_mode = "AUTO" if auto_mode else "MANUAL"
             q_state = "OK" if quality_ok else "LOW"
             d_state = "OK" if diverse_ok else "SIM"
-            txt = f"{str(args.pattern).upper()} {state} {cap_mode} q:{q_state} d:{d_state} saved:{saved} sharp:{sharp:.0f} cov:{coverage:.3f} div:{div:.3f}"
+            txt = f"{str(args.pattern).upper()} {state} {cap_mode} q:{q_state} d:{d_state} saved:{saved} sharp:{sharp:.0f} cov:{coverage:.3f}/{min_cov:.3f} div:{div:.3f}"
             cv2.putText(
                 vis,
                 txt,

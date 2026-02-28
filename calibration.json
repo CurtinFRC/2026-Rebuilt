@@ -4,29 +4,29 @@
   "image_height": 720,
   "images_total": 50,
   "images_used_initial": 50,
-  "images_used_final": 49,
-  "images_rejected_outlier": 1,
-  "rms_reprojection_error": 0.5100165531333747,
-  "mean_reprojection_error_px": 0.4338185153279931,
-  "max_reprojection_error_px": 0.676197685761725,
-  "min_coverage": 0.05,
-  "mean_coverage": 0.07940961447204231,
-  "mean_sharpness": 419.4988519760256,
-  "prune_threshold_px": 0.7201693306475359,
-  "prune_median_px": 0.43622671847707173,
-  "prune_mad_px": 0.08705303096846576,
+  "images_used_final": 50,
+  "images_rejected_outlier": 0,
+  "rms_reprojection_error": 0.42288594548400144,
+  "mean_reprojection_error_px": 0.34900807446064064,
+  "max_reprojection_error_px": 0.5637309247015309,
+  "min_coverage": 0.01,
+  "mean_coverage": 0.027751569407533407,
+  "mean_sharpness": 975.8114858895178,
+  "prune_threshold_px": 0.6663471102085781,
+  "prune_median_px": 0.35808418659492613,
+  "prune_mad_px": 0.09450931521211259,
   "dist_model": "rational",
   "zero_tangent": false,
   "K": [
     [
-      851.87414417703,
+      854.9288633679033,
       0.0,
-      656.1857504801268
+      646.6629754587065
     ],
     [
       0.0,
-      851.4312878979495,
-      358.86413534058886
+      853.5201517704674,
+      353.80122201918516
     ],
     [
       0.0,
@@ -35,14 +35,14 @@
     ]
   ],
   "dist": [
-    -2.223612572635443,
-    11.553524890395426,
-    -0.008149684009646522,
-    0.0026118868398539805,
-    105.990182569034,
-    -2.513915117822515,
-    13.417072445216993,
-    98.57148044075088,
+    -2.8742702562830074,
+    -15.964065766291867,
+    -0.005370936357486865,
+    0.0008317338423974286,
+    66.33662248059912,
+    -3.101767730188295,
+    -14.269791592285904,
+    62.68118871650012,
     0.0,
     0.0,
     0.0,
@@ -54,14 +54,14 @@
     "calibration": {
       "K": [
         [
-          851.87414417703,
+          854.9288633679033,
           0.0,
-          656.1857504801268
+          646.6629754587065
         ],
         [
           0.0,
-          851.4312878979495,
-          358.86413534058886
+          853.5201517704674,
+          353.80122201918516
         ],
         [
           0.0,
@@ -70,14 +70,14 @@
         ]
       ],
       "dist": [
-        -2.223612572635443,
-        11.553524890395426,
-        -0.008149684009646522,
-        0.0026118868398539805,
-        105.990182569034,
-        -2.513915117822515,
-        13.417072445216993,
-        98.57148044075088,
+        -2.8742702562830074,
+        -15.964065766291867,
+        -0.005370936357486865,
+        0.0008317338423974286,
+        66.33662248059912,
+        -3.101767730188295,
+        -14.269791592285904,
+        62.68118871650012,
         0.0,
         0.0,
         0.0,
@@ -98,6 +98,7 @@
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0007.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0008.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0009.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0010.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0011.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0012.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0013.png",
@@ -138,7 +139,5 @@
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0048.png",
     "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0049.png"
   ],
-  "rejected_files": [
-    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0010.png"
-  ]
+  "rejected_files": []
 }
