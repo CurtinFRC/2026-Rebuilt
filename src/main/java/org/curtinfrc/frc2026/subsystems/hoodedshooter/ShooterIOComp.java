@@ -38,7 +38,7 @@ public class ShooterIOComp implements ShooterIO {
   private static final double KI = 0.0;
   private static final double KD = 0.0;
   private static final double KS = 0.0;
-  private static final double KV = 0.0;
+  private static final double KV = 0.2;
   private static final double KA = 0.0;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);

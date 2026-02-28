@@ -48,9 +48,9 @@ public class HoodIOComp implements HoodIO {
   public static final double ZERO_DEGREE_OFFSET_DEGREES = 0;
 
   public static final double GRAVITY_POSITION_OFFSET = 0;
-  public static final double KP = 0;
+  public static final double KP = 181.35;
   public static final double KI = 0;
-  public static final double KD = 0;
+  public static final double KD = 3.5;
   public static final double KS = 0;
   public static final double KV = 2.44;
   public static final double KA = 0.02;
