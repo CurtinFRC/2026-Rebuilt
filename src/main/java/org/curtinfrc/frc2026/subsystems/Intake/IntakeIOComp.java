@@ -17,8 +17,8 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
 
 public class IntakeIOComp implements IntakeIO {
-  private final TalonFX frontMotor = new TalonFX(99);
-  private final TalonFX backMotor = new TalonFX(99);
+  private final TalonFX frontMotor = new TalonFX(12);
+  private final TalonFX backMotor = new TalonFX(13);
 
   private final VelocityVoltage m_request = new VelocityVoltage(0).withSlot(0);
 
@@ -36,7 +36,7 @@ public class IntakeIOComp implements IntakeIO {
       new TalonFXConfiguration()
           .withMotorOutput(
               new MotorOutputConfigs()
-                  .withInverted(InvertedValue.CounterClockwise_Positive)
+                  .withInverted(InvertedValue.Clockwise_Positive)
                   .withNeutralMode(NeutralModeValue.Coast))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
@@ -44,7 +44,7 @@ public class IntakeIOComp implements IntakeIO {
       new TalonFXConfiguration()
           .withMotorOutput(
               new MotorOutputConfigs()
-                  .withInverted(InvertedValue.CounterClockwise_Positive)
+                  .withInverted(InvertedValue.Clockwise_Positive)
                   .withNeutralMode(NeutralModeValue.Coast))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));

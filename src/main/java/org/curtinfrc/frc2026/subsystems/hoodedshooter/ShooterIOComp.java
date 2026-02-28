@@ -26,10 +26,10 @@ import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIOComp implements ShooterIO {
-  public static final int ID1 = 0;
-  public static final int ID2 = 0;
-  public static final int ID3 = 0;
-  public static final int ID4 = 0;
+  public static final int ID1 = 17;
+  public static final int ID2 = 18;
+  public static final int ID3 = 19;
+  public static final int ID4 = 20;
 
   public static final double VELOCITY_TOLERANCE = 1;
 
@@ -90,9 +90,9 @@ public class ShooterIOComp implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
-    inputs.motorTemperatures = new double[3];
-    inputs.motorsConnected = new boolean[3];
-    for (int motor = 0; motor < 3; motor++) {
+    inputs.motorTemperatures = new double[4];
+    inputs.motorsConnected = new boolean[4];
+    for (int motor = 0; motor < 4; motor++) {
       inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
       inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
     }
