@@ -34,6 +34,7 @@ import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
+import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIOComp;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
@@ -120,6 +121,13 @@ public class Robot extends LoggedRobot {
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
           intake = new Intake(new IntakeIOComp());
+          mag =
+              new Mag(
+                  new MagRollerIOComp(
+                      Constants.bBotIntakeMagRollerMotorID,
+                      InvertedValue.CounterClockwise_Positive),
+                  new MagRollerIODev(
+                      Constants.bBotIndexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
         }
         case DEV -> {
           drive =
@@ -146,11 +154,12 @@ public class Robot extends LoggedRobot {
           mag =
               new Mag(
                   new MagRollerIODev(
-                      Constants.intakeMagRollerMotorID, InvertedValue.CounterClockwise_Positive),
+                      Constants.alphaIntakeMagRollerMotorID,
+                      InvertedValue.CounterClockwise_Positive),
                   new MagRollerIODev(
-                      Constants.middleMagRollerMotorID, InvertedValue.Clockwise_Positive),
+                      Constants.alphaMiddleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
-                      Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+                      Constants.alphaIndexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
           hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev(), drive::getPose);
         }
         case SIM -> {
@@ -187,7 +196,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
-      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
+      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
       intake = new Intake(new IntakeIO() {});
     }
