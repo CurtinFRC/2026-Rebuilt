@@ -37,10 +37,12 @@ import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIOComp;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOSim;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
+import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.GameState;
@@ -120,7 +122,8 @@ public class Robot extends LoggedRobot {
                   drive::getRotation,
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
-          hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(new HoodIOComp() {}, new ShooterIOComp() {}, drive::getPose);
           intake = new Intake(new IntakeIOComp());
           mag =
               new Mag(

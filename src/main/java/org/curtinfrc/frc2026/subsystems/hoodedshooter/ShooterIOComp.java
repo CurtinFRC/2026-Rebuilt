@@ -90,9 +90,9 @@ public class ShooterIOComp implements ShooterIO {
 
   @Override
   public void updateInputs(ShooterIOInputs inputs) {
-    inputs.motorTemperatures = new double[3];
-    inputs.motorsConnected = new boolean[3];
-    for (int motor = 0; motor < 3; motor++) {
+    inputs.motorTemperatures = new double[4];
+    inputs.motorsConnected = new boolean[4];
+    for (int motor = 0; motor < 4; motor++) {
       inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
       inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
     }
