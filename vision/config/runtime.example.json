@@ -77,8 +77,8 @@
         "type": "yolo",
         "model_path": "../models/yolo.onnx",
         "output_format": "yolov8",
-        "input_width": 640,
-        "input_height": 640,
+        "input_width": 1024,
+        "input_height": 1024,
         "conf_threshold": 0.25,
         "nms_threshold": 0.45,
         "max_detections": 300

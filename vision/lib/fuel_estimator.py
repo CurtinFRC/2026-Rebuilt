@@ -110,7 +110,7 @@ def apply_axis_conversion(ray_cv: np.ndarray, A_cam_from_cv: Optional[np.ndarray
 def ray_camera_to_field(pose: CameraPoseField, ray_c: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     R = np.asarray(pose.R_f_c, dtype=np.float64).reshape(3, 3)
     p = np.asarray(pose.p_f, dtype=np.float64).reshape(3)
-    d_f = R @ np.asarray(ray_c, dtype=np.float64).reshape(3)
+    d_f = R.T @ np.asarray(ray_c, dtype=np.float64).reshape(3)
     d_f = d_f / float(np.linalg.norm(d_f))
     return p, d_f
 
@@ -125,7 +125,7 @@ def intersect_ray_with_plane(o: np.ndarray, d: np.ndarray, n: np.ndarray, p0: np
     if abs(denom) < float(eps):
         return None
     t = float(n @ (p0 - o)) / denom
-    if t <= 0.0:
+    if t <= 0.0: # HERE
         return None
     return o + t * d
 
@@ -153,14 +153,17 @@ def estimate_fuel_center_field(
 
     dz = float(d_f[2])
     if float(min_abs_dz) > 0.0 and abs(dz) < float(min_abs_dz):
+        # print("gate(min_abs_dz):", True)
         return None
 
     pt = intersect_ray_with_plane_z(o_f, d_f, z_plane=float(ball_radius_m))
     if pt is None:
+        # print("pt:", None)
         return None
 
     if max_range_m is not None:
         if float(np.linalg.norm(np.asarray(pt, dtype=np.float64).reshape(3) - np.asarray(o_f, dtype=np.float64).reshape(3))) > float(max_range_m):
+            # print("gate(max_range_m):", True)
             return None
 
     return pt

@@ -1,0 +1,144 @@
+{
+  "pattern": "charuco",
+  "image_width": 1280,
+  "image_height": 720,
+  "images_total": 50,
+  "images_used_initial": 50,
+  "images_used_final": 49,
+  "images_rejected_outlier": 1,
+  "rms_reprojection_error": 0.5100165531333747,
+  "mean_reprojection_error_px": 0.4338185153279931,
+  "max_reprojection_error_px": 0.676197685761725,
+  "min_coverage": 0.05,
+  "mean_coverage": 0.07940961447204231,
+  "mean_sharpness": 419.4988519760256,
+  "prune_threshold_px": 0.7201693306475359,
+  "prune_median_px": 0.43622671847707173,
+  "prune_mad_px": 0.08705303096846576,
+  "dist_model": "rational",
+  "zero_tangent": false,
+  "K": [
+    [
+      851.87414417703,
+      0.0,
+      656.1857504801268
+    ],
+    [
+      0.0,
+      851.4312878979495,
+      358.86413534058886
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "dist": [
+    -2.223612572635443,
+    11.553524890395426,
+    -0.008149684009646522,
+    0.0026118868398539805,
+    105.990182569034,
+    -2.513915117822515,
+    13.417072445216993,
+    98.57148044075088,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "runtime_camera_calibration": {
+    "calibration": {
+      "K": [
+        [
+          851.87414417703,
+          0.0,
+          656.1857504801268
+        ],
+        [
+          0.0,
+          851.4312878979495,
+          358.86413534058886
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "dist": [
+        -2.223612572635443,
+        11.553524890395426,
+        -0.008149684009646522,
+        0.0026118868398539805,
+        105.990182569034,
+        -2.513915117822515,
+        13.417072445216993,
+        98.57148044075088,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "used_files": [
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0000.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0001.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0002.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0003.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0004.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0005.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0006.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0007.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0008.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0009.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0011.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0012.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0013.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0014.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0015.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0016.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0017.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0018.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0019.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0020.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0021.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0022.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0023.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0024.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0025.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0026.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0027.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0028.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0029.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0030.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0031.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0032.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0033.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0034.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0035.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0036.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0037.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0038.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0039.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0040.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0041.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0042.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0043.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0044.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0045.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0046.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0047.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0048.png",
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0049.png"
+  ],
+  "rejected_files": [
+    "C:\\Users\\paulh\\2026-Rebuilt\\calib_images\\calib_0010.png"
+  ]
+}

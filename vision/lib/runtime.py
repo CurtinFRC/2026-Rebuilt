@@ -141,6 +141,7 @@ def _to_field_object(
         return None
     max_range = cls.max_range_m if cls.max_range_m is not None else float(cam.cfg.max_range_m)
     estimator = cls.estimator.strip().lower()
+
     if estimator == "fuel":
         pt = estimate_fuel_center_field(
             bbox=tracked.detection.as_bbox(),
@@ -266,7 +267,7 @@ def _render_camera_frame(frame: np.ndarray, camera_name: str, detections: list[_
         y2 = int(round(float(d.y2)))
         color = _color_for_class(d.class_id)
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, lineType=cv2.LINE_AA)
-        label = f"{item.type_name} {d.confidence:.2f}"
+        label = f"{d.confidence:.2f}"
         if item.distance_m is not None:
             label += f" {item.distance_m:.2f}m"
         _draw_text_with_bg(out, label, x1 + 2, y1 - 4, bg=color)

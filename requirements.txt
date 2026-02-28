@@ -9,3 +9,4 @@ trimesh[easy]
 rtree
 opencv-python==4.13.0.92
 pyright
+opencv-contrib-python

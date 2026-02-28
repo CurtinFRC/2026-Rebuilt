@@ -8,3 +8,4 @@ ultralytics
 tensorflow
 pyright
 onnxruntime-directml
+opencv-contrib-python
