@@ -16,7 +16,13 @@ import org.curtinfrc.frc2026.sim.BallSim;
 import org.littletonrobotics.junction.Logger;
 
 public class HoodedShooter extends SubsystemBase {
-  public static final double WHEEL_DIAMETER = 0.1;
+  public static final double MOTOR_WARNING_TEMP = 60;
+  public static final double WHEEL_DIAMETER =
+      (Constants.robotType == Constants.RobotType.COMP) ? 0.1 : 0.101;
+  public static final int SHOOTER_MOTOR_NUMBER =
+      (Constants.robotType == Constants.RobotType.COMP) ? 4 : 4;
+  public static final int HOOD_MOTOR_NUMBER =
+      (Constants.robotType == Constants.RobotType.COMP) ? 2 : 1;
 
   private final HoodIO hoodIO;
   private final HoodIOInputsAutoLogged hoodInputs = new HoodIOInputsAutoLogged();
@@ -26,18 +32,18 @@ public class HoodedShooter extends SubsystemBase {
 
   private final Supplier<Pose2d> robotPose;
 
-  private final Alert[] hoodMotorDisconnectedAlerts = new Alert[2];
-  private final Alert[] hoodMotorTempAlerts = new Alert[2];
+  private final Alert[] hoodMotorDisconnectedAlerts = new Alert[HOOD_MOTOR_NUMBER];
+  private final Alert[] hoodMotorTempAlerts = new Alert[HOOD_MOTOR_NUMBER];
 
-  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
-  private final Alert[] shooterMotorTempAlerts = new Alert[3];
+  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
+  private final Alert[] shooterMotorTempAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
 
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO, Supplier<Pose2d> robotPose) {
     this.hoodIO = hoodIO;
     this.shooterIO = shooterIO;
     this.robotPose = robotPose;
 
-    for (int motor = 0; motor < hoodMotorDisconnectedAlerts.length; motor++) {
+    for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor] =
           new Alert("Hood motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
       hoodMotorTempAlerts[motor] =
@@ -45,10 +51,10 @@ public class HoodedShooter extends SubsystemBase {
               "Hood motor " + String.valueOf(motor) + " temperature above 60°C.",
               AlertType.kWarning);
     }
-    for (int motor = 0; motor < 3; motor++) {
-      this.shooterMotorDisconnectedAlerts[motor] =
+    for (int motor = 0; motor < SHOOTER_MOTOR_NUMBER; motor++) {
+      shooterMotorDisconnectedAlerts[motor] =
           new Alert("Shooter motor " + String.valueOf(motor) + " disconnected.", AlertType.kError);
-      this.shooterMotorTempAlerts[motor] =
+      shooterMotorTempAlerts[motor] =
           new Alert(
               "Shooter motor " + String.valueOf(motor) + " temperature above 60°C.",
               AlertType.kWarning);
@@ -62,13 +68,14 @@ public class HoodedShooter extends SubsystemBase {
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
 
-    for (int motor = 0; motor < 1; motor++) {
+    for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
-      hoodMotorTempAlerts[motor].set(hoodInputs.motorTemperatures[motor] > 60);
+      hoodMotorTempAlerts[motor].set(hoodInputs.motorTemperatures[motor] > MOTOR_WARNING_TEMP);
     }
-    for (int motor = 0; motor < 3; motor++) {
+    for (int motor = 0; motor < SHOOTER_MOTOR_NUMBER; motor++) {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
-      shooterMotorTempAlerts[motor].set(shooterInputs.motorTemperatures[motor] > 60);
+      shooterMotorTempAlerts[motor].set(
+          shooterInputs.motorTemperatures[motor] > MOTOR_WARNING_TEMP);
     }
   }
 
