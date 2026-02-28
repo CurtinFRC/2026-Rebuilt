@@ -26,6 +26,8 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
+
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
@@ -33,6 +35,7 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
@@ -339,6 +342,8 @@ public class Drive extends SubsystemBase {
     return targetAngle;
   }
 
+  double targetAngle = 0;
+
   public Command faceLocation(Supplier<Translation2d> locationSupplier) {
     return run(
         () -> {
@@ -361,6 +366,10 @@ public class Drive extends SubsystemBase {
           double angleSpeed =
               hubHeadingController.calculate(
                   robotAngle, angleToLocation(locationTransform, currentPosition));
+          targetAngle = angleToLocation(locationTransform, currentPosition);
+          Trigger withinAngleRange = new Trigger(() -> {
+            return (Math.abs(targetAngle) - robotAngle < 5);
+  });
 
           Logger.recordOutput("Target Angle", angleToLocation(locationTransform, currentPosition));
           Logger.recordOutput("Robot Angle", robotAngle);
@@ -439,5 +448,8 @@ public class Drive extends SubsystemBase {
                     isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           }
         });
+        public Command getAllianceSide() {
+          Transform2d currentPosition = getPose();
+        }
   }
 }
