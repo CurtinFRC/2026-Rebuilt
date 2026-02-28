@@ -38,6 +38,9 @@ public class HoodedShooter extends SubsystemBase {
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
   private final Alert[] shooterMotorTempAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
 
+  private double hoodTarget = 0;
+  private double shooterTarget = 0;
+
   public HoodedShooter(HoodIO hoodIO, ShooterIO shooterIO, Supplier<Pose2d> robotPose) {
     this.hoodIO = hoodIO;
     this.shooterIO = shooterIO;
@@ -67,6 +70,8 @@ public class HoodedShooter extends SubsystemBase {
     shooterIO.updateInputs(shooterInputs);
     Logger.processInputs("Hood", hoodInputs);
     Logger.processInputs("Shooter", shooterInputs);
+    Logger.recordOutput("HoodedShooter/hoodTarget", hoodTarget);
+    Logger.recordOutput("HoodedShooter/shooterTarget", shooterTarget);
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
@@ -106,6 +111,8 @@ public class HoodedShooter extends SubsystemBase {
   public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
     return run(
         () -> {
+          hoodTarget = position;
+          shooterTarget = velocity;
           hoodIO.setPosition(position);
           shooterIO.setVelocity(velocity);
 
