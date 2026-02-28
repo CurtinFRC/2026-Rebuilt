@@ -6,6 +6,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 
 from lib.runtime_types import Detection2D
 
@@ -284,7 +285,21 @@ class YoloPipeline(VisionPipeline):
         p = Path(model_path)
         if not p.exists():
             raise FileNotFoundError(f"yolo model not found: {p}")
-        self._net = cv2.dnn.readNet(str(p))
+        available = set(ort.get_available_providers())
+        providers: list[str] = []
+        if "CUDAExecutionProvider" in available:
+            providers.append("CUDAExecutionProvider")
+        if "CPUExecutionProvider" in available:
+            providers.append("CPUExecutionProvider")
+        if not providers:
+            raise RuntimeError("onnxruntime has no available execution providers")
+
+        session_options = ort.SessionOptions()
+        session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self._session = ort.InferenceSession(str(p), sess_options=session_options, providers=providers)
+        self._input_name = self._session.get_inputs()[0].name
+        self._output_name = self._session.get_outputs()[0].name
+        self._input_type = str(self._session.get_inputs()[0].type)
         self._input_width = int(spec.get("input_width", 640))
         self._input_height = int(spec.get("input_height", 640))
         self._conf_threshold = float(spec.get("conf_threshold", 0.25))
@@ -305,23 +320,59 @@ class YoloPipeline(VisionPipeline):
         if frame is None or frame.size == 0:
             return []
         h, w = frame.shape[:2]
-        blob = cv2.dnn.blobFromImage(
+        resized = cv2.resize(
             frame,
-            scalefactor=1.0 / 255.0,
-            size=(self._input_width, self._input_height),
-            swapRB=True,
-            crop=False,
+            (self._input_width, self._input_height),
+            interpolation=cv2.INTER_LINEAR,
         )
-        self._net.setInput(blob)
-        raw = self._net.forward()
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        chw = np.transpose(rgb, (2, 0, 1))
+        if "float16" in self._input_type:
+            blob = chw.astype(np.float16, copy=False) / np.float16(255.0)
+        else:
+            blob = chw.astype(np.float32, copy=False) / np.float32(255.0)
+        blob = np.expand_dims(blob, axis=0)
+        raw = self._session.run([self._output_name], {self._input_name: blob})[0]
         pred = self._pred_matrix(raw)
         if pred.shape[1] < 5:
             return []
+        sx = float(w) / float(self._input_width)
+        sy = float(h) / float(self._input_height)
+
+        # End-to-end ONNX export path (x1, y1, x2, y2, score, class_id).
+        if pred.shape[1] == 6:
+            out: list[Detection2D] = []
+            for row in pred:
+                x1, y1, x2, y2, score, cls_raw = map(float, row[:6])
+                if score < self._conf_threshold:
+                    continue
+                if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 2.0:
+                    x1 *= float(self._input_width)
+                    y1 *= float(self._input_height)
+                    x2 *= float(self._input_width)
+                    y2 *= float(self._input_height)
+                clamped = _clamp_box(x1 * sx, y1 * sy, x2 * sx, y2 * sy, w, h)
+                if clamped is None:
+                    continue
+                cx1, cy1, cx2, cy2 = clamped
+                out.append(
+                    Detection2D(
+                        class_id=max(0, int(round(cls_raw))),
+                        confidence=float(score),
+                        x1=float(cx1),
+                        y1=float(cy1),
+                        x2=float(cx2),
+                        y2=float(cy2),
+                        pipeline=self._name,
+                    )
+                )
+                if len(out) >= self._max_detections:
+                    break
+            return out
+
         class_ids: list[int] = []
         confidences: list[float] = []
         boxes_xywh: list[list[float]] = []
-        sx = float(w) / float(self._input_width)
-        sy = float(h) / float(self._input_height)
         for row in pred:
             cx, cy, bw, bh = map(float, row[:4])
             if max(abs(cx), abs(cy), abs(bw), abs(bh)) <= 2.0:
