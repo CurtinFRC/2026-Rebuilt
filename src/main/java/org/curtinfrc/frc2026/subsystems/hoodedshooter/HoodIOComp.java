@@ -34,9 +34,9 @@ import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class HoodIOComp implements HoodIO {
-  public static final int LEADER_ID = 0;
-  public static final int FOLLOWER_ID = 0;
-  public static final int ENCODER_ID = 0;
+  public static final int LEADER_ID = 14;
+  public static final int FOLLOWER_ID = 15;
+  public static final int ENCODER_ID = 16;
 
   public static final double POSITION_TOLERANCE_DEGREES = 1.0;
 
@@ -137,7 +137,7 @@ public class HoodIOComp implements HoodIO {
     tryUntilOk(5, () -> followerMotor.getConfigurator().apply(sharedConfig));
     tryUntilOk(5, () -> encoder.getConfigurator().apply(encoderConfig));
 
-    followerMotor.setControl(new Follower(LEADER_ID, MotorAlignmentValue.Aligned));
+    followerMotor.setControl(new Follower(LEADER_ID, MotorAlignmentValue.Opposed));
 
     BaseStatusSignal.setUpdateFrequencyForAll(
         50.0, velocity, voltage, current, position, encoderPosition);

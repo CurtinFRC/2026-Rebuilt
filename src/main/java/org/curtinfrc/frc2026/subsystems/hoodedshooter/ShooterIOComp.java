@@ -26,10 +26,10 @@ import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class ShooterIOComp implements ShooterIO {
-  public static final int ID1 = 0;
-  public static final int ID2 = 0;
-  public static final int ID3 = 0;
-  public static final int ID4 = 0;
+  public static final int ID1 = 17;
+  public static final int ID2 = 18;
+  public static final int ID3 = 19;
+  public static final int ID4 = 20;
 
   public static final double VELOCITY_TOLERANCE = 1;
 
