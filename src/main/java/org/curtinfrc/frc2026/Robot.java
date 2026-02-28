@@ -130,8 +130,9 @@ public class Robot extends LoggedRobot {
                   new MagRollerIOComp(
                       Constants.bBotIntakeMagRollerMotorID,
                       InvertedValue.CounterClockwise_Positive),
-                  new MagRollerIODev(
-                      Constants.bBotIndexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+                  new MagRollerIOComp(
+                      Constants.bBotIndexerMagRollerMotorID,
+                      InvertedValue.CounterClockwise_Positive));
         }
         case DEV -> {
           drive =
@@ -229,7 +230,7 @@ public class Robot extends LoggedRobot {
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(1.0),
+                intake.RawControlConsume(10),
                 mag.store(0.7),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
