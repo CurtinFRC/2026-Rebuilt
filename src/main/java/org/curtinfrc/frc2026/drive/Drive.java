@@ -448,8 +448,5 @@ public class Drive extends SubsystemBase {
                     isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           }
         });
-        public Command getAllianceSide() {
-          Transform2d currentPosition = getPose();
-        }
   }
 }
