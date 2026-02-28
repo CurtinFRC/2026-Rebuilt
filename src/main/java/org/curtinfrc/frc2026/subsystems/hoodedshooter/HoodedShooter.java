@@ -31,7 +31,6 @@ public class HoodedShooter extends SubsystemBase {
       (Constants.robotType == Constants.RobotType.COMP) ? 4 : 4;
   public static final int HOOD_MOTOR_NUMBER =
       (Constants.robotType == Constants.RobotType.COMP) ? 2 : 1;
-  public static final double WHEEL_DIAMETER = 0.101;
   public static final Translation2d HUB_LOCATION =
       ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d());
 
