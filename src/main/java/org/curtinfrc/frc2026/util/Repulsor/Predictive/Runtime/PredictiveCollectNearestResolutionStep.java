@@ -39,7 +39,7 @@ public final class PredictiveCollectNearestResolutionStep {
   static final double EARLY_SWITCH_ETA_DELTA_MAX_S = 0.85;
   static final double EARLY_SWITCH_SCORE_FLOOR_DELTA = 0.45;
   static final double ESCAPE_SAME_TARGET_EPS_M = 0.05;
-  static final double RETURN_FRESH_MAX_AGE_S = 0.45;
+  static final double RETURN_FRESH_MAX_AGE_S = 0.30;
 
   static boolean allowCommitWindowRicherSwitch(CollectEval current, CollectEval candidate) {
     if (current == null || candidate == null) return false;
@@ -75,6 +75,27 @@ public final class PredictiveCollectNearestResolutionStep {
       if ((dx * dx + dy * dy) <= rr2) n++;
     }
     return n;
+  }
+
+  static Translation2d nearestFreshResourceTo(
+      SpatialDyn dyn, Translation2d center, double maxDist, double maxAgeS) {
+    if (dyn == null || center == null || dyn.resources == null || dyn.resources.isEmpty())
+      return null;
+    double bestD2 = maxDist * maxDist;
+    Translation2d best = null;
+    for (int i = 0; i < dyn.resources.size(); i++) {
+      var o = dyn.resources.get(i);
+      if (o == null || o.pos == null) continue;
+      if (o.ageS > maxAgeS) continue;
+      double dx = o.pos.getX() - center.getX();
+      double dy = o.pos.getY() - center.getY();
+      double d2 = dx * dx + dy * dy;
+      if (d2 <= bestD2) {
+        bestD2 = d2;
+        best = o.pos;
+      }
+    }
+    return best;
   }
 
   public static PointCandidate resolve(
@@ -525,6 +546,23 @@ public final class PredictiveCollectNearestResolutionStep {
       ops.collectArrivalTs = -1.0;
       return null;
     }
+
+    Translation2d returnPoint =
+        nearestFreshResourceTo(
+            dyn, ops.currentCollectTouch, Math.max(0.20, rCore * 2.0), RETURN_FRESH_MAX_AGE_S);
+    if (returnPoint == null || inShootBand.test(returnPoint)) {
+      ops.addDepletedMark(
+          ops.currentCollectTarget, 0.65, 1.25, PredictiveFieldStateOps.DEPLETED_TTL_S, false);
+      ops.addDepletedRing(
+          ops.currentCollectTarget, 0.35, 0.95, 0.80, PredictiveFieldStateOps.DEPLETED_TTL_S);
+      ops.recordRegionAttempt(dyn, ops.currentCollectTarget, now, false);
+      ops.currentCollectTarget = null;
+      ops.currentCollectTouch = null;
+      ops.collectArrivalTs = -1.0;
+      return null;
+    }
+    ops.currentCollectTarget = returnPoint;
+    ops.currentCollectTouch = returnPoint;
 
     CollectEval finalE =
         ops.evalCollectPoint(

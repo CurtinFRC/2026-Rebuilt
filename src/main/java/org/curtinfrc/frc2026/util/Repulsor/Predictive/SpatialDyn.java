@@ -92,8 +92,10 @@ public final class SpatialDyn {
           && o.ageS > PredictiveFieldStateRuntime.RESOURCE_HARD_MAX_AGE_S) continue;
 
       String ty = o.type != null ? o.type.toLowerCase() : "unknown";
-      if (this.collectTypes.contains(ty) && !this.collectFilter.test(o.pos)) continue;
-      if (this.specs.containsKey(ty)) {
+      boolean isCollect = this.collectTypes.contains(ty);
+      if (isCollect && !this.collectFilter.test(o.pos)) continue;
+
+      if (this.specs.containsKey(ty) && isCollect) {
         res.add(o);
         addTo(resCells, o.pos, o);
       } else {

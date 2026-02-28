@@ -176,7 +176,7 @@ public class AutoPathBehaviour extends Behaviour {
   private Command buildShootReadyCommand(BehaviourContext ctx) {
     return Commands.runOnce(
             () -> {
-              // FieldTrackerCore.getInstance().resetAll();
+              FieldTrackerCore.getInstance().resetAll();
               shooterPassthrough.set(true);
             })
         .andThen(Commands.waitUntil(() -> pieceCount.get() == 0))
@@ -201,7 +201,7 @@ public class AutoPathBehaviour extends Behaviour {
     return Commands.runOnce(
         () -> {
           System.out.println("AutoPathBehaviour: Resetting FieldTracker");
-          // FieldTrackerCore.getInstance().resetAll();
+          FieldTrackerCore.getInstance().resetAll();
         });
   }
 
@@ -327,7 +327,7 @@ public class AutoPathBehaviour extends Behaviour {
                   desired = fromNT;
                 } else {
                   RepulsorSetpoint pred = pickPredicted(ctx);
-                  // FieldTrackerCore.getInstance().resetAll();
+                  FieldTrackerCore.getInstance().resetAll();
                   desired = scoreFallback;
                 }
 

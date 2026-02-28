@@ -101,7 +101,7 @@ public final class PredictiveCollectSecondaryRankers {
   private static final double SECONDARY_ANCHOR_EVIDENCE_SCALE = 0.65;
   private static final double SECONDARY_ANCHOR_UNITS_SCALE = 0.55;
   private static final double SECONDARY_FINAL_UNITS_SCALE = 0.70;
-  private static final double SECONDARY_RETURN_MAX_AGE_S = 0.45;
+  private static final double SECONDARY_RETURN_MAX_AGE_S = 0.30;
   private static final double ACTIVITY_CAP = 1.05;
   private static final int ENEMY_REGIONS_MAX = 24;
 
@@ -127,13 +127,38 @@ public final class PredictiveCollectSecondaryRankers {
     return count;
   }
 
+  private static Translation2d nearestFreshResourceTo(
+      SpatialDyn dyn, Translation2d center, double maxDist, double maxAgeS) {
+    if (dyn == null || center == null || dyn.resources == null || dyn.resources.isEmpty())
+      return null;
+    double bestD2 = maxDist * maxDist;
+    Translation2d best = null;
+    for (int i = 0; i < dyn.resources.size(); i++) {
+      var o = dyn.resources.get(i);
+      if (o == null || o.pos == null) continue;
+      if (o.ageS > maxAgeS) continue;
+      double dx = o.pos.getX() - center.getX();
+      double dy = o.pos.getY() - center.getY();
+      double d2 = dx * dx + dy * dy;
+      if (d2 <= bestD2) {
+        bestD2 = d2;
+        best = o.pos;
+      }
+    }
+    return best;
+  }
+
   static Translation2d anchorHierarchicalPointToFuel(
       SpatialDyn dyn, Translation2d seed, double cellM, double minUnits, double minEv) {
     if (dyn == null || seed == null) return null;
 
     double rCore = Math.max(0.05, PredictiveFieldStateOps.coreRadiusFor(cellM));
     Translation2d nearest =
-        dyn.nearestResourceTo(seed, Math.max(HIERARCHICAL_ANCHOR_MAX_DIST_M, rCore * 4.0));
+        nearestFreshResourceTo(
+            dyn,
+            seed,
+            Math.max(HIERARCHICAL_ANCHOR_MAX_DIST_M, rCore * 4.0),
+            SECONDARY_RETURN_MAX_AGE_S);
     if (nearest == null) return null;
 
     Translation2d anchored = nearest;
@@ -152,7 +177,9 @@ public final class PredictiveCollectSecondaryRankers {
     if (freshNear < 1) return null;
     if (evidence < minEv * HIERARCHICAL_ANCHOR_EVIDENCE_SCALE) return null;
     if (units < Math.max(0.02, minUnits * HIERARCHICAL_ANCHOR_UNITS_SCALE)) return null;
-    return anchored;
+
+    return nearestFreshResourceTo(
+        dyn, anchored, Math.max(0.10, rCore * 2.0), SECONDARY_RETURN_MAX_AGE_S);
   }
 
   static PointCandidate rankCollectHierarchical(
@@ -407,12 +434,24 @@ public final class PredictiveCollectSecondaryRankers {
                   Math.max(0.20, PredictiveFieldStateOps.coreRadiusFor(cellM) * 2.0),
                   SECONDARY_RETURN_MAX_AGE_S)
               >= 1) {
-        api.setLastReturnedCollect(use, now);
+        Translation2d returnPoint =
+            nearestFreshResourceTo(
+                dyn,
+                use,
+                Math.max(0.20, PredictiveFieldStateOps.coreRadiusFor(cellM) * 2.0),
+                SECONDARY_RETURN_MAX_AGE_S);
+        if (returnPoint == null) {
+          api.addDepletedMark(use, 0.70, 1.20, DEPLETED_TTL_S, false);
+          api.addDepletedRing(use, 0.35, 0.95, 0.75, DEPLETED_TTL_S);
+          continue;
+        }
 
-        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(use, new Rotation2d()));
+        api.setLastReturnedCollect(returnPoint, now);
+
+        Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(returnPoint, new Rotation2d()));
 
         return new PointCandidate(
-            use,
+            returnPoint,
             new Rotation2d(),
             eUse.eta,
             eUse.value,
@@ -556,12 +595,24 @@ public final class PredictiveCollectSecondaryRankers {
       return null;
     }
 
-    api.setLastReturnedCollect(bestP, nowSec());
+    Translation2d snapped =
+        nearestFreshResourceTo(
+            dyn,
+            bestP,
+            Math.max(0.20, PredictiveFieldStateOps.coreRadiusFor(COLLECT_CELL_M) * 2.0),
+            SECONDARY_RETURN_MAX_AGE_S);
+    if (snapped == null) {
+      api.addDepletedMark(bestP, 0.70, 1.15, DEPLETED_TTL_S, false);
+      api.addDepletedRing(bestP, 0.35, 0.95, 0.75, DEPLETED_TTL_S);
+      return null;
+    }
 
-    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(bestP, new Rotation2d()));
+    api.setLastReturnedCollect(snapped, nowSec());
+
+    Logger.recordOutput("Repulsor/ChosenCollect", new Pose2d(snapped, new Rotation2d()));
 
     return new PointCandidate(
-        bestP,
+        snapped,
         new Rotation2d(),
         bestE.eta,
         bestE.value,

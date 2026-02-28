@@ -115,8 +115,8 @@ public final class FieldTrackerCollectObjectiveLoop {
   public static final int COLLECT_NEARBY_MIN_COUNT = 1;
 
   public static final double COLLECT_LIVE_FUEL_NEAR_TARGET_R_M = 0.65;
-  public static final double COLLECT_LIVE_OBS_MAX_AGE_S = 0.45;
-  public static final double COLLECT_PREDICTOR_OBS_MAX_AGE_S = 0.35;
+  public static final double COLLECT_LIVE_OBS_MAX_AGE_S = 0.30;
+  public static final double COLLECT_PREDICTOR_OBS_MAX_AGE_S = 0.25;
   public static final double COLLECT_STICKY_INVALID_DROP_SEC = 0.10;
   public static final double COLLECT_REACHED_EMPTY_FORCE_DROP_SEC = 0.18;
   public static final double COLLECT_REACHED_EMPTY_NEAR_TARGET_M = 0.95;
@@ -283,9 +283,6 @@ public final class FieldTrackerCollectObjectiveLoop {
       Translation2d near = predictor.nearestCollectResource(p, COLLECT_RESOURCE_SNAP_MAX_DIST_M);
       if (near != null) {
         p = near;
-      } else {
-        Translation2d centroid = predictor.snapToCollectCentroid(p, 0.75, 0.15);
-        if (centroid != null) p = centroid;
       }
     }
 

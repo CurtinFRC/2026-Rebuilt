@@ -46,6 +46,8 @@ public final class FieldTrackerCollectPassCandidateStep {
       FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M + 0.35;
   static final double LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M =
       FieldTrackerCollectObjectiveLoop.COLLECT_NEARBY_RADIUS_M + 1.0;
+  static final double DIRECT_FUEL_LOCK_STRICT_R_M = 0.16;
+  static final double DIRECT_FUEL_LOCK_RELAXED_R_M = 0.22;
 
   static Translation2d maybeCanonicalizeCandidate(
       Translation2d bestCandidate,
@@ -198,6 +200,8 @@ public final class FieldTrackerCollectPassCandidateStep {
     HashMap<Long, CollectProbe> probeCache = new HashMap<>(512);
     HashMap<Long, Boolean> footprintCache = new HashMap<>(512);
     HashMap<Long, Boolean> nearFuelCache = new HashMap<>(512);
+    HashMap<Long, Boolean> directFuelStrictCache = new HashMap<>(512);
+    HashMap<Long, Boolean> directFuelRelaxedCache = new HashMap<>(512);
     HashMap<Long, Boolean> liveFuelNearStrictCache = new HashMap<>(512);
     HashMap<Long, Boolean> liveFuelNearRelaxedCache = new HashMap<>(512);
     HashMap<Long, Boolean> validCache = new HashMap<>(512);
@@ -268,6 +272,32 @@ public final class FieldTrackerCollectPassCandidateStep {
           return ok1;
         };
 
+    Predicate<Translation2d> hasDirectFuelLockStrict =
+        p -> {
+          if (p == null) return false;
+          long key = pointKey.applyAsLong(p);
+          Boolean cached = directFuelStrictCache.get(key);
+          if (cached != null) return cached;
+          boolean ok1 =
+              loop.predictor.nearestCollectResource(p, DIRECT_FUEL_LOCK_STRICT_R_M) != null;
+          if (directFuelStrictCache.size() > 2048) directFuelStrictCache.clear();
+          directFuelStrictCache.put(key, ok1);
+          return ok1;
+        };
+
+    Predicate<Translation2d> hasDirectFuelLockRelaxed =
+        p -> {
+          if (p == null) return false;
+          long key = pointKey.applyAsLong(p);
+          Boolean cached = directFuelRelaxedCache.get(key);
+          if (cached != null) return cached;
+          boolean ok1 =
+              loop.predictor.nearestCollectResource(p, DIRECT_FUEL_LOCK_RELAXED_R_M) != null;
+          if (directFuelRelaxedCache.size() > 2048) directFuelRelaxedCache.clear();
+          directFuelRelaxedCache.put(key, ok1);
+          return ok1;
+        };
+
     Predicate<Translation2d> hasLiveFuelNearStrict =
         p -> {
           if (!hasLiveCollectDynamicsFinal) return true;
@@ -319,9 +349,11 @@ public final class FieldTrackerCollectPassCandidateStep {
             validCache.put(key, false);
             return false;
           }
-          if (shouldRequireLiveFuelEvidence(
-                  ctx.robotPos(), p, hasLiveCollectDynamicsFinal, LIVE_FUEL_REQUIRE_NEAR_R_M)
-              && !hasLiveFuelNearStrict.test(p)) {
+          if (!hasDirectFuelLockStrict.test(p)) {
+            validCache.put(key, false);
+            return false;
+          }
+          if (hasLiveCollectDynamicsFinal && !hasLiveFuelNearStrict.test(p)) {
             validCache.put(key, false);
             return false;
           }
@@ -349,12 +381,11 @@ public final class FieldTrackerCollectPassCandidateStep {
             validRelaxedCache.put(key, false);
             return false;
           }
-          if (shouldRequireLiveFuelEvidence(
-                  ctx.robotPos(),
-                  p,
-                  hasLiveCollectDynamicsFinal,
-                  LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M)
-              && !hasLiveFuelNearRelaxed.test(p)) {
+          if (!hasDirectFuelLockRelaxed.test(p)) {
+            validRelaxedCache.put(key, false);
+            return false;
+          }
+          if (hasLiveCollectDynamicsFinal && !hasLiveFuelNearRelaxed.test(p)) {
             validRelaxedCache.put(key, false);
             return false;
           }
@@ -463,10 +494,9 @@ public final class FieldTrackerCollectPassCandidateStep {
                     FieldTrackerCollectObjectiveLoop.COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75)) {
           continue;
         }
-        if (shouldRequireLiveFuelEvidence(
-                ctx.robotPos(), p, hasLiveCollectDynamicsFinal, LIVE_FUEL_REQUIRE_NEAR_R_M)
-            && !hasLiveFuelNearStrict.test(p)) continue;
+        if (hasLiveCollectDynamicsFinal && !hasLiveFuelNearStrict.test(p)) continue;
         if (!hasNearFuel.test(p)) continue;
+        if (!hasDirectFuelLockStrict.test(p)) continue;
         if (!footprintHasFuel.test(p)) continue;
         anyStrict = true;
         double u = pr.units;
@@ -486,12 +516,8 @@ public final class FieldTrackerCollectPassCandidateStep {
                       0.02,
                       FieldTrackerCollectObjectiveLoop.COLLECT_RESOURCE_SNAP_MIN_UNITS * 0.75))
             continue;
-          if (shouldRequireLiveFuelEvidence(
-                  ctx.robotPos(),
-                  p,
-                  hasLiveCollectDynamicsFinal,
-                  LIVE_FUEL_REQUIRE_RELAXED_NEAR_R_M)
-              && !hasLiveFuelNearRelaxed.test(p)) continue;
+          if (hasLiveCollectDynamicsFinal && !hasLiveFuelNearRelaxed.test(p)) continue;
+          if (!hasDirectFuelLockRelaxed.test(p)) continue;
           if (!footprintHasFuel.test(p)) continue;
           double u = pr.units;
           if (u > bestU) {

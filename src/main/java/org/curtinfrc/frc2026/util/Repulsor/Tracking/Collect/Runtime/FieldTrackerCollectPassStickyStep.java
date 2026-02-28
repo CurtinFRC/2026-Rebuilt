@@ -36,6 +36,48 @@ public final class FieldTrackerCollectPassStickyStep {
   private FieldTrackerCollectPassStickyStep() {}
 
   static final double STICKY_PREFER_RANKED_SCORE_MARGIN = 0.06;
+  static final double FAR_SWITCH_LOCK_DIST_M = 2.8;
+  static final double FAR_SWITCH_FORCE_MULT = 2.1;
+  static final double CLOSE_SWITCH_EASY_DIST_M = 1.35;
+  static final double CLOSE_SWITCH_MARGIN_SCALE = 0.55;
+
+  static boolean shouldBlockFarSwitch(
+      double distToCurrent,
+      double currentScore,
+      double bestScore,
+      double margin,
+      boolean currentIsTrap,
+      boolean bestIsTrap,
+      boolean currentValid,
+      boolean bestValid,
+      double stillSec,
+      double movedSinceLastSwitchM,
+      double sinceLastSwitchS) {
+    if (!currentValid || !bestValid) return false;
+    if (!Double.isFinite(distToCurrent) || distToCurrent < FAR_SWITCH_LOCK_DIST_M) return false;
+    if (currentIsTrap && !bestIsTrap) return false;
+    if (stillSec >= 0.30) return false;
+    if (sinceLastSwitchS >= 0.55
+        && Double.isFinite(movedSinceLastSwitchM)
+        && movedSinceLastSwitchM < FieldTrackerCollectObjectiveLoop.COLLECT_SWITCH_MIN_MOVE_M) {
+      return false;
+    }
+    return bestScore <= currentScore + (margin * FAR_SWITCH_FORCE_MULT);
+  }
+
+  static double adaptSwitchMarginForDistance(double margin, double distToCurrent) {
+    if (!Double.isFinite(distToCurrent)) return margin;
+    if (distToCurrent <= CLOSE_SWITCH_EASY_DIST_M) return margin * CLOSE_SWITCH_MARGIN_SCALE;
+    return margin;
+  }
+
+  static boolean shouldHoldPreviousForTooSoon(
+      boolean tooSoon, double stillSec, boolean opposite, double distToCurrent) {
+    if (!tooSoon) return false;
+    if (opposite) return false;
+    if (Double.isFinite(distToCurrent) && distToCurrent <= CLOSE_SWITCH_EASY_DIST_M) return false;
+    return stillSec < 0.10;
+  }
 
   static Translation2d preferRankedCandidateForSticky(
       Translation2d bestCandidate,
@@ -129,10 +171,28 @@ public final class FieldTrackerCollectPassStickyStep {
           double curScore = cand.scoreResource().apply(cur);
           double bestScore = cand.scoreResource().apply(bestCandidate);
           double margin = switchMarginForDist(ctx.robotPos().getDistance(bestCandidate));
+          margin = adaptSwitchMarginForDistance(margin, distToCur);
           double sinceLastSwitchS = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs);
+          double movedSinceLastSwitchM =
+              loop.collectStickyLastSwitchRobotPos != null
+                  ? ctx.robotPos().getDistance(loop.collectStickyLastSwitchRobotPos)
+                  : Double.POSITIVE_INFINITY;
           if (sinceLastSwitchS < 0.35) margin *= 1.45;
           if (ctx.robotInCenterBand()) margin *= 1.10;
-          if (bestScore > curScore + margin) selectedResource = bestCandidate;
+          if (!shouldBlockFarSwitch(
+              distToCur,
+              curScore,
+              bestScore,
+              margin,
+              curTrap,
+              bestTrap,
+              curValid,
+              bestValid,
+              loop.collectStickyStillSec,
+              movedSinceLastSwitchM,
+              sinceLastSwitchS)) {
+            if (bestScore > curScore + margin) selectedResource = bestCandidate;
+          }
         }
       } else if (!curValid && bestValid) {
         selectedResource = bestCandidate;
@@ -157,7 +217,7 @@ public final class FieldTrackerCollectPassStickyStep {
       boolean opposite = dot(prevHat, nextHat) < 0.15;
       boolean tooSoon = nowSFromNs(ctx.nowNs() - loop.collectStickyLastSwitchNs) < 0.25;
 
-      if (tooSoon && loop.collectStickyStillSec < 0.10 && !opposite) {
+      if (shouldHoldPreviousForTooSoon(tooSoon, loop.collectStickyStillSec, opposite, distToCur)) {
         selectedResource = prevSticky;
         loop.collectStickySelector.force(prevSticky);
       }

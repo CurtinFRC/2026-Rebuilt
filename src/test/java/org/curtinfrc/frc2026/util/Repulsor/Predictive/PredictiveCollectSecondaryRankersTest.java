@@ -85,7 +85,8 @@ class PredictiveCollectSecondaryRankersTest {
             api, new Translation2d[] {new Translation2d(4.30, 2.0)}, 0.75);
 
     assertNotNull(out);
-    assertTrue(out.getDistance(new Translation2d(4.0, 2.0)) <= 0.25);
+    assertEquals(4.0, out.getX(), EPS);
+    assertEquals(2.0, out.getY(), EPS);
   }
 
   @Test
@@ -130,7 +131,55 @@ class PredictiveCollectSecondaryRankersTest {
             8);
 
     assertNotNull(out);
-    assertTrue(out.point.getDistance(new Translation2d(4.0, 2.0)) <= 0.25);
+    assertEquals(4.0, out.point.getX(), EPS);
+    assertEquals(2.0, out.point.getY(), EPS);
+  }
+
+  @Test
+  void anchorHierarchicalPointToFuelReturnsRealFuelPointNotCentroid() {
+    SpatialDyn dyn =
+        makeDyn(
+            List.of(
+                new DynamicObject(
+                    "f1", "fuel", new Translation2d(4.00, 2.0), new Translation2d(), 0.05),
+                new DynamicObject(
+                    "f2", "fuel", new Translation2d(4.20, 2.0), new Translation2d(), 0.05)),
+            1.0);
+
+    Translation2d anchored =
+        PredictiveCollectSecondaryRankers.anchorHierarchicalPointToFuel(
+            dyn, new Translation2d(4.10, 2.0), 0.14, 0.06, 0.03);
+
+    assertNotNull(anchored);
+    boolean onF1 = anchored.getDistance(new Translation2d(4.00, 2.0)) <= EPS;
+    boolean onF2 = anchored.getDistance(new Translation2d(4.20, 2.0)) <= EPS;
+    assertTrue(onF1 || onF2);
+  }
+
+  @Test
+  void rankCollectHierarchicalReturnsRealFuelPoint() {
+    SpatialDyn dyn =
+        makeDyn(
+            List.of(
+                new DynamicObject(
+                    "f1", "fuel", new Translation2d(4.0, 2.0), new Translation2d(), 0.05)),
+            1.0);
+    TestApi api = new TestApi(dyn);
+
+    PointCandidate out =
+        PredictiveCollectSecondaryRankers.rankCollectHierarchical(
+            api,
+            new Translation2d(3.0, 2.0),
+            3.0,
+            new Translation2d[] {new Translation2d(4.25, 2.0)},
+            0.10,
+            1,
+            8,
+            3);
+
+    assertNotNull(out);
+    assertEquals(4.0, out.point.getX(), EPS);
+    assertEquals(2.0, out.point.getY(), EPS);
   }
 
   @Test

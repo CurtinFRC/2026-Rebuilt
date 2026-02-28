@@ -1,7 +1,9 @@
 package org.curtinfrc.frc2026.util.Repulsor.Tracking.Collect.Runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -114,5 +116,52 @@ class FieldTrackerCollectPassStickyStepTest {
         FieldTrackerCollectPassStickyStep.preferRankedCandidateForSticky(nonTrap, cand, CTX);
 
     assertSame(nonTrap, out);
+  }
+
+  @Test
+  void shouldBlockFarSwitchBlocksWhenFarAndUpgradeNotLarge() {
+    boolean blocked =
+        FieldTrackerCollectPassStickyStep.shouldBlockFarSwitch(
+            3.4, 1.00, 1.18, 0.12, false, false, true, true, 0.0, 0.5, 0.2);
+    assertTrue(blocked);
+  }
+
+  @Test
+  void shouldBlockFarSwitchAllowsTrapEscapeAndBigUpgrade() {
+    boolean trapEscape =
+        FieldTrackerCollectPassStickyStep.shouldBlockFarSwitch(
+            3.4, 1.00, 1.10, 0.12, true, false, true, true, 0.0, 0.5, 0.2);
+    boolean largeUpgrade =
+        FieldTrackerCollectPassStickyStep.shouldBlockFarSwitch(
+            3.4, 1.00, 1.30, 0.12, false, false, true, true, 0.0, 0.5, 0.2);
+
+    assertFalse(trapEscape);
+    assertFalse(largeUpgrade);
+  }
+
+  @Test
+  void shouldBlockFarSwitchReleasesWhenStillOrNoProgress() {
+    boolean stillRelease =
+        FieldTrackerCollectPassStickyStep.shouldBlockFarSwitch(
+            3.4, 1.00, 1.18, 0.12, false, false, true, true, 0.35, 0.5, 0.2);
+    boolean noProgressRelease =
+        FieldTrackerCollectPassStickyStep.shouldBlockFarSwitch(
+            3.4, 1.00, 1.18, 0.12, false, false, true, true, 0.0, 0.05, 0.7);
+
+    assertFalse(stillRelease);
+    assertFalse(noProgressRelease);
+  }
+
+  @Test
+  void adaptSwitchMarginForDistanceReducesMarginWhenClose() {
+    double out = FieldTrackerCollectPassStickyStep.adaptSwitchMarginForDistance(0.20, 1.0);
+    assertEquals(0.11, out, EPS);
+  }
+
+  @Test
+  void shouldHoldPreviousForTooSoonDoesNotHoldWhenClose() {
+    boolean hold =
+        FieldTrackerCollectPassStickyStep.shouldHoldPreviousForTooSoon(true, 0.01, false, 1.0);
+    assertFalse(hold);
   }
 }
