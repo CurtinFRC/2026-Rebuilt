@@ -1,5 +1,5 @@
 numpy>=1.23
-opencv-python
+opencv-python==4.13.0.92
 robotpy
 torch
 roboflow
@@ -7,4 +7,4 @@ tensorboard
 ultralytics
 tensorflow
 pyright
-onnxruntime-gpu
+onnxruntime-directml

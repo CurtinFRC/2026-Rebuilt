@@ -287,8 +287,8 @@ class YoloPipeline(VisionPipeline):
             raise FileNotFoundError(f"yolo model not found: {p}")
         available = set(ort.get_available_providers())
         providers: list[str] = []
-        if "CUDAExecutionProvider" in available:
-            providers.append("CUDAExecutionProvider")
+        if "DmlExecutionProvider" in available:
+            providers.append("DmlExecutionProvider")
         if "CPUExecutionProvider" in available:
             providers.append("CPUExecutionProvider")
         if not providers:
