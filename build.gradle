@@ -226,20 +226,29 @@ task(generateOffloadManifest, type: Copy) {
     rename { "offload-manifest.json" }
 }
 
+def configureOffloadSmokeInputs = { Test testTask ->
+    testTask.dependsOn(buildOffloadTasksJar, generateOffloadManifest)
+    testTask.doFirst {
+        testTask.systemProperty "repulsor.offload.test.taskJar", project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile.absolutePath
+        testTask.systemProperty "repulsor.offload.test.manifest", layout.buildDirectory.file("offload/offload-manifest.json").get().asFile.absolutePath
+    }
+}
+
 task(localOffloadSmokeTest, type: Test) {
     group = "offload"
     description = "Run local end-to-end offload smoke test against a real offload server."
-    dependsOn(buildOffloadTasksJar, generateOffloadManifest)
     useJUnitPlatform()
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     filter {
         includeTestsMatching "org.curtinfrc.frc2026.util.Repulsor.Offload.LocalOffloadSmokeTest"
     }
-    doFirst {
-        systemProperty "repulsor.offload.test.taskJar", project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile.absolutePath
-        systemProperty "repulsor.offload.test.manifest", layout.buildDirectory.file("offload/offload-manifest.json").get().asFile.absolutePath
-    }
+}
+tasks.named("test", Test) {
+    configureOffloadSmokeInputs(it)
+}
+tasks.named("localOffloadSmokeTest", Test) {
+    configureOffloadSmokeInputs(it)
 }
 
 def requestedTasks = gradle.startParameter.taskNames
