@@ -211,3 +211,5 @@ vision/train/data
 README_2.md
 *.pdf
 *.png
+*.onnx
+*.pt

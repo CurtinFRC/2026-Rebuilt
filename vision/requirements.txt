@@ -7,3 +7,4 @@ tensorboard
 ultralytics
 tensorflow
 pyright
+onnxruntime-gpu
