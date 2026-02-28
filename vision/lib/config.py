@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -131,12 +131,50 @@ def _default_runtime_config_path() -> str:
     return "vision/config/runtime.default.json"
 
 
-def load_runtime_config(path: str | None = None) -> RuntimeConfig:
-    cfg_path = path or _default_runtime_config_path()
-    p = Path(cfg_path).resolve()
+def resolve_runtime_config_path(path: str | None = None) -> Path:
+    return Path(path or _default_runtime_config_path()).resolve()
+
+
+def load_runtime_config_raw(path: str | None = None) -> dict[str, Any]:
+    p = resolve_runtime_config_path(path)
     raw = json.loads(p.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError(f"runtime config at {p} must be an object")
+    return raw
+
+
+def save_runtime_camera_usb_indexes(
+    usb_index_by_camera_name: Mapping[str, int],
+    path: str | None = None,
+) -> Path:
+    p = resolve_runtime_config_path(path)
+    raw = load_runtime_config_raw(str(p))
+    cameras_raw = raw.get("cameras", [])
+    if not isinstance(cameras_raw, list) or not cameras_raw:
+        raise ValueError("cameras must be a non-empty list")
+
+    known_names: set[str] = set()
+    for c in cameras_raw:
+        if not isinstance(c, dict):
+            raise ValueError("camera entry must be an object")
+        name = str(c.get("name", "")).strip()
+        if not name:
+            raise ValueError("camera name is required")
+        known_names.add(name)
+        if name in usb_index_by_camera_name:
+            c["usb_index"] = int(usb_index_by_camera_name[name])
+
+    unknown = sorted(set(usb_index_by_camera_name.keys()) - known_names)
+    if unknown:
+        raise ValueError(f"unknown camera names in mapping: {', '.join(unknown)}")
+
+    p.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
+    return p
+
+
+def load_runtime_config(path: str | None = None) -> RuntimeConfig:
+    p = resolve_runtime_config_path(path)
+    raw = load_runtime_config_raw(str(p))
     config_dir = p.parent
 
     nt_raw = raw.get("nt", {})

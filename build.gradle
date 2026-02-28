@@ -338,6 +338,17 @@ task(compileVisionNuitka) {
     }
 }
 
+task(visionCameraMapUi, type: Exec) {
+    group = "vision"
+    description = "Launch local camera-mapper web UI for assigning camera names to USB indexes."
+    def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "python").toString()
+    def runtimeCfg = (project.findProperty("visionConfig") ?: System.getenv("VISION_CONFIG") ?: "vision/config/runtime.default.json").toString()
+    def uiHost = (project.findProperty("visionCameraMapHost") ?: System.getenv("VISION_CAMERA_MAP_HOST") ?: "0.0.0.0").toString()
+    def uiPort = (project.findProperty("visionCameraMapPort") ?: System.getenv("VISION_CAMERA_MAP_PORT") ?: "5808").toString()
+    def scanMax = (project.findProperty("visionCameraScanMaxIndex") ?: System.getenv("VISION_CAMERA_SCAN_MAX_INDEX") ?: "8").toString()
+    commandLine pythonCmd, "vision/run.py", "--camera-map-ui", "--config", runtimeCfg, "--camera-map-host", uiHost, "--camera-map-port", uiPort, "--camera-scan-max-index", scanMax
+}
+
 task(prepareVisionBundle) {
     group = "vision"
     description = "Bundle Nuitka-compiled vision runtime and config for deployment."
@@ -428,10 +439,50 @@ WantedBy=multi-user.target
     }
 }
 
+task(syncVisionConfigFromCoprocessor) {
+    group = "vision"
+    description = "Pull runtime config from the coprocessor into local vision/config before deploy."
+    def pullRaw = (project.findProperty("visionPullConfigBeforeDeploy")
+            ?: System.getenv("VISION_PULL_CONFIG_BEFORE_DEPLOY")
+            ?: "true").toString().trim().toLowerCase()
+    onlyIf { ["1", "true", "yes", "y", "on"].contains(pullRaw) }
+    doLast {
+        def host = (project.findProperty("visionHost") ?: System.getenv("VISION_HOST") ?: "").toString().trim()
+        if (host.isEmpty()) {
+            def offloadHosts = (project.findProperty("offloadHosts") ?: System.getenv("OFFLOAD_HOSTS") ?: "").toString()
+            def first = offloadHosts.split(",").collect { it.trim() }.find { !it.isEmpty() }
+            if (first != null) {
+                host = first
+            }
+        }
+        if (host.isEmpty()) {
+            throw new GradleException("No vision coprocessor host configured. Set -PvisionHost=<host> or VISION_HOST.")
+        }
+
+        def user = (project.findProperty("visionUser") ?: System.getenv("VISION_USER") ?: System.getenv("OFFLOAD_USER") ?: System.getenv("USER") ?: "").toString().trim()
+        if (user.isEmpty()) {
+            throw new GradleException("No vision SSH user configured. Set -PvisionUser=<user> or VISION_USER.")
+        }
+
+        def deployDir = (project.findProperty("visionDeployDir") ?: System.getenv("VISION_DEPLOY_DIR") ?: "/opt/repulsor-vision").toString()
+        def localConfigPathRaw = (project.findProperty("visionLocalConfigPath") ?: System.getenv("VISION_LOCAL_CONFIG_PATH") ?: "vision/config/runtime.default.json").toString()
+        def localConfigPath = file(localConfigPathRaw)
+        localConfigPath.parentFile.mkdirs()
+        def remoteConfigPath = (project.findProperty("visionRemoteConfigPath")
+                ?: System.getenv("VISION_REMOTE_CONFIG_PATH")
+                ?: "${deployDir}/vision/config/${localConfigPath.name}").toString()
+
+        println "Syncing vision config from ${user}@${host}:${remoteConfigPath} -> ${localConfigPath}"
+        exec {
+            commandLine "scp", "${user}@${host}:${remoteConfigPath}", localConfigPath.absolutePath
+        }
+    }
+}
+
 task(deployVisionToCoprocessor) {
     group = "vision"
     description = "Deploy Nuitka-compiled vision runtime/config to one coprocessor and restart its service."
-    dependsOn(generateVisionServiceUnit)
+    dependsOn(syncVisionConfigFromCoprocessor, generateVisionServiceUnit)
     doLast {
         def host = (project.findProperty("visionHost") ?: System.getenv("VISION_HOST") ?: "").toString().trim()
         if (host.isEmpty()) {
@@ -484,6 +535,7 @@ sudo systemctl is-active --quiet ${serviceName}
         }
     }
 }
+generateVisionServiceUnit.mustRunAfter(syncVisionConfigFromCoprocessor)
 
 project.tasks.named("build") {
     dependsOn("compileVisionNuitka")

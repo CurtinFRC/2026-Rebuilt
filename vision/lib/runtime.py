@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 from wpimath.geometry import Pose2d
 
+from lib.camera_mapper_ui import run_camera_mapper_ui
 from lib.class_map import ClassMap, ClassDefinition
 from lib.config import CameraRuntimeConfig, RuntimeConfig, load_runtime_config
 from lib.fuel_estimator import (
@@ -552,5 +553,22 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", dest="config", default=None)
     parser.add_argument("--display", dest="display", action="store_true")
+    parser.add_argument(
+        "--camera-map-ui",
+        dest="camera_map_ui",
+        action="store_true",
+        help="Launch local web UI for mapping configured camera names to USB indexes.",
+    )
+    parser.add_argument("--camera-map-host", dest="camera_map_host", default="0.0.0.0")
+    parser.add_argument("--camera-map-port", dest="camera_map_port", type=int, default=5808)
+    parser.add_argument("--camera-scan-max-index", dest="camera_scan_max_index", type=int, default=8)
     args = parser.parse_args()
+    if bool(args.camera_map_ui):
+        run_camera_mapper_ui(
+            config_path=args.config,
+            host=str(args.camera_map_host),
+            port=int(args.camera_map_port),
+            scan_max_index=int(args.camera_scan_max_index),
+        )
+        return
     run(args.config, display=bool(args.display))
