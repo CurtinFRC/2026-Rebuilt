@@ -303,38 +303,38 @@ task(compileVisionNuitka) {
     description = "Compile vision runtime to a standalone binary with Nuitka."
     onlyIf { !visionSkipNuitka }
     doLast {
-        // def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "python").toString()
-        // def nuitkaScript = (project.findProperty("visionNuitkaScript") ?: System.getenv("VISION_NUITKA_SCRIPT") ?: "vision/run.py").toString()
-        // def outputDir = layout.buildDirectory.dir("visionNuitka").get().asFile
-        // delete(outputDir)
-        // outputDir.mkdirs()
-        // def configDir = file("vision/config").absolutePath.replace("\\", "/")
-        // def extraArgsRaw = (project.findProperty("visionNuitkaArgs") ?: System.getenv("VISION_NUITKA_ARGS") ?: "").toString().trim()
-        // def cmd = [
-        //     pythonCmd,
-        //     "-m",
-        //     "nuitka",
-        //     "--standalone",
-        //     "--follow-imports",
-        //     "--assume-yes-for-downloads",
-        //     "--remove-output",
-        //     "--output-dir=${outputDir.absolutePath.replace("\\", "/")}",
-        //     "--output-filename=vision_runtime",
-        //     "--include-data-dir=${configDir}=vision/config",
-        //     nuitkaScript
-        // ]
-        // if (!extraArgsRaw.isEmpty()) {
-        //     cmd.addAll(extraArgsRaw.split("\\s+").findAll { !it.isEmpty() })
-        // }
-        // exec {
-        //     commandLine cmd
-        // }
-        // def distDirs = outputDir.listFiles()?.findAll { it.isDirectory() && it.name.endsWith(".dist") } ?: []
-        // if (distDirs.isEmpty()) {
-        //     throw new GradleException("Nuitka output missing .dist directory in ${outputDir}")
-        // }
-        // def distDir = distDirs.max { it.lastModified() }
-        // project.ext.set("visionNuitkaDistDir", distDir.absolutePath)
+        def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "python").toString()
+        def nuitkaScript = (project.findProperty("visionNuitkaScript") ?: System.getenv("VISION_NUITKA_SCRIPT") ?: "vision/run.py").toString()
+        def outputDir = layout.buildDirectory.dir("visionNuitka").get().asFile
+        delete(outputDir)
+        outputDir.mkdirs()
+        def configDir = file("vision/config").absolutePath.replace("\\", "/")
+        def extraArgsRaw = (project.findProperty("visionNuitkaArgs") ?: System.getenv("VISION_NUITKA_ARGS") ?: "").toString().trim()
+        def cmd = [
+            pythonCmd,
+            "-m",
+            "nuitka",
+            "--standalone",
+            "--follow-imports",
+            "--assume-yes-for-downloads",
+            "--remove-output",
+            "--output-dir=${outputDir.absolutePath.replace("\\", "/")}",
+            "--output-filename=vision_runtime",
+            "--include-data-dir=${configDir}=vision/config",
+            nuitkaScript
+        ]
+        if (!extraArgsRaw.isEmpty()) {
+            cmd.addAll(extraArgsRaw.split("\\s+").findAll { !it.isEmpty() })
+        }
+        exec {
+            commandLine cmd
+        }
+        def distDirs = outputDir.listFiles()?.findAll { it.isDirectory() && it.name.endsWith(".dist") } ?: []
+        if (distDirs.isEmpty()) {
+            throw new GradleException("Nuitka output missing .dist directory in ${outputDir}")
+        }
+        def distDir = distDirs.max { it.lastModified() }
+        project.ext.set("visionNuitkaDistDir", distDir.absolutePath)
     }
 }
 
