@@ -305,6 +305,17 @@ public class FieldConstants {
         new Translation2d(0, AprilTagLayoutType.OFFICIAL.getLayout().getTagPose(29).get().getY());
   }
 
+  public static class ShuttlePoint {
+    public static final Translation2d ShuttlePointRight =
+        new Translation2d(14.468320846557617, 1.5593701601028442);
+    public static final Translation2d ShuttlePointLeft =
+        new Translation2d(14.50730037689209, 6.782690048217773);
+    public static final Translation2d OppShuttlePointRight =
+        new Translation2d(1.2346100807189941, 0.9551800489425659);
+    public static final Translation2d OppShuttlePointLeft =
+        new Translation2d(1.25910484790802, 7.153144836425781);
+  }
+
   public enum FieldType {
     ANDYMARK("andymark"),
     WELDED("welded");

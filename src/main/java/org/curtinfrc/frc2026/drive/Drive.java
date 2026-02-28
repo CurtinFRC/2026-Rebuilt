@@ -26,6 +26,7 @@ import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
@@ -339,6 +340,8 @@ public class Drive extends SubsystemBase {
     return targetAngle;
   }
 
+  double targetAngle = 0;
+
   public Command faceLocation(Supplier<Translation2d> locationSupplier) {
     return run(
         () -> {
@@ -361,6 +364,12 @@ public class Drive extends SubsystemBase {
           double angleSpeed =
               hubHeadingController.calculate(
                   robotAngle, angleToLocation(locationTransform, currentPosition));
+          targetAngle = angleToLocation(locationTransform, currentPosition);
+          Trigger withinAngleRange =
+              new Trigger(
+                  () -> {
+                    return (Math.abs(targetAngle) - robotAngle < 5);
+                  });
 
           Logger.recordOutput("Target Angle", angleToLocation(locationTransform, currentPosition));
           Logger.recordOutput("Robot Angle", robotAngle);
