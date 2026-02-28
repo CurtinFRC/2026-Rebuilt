@@ -20,28 +20,45 @@ public class Mag extends SubsystemBase {
     indexerMagRoller = new MagRoller(roller3);
   }
 
+  public Mag(MagRollerIO roller1, MagRollerIO roller2) {
+    intakeMagRoller = new MagRoller(roller1);
+    indexerMagRoller = new MagRoller(roller2);
+  }
+
   public void initDefaultCommand() {
     setDefaultCommand(stop());
   }
 
   public Command spinIndexer(double volts) {
-    return this.indexerMagRoller.runMotor(volts);
+    return indexerMagRoller.runMotor(volts);
   }
 
   public Command moveAll(double volts) {
-    return Commands.parallel(
-        indexerMagRoller.runMotor(volts),
-        middleMagRoller.runMotor(volts),
-        intakeMagRoller.runMotor(volts));
+    if (middleMagRoller == null) {
+      return Commands.parallel(indexerMagRoller.runMotor(volts), intakeMagRoller.runMotor(volts));
+    } else {
+      return Commands.parallel(
+          indexerMagRoller.runMotor(volts),
+          middleMagRoller.runMotor(volts),
+          intakeMagRoller.runMotor(volts));
+    }
   }
 
   public Command store(double volts) {
-    return Commands.parallel(middleMagRoller.runMotor(volts), intakeMagRoller.runMotor(volts));
+    if (middleMagRoller == null) {
+      return intakeMagRoller.runMotor(volts);
+    } else {
+      return Commands.parallel(middleMagRoller.runMotor(volts), intakeMagRoller.runMotor(volts));
+    }
   }
 
   public Command stop() {
-    return Commands.parallel(
-        intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
+    if (middleMagRoller == null) {
+      return Commands.parallel(intakeMagRoller.stop(), indexerMagRoller.stop());
+    } else {
+      return Commands.parallel(
+          intakeMagRoller.stop(), middleMagRoller.stop(), indexerMagRoller.stop());
+    }
   }
 
   public Command holdIndexerCommand() {
