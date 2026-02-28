@@ -28,6 +28,8 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOComp;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
 import org.curtinfrc.frc2026.subsystems.Mag.Mag;
@@ -119,6 +121,7 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVision(
                       cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
           hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
+          intake = new Intake(new IntakeIOComp());
           mag =
               new Mag(
                   new MagRollerIOComp(
@@ -196,6 +199,7 @@ public class Robot extends LoggedRobot {
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
+      intake = new Intake(new IntakeIO() {});
     }
 
     CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
