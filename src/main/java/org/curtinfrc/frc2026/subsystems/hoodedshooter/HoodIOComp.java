@@ -52,9 +52,9 @@ public class HoodIOComp implements HoodIO {
   public static final double KI = 0;
   public static final double KD = 0;
   public static final double KS = 0;
-  public static final double KV = 0;
-  public static final double KA = 0;
-  public static final double KG = 0;
+  public static final double KV = 2.44;
+  public static final double KA = 0.02;
+  public static final double KG = 0.14;
 
   public static final double MM_CRUISE_VELOCITY = 0;
   public static final double MM_ACCLERATION = 0;
