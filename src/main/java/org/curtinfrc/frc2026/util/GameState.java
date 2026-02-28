@@ -26,7 +26,9 @@ public class GameState {
     Optional<DriverStation.Alliance> readAlliance = DriverStation.getAlliance();
     if (alliance.isEmpty() && readAlliance.isPresent()) {
       alliance = readAlliance;
-    } else {
+    }
+
+    if (alliance.isEmpty()) {
       noAllianceAlert.set(true);
     }
   }
