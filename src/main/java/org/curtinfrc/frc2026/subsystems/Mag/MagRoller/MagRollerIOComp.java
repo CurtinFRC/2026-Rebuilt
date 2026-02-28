@@ -19,6 +19,7 @@ import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class MagRollerIOComp implements MagRollerIO {
   private final TalonFX magMotor;
+  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0);
 
   private final StatusSignal<Voltage> voltage;
   private final StatusSignal<AngularVelocity> angularVelocity;
@@ -73,8 +74,6 @@ public class MagRollerIOComp implements MagRollerIO {
   public void setVoltage(double volts) {
     magMotor.set(volts);
   }
-
-  final PositionVoltage m_request = new PositionVoltage(0).withSlot(0); //TODO
 
   @Override
   public void setPosition(double position) {
