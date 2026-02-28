@@ -229,10 +229,11 @@ public class Robot extends LoggedRobot {
             drive.joystickDrive(
                 () -> -controller.getLeftY(),
                 () -> -controller.getLeftX(),
-                () -> -controller.getRightX()),
-            intake.RawControlConsume(1.0),
-            mag.store(0.7),
-            Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))));
+                () -> -controller.getRightX())
+            // intake.RawControlConsume(1.0),
+            // mag.store(0.7),
+            // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
+            ));
     Trigger automaticLocation =
         new Trigger(
             () -> {
