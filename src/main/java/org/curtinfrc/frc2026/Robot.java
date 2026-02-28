@@ -34,7 +34,6 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
-import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOComp;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
@@ -139,7 +138,8 @@ public class Robot extends LoggedRobot {
                   new VisionIOPhotonVision(
                       compCameraConfigs[3].name(), compCameraConfigs[3].robotToCamera()));
           hoodedShooter =
-              new HoodedShooter(new HoodIOComp() {}, new ShooterIOComp() {}, drive::getPose);
+              new HoodedShooter(
+                  new HoodIO() {}, new ShooterIO() {}, drive::getPose, drive::getChassisSpeeds);
           intake = new Intake(new IntakeIOComp());
           mag =
               new Mag(
@@ -180,10 +180,10 @@ public class Robot extends LoggedRobot {
                   new MagRollerIODev(
                       Constants.alphaMiddleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
-                      Constants.indexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
+                      Constants.alphaIndexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
           hoodedShooter =
               new HoodedShooter(
-                  new ShooterIODev(), new HoodIODev(), drive::getPose, drive::getChassisSpeeds);
+                  new HoodIODev(), new ShooterIODev(), drive::getPose, drive::getChassisSpeeds);
         }
         case SIM -> {
           drive =
@@ -217,7 +217,7 @@ public class Robot extends LoggedRobot {
           intake = new Intake(new IntakeIOSim());
           hoodedShooter =
               new HoodedShooter(
-                  new ShooterIOSim(), new HoodIOSim(), drive::getPose, drive::getChassisSpeeds);
+                  new HoodIOSim(), new ShooterIOSim(), drive::getPose, drive::getChassisSpeeds);
         }
       }
     } else {
@@ -232,7 +232,7 @@ public class Robot extends LoggedRobot {
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter =
           new HoodedShooter(
-              new ShooterIO() {}, new HoodIO() {}, drive::getPose, drive::getChassisSpeeds);
+              new HoodIO() {}, new ShooterIO() {}, drive::getPose, drive::getChassisSpeeds);
     }
 
     CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
@@ -452,15 +452,7 @@ public class Robot extends LoggedRobot {
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {
-    // CommandScheduler.getInstance()
-    //     .schedule(
-    //         hoodedShooter
-    //             .hoodSysIdDynamicForward()
-    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
-  }
+  public void autonomousInit() {}
 
   /** This function is called periodically during autonomous. */
   @Override

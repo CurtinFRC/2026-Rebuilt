@@ -83,8 +83,8 @@ public class HoodedShooter extends SubsystemBase {
           .debounce(0.1);
 
   public HoodedShooter(
-      ShooterIO shooterIO,
       HoodIO hoodIO,
+      ShooterIO shooterIO,
       Supplier<Pose2d> robotPose,
       Supplier<ChassisSpeeds> robotVelocity) {
     this.shooterIO = shooterIO;
