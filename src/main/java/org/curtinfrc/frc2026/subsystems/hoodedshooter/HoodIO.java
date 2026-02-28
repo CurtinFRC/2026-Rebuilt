@@ -6,10 +6,10 @@ import org.littletonrobotics.junction.AutoLog;
 public interface HoodIO {
   @AutoLog
   public static class HoodIOInputs {
-    public boolean motorConnected;
-    public double motorTemperature;
+    public boolean[] motorsConnected;
+    public double[] motorTemperatures;
     public double positionRotations;
-    public double absolutePositionRotations;
+    public double encoderPositionRotations;
     public double angularVelocityRotationsPerSecond;
     public double currentAmps;
     public double appliedVolts;
