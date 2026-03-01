@@ -37,6 +37,8 @@ import org.curtinfrc.frc2026.Constants.Mode;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
+import com.ctre.phoenix6.swerve.SwerveRequest.RobotCentricFacingAngle;
+
 public class Drive extends SubsystemBase {
   // TunerConstants doesn't include these constants, so they are declared locally
   static final double ODOMETRY_FREQUENCY = TunerConstants.kCANBus.isNetworkFD() ? 250.0 : 100.0;
@@ -401,12 +403,13 @@ public class Drive extends SubsystemBase {
           // Getting robot current angle in radians
           double robotAngle = currentPosition.getRotation().getRadians();
 
-          // Getting optimal angle speed by providing the current robot angle and the angle we want
-          // to go to
+         
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
           if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
             angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
+           // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput("TargetAngle", angleToHub);
@@ -447,6 +450,34 @@ public class Drive extends SubsystemBase {
                     speeds,
                     isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           }
+
         });
+        
   }
-}
+
+  public double Goal = 0;
+  public Command TrenchAlign (DoubleSupplier xSupplier,DoubleSupplier ySupplier) {
+    return run(
+        () -> {
+            Pose2d currentPosition = getPose();
+            double robotAngle = currentPosition.getRotation().getDegrees();
+            if (robotAngle >= -90 && robotAngle <= 90) {
+              Goal = 0;
+
+          }else {
+            Goal = 180;
+          }
+          double angleSpeed = hubHeadingController.calculate(robotAngle, Goal);
+              
+              Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+             ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    angleSpeed);
+              runVelocity(speeds);
+                  });
+}}
+
