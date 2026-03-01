@@ -296,6 +296,10 @@ public class Repulsor {
             this, m_planner, m_visionPlanner, m_drive, robot_x, robot_y, m_drive::getPose));
   }
 
+  public void disableBehaviours() {
+    m_usageType = UsageType.kAutoDrive;
+  }
+
   public DriveRepulsor getDrive() {
     return m_drive;
   }

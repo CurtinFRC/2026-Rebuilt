@@ -8,6 +8,8 @@ import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Translation2d;
+
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.net.WebServer;
@@ -223,6 +225,7 @@ public class Robot extends LoggedRobot {
     reasoner.setTesting(true);
     repulsor.setReasoner(reasoner);
 
+    // repulsor.disableBehaviours();
     repulsor.setup();
 
     StaticInstance.initialize(repulsor);
