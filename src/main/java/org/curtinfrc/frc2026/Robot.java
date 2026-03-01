@@ -320,7 +320,7 @@ public class Robot extends LoggedRobot {
     Trigger isInBlueAllianceHalf =
         new Trigger(
             () -> currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
-    
+
     isRed
         .and(isInRedAllianceHalf)
         .whileTrue(
@@ -413,8 +413,9 @@ public class Robot extends LoggedRobot {
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
-    controller.b().whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(),
-                () -> -controller.getLeftX()));
+    controller
+        .b()
+        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
   }
 
   /** This function is called periodically during all modes. */
