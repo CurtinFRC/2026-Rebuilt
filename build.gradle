@@ -154,6 +154,15 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
 
+tasks.register("syncOffloadClassesToBin", Copy) {
+    group = "offload"
+    description = "Sync compiled offload-api/offload-client classes into bin/main for IDE launches."
+    dependsOn(":offload-api:classes", ":offload-client:classes")
+    from(project(":offload-api").layout.buildDirectory.dir("classes/java/main"))
+    from(project(":offload-client").layout.buildDirectory.dir("classes/java/main"))
+    into(layout.projectDirectory.dir("bin/main"))
+}
+
 // Create version file
 project.compileJava.dependsOn(createVersionFile)
 gversion {
@@ -197,9 +206,10 @@ task(eventDeploy) {
     }
 }
 createVersionFile.dependsOn(eventDeploy)
-project.compileJava.dependsOn(spotlessApply)
+// project.compileJava.dependsOn(spotlessApply)
 project.tasks.named("compileJava") {
     finalizedBy("test")
+    finalizedBy("syncOffloadClassesToBin")
 }
 
 project.tasks.named("deploy") {

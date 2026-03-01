@@ -146,6 +146,7 @@ public class HoodedShooter extends SubsystemBase {
           shooterInputs.motorTemperatures[motor] > MOTOR_WARNING_TEMP);
     }
   }
+  }
 
   public Translation2d getVirtualTargetLocation(Supplier<Translation2d> location) {
     double realDistanceLength = location.get().minus(robotPose.get().getTranslation()).getNorm();

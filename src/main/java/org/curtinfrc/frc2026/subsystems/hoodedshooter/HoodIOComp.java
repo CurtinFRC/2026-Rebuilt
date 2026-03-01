@@ -31,6 +31,8 @@ import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import java.util.List;
+import org.curtinfrc.frc2026.Constants;
+import org.curtinfrc.frc2026.Constants.RobotType;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 
 public class HoodIOComp implements HoodIO {
@@ -149,9 +151,11 @@ public class HoodIOComp implements HoodIO {
   public void updateInputs(HoodIOInputs inputs) {
     inputs.motorTemperatures = new double[2];
     inputs.motorsConnected = new boolean[2];
-    for (int motor = 0; motor < 2; motor++) {
-      inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
-      inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
+    if (Constants.robotType != RobotType.SIM) {
+      for (int motor = 0; motor < 2; motor++) {
+        inputs.motorTemperatures[motor] = motorTemperatures.get(motor).getValueAsDouble();
+        inputs.motorsConnected[motor] = motorTemperatures.get(motor).getStatus().isOK();
+      }
     }
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
