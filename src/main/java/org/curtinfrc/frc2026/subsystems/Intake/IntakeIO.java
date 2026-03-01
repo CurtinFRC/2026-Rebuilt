@@ -5,9 +5,15 @@ import org.littletonrobotics.junction.AutoLog;
 public interface IntakeIO {
   @AutoLog
   public static class IntakeIOInputs {
-    double AppliedVoltage;
-    double CurrentAmps;
-    double angularVelocity;
+    double frontMotorAppliedVoltage;
+    double frontMotorCurrentAmps;
+    double frontMotorAngularVelocity;
+    double frontMotorPosition;
+
+    double backMotorAppliedVoltage;
+    double backMotorCurrentAmps;
+    double backMotorAngularVelocity;
+    double backMotorPosition;
   }
 
   public default void setVoltage(double Volts) {}
