@@ -4,6 +4,8 @@ import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
 
 import choreo.auto.AutoChooser;
 import choreo.auto.AutoFactory;
+import choreo.auto.AutoRoutine;
+import choreo.auto.AutoTrajectory;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
@@ -199,11 +201,9 @@ public class Robot extends LoggedRobot {
     autoChooser = new AutoChooser();
 
     SmartDashboard.putData("autoChooser", autoChooser);
-    autoChooser.addCmd("Sim Test 2x2", this::simTestDrive);
     autoChooser.addCmd("Dev Test Positive X", this::positiveXDrive);
-    autoChooser.addCmd("Drive Left Intake Test", this::testLeftDriveIntakeShootIndex);
     autoChooser.addCmd("Slow Test", this::slow);
-    autoChooser.addCmd("All In One", this::shootFromCorner);
+    autoChooser.addRoutine("All In One Routine", this::shootFromCornerAutoRoutine);
     autoChooser.select("Forward");
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -242,17 +242,12 @@ public class Robot extends LoggedRobot {
         .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
+    controller.b().onTrue(drive.trenchAlign());
   }
 
   private Command positiveXDrive() {
     return autoFactory
         .trajectoryCmd("testDevPositiveX")
-        .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
-  }
-
-  private Command simTestDrive() {
-    return autoFactory
-        .trajectoryCmd("testSim2x2")
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
@@ -262,30 +257,89 @@ public class Robot extends LoggedRobot {
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
-  private Command testLeftDriveIntakeShootIndex() {
-    return Commands.parallel(
-        autoFactory
-            .trajectoryCmd("VerySmallMoveLeft")
-            .andThen((drive.joystickDrive(() -> 0, () -> 0, () -> 0))),
-        intake.RawControlConsume(4),
-        hoodedShooter.setShooterVoltage(4),
-        mag.spinIndexer(4));
+  public AutoRoutine shootFromCornerAutoRoutine() {
+    AutoRoutine routine = autoFactory.newRoutine("shootFromCorner");
+
+    AutoTrajectory allInOne = routine.trajectory("AllInOne");
+
+    routine
+        .active()
+        .onTrue(
+            Commands.sequence(
+                // intake.RawControlConsume(4),
+                // hoodedShooter.setShooterVoltage(4),
+                // mag.spinIndexer(4),
+                allInOne.cmd()));
+
+    // allInOne.atTime("Wait5").onTrue(
+    //   Commands.waitSeconds(5)
+    // );
+
+    return routine;
   }
 
-  private Command shootFromCorner() {
-    return Commands.sequence(
-        Commands.parallel(
-            intake.RawControlConsume(4), hoodedShooter.setShooterVoltage(4), mag.spinIndexer(4)),
-        Commands.waitSeconds(5),
-        hoodedShooter.stopShooter());
+  public AutoRoutine leftHalfAutoRoutine() {
+    AutoRoutine routine = autoFactory.newRoutine("leftHalfAuto");
+    AutoTrajectory leftHalfAuto = routine.trajectory("LeftHalfAuto");
 
-    //
-    //
+    routine
+        .active()
+        .onTrue(
+            Commands.sequence(
+                intake.RawControlConsume(4),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                mag.spinIndexer(4),
+                leftHalfAuto.cmd()));
 
-    // ,
-    // autoFactory
-    //     .trajectoryCmd("AllInOne")
-    //     .andThen((drive.joystickDrive(() -> 0, () -> 0, () -> 0)))
+    return routine;
+  }
+
+  public AutoRoutine rightHalfAutoRoutine() {
+    AutoRoutine routine = autoFactory.newRoutine("rightHalfAuto");
+    AutoTrajectory rightHalfAuto = routine.trajectory("RightHalfAuto");
+
+    routine
+        .active()
+        .onTrue(
+            Commands.sequence(
+                intake.RawControlConsume(4),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                mag.spinIndexer(4),
+                rightHalfAuto.cmd()));
+
+    return routine;
+  }
+
+  public AutoRoutine leftFullAuto() {
+    AutoRoutine routine = autoFactory.newRoutine("leftFullAuto");
+    AutoTrajectory leftFullAuto = routine.trajectory("LeftFullAuto");
+
+    routine
+        .active()
+        .onTrue(
+            Commands.sequence(
+                intake.RawControlConsume(4),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                mag.spinIndexer(4),
+                leftFullAuto.cmd()));
+
+    return routine;
+  }
+
+  public AutoRoutine rightFullAuto() {
+    AutoRoutine routine = autoFactory.newRoutine("rightFullAuto");
+    AutoTrajectory rightFullAuto = routine.trajectory("RightFullAuto");
+
+    routine
+        .active()
+        .onTrue(
+            Commands.sequence(
+                intake.RawControlConsume(4),
+                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                mag.spinIndexer(4),
+                rightFullAuto.cmd()));
+
+    return routine;
   }
 
   /** This function is called periodically during all modes. */

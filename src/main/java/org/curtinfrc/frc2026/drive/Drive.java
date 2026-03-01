@@ -3,6 +3,7 @@ package org.curtinfrc.frc2026.drive;
 import static edu.wpi.first.units.Units.*;
 
 import choreo.trajectory.SwerveSample;
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
@@ -321,5 +322,382 @@ public class Drive extends SubsystemBase {
               ChassisSpeeds.fromFieldRelativeSpeeds(
                   speeds, isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
         });
+  }
+
+  public Command trenchAlign() {
+    return run(
+        () -> {
+          double startingXPose = getPose().getX();
+          double startingYPose = getPose().getY();
+          double redStartingXPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+          double redStartingYPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+
+          Logger.recordOutput("Robot X", startingXPose);
+          Logger.recordOutput("Robot Y", startingYPose);
+          Logger.recordOutput("Reversed Robot X", redStartingXPose);
+          Logger.recordOutput("Reversed Robot Y", redStartingYPose);
+
+          //Blue side
+            if (startingYPose > 4 && startingXPose < 4.6) leftTrenchAlign().schedule();
+            if (startingYPose < 4 && startingXPose < 4.6) rightTrenchAlign().schedule();
+            if (startingYPose > 4 && startingXPose > 4.6 && startingXPose < 8)
+              leftReverseTrenchAlign().schedule();
+            if (startingYPose < 4 && startingXPose > 4.6 && startingXPose < 8)
+              rightReverseTrenchAlign().schedule();
+
+          //Red side
+            if (redStartingYPose > 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+              redLeftTrenchAlign().schedule();
+            if (redStartingYPose < 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+              redRightTrenchAlign().schedule();
+            if (redStartingYPose > 4
+                && redStartingXPose > 4.6
+                && redStartingYPose < 8
+                && startingXPose > 8.2677) redLeftReverseTrenchAlign().schedule();
+            if (redStartingYPose < 4
+                && redStartingXPose > 4.6
+                && redStartingYPose < 8
+                && startingXPose > 8.2677) redRightReverseTrenchAlign().schedule();
+        });
+  }
+
+  public Command leftTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("left trench started");
+
+          ChassisSpeeds leftSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), 3.6) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), 7.4) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds leftSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), 5.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), 7.4)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(leftSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            });
+  }
+
+  public Command rightTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("right trench started");
+          ChassisSpeeds rightSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), 3.6) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), 0.6) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(rightSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds rightSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), 5.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), 0.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(rightSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            });
+  }
+
+  public Command leftReverseTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("left reverse trench started");
+          ChassisSpeeds leftReverseSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), 5.6) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), 7.4) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftReverseSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds leftReverseSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), 3.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), 7.4)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(leftReverseSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            });
+  }
+
+  public Command rightReverseTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("right reverse trench started");
+          ChassisSpeeds rightReverseSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), 5.6) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), 0.6) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(rightReverseSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds rightReverseSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), 3.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), 0.6)
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(rightReverseSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            });
+  }
+
+  public Command redLeftTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("red left trench started");
+          ChassisSpeeds leftSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(3.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(7.4))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+              double yPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds leftSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(5.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(7.4))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(leftSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(5.6)) < 0.1 && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(7.4)) < 0.1;
+            });
+          }
+
+  public Command redRightTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("red right trench started");
+          ChassisSpeeds rightSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(3.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(0.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(rightSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+              double yPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+              return Math.abs(xPose - 3.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds rightSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(5.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(0.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(rightSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(5.6)) < 0.1
+                  && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(0.6)) < 0.1;
+            });
+  }
+
+  public Command redLeftReverseTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("red reverse left trench started");
+          ChassisSpeeds leftReverseSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(5.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(7.4))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftReverseSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+              double yPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 7.4) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds leftReverseSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(3.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(7.4))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(leftReverseSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(3.6)) < 0.1
+                  && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(7.4)) < 0.1;
+            });
+  }
+
+  public Command redRightReverseTrenchAlign() {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("red reverse right trench started");
+          ChassisSpeeds rightReverseSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(5.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(0.6))
+                      * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(rightReverseSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+              double yPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+              return Math.abs(xPose - 5.6) < 0.1 && Math.abs(yPose - 0.6) < 0.1;
+            })
+        .andThen(
+            run(
+                () -> {
+                  double omega = 0.0;
+
+                  ChassisSpeeds rightReverseSpeeds2 =
+                      new ChassisSpeeds(
+                          xController.calculate(getPose().getX(), ChoreoAllianceFlipUtil.flipX(3.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          yController.calculate(getPose().getY(), ChoreoAllianceFlipUtil.flipY(0.6))
+                              * getMaxLinearSpeedMetersPerSec(),
+                          omega * getMaxAngularSpeedRadPerSec());
+
+                  runVelocity(rightReverseSpeeds2);
+                }))
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(3.6)) < 0.1
+                  && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(0.6)) < 0.1;
+            });
   }
 }
