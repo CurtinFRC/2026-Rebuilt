@@ -231,7 +231,7 @@ class TestFuelEstimator(unittest.TestCase):
 
         p_f = np.array([2.0, 1.0, 0.7], dtype=np.float64)
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=30.0, roll_deg=0.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=-30.0, roll_deg=0.0),
             p_f=p_f,
         )
 
@@ -271,7 +271,7 @@ class TestFuelEstimator(unittest.TestCase):
         A_cam_from_cv = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64)
 
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=12.0, pitch_deg=25.0, roll_deg=-3.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=12.0, pitch_deg=-25.0, roll_deg=-3.0),
             p_f=np.array([2.0, -1.0, 0.9], dtype=np.float64),
         )
 
@@ -290,7 +290,7 @@ class TestFuelEstimator(unittest.TestCase):
 
         A_cam_from_cv = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64)
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=10.0, pitch_deg=25.0, roll_deg=-5.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=10.0, pitch_deg=-25.0, roll_deg=-5.0),
             p_f=np.array([2.0, 1.0, 0.7], dtype=np.float64),
         )
 
@@ -322,7 +322,7 @@ class TestFuelEstimator(unittest.TestCase):
 
         A_cam_from_cv = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64)
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=30.0, roll_deg=0.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=-30.0, roll_deg=0.0),
             p_f=np.array([2.0, 1.0, 0.7], dtype=np.float64),
         )
 
@@ -348,7 +348,7 @@ class TestFuelEstimator(unittest.TestCase):
 
         A_cam_from_cv = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64)
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=30.0, roll_deg=0.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=-30.0, roll_deg=0.0),
             p_f=np.array([2.0, 1.0, 0.7], dtype=np.float64),
         )
 
@@ -367,7 +367,7 @@ class TestFuelEstimator(unittest.TestCase):
 
         A_cam_from_cv = np.array([[0.0, 0.0, 1.0], [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64)
         pose = CameraPoseField(
-            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=30.0, roll_deg=0.0),
+            R_f_c=R_field_from_cam_ypr(yaw_deg=0.0, pitch_deg=-30.0, roll_deg=0.0),
             p_f=np.array([2.0, 1.0, 0.7], dtype=np.float64),
         )
 

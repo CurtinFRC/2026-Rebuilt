@@ -69,7 +69,9 @@ def rot_z(deg: float) -> np.ndarray:
 
 
 def R_field_from_cam_ypr(yaw_deg: float, pitch_deg: float, roll_deg: float) -> np.ndarray:
-    return rot_z(yaw_deg) @ rot_y(pitch_deg) @ rot_x(roll_deg)
+    # Use a camera-centric pitch convention where negative values tilt the
+    # camera downward toward the floor.
+    return rot_z(yaw_deg) @ rot_y(-pitch_deg) @ rot_x(roll_deg)
 
 
 def bbox_center_u(b: YoloBBox) -> float:
@@ -110,7 +112,7 @@ def apply_axis_conversion(ray_cv: np.ndarray, A_cam_from_cv: Optional[np.ndarray
 def ray_camera_to_field(pose: CameraPoseField, ray_c: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     R = np.asarray(pose.R_f_c, dtype=np.float64).reshape(3, 3)
     p = np.asarray(pose.p_f, dtype=np.float64).reshape(3)
-    d_f = R.T @ np.asarray(ray_c, dtype=np.float64).reshape(3)
+    d_f = R @ np.asarray(ray_c, dtype=np.float64).reshape(3)
     d_f = d_f / float(np.linalg.norm(d_f))
     return p, d_f
 
