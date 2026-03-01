@@ -188,7 +188,7 @@ public class HoodedShooter extends SubsystemBase {
           }
 
           if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
-            hoodIO.setPosition(hoodTarget);
+            hoodIO.setPosition(hoodTarget / 360);
             shooterIO.setVelocity(shooterTarget);
           } else {
             hoodIO.setVoltage(0);
