@@ -247,7 +247,7 @@ public class Robot extends LoggedRobot {
     //   controller.leftBumper().whileTrue(intake.RawControlConsume(1.0));
     //   IntakeToggle = false;
 
-    controller.leftBumper().toggleOnTrue(intake.RawControlConsume(1.0));
+    controller.leftBumper().toggleOnTrue((intake.RawControlConsume(10)));
 
     Trigger automaticLocation =
         new Trigger(
