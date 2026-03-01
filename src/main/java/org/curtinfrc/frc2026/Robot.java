@@ -4,6 +4,7 @@ import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
 import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
 import com.ctre.phoenix6.SignalLogger;
+import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.net.WebServer;
@@ -64,6 +65,7 @@ import org.littletonrobotics.junction.Logger;
 import org.littletonrobotics.junction.networktables.NT4Publisher;
 import org.littletonrobotics.junction.wpilog.WPILOGReader;
 import org.littletonrobotics.junction.wpilog.WPILOGWriter;
+import edu.wpi.first.math.geometry.Translation2d;
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -80,6 +82,8 @@ public class Robot extends LoggedRobot {
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+  
+  private LoggedNetworkStruct<Translation2d> shootTargetPose = new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -405,8 +409,8 @@ public class Robot extends LoggedRobot {
         .leftTrigger()
         .whileTrue(
             Commands.parallel(
-                intake.RawControlConsume(10),
-                mag.store(0.7),
+                intake.RawControlConsume(3),
+                mag.store(0.2),
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
@@ -419,12 +423,7 @@ public class Robot extends LoggedRobot {
 
     controller
         .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.332, 0))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.14, 0)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
+        .whileTrue(hoodedShooter.shootAtTarget(shootTargetPose))
         .onFalse(hoodedShooter.stopHoodedShooter());
   }
 

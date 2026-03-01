@@ -70,8 +70,7 @@ public class HoodedShooter extends SubsystemBase {
       new Trigger(
               () -> {
                 double hoodPosition =
-                    hoodInputs.encoderPositionRotations * 360 / HoodIODev.GEAR_RATIO
-                        + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES;
+                    hoodInputs.positionRotations * 360;
                 boolean hoodReady =
                     Math.abs(hoodTarget - hoodPosition) <= READY_HOOD_POSITION_TOLERANCE;
                 boolean shooterReady =
@@ -135,6 +134,7 @@ public class HoodedShooter extends SubsystemBase {
     Logger.recordOutput("HoodedShooter/hoodTarget", hoodTarget);
     Logger.recordOutput("HoodedShooter/shooterTarget", shooterTarget);
     Logger.recordOutput("HoodedShooter/hoodPositionDegrees", hoodInputs.positionRotations * 360);
+    Logger.recordOutput("HoodedShooter/distanceFromHub", HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm());
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
@@ -205,10 +205,10 @@ public class HoodedShooter extends SubsystemBase {
         });
   }
 
-  public Command setHoodPosition(double positionDegrees) {
+  public Command setHoodPosition(double position) {
     return run(
         () -> {
-          hoodIO.setPosition(positionDegrees);
+          hoodIO.setPosition(position);
         });
   }
 
