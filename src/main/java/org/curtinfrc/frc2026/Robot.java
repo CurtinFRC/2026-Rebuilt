@@ -419,11 +419,11 @@ public class Robot extends LoggedRobot {
 
     controller
         .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.04, 0))
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.332, 0))
         .onFalse(hoodedShooter.stopHoodedShooter());
     controller
         .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.1, 0)) // in front of hub
+        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.14, 0)) // in front of hub
         // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
         .onFalse(hoodedShooter.stopHoodedShooter());
   }

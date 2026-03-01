@@ -57,7 +57,7 @@ public class HoodedShooter extends SubsystemBase {
   private final LoggedTunableNumber tunableHoodSetpoint =
       new LoggedTunableNumber("HoodSetpoint", 90);
   private final LoggedTunableNumber tunableShooterSetpoint =
-      new LoggedTunableNumber("ShooterSetpoint", 19.5);
+      new LoggedTunableNumber("ShooterSetpoint", 23.5);
   private double shooterTarget = 0;
   private double hoodTarget = 0;
 
@@ -134,10 +134,7 @@ public class HoodedShooter extends SubsystemBase {
     Logger.recordOutput("HoodedShooter/hoodedShooterReady", hoodedShooterReady.getAsBoolean());
     Logger.recordOutput("HoodedShooter/hoodTarget", hoodTarget);
     Logger.recordOutput("HoodedShooter/shooterTarget", shooterTarget);
-    Logger.recordOutput(
-        "HoodedShooter/hoodPositionDegrees",
-        hoodInputs.encoderPositionRotations / HoodIODev.GEAR_RATIO * 360
-            + HoodIODev.ZERO_DEGREE_OFFSET_DEGREES);
+    Logger.recordOutput("HoodedShooter/hoodPositionDegrees", hoodInputs.positionRotations * 360);
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
@@ -190,7 +187,7 @@ public class HoodedShooter extends SubsystemBase {
           }
 
           if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
-            hoodIO.setPosition(hoodTarget);
+            hoodIO.setPosition(hoodTarget / 360);
             shooterIO.setVelocity(shooterTarget);
           } else {
             hoodIO.setVoltage(0);
@@ -236,10 +233,10 @@ public class HoodedShooter extends SubsystemBase {
   }
 
   public Command setHoodedShooterPositionAndVelocity(
-      double positionDegrees, double velocityMetresPerSecond) {
+      double position, double velocityMetresPerSecond) {
     return run(
         () -> {
-          hoodIO.setPosition(positionDegrees);
+          hoodIO.setPosition(position);
           shooterIO.setVelocity(velocityMetresPerSecond);
         });
   }
