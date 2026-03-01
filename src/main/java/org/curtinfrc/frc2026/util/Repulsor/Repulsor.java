@@ -83,6 +83,10 @@ public class Repulsor {
   private DriveRepulsor m_drive;
   private UsageType m_usageType = UsageType.kAutoDrive;
 
+  public boolean isSameDrive(DriveRepulsor other) {
+    return this.m_drive == other;
+  }
+
   private RepulsorSetpoint m_currentGoal =
       new RepulsorSetpoint(Setpoints.Rebuilt2026.CENTER_COLLECT, HeightSetpoint.NONE);
 
@@ -203,11 +207,7 @@ public class Repulsor {
     SimMatchDriver.simInit(false);
   }
 
-  public Repulsor(
-      DriveRepulsor drive,
-      double robot_x,
-      double robot_y,
-      Supplier<Boolean> hasPiece) {
+  public Repulsor(DriveRepulsor drive, double robot_x, double robot_y, Supplier<Boolean> hasPiece) {
     this(drive, UsageType.kFullAuto, robot_x, robot_y, hasPiece);
   }
 
@@ -280,6 +280,10 @@ public class Repulsor {
     RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
     if (dsBase instanceof NtRepulsorDriverStation ds) {
       enabled = ds.getConfigBool("force_controller_override");
+    }
+
+    if (!m_usageType.equals(UsageType.kFullAuto)) {
+      return;
     }
 
     if (enabled) {

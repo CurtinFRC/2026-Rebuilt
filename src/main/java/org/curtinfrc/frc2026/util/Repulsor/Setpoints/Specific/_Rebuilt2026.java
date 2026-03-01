@@ -49,6 +49,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Shooting.OnlineSearchState;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibrary;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibraryBuilder;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotSolution;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.StaticPoseSetpoint;
 
 public class _Rebuilt2026 {
   protected _Rebuilt2026() {}
@@ -445,20 +446,6 @@ public class _Rebuilt2026 {
   private static int obstaclesStableHash(List<? extends Obstacle> obs) {
     if (obs == null || obs.isEmpty()) return 0;
     return (System.identityHashCode(obs) * 31) ^ obs.size();
-  }
-
-  private static final class StaticPoseSetpoint extends GameSetpoint {
-    private final Pose2d bluePose;
-
-    StaticPoseSetpoint(String name, SetpointType type, Pose2d bluePose) {
-      super(name, type);
-      this.bluePose = bluePose == null ? Pose2d.kZero : bluePose;
-    }
-
-    @Override
-    public Pose2d bluePose(SetpointContext ctx) {
-      return bluePose;
-    }
   }
 
   private static final class ApproachFromTagSetpoint extends GameSetpoint {

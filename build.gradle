@@ -303,7 +303,7 @@ task(compileVisionNuitka) {
     description = "Compile vision runtime to a standalone binary with Nuitka."
     onlyIf { !visionSkipNuitka }
     doLast {
-        def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "python").toString()
+        def pythonCmd = (project.findProperty("visionPython") ?: System.getenv("VISION_PYTHON") ?: "./.venv/Scripts/python.exe").toString()
         def nuitkaScript = (project.findProperty("visionNuitkaScript") ?: System.getenv("VISION_NUITKA_SCRIPT") ?: "vision/run.py").toString()
         def outputDir = layout.buildDirectory.dir("visionNuitka").get().asFile
         delete(outputDir)
@@ -321,6 +321,8 @@ task(compileVisionNuitka) {
             "--output-dir=${outputDir.absolutePath.replace("\\", "/")}",
             "--output-filename=vision_runtime",
             "--include-data-dir=${configDir}=vision/config",
+            "--nofollow-import-to=torch",
+            "--nofollow-import-to=torch.*",
             nuitkaScript
         ]
         if (!extraArgsRaw.isEmpty()) {

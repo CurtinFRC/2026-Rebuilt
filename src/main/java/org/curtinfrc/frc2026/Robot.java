@@ -79,6 +79,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.RepulsorOffloadRuntime;
 import org.curtinfrc.frc2026.util.Repulsor.Profiler.Profiler;
 import org.curtinfrc.frc2026.util.Repulsor.Reasoning.Rebuilt2026Reasoner;
 import org.curtinfrc.frc2026.util.Repulsor.Repulsor;
+import org.curtinfrc.frc2026.util.Repulsor.StaticInstance;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.HeightSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.Setpoints;
@@ -224,6 +225,8 @@ public class Robot extends LoggedRobot {
     repulsor.setReasoner(reasoner);
 
     repulsor.setup();
+
+    StaticInstance.initialize(repulsor);
   }
 
   public Robot() {
@@ -418,6 +421,11 @@ public class Robot extends LoggedRobot {
                   interrupter -> runningInterrupters.put(interrupter, interrupted));
               commandEnded(interrupted);
             });
+    drive.setPose(
+        new Pose2d(
+            15.391 - (Constants.ROBOT_X / 2), 3.84 + (Constants.ROBOT_Y / 2), new Rotation2d()));
+
+    // drive.setPose(new Pose2d(0, 0, new Rotation2d()));
 
     DriverStation.silenceJoystickConnectionWarning(true);
 
