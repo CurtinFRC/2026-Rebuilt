@@ -7,9 +7,6 @@ import choreo.auto.AutoFactory;
 import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Translation2d;
-
-import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.net.WebServer;
@@ -23,7 +20,6 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
-import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -59,8 +55,11 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+<<<<<<< HEAD
 import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
+=======
+>>>>>>> 70dc982 (a)
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -70,7 +69,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleRecoveryBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
-import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStationBootstrap;
 import org.curtinfrc.frc2026.util.Repulsor.Fallback;
