@@ -1,15 +1,16 @@
 package org.curtinfrc.frc2026.util.Repulsor;
 
 public class StaticInstance {
-    public static Repulsor repulsor;
+  public static Repulsor repulsor;
 
-      public static Repulsor getInstance() {
+  public static Repulsor getInstance() {
     Repulsor local = repulsor;
     if (local == null) {
       synchronized (Repulsor.class) {
         local = repulsor;
         if (local == null) {
-            throw new IllegalStateException("Repulsor instance has not been initialized. Please initialize it before calling getInstance().");
+          throw new IllegalStateException(
+              "Repulsor instance has not been initialized. Please initialize it before calling getInstance().");
         }
       }
     }

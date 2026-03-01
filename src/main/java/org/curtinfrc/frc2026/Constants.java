@@ -18,6 +18,7 @@ public final class Constants {
   public static final double ROBOT_Y = 0.85;
   public static final double FIELD_LENGTH = 16.540988;
   public static final double FIELD_WIDTH = aprilTagLayout.getFieldWidth();
+  public static boolean tuningMode = false;
 
   public static final Mode getMode() {
     return switch (robotType) {

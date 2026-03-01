@@ -1,4 +1,3 @@
-
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import org.curtinfrc.frc2026.sim.BallSim;

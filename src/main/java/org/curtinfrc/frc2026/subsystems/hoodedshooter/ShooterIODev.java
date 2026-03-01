@@ -1,4 +1,3 @@
-
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
 import static org.curtinfrc.frc2026.util.PhoenixUtil.tryUntilOk;

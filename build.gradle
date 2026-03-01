@@ -1,8 +1,8 @@
 plugins {
     id "java"
     id "edu.wpi.first.GradleRIO" version "2026.2.1"
-    id "com.peterabeles.gversion" version "1.10.3"
-    id "com.diffplug.spotless" version "8.2.1"
+    id "com.peterabeles.gversion" version "1.10"
+    id "com.diffplug.spotless" version "6.12.0"
 }
 
 java {
@@ -48,10 +48,11 @@ deploy {
                     }
 
                     // The options below may improve performance, but should only be enabled on the RIO 2
-                    final MAX_JAVA_HEAP_SIZE_MB = 100;
-                    jvmArgs.add("-Xmx" + MAX_JAVA_HEAP_SIZE_MB + "M")
-                    jvmArgs.add("-Xms" + MAX_JAVA_HEAP_SIZE_MB + "M")
-                    jvmArgs.add("-XX:+AlwaysPreTouch")
+                    //
+                    // final MAX_JAVA_HEAP_SIZE_MB = 100;
+                    // jvmArgs.add("-Xmx" + MAX_JAVA_HEAP_SIZE_MB + "M")
+                    // jvmArgs.add("-Xms" + MAX_JAVA_HEAP_SIZE_MB + "M")
+                    // jvmArgs.add("-XX:+AlwaysPreTouch")
                 }
 
                 // Static files artifact
@@ -60,7 +61,7 @@ deploy {
                     directory = '/home/lvuser/deploy'
                     // Change to true to delete files on roboRIO that no
                     // longer exist in deploy directory on roboRIO
-                    deleteOldFiles = true
+                    deleteOldFiles = false
                 }
             }
         }
@@ -135,11 +136,6 @@ wpi.sim.addDriverstation()
 // in order to make them all available at runtime. Also adding the manifest so WPILib
 // knows where to look for our Robot Class.
 jar {
-    from {
-        configurations.runtimeClasspath.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
     dependsOn(":offload-api:jar", ":offload-client:jar")
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     from sourceSets.main.allSource
@@ -558,6 +554,7 @@ spotless {
         trimTrailingWhitespace()
         endWithNewline()
     }
+
     groovyGradle {
         target fileTree(".") {
             include "**/*.gradle"

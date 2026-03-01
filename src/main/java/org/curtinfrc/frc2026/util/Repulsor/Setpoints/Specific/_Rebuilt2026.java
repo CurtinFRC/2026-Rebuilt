@@ -42,6 +42,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Setpoints.GameSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointType;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointUtil;
+import org.curtinfrc.frc2026.util.Repulsor.Setpoints.StaticPoseSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.GamePiecePhysics;
@@ -49,7 +50,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Shooting.OnlineSearchState;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibrary;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotLibraryBuilder;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.ShotSolution;
-import org.curtinfrc.frc2026.util.Repulsor.Setpoints.StaticPoseSetpoint;
 
 public class _Rebuilt2026 {
   protected _Rebuilt2026() {}
