@@ -61,10 +61,10 @@ public class HoodedShooter extends SubsystemBase {
   private double shooterTarget = 0;
   private double hoodTarget = 0;
 
-  private final Alert[] hoodMotorDisconnectedAlerts = new Alert[1];
-  private final Alert[] hoodMotorTempAlerts = new Alert[1];
-  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[3];
-  private final Alert[] shooterMotorTempAlerts = new Alert[3];
+  private final Alert[] hoodMotorDisconnectedAlerts = new Alert[HOOD_MOTOR_NUMBER];
+  private final Alert[] hoodMotorTempAlerts = new Alert[HOOD_MOTOR_NUMBER];
+  private final Alert[] shooterMotorDisconnectedAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
+  private final Alert[] shooterMotorTempAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
 
   public final Trigger hoodedShooterReady =
       new Trigger(

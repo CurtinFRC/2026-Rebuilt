@@ -32,6 +32,7 @@ import edu.wpi.first.units.measure.Temperature;
 import edu.wpi.first.units.measure.Voltage;
 import java.util.List;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
+import org.littletonrobotics.junction.Logger;
 
 public class HoodIOComp implements HoodIO {
   public static final int LEADER_ID = 14;
@@ -57,8 +58,7 @@ public class HoodIOComp implements HoodIO {
 
   public static final double MM_CRUISE_VELOCITY = 290;
   public static final double MM_ACCLERATION =
-      2
-          * DCMotor.getKrakenX44Foc(1).KtNMPerAmp
+      DCMotor.getKrakenX44Foc(2).KtNMPerAmp
           * ENCODER_TO_MECHANISM_RATIO
           * MOTOR_TO_SENSOR_RATIO
           * 60
@@ -157,6 +157,8 @@ public class HoodIOComp implements HoodIO {
     inputs.positionRotations = position.getValueAsDouble();
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
+
+    Logger.recordOutput("HoodedShooter/MM_ACCELERATION", MM_ACCLERATION);
   }
 
   @Override
