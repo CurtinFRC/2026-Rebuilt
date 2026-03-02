@@ -310,7 +310,7 @@ public class Drive extends SubsystemBase {
     // Square magnitude for more precise control
     linearMagnitude = linearMagnitude * linearMagnitude;
 
-    // Return new linear velocity
+    // Return new linear velocit
     return new Pose2d(Translation2d.kZero, linearDirection)
         .transformBy(new Transform2d(linearMagnitude, 0.0, Rotation2d.kZero))
         .getTranslation();
@@ -357,7 +357,6 @@ public class Drive extends SubsystemBase {
             .getTranslation()
             .minus(currentPosition.getTranslation())
             .getAngle()
-            .rotateBy(Rotation2d.k180deg)
             .getRadians();
 
     return targetAngle;
@@ -427,9 +426,9 @@ public class Drive extends SubsystemBase {
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-          }
+          // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+          //   angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+          // }
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput("TargetAngle", angleToHub);
@@ -454,7 +453,7 @@ public class Drive extends SubsystemBase {
                 new ChassisSpeeds(
                     linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                     linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    angleSpeed);
+                    -angleSpeed);
             runVelocity(
                 ChassisSpeeds.fromFieldRelativeSpeeds(
                     speeds,
@@ -494,48 +493,48 @@ public class Drive extends SubsystemBase {
             });
   }
 
-  public Command trenchAlign() {
-    return run(
-        () -> {
-          double startingXPose = getPose().getX();
-          double startingYPose = getPose().getY();
-          double redStartingXPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
-          double redStartingYPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
+  // public Command trenchAlign() {
+  //   return run(
+  //       () -> {
+  //         double startingXPose = getPose().getX();
+  //         double startingYPose = getPose().getY();
+  //         double redStartingXPose = ChoreoAllianceFlipUtil.flipX(getPose().getX());
+  //         double redStartingYPose = ChoreoAllianceFlipUtil.flipY(getPose().getY());
 
-          Logger.recordOutput("Robot X", startingXPose);
-          Logger.recordOutput("Robot Y", startingYPose);
-          Logger.recordOutput("Reversed Robot X", redStartingXPose);
-          Logger.recordOutput("Reversed Robot Y", redStartingYPose);
+  //         Logger.recordOutput("Robot X", startingXPose);
+  //         Logger.recordOutput("Robot Y", startingYPose);
+  //         Logger.recordOutput("Reversed Robot X", redStartingXPose);
+  //         Logger.recordOutput("Reversed Robot Y", redStartingYPose);
 
-          // Blue side
-          if (startingYPose > 4 && startingXPose < 4.6) leftTrenchAlign().schedule();
+  //         // Blue side
+  //         if (startingYPose > 4 && startingXPose < 4.6) leftTrenchAlign().schedule();
 
-          if (startingYPose < 4 && startingXPose < 4.6) rightTrenchAlign().schedule();
+  //         if (startingYPose < 4 && startingXPose < 4.6) rightTrenchAlign().schedule();
 
-          if (startingYPose > 4 && startingXPose > 4.6 && startingXPose < 8.2677)
-            leftReverseTrenchAlign().schedule();
+  //         if (startingYPose > 4 && startingXPose > 4.6 && startingXPose < 8.2677)
+  //           leftReverseTrenchAlign().schedule();
 
-          if (startingYPose < 4 && startingXPose > 4.6 && startingXPose < 8.2677)
-            rightReverseTrenchAlign().schedule();
+  //         if (startingYPose < 4 && startingXPose > 4.6 && startingXPose < 8.2677)
+  //           rightReverseTrenchAlign().schedule();
 
-          // Red side
-          if (redStartingYPose > 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
-            redLeftTrenchAlign().schedule();
+  //         // Red side
+  //         if (redStartingYPose > 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+  //           redLeftTrenchAlign().schedule();
 
-          if (redStartingYPose < 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
-            redRightTrenchAlign().schedule();
+  //         if (redStartingYPose < 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+  //           redRightTrenchAlign().schedule();
 
-          if (redStartingYPose > 4
-              && redStartingXPose > 4.6
-              && redStartingYPose < 8
-              && startingXPose > 8.2677) redLeftReverseTrenchAlign().schedule();
+  //         if (redStartingYPose > 4
+  //             && redStartingXPose > 4.6
+  //             && redStartingYPose < 8
+  //             && startingXPose > 8.2677) redLeftReverseTrenchAlign().schedule();
 
-          if (redStartingYPose < 4
-              && redStartingXPose > 4.6
-              && redStartingYPose < 8
-              && startingXPose > 8.2677) redRightReverseTrenchAlign().schedule();
-        });
-  }
+  //         if (redStartingYPose < 4
+  //             && redStartingXPose > 4.6
+  //             && redStartingYPose < 8
+  //             && startingXPose > 8.2677) redRightReverseTrenchAlign().schedule();
+  //       });
+  // }
 
   public Command leftTrenchAlign() {
     return run(() -> {
