@@ -7,6 +7,7 @@ import choreo.auto.AutoChooser;
 import choreo.auto.AutoFactory;
 import choreo.auto.AutoRoutine;
 import choreo.auto.AutoTrajectory;
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.net.WebServer;
@@ -45,11 +46,9 @@ import org.curtinfrc.frc2026.subsystems.Mag.Mag;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIO;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIOComp;
 import org.curtinfrc.frc2026.subsystems.Mag.MagRoller.MagRollerIODev;
-import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.HoodedShooter;
-import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.util.GameState;
@@ -228,7 +227,7 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {});
-      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
+      // hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
       intake = new Intake(new IntakeIO() {});
     }
 
@@ -240,7 +239,9 @@ public class Robot extends LoggedRobot {
     autoChooser.addCmd("Left then forward", this::testDrive);
     autoChooser.addCmd("Left trench, half", this::leftHalfAuto);
     autoChooser.addCmd("Left trench", this::leftTrench);
+
     autoChooser.addRoutine("All In One Routine", this::shootFromCornerAutoRoutine);
+    autoChooser.addRoutine("Left trench, half routine", this::leftHalfAutoRoutine);
     autoChooser.select("Forward");
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
     CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
@@ -434,7 +435,7 @@ public class Robot extends LoggedRobot {
     //     .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.1, 0)) // in front of hub
     //     // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
     //     .onFalse(hoodedShooter.stopHoodedShooter());
-    controller.b().onTrue(drive.trenchAlign());
+    // controller.b().onTrue(drive.trenchAlign());
   }
 
   private Command leftHalfAuto() {
@@ -484,9 +485,11 @@ public class Robot extends LoggedRobot {
         .active()
         .onTrue(
             Commands.sequence(
-                intake.RawControlConsume(4),
-                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
-                mag.spinIndexer(4),
+                // intake.RawControlConsume(4),
+                // hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                // mag.spinIndexer(4),
+                drive.prepareAutonomous(
+                    ChoreoAllianceFlipUtil.flipX(4.35), ChoreoAllianceFlipUtil.flipY(7.5)),
                 leftHalfAuto.cmd()));
 
     return routine;

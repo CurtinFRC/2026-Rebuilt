@@ -473,6 +473,27 @@ public class Drive extends SubsystemBase {
         });
   }
 
+  public Command prepareAutonomous(double x, double y) {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("Left Trench Autonomous Alignment Started");
+
+          ChassisSpeeds leftAutoSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), x) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), y) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftAutoSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - x) < 0.1 && Math.abs(yPose - y) < 0.1;
+            });
+  }
+
   public Command trenchAlign() {
     return run(
         () -> {
