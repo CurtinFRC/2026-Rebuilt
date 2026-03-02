@@ -137,11 +137,11 @@ public class HoodedShooter extends SubsystemBase {
         "HoodedShooter/distanceFromHub",
         HUB_LOCATION.minus(robotPose.get().getTranslation()).getNorm());
 
-    for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
+    for (int motor = 0; motor < hoodMotorDisconnectedAlerts.length; motor++) {
       hoodMotorDisconnectedAlerts[motor].set(!hoodInputs.motorsConnected[motor]);
       hoodMotorTempAlerts[motor].set(hoodInputs.motorTemperatures[motor] > MOTOR_WARNING_TEMP);
     }
-    for (int motor = 0; motor < SHOOTER_MOTOR_NUMBER; motor++) {
+    for (int motor = 0; motor < shooterMotorDisconnectedAlerts.length; motor++) {
       shooterMotorDisconnectedAlerts[motor].set(!shooterInputs.motorsConnected[motor]);
       shooterMotorTempAlerts[motor].set(
           shooterInputs.motorTemperatures[motor] > MOTOR_WARNING_TEMP);

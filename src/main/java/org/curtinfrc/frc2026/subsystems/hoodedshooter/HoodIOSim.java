@@ -13,7 +13,7 @@ import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotController;
 import edu.wpi.first.wpilibj.simulation.SingleJointedArmSim;
 
-public class HoodIOSim extends HoodIODev {
+public class HoodIOSim extends HoodIOComp {
   private static final double DT = 0.001;
   private static final double HOOD_JKG = 0.00816; // fix
   private static final double HOOD_MIN_POSITION_ROTATIONS = 0;
@@ -28,7 +28,7 @@ public class HoodIOSim extends HoodIODev {
   public HoodIOSim() {
     super();
 
-    motorSim = motor.getSimState();
+    motorSim = leaderMotor.getSimState();
     motorSim.setMotorType(MotorType.KrakenX44);
     motorSim.Orientation = ChassisReference.CounterClockwise_Positive;
     motorSimModel =

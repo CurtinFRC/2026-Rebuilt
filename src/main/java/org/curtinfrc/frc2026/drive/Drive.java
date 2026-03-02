@@ -6,6 +6,7 @@ import choreo.trajectory.SwerveSample;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
@@ -55,10 +56,7 @@ public class Drive extends SubsystemBase {
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
 
-  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
   private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
-  private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
-  private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
   static final Lock odometryLock = new ReentrantLock();
   private final GyroIO gyroIO;
@@ -70,7 +68,7 @@ public class Drive extends SubsystemBase {
   // Setting PID values for turning towards Hub.
   public static final double hubHeadingKP = 10;
   public static final double hubHeadingKI = 0;
-  private static final double hubHeadingKD = 0.2;
+  private static final double hubHeadingKD = 0;
 
   // Creating a new instance of the class PIDController and plugging in PID values from variables
   // above.
@@ -79,7 +77,8 @@ public class Drive extends SubsystemBase {
           hubHeadingKP,
           hubHeadingKI,
           hubHeadingKD,
-          new TrapezoidProfile.Constraints(MAX_ANGULAR_SPEED - 0.5, ANGLE_MAX_ACCELERATION));
+          new TrapezoidProfile.Constraints(
+              getMaxAngularSpeedRadPerSec() - 0.5, ANGLE_MAX_ACCELERATION));
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -412,70 +411,77 @@ public class Drive extends SubsystemBase {
       DoubleSupplier rotationSupplier,
       BooleanSupplier aligningSupplier,
       Supplier<Translation2d> locationTransform) {
-    return run(
-        () -> {
+    return runOnce(() -> hubHeadingController.reset(getRotation().getRadians()))
+        .andThen(
+            run(
+                () -> {
 
-          // Get current position using the getPose method.
-          Pose2d currentPosition = getPose();
+                  // Get current position using the getPose method.
+                  Pose2d currentPosition = getPose();
 
-          // targetAngle = Math.toDegrees(targetAngle);
+                  // targetAngle = Math.toDegrees(targetAngle);
 
-          // Getting robot current angle in radians
-          double robotAngle = currentPosition.getRotation().getRadians();
+                  // Getting robot current angle in radians
+                  double robotAngle = currentPosition.getRotation().getRadians();
 
-          // Getting optimal angle speed by providing the current robot angle and the angle we want
-          // to go to
-          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-          //   angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-          // }
-          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+                  double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+                  Logger.recordOutput("Aiming Target", locationTransform.get());
+                  // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+                  //   angleToHub =
+                  //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+                  // }
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
-          Logger.recordOutput("TargetAngle", angleToHub);
-          Logger.recordOutput("RobotAngle", robotAngle);
+                  Logger.recordOutput("TargetAngle", angleToHub);
+                  Logger.recordOutput("RobotAngle", robotAngle);
 
-          // Apply rotation deadband
-          double omega = rotationSupplier.getAsDouble();
+                  // Apply rotation deadband
+                  double omega = rotationSupplier.getAsDouble();
 
-          // Square rotation value for more precise control
-          omega = Math.copySign(omega * omega, omega);
+                  // Square rotation value for more precise control
+                  omega = Math.copySign(omega * omega, omega);
 
-          // Get linear velocity
-          Translation2d linearVelocity =
-              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+                  // Get linear velocity
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
-          // Convert to field relative speeds & send command
-          boolean isFlipped =
-              DriverStation.getAlliance().isPresent()
-                  && DriverStation.getAlliance().get() == Alliance.Red;
-          if (aligningSupplier.getAsBoolean()) {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    -angleSpeed);
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          } else {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    omega * getMaxAngularSpeedRadPerSec());
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          }
-        });
+                  // Convert to field relative speeds & send command
+                  boolean isFlipped =
+                      DriverStation.getAlliance().isPresent()
+                          && DriverStation.getAlliance().get() == Alliance.Red;
+                  boolean rotating = Math.abs(rotationSupplier.getAsDouble()) > 0.005;
+                  if (!aligningSupplier.getAsBoolean() || rotating) {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            omega * getMaxAngularSpeedRadPerSec());
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  } else {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            -angleSpeed);
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  }
+                }));
   }
 
   public Command prepareAutonomous(double x, double y) {
     return run(() -> {
           double omega = 0.0;
-          System.out.println("Left Trench Autonomous Alignment Started");
 
           ChassisSpeeds leftAutoSpeeds =
               new ChassisSpeeds(
@@ -491,5 +497,48 @@ public class Drive extends SubsystemBase {
               double yPose = getPose().getY();
               return Math.abs(xPose - x) < 0.1 && Math.abs(yPose - y) < 0.1;
             });
+  }
+
+  public Rotation2d Goal = Rotation2d.kZero;
+
+  public Command stopCmd() {
+    return runOnce(() -> stop());
+  }
+
+  public Command TrenchAlign(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
+    return runOnce(
+            () -> {
+              Pose2d currentPosition = getPose();
+              double robotAngle = currentPosition.getRotation().getRadians();
+              Logger.recordOutput("Robot Angle", robotAngle);
+              hubHeadingController.reset(robotAngle);
+              if (robotAngle >= -Math.PI / 2 && robotAngle <= Math.PI / 2) {
+                Goal = Rotation2d.kZero;
+              } else {
+                Goal = Rotation2d.k180deg;
+              }
+            })
+        .andThen(
+            run(
+                () -> {
+                  Pose2d currentPosition = getPose();
+                  double robotAngle =
+                      MathUtil.angleModulus(currentPosition.getRotation().getRadians());
+                  Logger.recordOutput("Robot Angle", robotAngle);
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, Goal.getRadians());
+                  Logger.recordOutput("Angle Speed", angleSpeed);
+                  Logger.recordOutput("Goal", Goal);
+
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+                  ChassisSpeeds speeds =
+                      new ChassisSpeeds(
+                          linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                          linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                          -angleSpeed);
+                  runVelocity(speeds);
+                }));
   }
 }

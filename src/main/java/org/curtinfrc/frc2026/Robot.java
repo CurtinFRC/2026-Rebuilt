@@ -4,6 +4,7 @@ import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
 import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
 import choreo.auto.AutoFactory;
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -12,6 +13,7 @@ import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DataLogManager;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -20,6 +22,7 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +54,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.AutoChooser;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -59,6 +63,7 @@ import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVision;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVisionSim;
+import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.LogFileUtil;
 import org.littletonrobotics.junction.LoggedRobot;
 import org.littletonrobotics.junction.Logger;
@@ -84,6 +89,45 @@ public class Robot extends LoggedRobot {
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+
+  @AutoLogOutput(key = "Triggers/IsRed")
+  Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
+
+  @AutoLogOutput(key = "Triggers/IsBlue")
+  Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
+
+  @AutoLogOutput(key = "Triggers/IsLeft")
+  Trigger isLeft =
+      new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
+
+  @AutoLogOutput(key = "Triggers/isInRedAllianceHalf")
+  // TODO doesnt work with both sides you dumb dumb sim fix btw
+  Trigger inOwnHalf =
+      new Trigger(
+          () ->
+              drive.getPose().getX()
+                  > ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
+
+  private boolean edge = true;
+
+  @AutoLogOutput(key = "Triggers/Edging")
+  Trigger edging = new Trigger(() -> edge);
+
+  private boolean intaker = true;
+  private boolean aligner = true;
+
+  @AutoLogOutput(key = "Triggers/Intaking")
+  Trigger intaking = new Trigger(() -> intaker);
+
+  @AutoLogOutput(key = "Triggers/Aligning")
+  Trigger aligning = new Trigger(() -> aligner);
+
+  @AutoLogOutput(key = "Triggers/isInNeutral")
+  Trigger isInNeutralZone =
+      new Trigger(
+          () ->
+              drive.getPose().getX()
+                  < ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
 
   private LoggedNetworkStruct<Translation2d> shootTargetPose =
       new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
@@ -121,6 +165,8 @@ public class Robot extends LoggedRobot {
     Logger.start();
     SignalLogger.start();
     DataLogManager.start();
+
+    DriverStation.waitForDsConnection(600);
 
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
@@ -273,42 +319,100 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.locationHeadingjoyStickDrive(
+        drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
-            () -> -controller.getRightX(),
-            () -> true,
-            () -> hoodedShooter.getVirtualTargetLocation(shootTargetPose)));
+            () -> -controller.getRightX()));
 
-    drive.locationHeadingjoyStickDrive(
-        () -> -controller.getLeftY(),
-        () -> -controller.getLeftX(),
-        () -> -controller.getRightX(),
-        () -> true,
-        () -> hoodedShooter.getVirtualTargetLocation(shootTargetPose));
-
-    controller.b().whileTrue(drive.faceLocation(shootTargetPose));
-
-    controller
-        .leftTrigger()
+    inOwnHalf
+        .and(edging)
+        .and(GameState.activeShift)
         .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(12),
-                mag.store(1.0),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () ->
+                        ChoreoAllianceFlipUtil.flip(
+                            FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+                .withName("Scoring"));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(1.0)).onFalse(mag.stop());
+    inOwnHalf
+        .and(GameState.activeShift)
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () ->
+                    ChoreoAllianceFlipUtil.flip(
+                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+
+    isInNeutralZone
+        .and(isLeft.negate())
+        .and(GameState.activeShift.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+
+    isInNeutralZone
+        .and(isLeft)
+        .and(GameState.activeShift.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+
+    isLeft
+        .negate()
+        .and(isInNeutralZone)
+        .whileTrue(
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () ->
+                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+                .withName("RightShuttling"));
+
+    isLeft
+        .and(isInNeutralZone)
+        .whileTrue(
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+                .withName("LeftShuttling"));
+
+    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+
+    // TODO FIX
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(intake.RawControlConsume(0.8))
+        .onFalse(intake.RawIdle());
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(mag.store(9.6))
+        .onFalse(mag.store(0));
+    hoodedShooter
+        .hoodedShooterReady
+        .whileTrue(mag.spinIndexer(9.6))
+        .whileFalse(mag.holdIndexerCommand());
 
     controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(1.0)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
-
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.shootAtTarget(shootTargetPose))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+        .leftBumper()
+        .whileTrue(
+            Commands.runOnce(() -> edge = false)
+                .andThen(
+                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+                        .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */
