@@ -88,9 +88,6 @@ public class Robot extends LoggedRobot {
   private LoggedNetworkStruct<Translation2d> shootTargetPose =
       new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
 
-  private LoggedNetworkStruct<Translation2d> shootTargetPose =
-      new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
-
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
     Logger.recordMetadata("BuildDate", BuildConstants.BUILD_DATE);
