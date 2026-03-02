@@ -3,6 +3,7 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
 import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
+import choreo.auto.AutoFactory;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -18,6 +19,7 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +50,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -71,6 +74,9 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  */
 public class Robot extends LoggedRobot {
   private Drive drive;
+  private final AutoFactory autoFactory;
+  private final AutoChooser autoChooser;
+  private final Autos autos;
   private Vision vision;
   private Intake intake;
   private Mag mag;
@@ -239,6 +245,19 @@ public class Robot extends LoggedRobot {
               new HoodIO() {}, new ShooterIO() {}, drive::getPose, drive::getChassisSpeeds);
     }
 
+    autoFactory =
+        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+    autoChooser = new AutoChooser();
+    autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
+
+    autoChooser.addCmd("Left then forward", autos::testDrive);
+    autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
+    autoChooser.addCmd("Left trench", autos::leftTrench);
+
+    autoChooser.addRoutine("Left trench, half routine", autos::leftHalfAutoRoutine);
+
+    RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
+
     CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
     CommandScheduler.getInstance().onCommandFinish(this::commandEnded);
     CommandScheduler.getInstance()
@@ -261,147 +280,12 @@ public class Robot extends LoggedRobot {
             () -> true,
             () -> hoodedShooter.getVirtualTargetLocation(shootTargetPose)));
 
-    // Trigger automaticLocation =
-    //     new Trigger(
-    //         () -> {
-    //           Pose2d currentPosition = drive.getPose();
-    //           if (DriverStation.getAlliance().get().equals(Alliance.Red)) {
-    //             if (currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX()) {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
-    //             } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.ShuttlePoint.ShuttlePointRight);
-    //
-    //             } else {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.ShuttlePoint.ShuttlePointLeft);
-    //             }
-    //
-    //           } else {
-    //             // If alliance is blue, then check if it is in the alliance zone by checking the
-    // x
-    //             // value is less than the left trench opening (opponent) Then set the location to
-    //             // hub.
-    //             if (currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX())
-    // {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
-    //             } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft);
-    //             } else {
-    //               drive.locationHeadingjoyStickDrive(
-    //                   () -> -controller.getLeftY(),
-    //                   () -> -controller.getLeftX(),
-    //                   () -> -controller.getRightX(),
-    //                   () -> true,
-    //                   () -> FieldConstants.ShuttlePoint.OppShuttlePointRight);
-    //             }
-    //           }
-    //           return true;
-    //         });
-    // Pose2d currentPosition = drive.getPose();
-    // Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
-    // Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
-    //
-    // Trigger isLeft =
-    //     new Trigger(() -> currentPosition.getY() < FieldConstants.Hub.topCenterPoint.getY());
-    // Trigger isOppLeft =
-    //     new Trigger(() -> currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY());
-    // Trigger isInRedAllianceHalf =
-    //     new Trigger(() -> currentPosition.getX() >
-    // FieldConstants.LeftTrench.openingTopLeft.getX());
-    // Trigger isInBlueAllianceHalf =
-    //     new Trigger(
-    //         () -> currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
-    //
-    // isRed
-    //     .and(isInRedAllianceHalf)
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
-    // isBlue
-    //     .and(isInBlueAllianceHalf)
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
-    //
-    // isRed
-    //     .and(isLeft.negate())
-    //     .and(isInRedAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.ShuttlePointRight));
-    // isRed
-    //     .and(isLeft)
-    //     .and(isInRedAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.ShuttlePointLeft));
-    // isBlue
-    //     .and(isOppLeft)
-    //     .and(isInBlueAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft));
-    // isBlue
-    //     .and(isOppLeft.negate())
-    //     .and(isInBlueAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.OppShuttlePointRight));
-
-    // drive.locationHeadingjoyStickDrive(
-    //     () -> -controller.getLeftY(),
-    //     () -> -controller.getLeftX(),
-    //     () -> -controller.getRightX(),
-    //     () -> true,
-    //     () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft);
+    drive.locationHeadingjoyStickDrive(
+        () -> -controller.getLeftY(),
+        () -> -controller.getLeftX(),
+        () -> -controller.getRightX(),
+        () -> true,
+        () -> hoodedShooter.getVirtualTargetLocation(shootTargetPose));
 
     controller.b().whileTrue(drive.faceLocation(shootTargetPose));
 
@@ -450,7 +334,9 @@ public class Robot extends LoggedRobot {
 
   /** This function is called periodically when disabled. */
   @Override
-  public void disabledPeriodic() {}
+  public void disabledPeriodic() {
+    autoChooser.periodic();
+  }
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
