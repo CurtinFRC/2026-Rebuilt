@@ -6,6 +6,7 @@ import choreo.trajectory.SwerveSample;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
@@ -491,30 +492,43 @@ public class Drive extends SubsystemBase {
             });
   }
 
-  public double Goal = 0;
+  public Rotation2d Goal = Rotation2d.kZero;
 
   public Command TrenchAlign(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
-    return run(
-        () -> {
-          Pose2d currentPosition = getPose();
-          double robotAngle = currentPosition.getRotation().getDegrees();
-          if (robotAngle >= -90 && robotAngle <= 90) {
-            Goal = 0;
+    return runOnce(
+            () -> {
+              Pose2d currentPosition = getPose();
+              double robotAngle = currentPosition.getRotation().getRadians();
+              Logger.recordOutput("Robot Angle", robotAngle);
+              hubHeadingController.reset(robotAngle);
+              ;
+              if (robotAngle >= -Math.PI / 2 && robotAngle <= Math.PI / 2) {
+                Goal = Rotation2d.kZero;
+              } else {
+                Goal = Rotation2d.k180deg;
+              }
+            })
+        .andThen(
+            run(
+                () -> {
+                  Pose2d currentPosition = getPose();
+                  double robotAngle =
+                      MathUtil.angleModulus(currentPosition.getRotation().getRadians());
+                  Logger.recordOutput("Robot Angle", robotAngle);
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, Goal.getRadians());
+                  Logger.recordOutput("Angle Speed", angleSpeed);
+                  Logger.recordOutput("Goal", Goal);
 
-          } else {
-            Goal = 180;
-          }
-          double angleSpeed = hubHeadingController.calculate(robotAngle, Goal);
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
-          Translation2d linearVelocity =
-              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
-
-          ChassisSpeeds speeds =
-              new ChassisSpeeds(
-                  linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                  linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                  angleSpeed);
-          runVelocity(speeds);
-        });
+                  ChassisSpeeds speeds =
+                      new ChassisSpeeds(
+                          linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                          linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                          -angleSpeed);
+                  runVelocity(speeds);
+                }));
   }
 }

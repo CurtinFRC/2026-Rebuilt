@@ -6,12 +6,14 @@ import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 import choreo.auto.AutoFactory;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj.DataLogManager;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -20,6 +22,7 @@ import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,6 +54,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.AutoChooser;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -290,7 +294,7 @@ public class Robot extends LoggedRobot {
     //   controller.leftBumper().whileTrue(intake.RawControlConsume(1.0));
     //   IntakeToggle = false;
 
-    controller.leftBumper().toggleOnTrue(intake.RawControlConsume(1.0));
+    // controller.leftBumper().toggleOnTrue(intake.RawControlConsume(1.0));
 
     Trigger automaticLocation =
         new Trigger(
@@ -451,7 +455,7 @@ public class Robot extends LoggedRobot {
 
     controller
         .leftBumper()
-        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
+        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftX(), () -> -controller.getLeftY()));
   }
 
   /** This function is called periodically during all modes. */
