@@ -35,14 +35,24 @@ public class ShooterIOComp implements ShooterIO {
   public static final double VELOCITY_TOLERANCE = 1;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.0;
-  private static final double KI = 0.05;
+  private static final double KP = 0.04;
+  private static final double KI = 0.0;
   private static final double KD = 0.0;
-  private static final double KS = 0.44;
-  private static final double KV = 0.1157;
-  private static final double KV_SHOOTING = 0.1157;
+  private static final double KS = 0.4;
+  private static final double KV = 0.1147;
   // private static final double KV_SHOOTING = 0.2;
-  private static final double KA = 0.0;
+  private static final double KA = 0.67;
+
+  // private final LoggedTunableNumber shooterKP =
+  //     new LoggedTunableNumber("Shooter/KP", KP);
+  // private final LoggedTunableNumber shooterKD =
+  //     new LoggedTunableNumber("Shooter/KD", KD);
+  // private final LoggedTunableNumber shooterKV =
+  //     new LoggedTunableNumber("Shooter/KV", KV);
+  // private final LoggedTunableNumber shooterKS =
+  //     new LoggedTunableNumber("Shooter/KS", KS);
+  // private final LoggedTunableNumber shooterKI =
+  //     new LoggedTunableNumber("Shooter/KI", KI);
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
   protected final TalonFX followerMotor1 = new TalonFX(ID2);
@@ -61,13 +71,7 @@ public class ShooterIOComp implements ShooterIO {
           .withSlot0(
               new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA))
           .withSlot1(
-              new Slot1Configs()
-                  .withKP(KP)
-                  .withKI(KI)
-                  .withKD(KD)
-                  .withKS(KS)
-                  .withKV(KV_SHOOTING)
-                  .withKA(KA));
+              new Slot1Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA));
 
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();
