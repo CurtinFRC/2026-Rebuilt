@@ -420,16 +420,7 @@ public class Robot extends LoggedRobot {
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
     controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.04, 0))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
         .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(-0.1, 0)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
-    controller
-        .b()
         .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
   }
 
