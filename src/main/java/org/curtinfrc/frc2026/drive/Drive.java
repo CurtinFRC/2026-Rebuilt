@@ -4,7 +4,6 @@ import static edu.wpi.first.units.Units.*;
 
 import choreo.trajectory.SwerveSample;
 import choreo.util.ChoreoAllianceFlipUtil;
-import com.ctre.phoenix6.CANBus;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
@@ -474,7 +473,6 @@ public class Drive extends SubsystemBase {
         });
   }
 
-  
   public Command trenchAlign() {
     return run(
         () -> {
@@ -488,33 +486,33 @@ public class Drive extends SubsystemBase {
           Logger.recordOutput("Reversed Robot X", redStartingXPose);
           Logger.recordOutput("Reversed Robot Y", redStartingYPose);
 
-          //Blue side
-            if (startingYPose > 4 && startingXPose < 4.6) leftTrenchAlign().schedule();
+          // Blue side
+          if (startingYPose > 4 && startingXPose < 4.6) leftTrenchAlign().schedule();
 
-            if (startingYPose < 4 && startingXPose < 4.6) rightTrenchAlign().schedule();
-            
-            if (startingYPose > 4 && startingXPose > 4.6 && startingXPose < 8)
-              leftReverseTrenchAlign().schedule();
+          if (startingYPose < 4 && startingXPose < 4.6) rightTrenchAlign().schedule();
 
-            if (startingYPose < 4 && startingXPose > 4.6 && startingXPose < 8)
-              rightReverseTrenchAlign().schedule();
+          if (startingYPose > 4 && startingXPose > 4.6 && startingXPose < 8.2677)
+            leftReverseTrenchAlign().schedule();
 
-          //Red side
-            if (redStartingYPose > 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
-              redLeftTrenchAlign().schedule();
+          if (startingYPose < 4 && startingXPose > 4.6 && startingXPose < 8.2677)
+            rightReverseTrenchAlign().schedule();
 
-            if (redStartingYPose < 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
-              redRightTrenchAlign().schedule();
+          // Red side
+          if (redStartingYPose > 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+            redLeftTrenchAlign().schedule();
 
-            if (redStartingYPose > 4
-                && redStartingXPose > 4.6
-                && redStartingYPose < 8
-                && startingXPose > 8.2677) redLeftReverseTrenchAlign().schedule();
+          if (redStartingYPose < 4 && redStartingXPose < 4.6 && startingXPose > 8.2677)
+            redRightTrenchAlign().schedule();
 
-            if (redStartingYPose < 4
-                && redStartingXPose > 4.6
-                && redStartingYPose < 8
-                && startingXPose > 8.2677) redRightReverseTrenchAlign().schedule();
+          if (redStartingYPose > 4
+              && redStartingXPose > 4.6
+              && redStartingYPose < 8
+              && startingXPose > 8.2677) redLeftReverseTrenchAlign().schedule();
+
+          if (redStartingYPose < 4
+              && redStartingXPose > 4.6
+              && redStartingYPose < 8
+              && startingXPose > 8.2677) redRightReverseTrenchAlign().schedule();
         });
   }
 
@@ -722,9 +720,10 @@ public class Drive extends SubsystemBase {
             () -> {
               double xPose = getPose().getX();
               double yPose = getPose().getY();
-              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(5.6)) < 0.1 && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(7.4)) < 0.1;
+              return Math.abs(xPose - ChoreoAllianceFlipUtil.flipX(5.6)) < 0.1
+                  && Math.abs(yPose - ChoreoAllianceFlipUtil.flipY(7.4)) < 0.1;
             });
-          }
+  }
 
   public Command redRightTrenchAlign() {
     return run(() -> {

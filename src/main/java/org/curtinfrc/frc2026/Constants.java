@@ -8,15 +8,11 @@ public final class Constants {
   public static final int alphaMiddleMagRollerMotorID = 20;
   public static final int alphaIndexerMagRollerMotorID = 15;
 
-<<<<<<< HEAD
-  public static final RobotType robotType = RobotType.SIM;
-=======
   public static final int bBotIntakeMagRollerMotorID = 22;
   public static final int bBotIndexerMagRollerMotorID = 21;
 
-  public static final RobotType robotType = RobotType.COMP;
+  public static final RobotType robotType = RobotType.SIM;
   public static boolean tuningMode = false;
->>>>>>> c2a6fee2139608a82870e3c84c09f63e1db95078
 
   public static final Mode getMode() {
     return switch (robotType) {
