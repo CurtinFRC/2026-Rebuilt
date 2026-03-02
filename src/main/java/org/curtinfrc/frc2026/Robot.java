@@ -254,10 +254,12 @@ public class Robot extends LoggedRobot {
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
     drive.setDefaultCommand(
-        drive.joystickDrive(
+        drive.locationHeadingjoyStickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
+            () -> -controller.getRightX(),
+            () -> true,
+            () -> hoodedShooter.getVirtualTargetLocation(shootTargetPose)));
 
     // Trigger automaticLocation =
     //     new Trigger(
@@ -412,7 +414,7 @@ public class Robot extends LoggedRobot {
                 Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
         .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(1)).onFalse(mag.stop());
+    controller.rightTrigger().whileTrue(mag.moveAll(1.0)).onFalse(mag.stop());
 
     controller
         .a()

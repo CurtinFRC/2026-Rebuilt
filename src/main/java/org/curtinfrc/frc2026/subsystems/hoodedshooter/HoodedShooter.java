@@ -89,21 +89,21 @@ public class HoodedShooter extends SubsystemBase {
     this.robotPose = robotPose;
     this.robotVelocity = robotVelocity;
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 19.5);
-    DISTANCE_TO_HOOD_ANGLE.put(2.45, 82.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.15);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 14.1035);
+    DISTANCE_TO_HOOD_ANGLE.put(2.45, 81.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.117);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.6, 19.5);
-    DISTANCE_TO_HOOD_ANGLE.put(3.6, 75.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.6, 1.2);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.2, 14.1035);
+    DISTANCE_TO_HOOD_ANGLE.put(3.2, 74.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.2, 1.05);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.8, 19.5);
-    DISTANCE_TO_HOOD_ANGLE.put(3.8, 73.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.8, 1.43);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(4.15, 16.7);
+    DISTANCE_TO_HOOD_ANGLE.put(4.15, 70.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(4.15, 1.267);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5);
-    DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
+    // DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5);
+    // DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
+    // DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor] =
@@ -155,7 +155,7 @@ public class HoodedShooter extends SubsystemBase {
             robotVelocity.get().vxMetersPerSecond, robotVelocity.get().vyMetersPerSecond);
     double airTime = DISTANCE_TO_BALL_FLIGHT_TIME.get(realDistanceLength);
 
-    Translation2d hubCompensationOffset = robotVel.times(-airTime);
+    Translation2d hubCompensationOffset = robotVel.times(airTime);
     Translation2d compensatedHubLocation = location.get().plus(hubCompensationOffset);
     return (realDistanceLength > 1) ? compensatedHubLocation : location.get();
   }
