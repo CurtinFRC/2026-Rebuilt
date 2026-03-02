@@ -42,6 +42,7 @@ public class HoodIOComp implements HoodIO {
 
   public static final double ENCODER_TO_MECHANISM_RATIO = 8.33;
   public static final double MOTOR_TO_SENSOR_RATIO = 3;
+  public static final double GEAR_RATIO = MOTOR_TO_SENSOR_RATIO * ENCODER_TO_MECHANISM_RATIO;
   public static final double FORWARD_LIMIT_ROTATIONS = 0.194;
   public static final double REVERSE_LIMIT_ROTATIONS = 0.0;
   public static final double ENCODER_MAGNET_OFFSET = 0.538;

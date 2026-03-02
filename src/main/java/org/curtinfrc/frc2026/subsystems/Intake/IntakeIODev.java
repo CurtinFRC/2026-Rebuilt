@@ -68,6 +68,5 @@ public class IntakeIODev implements IntakeIO {
   public void setVoltage(double Volts) {
     // voltageRequest.withOutput(Volts);
     motor.set(Volts);
-    System.out.println("running");
   }
 }
