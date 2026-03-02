@@ -19,7 +19,7 @@ public interface ShooterIO {
 
   public default void setVoltage(double voltage) {}
 
-  public default void setVelocity(double velocity) {}
+  public default void setVelocity(double velocity, boolean shooting) {}
 
   public default void addSimBall(BallSim ball) {}
 }

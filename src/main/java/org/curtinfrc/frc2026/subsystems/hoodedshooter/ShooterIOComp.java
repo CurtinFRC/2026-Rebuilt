@@ -8,6 +8,7 @@ import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.configs.Slot0Configs;
+import com.ctre.phoenix6.configs.Slot1Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.controls.VelocityVoltage;
@@ -35,10 +36,12 @@ public class ShooterIOComp implements ShooterIO {
 
   public static final double GEAR_RATIO = 1.0;
   private static final double KP = 0.0;
-  private static final double KI = 0.0;
+  private static final double KI = 0.05;
   private static final double KD = 0.0;
   private static final double KS = 0.44;
   private static final double KV = 0.1157;
+  private static final double KV_SHOOTING = 0.1157;
+  // private static final double KV_SHOOTING = 0.2;
   private static final double KA = 0.0;
 
   protected final TalonFX leaderMotor = new TalonFX(ID1);
@@ -56,7 +59,15 @@ public class ShooterIOComp implements ShooterIO {
               new CurrentLimitsConfigs().withSupplyCurrentLimit(100).withStatorCurrentLimit(120))
           .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
           .withSlot0(
-              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA));
+              new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA))
+          .withSlot1(
+              new Slot1Configs()
+                  .withKP(KP)
+                  .withKI(KI)
+                  .withKD(KD)
+                  .withKS(KS)
+                  .withKV(KV_SHOOTING)
+                  .withKA(KA));
 
   private final StatusSignal<Voltage> voltage = leaderMotor.getMotorVoltage();
   private final StatusSignal<Current> current = leaderMotor.getStatorCurrent();
@@ -114,9 +125,15 @@ public class ShooterIOComp implements ShooterIO {
   }
 
   @Override
-  public void setVelocity(double velocity) {
+  public void setVelocity(double velocity, boolean shooting) {
     double rps = convertVelocityToRPS(velocity);
-    leaderMotor.setControl(velocityRequest.withVelocity(rps));
+    var request = velocityRequest.withVelocity(rps);
+    if (shooting) {
+      request = request.withSlot(1);
+    } else {
+      request = request.withSlot(0);
+    }
+    leaderMotor.setControl(request);
   }
 
   public static double convertVelocityToRPS(double velocity) {

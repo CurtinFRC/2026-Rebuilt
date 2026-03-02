@@ -105,7 +105,7 @@ public class ShooterIODev implements ShooterIO {
   }
 
   @Override
-  public void setVelocity(double velocity) {
+  public void setVelocity(double velocity, boolean shooting) {
     double rps = convertVelocityToRPS(velocity);
     leaderMotor.setControl(velocityRequest.withVelocity(rps));
   }
