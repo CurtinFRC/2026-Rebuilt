@@ -29,7 +29,6 @@ import org.curtinfrc.frc2026.util.Repulsor.DriverStation.NtRepulsorDriverStation
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
-import org.littletonrobotics.junction.Logger;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public final class FieldPlannerForceModel {
@@ -103,8 +102,6 @@ public final class FieldPlannerForceModel {
         }
       }
     }
-
-    
   }
 
   public ArrayList<Pose2d> getArrows() {

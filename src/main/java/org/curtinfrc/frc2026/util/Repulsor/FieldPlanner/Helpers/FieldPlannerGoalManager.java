@@ -34,6 +34,9 @@ public final class FieldPlannerGoalManager {
   private static final double STAGED_SAME_GOAL_POS_M = 0.05;
   private static final double STAGED_SAME_GOAL_ROT_DEG = 5.0;
 
+  private static final int STAGED_ENTRY_MIN_TICKS_BEFORE_PASS = 3;   
+private static final double STAGED_ENTRY_PASS_MUST_BE_WITHIN_M = 0.85; 
+
   private static final double STAGED_REACH_EXIT_M = 0.55;
   private static final double STAGED_ENTRY_REACH_ENTER_M = 0.50;
   private static final double STAGED_ENTRY_PASSED_PROJ_M = 0.06;
@@ -231,7 +234,12 @@ public final class FieldPlannerGoalManager {
       else if (d >= STAGED_REACH_EXIT_M) stagedReachTicks = 0;
 
       boolean reached = stagedReachTicks >= reachTicksRequired;
-      if (!reached && !stagedExitPhase && passedLiveTargetTowardGoal) reached = true;
+
+if (!reached && !stagedExitPhase && passedLiveTargetTowardGoal) {
+  boolean committed =
+      (d <= STAGED_ENTRY_PASS_MUST_BE_WITHIN_M) || (stagedModeTicks >= STAGED_ENTRY_MIN_TICKS_BEFORE_PASS);
+  if (committed) reached = true;
+}
 
       if (stagedGate != null) {
         boolean gateOccludingNow =
@@ -294,25 +302,30 @@ public final class FieldPlannerGoalManager {
         }
       }
 
-      if (reached
-          && !stagedExitPhase
-          && stagedExitPoint != null
-          && (stagedAttractor == null
-              || stagedAttractor.getDistance(stagedExitPoint) > STAGED_REACH_EXIT_M)) {
-        stagedExitPhase = true;
-        stagedAttractor = stagedExitPoint;
-        lastStagedPoint = stagedExitPoint;
-        stagedGate = null;
-        stagedUsingBypass = false;
-        stagedGatePassed = true;
-        stagedLatchedPull = null;
-        stagedReachTicks = 0;
-        stagedModeTicks = 0;
-        stagedGateClearTicks = 0;
-        goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
-        return false;
-      }
 
+      if (reached
+    && !stagedExitPhase
+    && stagedExitPoint != null
+    && (stagedAttractor == null
+        || stagedAttractor.getDistance(stagedExitPoint) > STAGED_REACH_EXIT_M)) {
+
+  boolean canSwitchToExit = (stagedGate == null) || stagedGatePassed;
+
+  if (canSwitchToExit) {
+    stagedExitPhase = true;
+    stagedAttractor = stagedExitPoint;
+    lastStagedPoint = stagedExitPoint;
+    stagedGate = null;
+    stagedUsingBypass = false;
+    stagedGatePassed = true;
+    stagedLatchedPull = null;
+    stagedReachTicks = 0;
+    stagedModeTicks = 0;
+    stagedGateClearTicks = 0;
+    goal = new Pose2d(stagedAttractor, requestedGoal.getRotation());
+    return false;
+  }
+}
       if (reached && gateCleared) {
         if (stagedCenterReturn && !stagedExitPhase && stagedExitPoint != null) {
           stagedExitPhase = true;

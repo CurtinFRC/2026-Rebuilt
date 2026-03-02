@@ -546,7 +546,7 @@ sudo systemctl is-active --quiet ${serviceName}
 generateVisionServiceUnit.mustRunAfter(syncVisionConfigFromCoprocessor)
 
 project.tasks.named("build") {
-    dependsOn("compileVisionNuitka")
+    // dependsOn("compileVisionNuitka")
 }
 
 spotless {
@@ -554,11 +554,8 @@ spotless {
         target fileTree(".") {
             include "**/*.java"
             targetExclude 'bin/**', 'build/**', '**/generated/**', '**/generated-sources/**'
-
         }
-
         replaceRegex("removeBOM", "^\\uFEFF", "")
-
         toggleOffOn()
         googleJavaFormat('1.24.0')
         trimTrailingWhitespace()
@@ -568,11 +565,9 @@ spotless {
     groovyGradle {
         target fileTree(".") {
             include "**/*.gradle"
-            exclude "**/build/**", "**/build-*/**"
+            exclude "**/build/**", "**/build-*/**", "bin/**"
         }
-
         replaceRegex("removeBOM", "^\\uFEFF", "")
-
         greclipse()
         indentWithSpaces(4)
         trimTrailingWhitespace()
@@ -582,11 +577,9 @@ spotless {
     json {
         target fileTree(".") {
             include "**/*.json"
-            exclude "**/build/**", "**/build-*/**"
+            exclude "**/build/**", "**/build-*/**", "bin/**"
         }
-
         replaceRegex("removeBOM", "^\\uFEFF", "")
-
         gson().indentWithSpaces(2)
         endWithNewline()
     }
@@ -594,11 +587,9 @@ spotless {
     format "misc", {
         target fileTree(".") {
             include "**/*.md", "**/.gitignore"
-            exclude "**/build/**", "**/build-*/**"
+            exclude "**/build/**", "**/build-*/**", "bin/**"
         }
-
         replaceRegex("removeBOM", "^\\uFEFF", "")
-
         trimTrailingWhitespace()
         indentWithSpaces(2)
         endWithNewline()

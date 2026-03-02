@@ -23,6 +23,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,7 +60,6 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
-import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenceBehaviour;
@@ -435,6 +435,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
+<<<<<<< HEAD
     inOwnHalf
         .and(edging)
         .and(GameState.activeShift)
@@ -449,6 +450,46 @@ public class Robot extends LoggedRobot {
                         ChoreoAllianceFlipUtil.flip(
                             FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
+=======
+    drive.setDefaultCommand(
+          drive.joystickDrive(
+                    () -> -controller.getLeftY(),
+                   () -> -controller.getLeftX(),
+              () -> -controller.getRightX())
+    );
+    // RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
+    // if (dsBase instanceof NtRepulsorDriverStation ds) {
+    //   // new Trigger(() -> ds.getConfigBool("force_controller_override"))
+    //   //     .whileTrue(
+    //   //   Commands.parallel(
+    //   //             drive.joystickDrive(
+    //   //                 () -> -controller.getLeftY(),
+    //   //                 () -> -controller.getLeftX(),
+    //   //                 () -> -controller.getRightX())
+    //   //       // intake.RawControlConsume(1.0),
+    //   //       // mag.store(0.7),
+    //   //       // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
+    //   //       ));
+    //   Trigger automaticLocation =
+    //       new Trigger(
+    //           () -> {
+    //             Pose2d currentPosition = drive.getPose();
+    //             if (DriverStation.getAlliance().get().equals(Alliance.Red)) {
+    //               if (currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX()) {
+    //                 drive.locationHeadingjoyStickDrive(
+    //                     () -> -controller.getLeftY(),
+    //                     () -> -controller.getLeftX(),
+    //                     () -> -controller.getRightX(),
+    //                     () -> true,
+    //                     () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
+    //               } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
+    //                 drive.locationHeadingjoyStickDrive(
+    //                     () -> -controller.getLeftY(),
+    //                     () -> -controller.getLeftX(),
+    //                     () -> -controller.getRightX(),
+    //                     () -> true,
+    //                     () -> FieldConstants.ShuttlePoint.ShuttlePointRight);
+>>>>>>> 254c4d8 (a)
 
     inOwnHalf
         .and(GameState.activeShift)

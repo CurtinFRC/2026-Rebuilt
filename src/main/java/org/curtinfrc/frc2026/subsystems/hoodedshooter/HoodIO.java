@@ -1,5 +1,6 @@
 package org.curtinfrc.frc2026.subsystems.hoodedshooter;
 
+import edu.wpi.first.units.measure.Voltage;
 import org.littletonrobotics.junction.AutoLog;
 
 public interface HoodIO {

@@ -32,7 +32,7 @@ public class DriveTuningHeat extends DriveTuning {
   private double minStep = 0.02;
   private double nearStart = 0.40;
   private double nearEnd = 0.02;
-  private final double MAX_SPEED = 5.14;
+  private final double MAX_SPEED = 1; //5.14;
 
   private final Heatmap heatmap;
   private final Supplier<Pose2d> robotPoseSupplier;

@@ -10,9 +10,11 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.Alert;
+import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Alert.AlertType;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
@@ -230,11 +232,13 @@ public class HoodedShooter extends SubsystemBase {
     return run(() -> shooterIO.setVoltage(0));
   }
 
-  public Command setShooterVelocity(double velocity) {
-    return run(() -> shooterIO.setVelocity(velocity));
+  public Command setShooterVelocity(double velocityMetresPerSecond) {
+    return run(
+        () -> shooterIO.setVelocity(velocityMetresPerSecond, hoodedShooterReady.getAsBoolean()));
   }
 
-  public Command setHoodedShooterPositionAndVelocity(double position, double velocity) {
+  public Command setHoodedShooterPositionAndVelocity(
+      double position, double velocityMetresPerSecond) {
     return run(
         () -> {
           hoodIO.setPosition(position);
