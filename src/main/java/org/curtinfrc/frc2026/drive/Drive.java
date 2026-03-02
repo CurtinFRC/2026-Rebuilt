@@ -413,62 +413,71 @@ public class Drive extends SubsystemBase {
       DoubleSupplier rotationSupplier,
       BooleanSupplier aligningSupplier,
       Supplier<Translation2d> locationTransform) {
-    return run(
-        () -> {
+    return runOnce(() -> hubHeadingController.reset(getRotation().getRadians()))
+        .andThen(
+            run(
+                () -> {
 
-          // Get current position using the getPose method.
-          Pose2d currentPosition = getPose();
+                  // Get current position using the getPose method.
+                  Pose2d currentPosition = getPose();
 
-          // targetAngle = Math.toDegrees(targetAngle);
+                  // targetAngle = Math.toDegrees(targetAngle);
 
-          // Getting robot current angle in radians
-          double robotAngle = currentPosition.getRotation().getRadians();
+                  // Getting robot current angle in radians
+                  double robotAngle = currentPosition.getRotation().getRadians();
 
-          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-          }
-          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+                  double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+                  Logger.recordOutput("Aiming Target", locationTransform.get());
+                  if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+                    angleToHub =
+                        new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+                  }
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
-          Logger.recordOutput("TargetAngle", angleToHub);
-          Logger.recordOutput("RobotAngle", robotAngle);
+                  Logger.recordOutput("TargetAngle", angleToHub);
+                  Logger.recordOutput("RobotAngle", robotAngle);
 
-          // Apply rotation deadband
-          double omega = rotationSupplier.getAsDouble();
+                  // Apply rotation deadband
+                  double omega = rotationSupplier.getAsDouble();
 
-          // Square rotation value for more precise control
-          omega = Math.copySign(omega * omega, omega);
+                  // Square rotation value for more precise control
+                  omega = Math.copySign(omega * omega, omega);
 
-          // Get linear velocity
-          Translation2d linearVelocity =
-              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+                  // Get linear velocity
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
-          // Convert to field relative speeds & send command
-          boolean isFlipped =
-              DriverStation.getAlliance().isPresent()
-                  && DriverStation.getAlliance().get() == Alliance.Red;
-          if (aligningSupplier.getAsBoolean()) {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    -angleSpeed);
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          } else {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    omega * getMaxAngularSpeedRadPerSec());
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          }
-        });
+                  // Convert to field relative speeds & send command
+                  boolean isFlipped =
+                      DriverStation.getAlliance().isPresent()
+                          && DriverStation.getAlliance().get() == Alliance.Red;
+                  if (aligningSupplier.getAsBoolean()) {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            -angleSpeed);
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  } else {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            omega * getMaxAngularSpeedRadPerSec());
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  }
+                }));
   }
 
   public Command prepareAutonomous(double x, double y) {
@@ -501,7 +510,6 @@ public class Drive extends SubsystemBase {
               double robotAngle = currentPosition.getRotation().getRadians();
               Logger.recordOutput("Robot Angle", robotAngle);
               hubHeadingController.reset(robotAngle);
-              ;
               if (robotAngle >= -Math.PI / 2 && robotAngle <= Math.PI / 2) {
                 Goal = Rotation2d.kZero;
               } else {
