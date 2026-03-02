@@ -287,7 +287,7 @@ public class Drive extends SubsystemBase {
     // Square magnitude for more precise control
     linearMagnitude = linearMagnitude * linearMagnitude;
 
-    // Return new linear velocity
+    // Return new linear velocit
     return new Pose2d(Translation2d.kZero, linearDirection)
         .transformBy(new Transform2d(linearMagnitude, 0.0, Rotation2d.kZero))
         .getTranslation();
@@ -334,7 +334,6 @@ public class Drive extends SubsystemBase {
             .getTranslation()
             .minus(currentPosition.getTranslation())
             .getAngle()
-            .rotateBy(Rotation2d.k180deg)
             .getRadians();
 
     return targetAngle;
@@ -404,9 +403,9 @@ public class Drive extends SubsystemBase {
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           // to go to
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-          }
+          // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+          //   angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+          // }
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput("TargetAngle", angleToHub);
@@ -431,7 +430,7 @@ public class Drive extends SubsystemBase {
                 new ChassisSpeeds(
                     linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                     linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    angleSpeed);
+                    -angleSpeed);
             runVelocity(
                 ChassisSpeeds.fromFieldRelativeSpeeds(
                     speeds,
