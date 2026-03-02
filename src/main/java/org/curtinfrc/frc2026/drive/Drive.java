@@ -40,9 +40,9 @@ import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
 public class Drive extends SubsystemBase {
-  private final PIDController xController = new PIDController(2, 0.0, 0.0);
-  private final PIDController yController = new PIDController(2, 0.0, 0.0);
-  private final PIDController headingController = new PIDController(3.5, 0.0, 0.0);
+  private final PIDController xController = new PIDController(10, 0.0, 0.0);
+  private final PIDController yController = new PIDController(10, 0.0, 0.0);
+  private final PIDController headingController = new PIDController(7.5, 0.0, 0.0);
 
   // TunerConstants doesn't include these constants, so they are declared locally
   static final double ODOMETRY_FREQUENCY = TunerConstants.kCANBus.isNetworkFD() ? 250.0 : 100.0;
@@ -128,9 +128,10 @@ public class Drive extends SubsystemBase {
         new ChassisSpeeds(
             -sample.vx - xController.calculate(pose.getX(), sample.x),
             -sample.vy - yController.calculate(pose.getY(), sample.y),
-            sample.omega
-                + headingController.calculate(pose.getRotation().getRadians(), sample.heading));
+            -sample.omega
+                - headingController.calculate(pose.getRotation().getRadians(), sample.heading));
 
+    Logger.recordOutput("Odometry/target", sample.getPose());
     runVelocity(speeds);
   }
 

@@ -3,7 +3,6 @@ package org.curtinfrc.frc2026;
 import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
 import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
-import choreo.auto.AutoChooser;
 import choreo.auto.AutoFactory;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
@@ -51,6 +50,7 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -255,7 +255,6 @@ public class Robot extends LoggedRobot {
     autoChooser.addCmd("Left trench", autos::leftTrench);
 
     autoChooser.addRoutine("Left trench, half routine", autos::leftHalfAutoRoutine);
-    autoChooser.select("Forward");
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -335,7 +334,9 @@ public class Robot extends LoggedRobot {
 
   /** This function is called periodically when disabled. */
   @Override
-  public void disabledPeriodic() {}
+  public void disabledPeriodic() {
+    autoChooser.periodic();
+  }
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
