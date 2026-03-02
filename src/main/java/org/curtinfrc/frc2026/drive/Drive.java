@@ -2,10 +2,12 @@ package org.curtinfrc.frc2026.drive;
 
 import static edu.wpi.first.units.Units.*;
 
+import choreo.trajectory.SwerveSample;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -38,6 +40,10 @@ import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
 public class Drive extends SubsystemBase {
+  private final PIDController xController = new PIDController(10, 0.0, 0.0);
+  private final PIDController yController = new PIDController(10, 0.0, 0.0);
+  private final PIDController headingController = new PIDController(7.5, 0.0, 0.0);
+
   // TunerConstants doesn't include these constants, so they are declared locally
   static final double ODOMETRY_FREQUENCY = TunerConstants.kCANBus.isNetworkFD() ? 250.0 : 100.0;
   public static final double DRIVE_BASE_RADIUS =
@@ -110,6 +116,23 @@ public class Drive extends SubsystemBase {
 
     // Start odometry thread
     PhoenixOdometryThread.getInstance().start();
+
+    headingController.enableContinuousInput(-Math.PI, Math.PI);
+  }
+
+  public void followTrajectory(SwerveSample sample) {
+
+    Pose2d pose = getPose();
+
+    ChassisSpeeds speeds =
+        new ChassisSpeeds(
+            -sample.vx - xController.calculate(pose.getX(), sample.x),
+            -sample.vy - yController.calculate(pose.getY(), sample.y),
+            -sample.omega
+                - headingController.calculate(pose.getRotation().getRadians(), sample.heading));
+
+    Logger.recordOutput("Odometry/target", sample.getPose());
+    runVelocity(speeds);
   }
 
   @Override
@@ -287,7 +310,7 @@ public class Drive extends SubsystemBase {
     // Square magnitude for more precise control
     linearMagnitude = linearMagnitude * linearMagnitude;
 
-    // Return new linear velocity
+    // Return new linear velocit
     return new Pose2d(Translation2d.kZero, linearDirection)
         .transformBy(new Transform2d(linearMagnitude, 0.0, Rotation2d.kZero))
         .getTranslation();
@@ -334,7 +357,6 @@ public class Drive extends SubsystemBase {
             .getTranslation()
             .minus(currentPosition.getTranslation())
             .getAngle()
-            .rotateBy(Rotation2d.k180deg)
             .getRadians();
 
     return targetAngle;
@@ -405,8 +427,6 @@ public class Drive extends SubsystemBase {
           if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
             angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
-          // Getting optimal angle speed by providing the current robot angle and the angle we want
-          // to go to
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput("TargetAngle", angleToHub);
@@ -431,7 +451,7 @@ public class Drive extends SubsystemBase {
                 new ChassisSpeeds(
                     linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                     linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    angleSpeed);
+                    -angleSpeed);
             runVelocity(
                 ChassisSpeeds.fromFieldRelativeSpeeds(
                     speeds,
@@ -448,6 +468,27 @@ public class Drive extends SubsystemBase {
                     isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
           }
         });
+  }
+
+  public Command prepareAutonomous(double x, double y) {
+    return run(() -> {
+          double omega = 0.0;
+          System.out.println("Left Trench Autonomous Alignment Started");
+
+          ChassisSpeeds leftAutoSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), x) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), y) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftAutoSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - x) < 0.1 && Math.abs(yPose - y) < 0.1;
+            });
   }
 
   public double Goal = 0;

@@ -42,9 +42,10 @@ public class HoodIOComp implements HoodIO {
 
   public static final double ENCODER_TO_MECHANISM_RATIO = 8.33;
   public static final double MOTOR_TO_SENSOR_RATIO = 3;
-  public static final double FORWARD_LIMIT_ROTATIONS = 0.057;
-  public static final double REVERSE_LIMIT_ROTATIONS = -0.138;
+  public static final double FORWARD_LIMIT_ROTATIONS = 0.194;
+  public static final double REVERSE_LIMIT_ROTATIONS = 0.0;
   public static final double ENCODER_MAGNET_OFFSET = 0.538;
+  public static final double HOOD_STARTING_POSITION = 0.13888;
 
   public static final double GRAVITY_POSITION_OFFSET = 0.0888;
   public static final double KP = 181.35;
@@ -76,8 +77,9 @@ public class HoodIOComp implements HoodIO {
               new FeedbackConfigs()
                   .withFeedbackRemoteSensorID(ENCODER_ID) // Ties encoder with motor
                   .withFeedbackSensorSource(
-                      FeedbackSensorSourceValue.RotorSensor) // Ties encoder with motor
-                  .withSensorToMechanismRatio(ENCODER_TO_MECHANISM_RATIO * MOTOR_TO_SENSOR_RATIO))
+                      FeedbackSensorSourceValue.FusedCANcoder) // Ties encoder with motor
+                  .withSensorToMechanismRatio(ENCODER_TO_MECHANISM_RATIO)
+                  .withRotorToSensorRatio(MOTOR_TO_SENSOR_RATIO))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
           .withSoftwareLimitSwitch(
@@ -139,9 +141,7 @@ public class HoodIOComp implements HoodIO {
     encoder.optimizeBusUtilization();
     PhoenixUtil.registerSignals(false, velocity, voltage, current, position, encoderPosition);
 
-    leaderMotor.setPosition(
-        encoder.getPosition().getValueAsDouble() / ENCODER_TO_MECHANISM_RATIO - 0.138);
-    // 0.0517, 0.3608, -0.3091
+    encoder.setPosition(0);
   }
 
   @Override
@@ -154,7 +154,7 @@ public class HoodIOComp implements HoodIO {
     }
     inputs.appliedVolts = voltage.getValueAsDouble();
     inputs.currentAmps = current.getValueAsDouble();
-    inputs.positionRotations = position.getValueAsDouble();
+    inputs.positionRotations = position.getValueAsDouble() + HOOD_STARTING_POSITION;
     inputs.encoderPositionRotations = encoderPosition.getValueAsDouble();
     inputs.angularVelocityRotationsPerSecond = velocity.getValueAsDouble();
   }
@@ -166,6 +166,6 @@ public class HoodIOComp implements HoodIO {
 
   @Override
   public void setPosition(double position) {
-    leaderMotor.setControl(positionRequest.withPosition(position));
+    leaderMotor.setControl(positionRequest.withPosition(position - HOOD_STARTING_POSITION));
   }
 }
