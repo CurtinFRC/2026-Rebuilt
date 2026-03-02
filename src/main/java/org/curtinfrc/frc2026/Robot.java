@@ -17,7 +17,6 @@ import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
-import edu.wpi.first.wpilibj2.command.Command.InterruptionBehavior;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
@@ -101,24 +100,34 @@ public class Robot extends LoggedRobot {
   Trigger isLeft =
       new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
 
-  // @AutoLogOutput(key = "Triggers/IsOppLeft")
-  // Trigger isOppLeft =
-  //     new Trigger(() -> drive.getPose().getY() > FieldConstants.Hub.topCenterPoint.getY());
-
   @AutoLogOutput(key = "Triggers/isInRedAllianceHalf")
-  Trigger isInRedAllianceHalf =
+  // TODO doesnt work with both sides you dumb dumb sim fix btw
+  Trigger inOwnHalf =
       new Trigger(
           () ->
               drive.getPose().getX()
                   > ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
 
-  // @AutoLogOutput(key = "Triggers/isInBlueAllianceHalf")
-  // Trigger isInBlueAllianceHalf =
-  //     new Trigger(
-  //         () -> drive.getPose().getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
+  private boolean edge = true;
 
-  @AutoLogOutput(key = "Triggers/redInRed")
-  Trigger redInRed = isRed.and(isInRedAllianceHalf);
+  @AutoLogOutput(key = "Triggers/Edging")
+  Trigger edging = new Trigger(() -> edge);
+
+  private boolean intaker = true;
+  private boolean aligner = true;
+
+  @AutoLogOutput(key = "Triggers/Intaking")
+  Trigger intaking = new Trigger(() -> intaker);
+
+  @AutoLogOutput(key = "Triggers/Aligning")
+  Trigger aligning = new Trigger(() -> aligner);
+
+  @AutoLogOutput(key = "Triggers/isInNeutral")
+  Trigger isInNeutralZone =
+      new Trigger(
+          () ->
+              drive.getPose().getX()
+                  < ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
 
   private LoggedNetworkStruct<Translation2d> shootTargetPose =
       new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
@@ -313,106 +322,97 @@ public class Robot extends LoggedRobot {
         drive.joystickDrive(
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),
-            () -> -controller.getRightX())
-        // intake.RawControlConsume(1.0),
-        // mag.store(0.7),
-        // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
-        );
-    // Boolean IntakeToggle = false;
-    // if (IntakeToggle == false) {
-    //     controller.leftBumper().whileTrue(intake.Idle());
-    //     IntakeToggle = true;
-    // } else {
-    //   controller.leftBumper().whileTrue(intake.RawControlConsume(1.0));
-    //   IntakeToggle = false;
+            () -> -controller.getRightX()));
 
-    // controller.leftBumper().toggleOnTrue(intake.RawControlConsume(1.0));
-
-    isRed
-        .and(isInRedAllianceHalf)
+    inOwnHalf
+        .and(edging)
+        .and(GameState.activeShift)
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
                     () -> -controller.getLeftY(),
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
-                    () -> true,
+                    aligning,
                     () ->
                         ChoreoAllianceFlipUtil.flip(
                             FieldConstants.Hub.topCenterPoint.toTranslation2d()))
-                .withInterruptBehavior(InterruptionBehavior.kCancelIncoming));
-    // isBlue
-    //     .and(isInBlueAllianceHalf)
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
+                .withName("Scoring"));
 
-    // isRed
-    //     .and(isLeft.negate())
-    //     .and(isInRedAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.ShuttlePointRight));
-    // isRed
-    //     .and(isLeft)
-    //     .and(isInRedAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.ShuttlePointLeft));
-    // isBlue
-    //     .and(isOppLeft)
-    //     .and(isInBlueAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft));
-    // isBlue
-    //     .and(isOppLeft.negate())
-    //     .and(isInBlueAllianceHalf.negate())
-    //     .whileTrue(
-    //         drive.locationHeadingjoyStickDrive(
-    //             () -> -controller.getLeftY(),
-    //             () -> -controller.getLeftX(),
-    //             () -> -controller.getRightX(),
-    //             () -> true,
-    //             () -> FieldConstants.ShuttlePoint.OppShuttlePointRight));
-
-    controller.b().whileTrue(drive.faceLocation(shootTargetPose));
-
-    controller
-        .leftTrigger()
+    inOwnHalf
+        .and(GameState.activeShift)
         .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(12),
-                mag.store(1.0),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+            hoodedShooter.shootAtTarget(
+                () ->
+                    ChoreoAllianceFlipUtil.flip(
+                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(1.0)).onFalse(mag.stop());
+    isInNeutralZone
+        .and(isLeft.negate())
+        .and(GameState.activeShift.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
 
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(1.0)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    isInNeutralZone
+        .and(isLeft)
+        .and(GameState.activeShift.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+
+    isLeft
+        .negate()
+        .and(isInNeutralZone)
+        .whileTrue(
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () ->
+                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+                .withName("RightShuttling"));
+
+    isLeft
+        .and(isInNeutralZone)
+        .whileTrue(
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+                .withName("LeftShuttling"));
+
+    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+
+    // TODO FIX
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(intake.RawControlConsume(0.8))
+        .onFalse(intake.RawIdle());
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(mag.store(9.6))
+        .onFalse(mag.store(0));
+    hoodedShooter
+        .hoodedShooterReady
+        .whileTrue(mag.spinIndexer(9.6))
+        .whileFalse(mag.holdIndexerCommand());
 
     controller
         .leftBumper()
-        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftX(), () -> -controller.getLeftY()));
+        .whileTrue(
+            Commands.runOnce(() -> edge = false)
+                .andThen(
+                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+                        .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */

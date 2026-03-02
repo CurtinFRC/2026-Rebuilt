@@ -56,10 +56,7 @@ public class Drive extends SubsystemBase {
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
 
-  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
   private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
-  private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
-  private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
   static final Lock odometryLock = new ReentrantLock();
   private final GyroIO gyroIO;
@@ -69,7 +66,7 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 3;
+  public static final double hubHeadingKP = 10;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0;
 
@@ -80,7 +77,8 @@ public class Drive extends SubsystemBase {
           hubHeadingKP,
           hubHeadingKI,
           hubHeadingKD,
-          new TrapezoidProfile.Constraints(MAX_ANGULAR_SPEED - 0.5, ANGLE_MAX_ACCELERATION));
+          new TrapezoidProfile.Constraints(
+              getMaxAngularSpeedRadPerSec() - 0.5, ANGLE_MAX_ACCELERATION));
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -452,12 +450,13 @@ public class Drive extends SubsystemBase {
                   boolean isFlipped =
                       DriverStation.getAlliance().isPresent()
                           && DriverStation.getAlliance().get() == Alliance.Red;
-                  if (aligningSupplier.getAsBoolean()) {
+                  boolean rotating = Math.abs(rotationSupplier.getAsDouble()) > 0.005;
+                  if (!aligningSupplier.getAsBoolean() || rotating) {
                     ChassisSpeeds speeds =
                         new ChassisSpeeds(
                             linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                             linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                            -angleSpeed);
+                            omega * getMaxAngularSpeedRadPerSec());
                     runVelocity(
                         ChassisSpeeds.fromFieldRelativeSpeeds(
                             speeds,
@@ -469,7 +468,7 @@ public class Drive extends SubsystemBase {
                         new ChassisSpeeds(
                             linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                             linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                            omega * getMaxAngularSpeedRadPerSec());
+                            -angleSpeed);
                     runVelocity(
                         ChassisSpeeds.fromFieldRelativeSpeeds(
                             speeds,
@@ -483,7 +482,6 @@ public class Drive extends SubsystemBase {
   public Command prepareAutonomous(double x, double y) {
     return run(() -> {
           double omega = 0.0;
-          System.out.println("Left Trench Autonomous Alignment Started");
 
           ChassisSpeeds leftAutoSpeeds =
               new ChassisSpeeds(
@@ -502,6 +500,10 @@ public class Drive extends SubsystemBase {
   }
 
   public Rotation2d Goal = Rotation2d.kZero;
+
+  public Command stopCmd() {
+    return runOnce(() -> stop());
+  }
 
   public Command TrenchAlign(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
     return runOnce(

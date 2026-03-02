@@ -35,10 +35,12 @@ public class GameState {
 
   public static void updateGameData() {
     String gameData = DriverStation.getGameSpecificMessage();
-    noGameDataAlert.set(true);
-    if (gameData.length() > 0) {
-      if (gameData.charAt(0) == 'B' || gameData.charAt(0) == 'R') {
-        noGameDataAlert.set(false);
+    if (noGameDataAlert.get()) {
+      noGameDataAlert.set(true);
+      if (gameData.length() > 0) {
+        if (gameData.charAt(0) == 'B' || gameData.charAt(0) == 'R') {
+          noGameDataAlert.set(false);
+        }
       }
     }
 
@@ -50,12 +52,10 @@ public class GameState {
 
   public static double getMatchTime() {
     double gameTime = DriverStation.getMatchTime();
-    if (DriverStation.isFMSAttached()) {
-      if (DriverStation.isTeleopEnabled()) {
-        gameTime = TELEOP_GAME_LENGTH - gameTime;
-      } else {
-        gameTime = AUTONOMOUS_PERIOD_LENGTH - gameTime;
-      }
+    if (DriverStation.isTeleopEnabled()) {
+      gameTime = TELEOP_GAME_LENGTH - gameTime;
+    } else {
+      gameTime = AUTONOMOUS_PERIOD_LENGTH - gameTime;
     }
     return gameTime;
   }
