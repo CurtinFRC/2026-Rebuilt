@@ -206,15 +206,15 @@ task(eventDeploy) {
     }
 }
 createVersionFile.dependsOn(eventDeploy)
-project.compileJava.dependsOn(spotlessApply)
+// project.compileJava.dependsOn(spotlessApply)
 project.tasks.named("compileJava") {
     finalizedBy("test")
     finalizedBy("syncOffloadClassesToBin")
 }
 
 project.tasks.named("deploy") {
-    dependsOn(deployOffloadToCoprocessors)
-    dependsOn(deployVisionToCoprocessor)
+    // dependsOn(deployOffloadToCoprocessors)
+    // dependsOn(deployVisionToCoprocessor)
 }
 
 task(buildOffloadTasksJar) {

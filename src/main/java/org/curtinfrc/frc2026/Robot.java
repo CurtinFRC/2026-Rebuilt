@@ -56,11 +56,8 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
-<<<<<<< HEAD
 import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
-=======
->>>>>>> 70dc982 (a)
 import org.curtinfrc.frc2026.util.GameState;
 import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
@@ -224,7 +221,7 @@ public class Robot extends LoggedRobot {
     reasoner.setTesting(true);
     repulsor.setReasoner(reasoner);
 
-    // repulsor.disableBehaviours();
+    repulsor.disableBehaviours();
     repulsor.setup();
 
     StaticInstance.initialize(repulsor);
