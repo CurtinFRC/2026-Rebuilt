@@ -318,8 +318,7 @@ public class Robot extends LoggedRobot {
     Trigger isInRedAllianceHalf =
         new Trigger(() -> currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX());
     Trigger isInBlueAllianceHalf =
-        new Trigger(
-            () -> currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
+        new Trigger(() -> currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
 
     isRed
         .and(isInRedAllianceHalf)
