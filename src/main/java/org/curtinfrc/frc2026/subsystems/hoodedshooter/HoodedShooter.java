@@ -202,12 +202,10 @@ public class HoodedShooter extends SubsystemBase {
           double robotAngle =
               robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
 
-          // shoot from other side
-          // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-          //   hoodTarget =
-          //       Math.max(180 - hoodTarget, HoodIODev.FORWARD_LIMIT_ROTATIONS * 360); // clamp
-          // value
-          // }
+          // Adjust hood angle based on robot angle compared to hood
+          if (Math.abs(robotAngle) < Rotation2d.kCCW_90deg.getRadians()) {
+            hoodTarget = Math.max(180 - hoodTarget, HoodIODev.FORWARD_LIMIT_ROTATIONS * 360);
+          }
 
           if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
             hoodIO.setPosition(hoodTarget / 360);
