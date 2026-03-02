@@ -69,9 +69,9 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 10;
+  public static final double hubHeadingKP = 3;
   public static final double hubHeadingKI = 0;
-  private static final double hubHeadingKD = 0.2;
+  private static final double hubHeadingKD = 0;
 
   // Creating a new instance of the class PIDController and plugging in PID values from variables
   // above.
@@ -428,10 +428,10 @@ public class Drive extends SubsystemBase {
 
                   double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
                   Logger.recordOutput("Aiming Target", locationTransform.get());
-                  if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-                    angleToHub =
-                        new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-                  }
+                  // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+                  //   angleToHub =
+                  //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+                  // }
                   double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
                   Logger.recordOutput("TargetAngle", angleToHub);

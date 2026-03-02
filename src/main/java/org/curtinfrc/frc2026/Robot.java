@@ -157,6 +157,8 @@ public class Robot extends LoggedRobot {
     SignalLogger.start();
     DataLogManager.start();
 
+    DriverStation.waitForDsConnection(600);
+
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
