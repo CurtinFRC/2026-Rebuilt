@@ -19,8 +19,6 @@ def load_asset(path):
     return os.path.join(assets, path)
 
 
-jsonfile = load_asset("cords.json")
-
 def place(event):
     global bintoggles, shoottoggles, amount, didit, AREANAx, AREANAy
     print(f"Current: {str(event.x)}, {str(event.y)}")
@@ -112,6 +110,7 @@ def update_gradient():
 
 update_gradient()
 
+canvas.create_text(400, 25, text="By Heath Legge", fill="white", font=("Arial", 15))
 canvas.create_image(75, 25, image=image_target, tag="shoottoggle")
 canvas.create_image(120, 25, image=image_bin, tag="bintoggle")
 canvas.create_image(28, 22, image=image_2)
