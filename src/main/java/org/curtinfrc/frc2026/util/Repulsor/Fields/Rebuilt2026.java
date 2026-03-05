@@ -439,8 +439,8 @@ public final class Rebuilt2026 implements FieldDefinition {
   @Override
   public List<Obstacle> walls() {
     return List.of(
-        new HorizontalObstacle(0.0, 2, true),
-        new HorizontalObstacle(Constants.FIELD_WIDTH, 2, false),
+        new HorizontalObstacle(0.0, 1, true),
+        new HorizontalObstacle(Constants.FIELD_WIDTH, 1, false),
         new VerticalObstacle(0.0, 3, true),
         new VerticalObstacle(Constants.FIELD_LENGTH, 3, false));
   }

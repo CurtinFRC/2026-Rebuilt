@@ -452,11 +452,10 @@ public class Robot extends LoggedRobot {
                 .withName("Scoring"));
 =======
     drive.setDefaultCommand(
-          drive.joystickDrive(
-                    () -> -controller.getLeftY(),
-                   () -> -controller.getLeftX(),
-              () -> -controller.getRightX())
-    );
+        drive.joystickDrive(
+            () -> -controller.getLeftY(),
+            () -> -controller.getLeftX(),
+            () -> -controller.getRightX()));
     // RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
     // if (dsBase instanceof NtRepulsorDriverStation ds) {
     //   // new Trigger(() -> ds.getConfigBool("force_controller_override"))
