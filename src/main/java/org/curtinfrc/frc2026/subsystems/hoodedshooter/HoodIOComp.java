@@ -46,7 +46,7 @@ public class HoodIOComp implements HoodIO {
   public static final double FORWARD_LIMIT_ROTATIONS = 0.194;
   public static final double REVERSE_LIMIT_ROTATIONS = 0.0;
   public static final double ENCODER_MAGNET_OFFSET = 0.538;
-  public static final double HOOD_STARTING_POSITION = 0.13888;
+  public static final double HOOD_STARTING_POSITION = 0.161621;
 
   public static final double GRAVITY_POSITION_OFFSET = 0.0888;
   public static final double KP = 181.35;
