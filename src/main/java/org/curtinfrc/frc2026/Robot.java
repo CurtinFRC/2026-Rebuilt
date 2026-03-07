@@ -100,7 +100,7 @@ public class Robot extends LoggedRobot {
   Trigger isLeft =
       new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
 
-  @AutoLogOutput(key = "Triggers/isInRedAllianceHalf")
+  @AutoLogOutput(key = "Triggers/inOwnHalf")
   // TODO doesnt work with both sides you dumb dumb sim fix btw
   Trigger inOwnHalf =
       new Trigger(
@@ -325,7 +325,7 @@ public class Robot extends LoggedRobot {
             () -> -controller.getRightX()));
 
     inOwnHalf
-        .and(edging)
+        .and(RobotModeTriggers.teleop())
         .and(GameState.activeShift)
         .whileTrue(
             drive
@@ -339,13 +339,13 @@ public class Robot extends LoggedRobot {
                             FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
-    inOwnHalf
-        .and(GameState.activeShift)
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () ->
-                    ChoreoAllianceFlipUtil.flip(
-                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+    // inOwnHalf
+    //     .and(GameState.activeShift)
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    //                 ChoreoAllianceFlipUtil.flip(
+    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
     isInNeutralZone
         .and(isLeft.negate())

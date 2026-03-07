@@ -356,6 +356,7 @@ public class Drive extends SubsystemBase {
             .getTranslation()
             .minus(currentPosition.getTranslation())
             .getAngle()
+            .rotateBy(Rotation2d.k180deg)
             .getRadians();
 
     return targetAngle;
@@ -468,7 +469,7 @@ public class Drive extends SubsystemBase {
                         new ChassisSpeeds(
                             linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                             linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                            -angleSpeed);
+                            angleSpeed);
                     runVelocity(
                         ChassisSpeeds.fromFieldRelativeSpeeds(
                             speeds,
