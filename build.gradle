@@ -271,7 +271,7 @@ task(generateOffloadServiceUnit) {
                 ?: "users").toString().trim()
 
         def serverJarName = "offload-server.jar"
-        def defaultExec = "/home/photon/.nix-profile/bin/java -jar ${deployDir}/${serverJarName}"
+        def defaultExec = "/home/photon/.nix-profile/bin/java -Djava.net.preferIPv4Stack=true -jar ${deployDir}/${serverJarName}"
         def execStart = (project.findProperty("offloadServiceExec")
                 ?: System.getenv("OFFLOAD_SERVICE_EXEC")
                 ?: defaultExec).toString()
@@ -314,6 +314,24 @@ task(localOffloadSmokeTest, type: Test) {
         includeTestsMatching "org.curtinfrc.frc2026.util.Repulsor.Offload.LocalOffloadSmokeTest"
     }
 }
+
+task(realOffloadDragShotTest, type: Test) {
+    group = "offload"
+    description = "Run DragShot offload integration test against a real remote offload server."
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty "repulsor.offload.real.enabled", "true"
+    systemProperty(
+            "repulsor.offload.real.host",
+            (System.getProperty("repulsor.offload.real.host")
+                    ?: project.findProperty("repulsorOffloadRealHost")
+                    ?: System.getenv("REPULSOR_OFFLOAD_REAL_HOST")
+                    ?: "10.47.88.11:5808").toString().trim())
+    filter {
+        includeTestsMatching "org.curtinfrc.frc2026.util.Repulsor.Offload.RealOffloadServerDragShotTest"
+    }
+}
 tasks.named("test", Test) {
     configureOffloadSmokeInputs(it)
 }
@@ -322,10 +340,13 @@ tasks.named("localOffloadSmokeTest", Test) {
 }
 
 def requestedTasks = gradle.startParameter.taskNames
-def localOffloadOnlyRequested =
+def dedicatedOffloadTestTasks = ["localOffloadSmokeTest", "realOffloadDragShotTest"]
+def dedicatedOffloadOnlyRequested =
         !requestedTasks.isEmpty() &&
-        requestedTasks.every { it == "localOffloadSmokeTest" || it.endsWith(":localOffloadSmokeTest") }
-if (localOffloadOnlyRequested) {
+        requestedTasks.every { requested ->
+            dedicatedOffloadTestTasks.any { requested == it || requested.endsWith(":${it}") }
+        }
+if (dedicatedOffloadOnlyRequested) {
     tasks.named("test") {
         enabled = false
     }
@@ -363,55 +384,68 @@ task(deployOffloadToCoprocessors) {
         def manifestFile = layout.buildDirectory.file("offload/offload-manifest.json").get().asFile
         def unitFile = new File(layout.buildDirectory.dir("offload/service").get().asFile, "${serviceName}.service")
 
-        hosts.each { host ->
-            def target = "${user}@${host}"
-            def remoteUnitPath = "${deployDir}/${serviceName}.service"
+hosts.each { host ->
+    def target = "${user}@${host}"
+    def remoteUnitPath = "${deployDir}/${serviceName}.service"
 
-            println "Deploying offload bundle to ${target}:${deployDir}"
+    def remoteTmpDir = "/tmp/repulsor-offload-deploy"
+    def remoteServerJarTmp = "${remoteTmpDir}/offload-server.jar"
+    def remoteTaskJarTmp = "${remoteTmpDir}/offload-tasks.jar"
+    def remoteManifestTmp = "${remoteTmpDir}/offload-manifest.json"
+    def remoteUnitTmp = "${remoteTmpDir}/${serviceName}.service"
 
-            exec {
-                commandLine "ssh",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        target,
-                        "mkdir -p '${deployDir}' '${pluginDir}'"
-            }
+    println "Deploying offload bundle to ${target}:${deployDir}"
 
-            exec {
-                commandLine "scp",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        serverJar.absolutePath,
-                        "${target}:${deployDir}/offload-server.jar"
-            }
+    exec {
+        commandLine "ssh",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                target,
+                "mkdir -p '${remoteTmpDir}'"
+    }
 
-            exec {
-                commandLine "scp",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        taskJar.absolutePath,
-                        "${target}:${pluginDir}/offload-tasks.jar"
-            }
+    exec {
+        commandLine "scp",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                serverJar.absolutePath,
+                "${target}:${remoteServerJarTmp}"
+    }
 
-            exec {
-                commandLine "scp",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        manifestFile.absolutePath,
-                        "${target}:${pluginDir}/offload-manifest.json"
-            }
+    exec {
+        commandLine "scp",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                taskJar.absolutePath,
+                "${target}:${remoteTaskJarTmp}"
+    }
 
-            exec {
-                commandLine "scp",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        unitFile.absolutePath,
-                        "${target}:${remoteUnitPath}"
-            }
+    exec {
+        commandLine "scp",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                manifestFile.absolutePath,
+                "${target}:${remoteManifestTmp}"
+    }
 
-            def remoteCmd = """set -e
+    exec {
+        commandLine "scp",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                unitFile.absolutePath,
+                "${target}:${remoteUnitTmp}"
+    }
+
+    def remoteCmd = """set -e
 sudo -n mkdir -p '${deployDir}' '${pluginDir}'
+
+sudo -n mv '${remoteServerJarTmp}' '${deployDir}/offload-server.jar'
+sudo -n mv '${remoteTaskJarTmp}' '${pluginDir}/offload-tasks.jar'
+sudo -n mv '${remoteManifestTmp}' '${pluginDir}/offload-manifest.json'
+sudo -n mv '${remoteUnitTmp}' '${remoteUnitPath}'
+
 sudo -n chown '${user}:users' '${deployDir}/offload-server.jar' '${pluginDir}/offload-tasks.jar' '${pluginDir}/offload-manifest.json' '${remoteUnitPath}' || true
+
 sudo -n systemctl link --runtime '${remoteUnitPath}'
 sudo -n systemctl daemon-reload
 sudo -n systemctl stop '${serviceName}.service' || true
@@ -419,22 +453,22 @@ sudo -n systemctl start '${serviceName}.service'
 sudo -n systemctl is-active --quiet '${serviceName}.service'
 """
 
-            def result = exec {
-                ignoreExitValue = true
-                commandLine "ssh",
-                        "-o", "BatchMode=yes",
-                        "-o", "StrictHostKeyChecking=accept-new",
-                        target,
-                        remoteCmd
-            }
+    def result = exec {
+        ignoreExitValue = true
+        commandLine "ssh",
+                "-o", "BatchMode=yes",
+                "-o", "StrictHostKeyChecking=accept-new",
+                target,
+                remoteCmd
+    }
 
-            if (result.exitValue != 0) {
-                throw new GradleException(
-                        "Copied offload artifacts to ${host}, but service start failed. " +
-                        "Check logs with: ssh ${target} \"sudo -n systemctl status ${serviceName}.service --no-pager && sudo -n journalctl -u ${serviceName}.service -n 100 --no-pager\""
-                )
-            }
-        }
+    if (result.exitValue != 0) {
+        throw new GradleException(
+                "Copied offload artifacts to ${host}, but service start failed. " +
+                "Check logs with: ssh ${target} \"sudo -n systemctl status ${serviceName}.service --no-pager && sudo -n journalctl -u ${serviceName}.service -n 100 --no-pager\""
+        )
+    }
+}
     }
 }
 

@@ -3,6 +3,9 @@ package org.curtinfrc.frc2026.util.Repulsor.Offload.Server;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -74,7 +77,7 @@ public final class OffloadServer implements AutoCloseable {
       return;
     }
     running = true;
-    serverSocket = new ServerSocket(config.port());
+    serverSocket = new ServerSocket(config.port(), 50, Inet4Address.getByName("0.0.0.0"));
 
     connectionPool.submit(
         () -> {
