@@ -1708,18 +1708,7 @@ public class RectangleObstacle extends Obstacle {
   }
 
   private static double nowSecondsSafe() {
-    if (isOffloadWorkerThread()) {
-      return System.nanoTime() * 1.0e-9;
-    }
-    try {
-      return edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
-    } catch (Throwable t) {
-      return System.nanoTime() * 1.0e-9;
-    }
-  }
-
-  private static boolean isOffloadWorkerThread() {
-    return Thread.currentThread().getName().startsWith("offload-server-worker");
+    return System.nanoTime() * 1.0e-9;
   }
 
   @Override

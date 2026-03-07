@@ -113,6 +113,7 @@ public final class OffloadServer implements AutoCloseable {
     if (OffloadProtocol.TASK_PING.equals(taskId)) {
       sendResponse(
           remoteAddress, request.correlationId(), OffloadProtocol.STATUS_OK, new byte[0]);
+      System.out.println("Executed task " + taskId + " with request: " + request + " and response: OK");
       return;
     }
 
@@ -129,6 +130,7 @@ public final class OffloadServer implements AutoCloseable {
           request.correlationId(),
           OffloadProtocol.STATUS_OK,
           CborSerde.write(hello));
+      System.out.println("Executed HELLO task with request: " + request + " and response: " + hello);
       return;
     }
 
@@ -257,6 +259,7 @@ public final class OffloadServer implements AutoCloseable {
       thread.setContextClassLoader(pluginClassLoader);
       RequestT request = CborSerde.read(payloadBytes, function.requestType());
       ResponseT response = function.execute(request);
+      System.out.println("Executed task " + function.taskId() + " with request: " + request + " and response: " + response);
       return CborSerde.write(response);
     } catch (Exception ex) {
       throw new IllegalStateException(
