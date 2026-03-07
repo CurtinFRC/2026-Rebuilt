@@ -3,23 +3,12 @@ import argparse
 import csv
 import json
 import math
-import webbrowser
 from pathlib import Path
 from statistics import mean
-
-try:
-    import plotly.graph_objects as go
-    import plotly.io as pio
-except Exception as exc:
-    raise SystemExit(
-        "plotly is required for the interactive dashboard. Install with: "
-        "pip install -r requirements.txt"
-    ) from exc
 
 
 DEFAULT_INPUT = "build/offload/real-offload-latency.json"
 DEFAULT_OUTPUT_DIR = "build/offload/real-offload-report"
-DEFAULT_HTML_NAME = "interactive_report.html"
 
 
 def resolve_path(project_root: Path, raw: str) -> Path:
@@ -85,17 +74,18 @@ def collect_rows(tasks: dict):
     rows = []
     for task_id, task in tasks.items():
         for sample in task.get("samples", []):
-            row = {
-                "task": task_id,
-                "sample": int(sample.get("sampleIndex", 0)),
-                "rtt": to_float(sample.get("rttMs")),
-                "server": to_float(sample.get("serverMs")),
-                "exec": to_float(sample.get("execMs")),
-                "queue": to_float(sample.get("queueMs")),
-                "overhead": to_float(sample.get("overheadMs")),
-            }
-            rows.append(row)
-    rows.sort(key=lambda r: (r["task"], r["sample"]))
+            rows.append(
+                {
+                    "task": task_id,
+                    "sample": int(sample.get("sampleIndex", 0)),
+                    "rtt": to_float(sample.get("rttMs")),
+                    "server": to_float(sample.get("serverMs")),
+                    "exec": to_float(sample.get("execMs")),
+                    "queue": to_float(sample.get("queueMs")),
+                    "overhead": to_float(sample.get("overheadMs")),
+                }
+            )
+    rows.sort(key=lambda row: (row["task"], row["sample"]))
     return rows
 
 
@@ -111,24 +101,23 @@ def compute_overall(tasks: dict):
 
 def compute_component_averages(tasks: dict):
     rows = collect_rows(tasks)
-    queue_vals = [r["queue"] for r in rows if r["queue"] is not None]
-    exec_vals = [r["exec"] for r in rows if r["exec"] is not None]
-    server_vals = [r["server"] for r in rows if r["server"] is not None]
-    client_net_vals = [r["overhead"] for r in rows if r["overhead"] is not None]
+    queue_values = [row["queue"] for row in rows if row["queue"] is not None]
+    exec_values = [row["exec"] for row in rows if row["exec"] is not None]
+    server_values = [row["server"] for row in rows if row["server"] is not None]
+    client_network_values = [row["overhead"] for row in rows if row["overhead"] is not None]
 
-    queue_avg = mean(queue_vals) if queue_vals else 0.0
-    exec_avg = mean(exec_vals) if exec_vals else 0.0
-    server_avg = mean(server_vals) if server_vals else 0.0
-    client_net_avg = mean(client_net_vals) if client_net_vals else 0.0
-
+    queue_avg = mean(queue_values) if queue_values else 0.0
+    exec_avg = mean(exec_values) if exec_values else 0.0
+    server_avg = mean(server_values) if server_values else 0.0
+    client_network_avg = mean(client_network_values) if client_network_values else 0.0
     server_framework_avg = max(0.0, server_avg - queue_avg - exec_avg)
-    total_avg = queue_avg + exec_avg + server_framework_avg + client_net_avg
+    total_avg = queue_avg + exec_avg + server_framework_avg + client_network_avg
 
     return {
         "queue": queue_avg,
         "exec": exec_avg,
-        "serverFramework": server_framework_avg,
-        "clientNetwork": client_net_avg,
+        "server_framework": server_framework_avg,
+        "client_network": client_network_avg,
         "total": total_avg,
     }
 
@@ -161,12 +150,12 @@ def write_summary_files(output_dir: Path, data: dict, tasks: dict, overall: dict
     lines.append(f"queueMs(avg): {fmt(components['queue'])} ({components['queue'] / total * 100.0:.1f}%)")
     lines.append(f"execMs(avg): {fmt(components['exec'])} ({components['exec'] / total * 100.0:.1f}%)")
     lines.append(
-        f"serverFrameworkMs(avg): {fmt(components['serverFramework'])} "
-        f"({components['serverFramework'] / total * 100.0:.1f}%)"
+        f"serverFrameworkMs(avg): {fmt(components['server_framework'])} "
+        f"({components['server_framework'] / total * 100.0:.1f}%)"
     )
     lines.append(
-        f"clientNetworkMs(avg): {fmt(components['clientNetwork'])} "
-        f"({components['clientNetwork'] / total * 100.0:.1f}%)"
+        f"clientNetworkMs(avg): {fmt(components['client_network'])} "
+        f"({components['client_network'] / total * 100.0:.1f}%)"
     )
     lines.append("")
     lines.append("Per Task")
@@ -215,26 +204,13 @@ def write_summary_files(output_dir: Path, data: dict, tasks: dict, overall: dict
     markdown.append(f"| Queue | {fmt(components['queue'])} | {components['queue'] / total * 100.0:.1f}% |")
     markdown.append(f"| Execute | {fmt(components['exec'])} | {components['exec'] / total * 100.0:.1f}% |")
     markdown.append(
-        f"| Server Framework | {fmt(components['serverFramework'])} | {components['serverFramework'] / total * 100.0:.1f}% |"
+        f"| Server Framework | {fmt(components['server_framework'])} | "
+        f"{components['server_framework'] / total * 100.0:.1f}% |"
     )
     markdown.append(
-        f"| Client + Network | {fmt(components['clientNetwork'])} | {components['clientNetwork'] / total * 100.0:.1f}% |"
+        f"| Client + Network | {fmt(components['client_network'])} | "
+        f"{components['client_network'] / total * 100.0:.1f}% |"
     )
-    markdown.append("")
-    markdown.append("## Per Task")
-    markdown.append("")
-    markdown.append("| Task | Samples | RTT Avg | RTT P95 | Server Avg | Exec Avg | Overhead Avg |")
-    markdown.append("|---|---:|---:|---:|---:|---:|---:|")
-    for task_id, task in tasks.items():
-        summary = task.get("summary", {})
-        markdown.append(
-            f"| {task_id} | {len(task.get('samples', []))} | "
-            f"{fmt(to_float(summary.get('rtt', {}).get('avgMs')))} | "
-            f"{fmt(to_float(summary.get('rtt', {}).get('p95Ms')))} | "
-            f"{fmt(to_float(summary.get('server', {}).get('avgMs')))} | "
-            f"{fmt(to_float(summary.get('exec', {}).get('avgMs')))} | "
-            f"{fmt(to_float(summary.get('overhead', {}).get('avgMs')))} |"
-        )
     (output_dir / "summary.md").write_text("\n".join(markdown), encoding="utf-8")
 
 
@@ -295,337 +271,252 @@ def write_csv_exports(output_dir: Path, tasks: dict):
                 )
 
 
-def build_component_pie(tasks: dict):
+def pie_autopct_with_ms(values):
+    total = sum(values)
+
+    def formatter(percent):
+        value = percent * total / 100.0
+        return f"{percent:.1f}%\n{value:.3f} ms"
+
+    return formatter
+
+
+def create_figures(tasks: dict):
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as exc:
+        raise SystemExit(
+            "matplotlib is required. Install with: pip install -r requirements.txt"
+        ) from exc
+
+    try:
+        plt.style.use("seaborn-v0_8-whitegrid")
+    except Exception:
+        pass
+
     components = compute_component_averages(tasks)
-    values = [
+    task_ids = list(tasks.keys())
+    figures = {}
+
+    pie_values = [
         components["queue"],
         components["exec"],
-        components["serverFramework"],
-        components["clientNetwork"],
+        components["server_framework"],
+        components["client_network"],
     ]
-    labels = ["Queue", "Execute", "Server Framework", "Client + Network"]
-    colors = ["#4C956C", "#2C6E49", "#F4A259", "#BC4B51"]
-
-    fig = go.Figure(
-        data=[
-            go.Pie(
-                labels=labels,
-                values=values,
-                marker={"colors": colors},
-                text=[f"{value:.3f} ms avg" for value in values],
-                textinfo="label+percent+text",
-                hovertemplate="%{label}<br>avg=%{value:.3f} ms<br>%{percent}<extra></extra>",
-                sort=False,
-            )
-        ]
+    pie_labels = ["Queue", "Execute", "Server Framework", "Client + Network"]
+    fig_pie, ax_pie = plt.subplots(figsize=(7, 6))
+    wedges, _texts, _autotexts = ax_pie.pie(
+        pie_values,
+        labels=pie_labels,
+        autopct=pie_autopct_with_ms(pie_values),
+        startangle=110,
+        textprops={"fontsize": 10},
     )
-    fig.update_layout(
-        title="Average RTT Composition (ms + percentage)",
-        margin={"l": 20, "r": 20, "t": 60, "b": 20},
-        height=470,
-    )
-    return fig, components
+    ax_pie.set_title("Average RTT Composition")
+    ax_pie.legend(wedges, pie_labels, loc="lower left", bbox_to_anchor=(0.0, -0.12))
+    figures["Average RTT Composition"] = fig_pie
 
-
-def build_rtt_line(tasks: dict):
-    fig = go.Figure()
-    for task_id, task in tasks.items():
-        samples = sorted(task.get("samples", []), key=lambda s: int(s.get("sampleIndex", 0)))
+    fig_rtt, ax_rtt = plt.subplots(figsize=(11, 6))
+    lines = []
+    for task_id in task_ids:
+        samples = sorted(tasks[task_id].get("samples", []), key=lambda sample: int(sample.get("sampleIndex", 0)))
         x_values = [int(sample.get("sampleIndex", 0)) for sample in samples]
         y_values = [to_float(sample.get("rttMs")) for sample in samples]
-        fig.add_trace(
-            go.Scattergl(
-                x=x_values,
-                y=y_values,
-                mode="lines+markers",
-                marker={"size": 5},
-                line={"width": 1.5},
-                name=task_id,
-                hovertemplate="task=%{fullData.name}<br>sample=%{x}<br>rtt=%{y:.3f} ms<extra></extra>",
-            )
-        )
-    fig.update_layout(
-        title="RTT Over Samples",
-        xaxis_title="Sample Index",
-        yaxis_title="RTT (ms)",
-        legend_title="Task",
-        hovermode="x unified",
-        height=430,
-        margin={"l": 40, "r": 20, "t": 60, "b": 40},
-    )
-    fig.update_xaxes(rangeslider={"visible": True})
-    return fig
+        line, = ax_rtt.plot(x_values, y_values, marker="o", markersize=2.5, linewidth=1.2, label=task_id)
+        lines.append(line)
+    ax_rtt.set_title("RTT Over Samples")
+    ax_rtt.set_xlabel("Sample Index")
+    ax_rtt.set_ylabel("RTT (ms)")
+    legend = ax_rtt.legend(fontsize=8, loc="upper right")
+    line_by_legend = {}
+    for legend_line, real_line in zip(legend.get_lines(), lines):
+        legend_line.set_picker(True)
+        legend_line.set_pickradius(6)
+        line_by_legend[legend_line] = real_line
 
+    def on_pick(event):
+        legend_line = event.artist
+        target = line_by_legend.get(legend_line)
+        if target is None:
+            return
+        target.set_visible(not target.get_visible())
+        legend_line.set_alpha(1.0 if target.get_visible() else 0.25)
+        fig_rtt.canvas.draw_idle()
 
-def build_component_stacked_per_task(tasks: dict):
-    task_ids = list(tasks.keys())
-    queue = []
-    execute = []
-    server_framework = []
-    client_network = []
+    fig_rtt.canvas.mpl_connect("pick_event", on_pick)
+    figures["RTT Over Samples"] = fig_rtt
+
+    queue_avgs = []
+    exec_avgs = []
+    server_framework_avgs = []
+    client_network_avgs = []
     for task_id in task_ids:
         task = tasks[task_id]
         queue_values = task_metric_values(task, "queueMs")
         exec_values = task_metric_values(task, "execMs")
         server_values = task_metric_values(task, "serverMs")
         overhead_values = task_metric_values(task, "overheadMs")
-
         queue_avg = mean(queue_values) if queue_values else 0.0
         exec_avg = mean(exec_values) if exec_values else 0.0
         server_avg = mean(server_values) if server_values else 0.0
         overhead_avg = mean(overhead_values) if overhead_values else 0.0
         framework_avg = max(0.0, server_avg - queue_avg - exec_avg)
+        queue_avgs.append(queue_avg)
+        exec_avgs.append(exec_avg)
+        server_framework_avgs.append(framework_avg)
+        client_network_avgs.append(overhead_avg)
 
-        queue.append(queue_avg)
-        execute.append(exec_avg)
-        server_framework.append(framework_avg)
-        client_network.append(overhead_avg)
+    fig_stack, ax_stack = plt.subplots(figsize=(11, 6))
+    indices = range(len(task_ids))
+    ax_stack.bar(indices, queue_avgs, label="Queue")
+    ax_stack.bar(indices, exec_avgs, bottom=queue_avgs, label="Execute")
+    second_bottom = [q + e for q, e in zip(queue_avgs, exec_avgs)]
+    ax_stack.bar(indices, server_framework_avgs, bottom=second_bottom, label="Server Framework")
+    third_bottom = [a + b for a, b in zip(second_bottom, server_framework_avgs)]
+    ax_stack.bar(indices, client_network_avgs, bottom=third_bottom, label="Client + Network")
+    ax_stack.set_title("Average Latency Components By Task")
+    ax_stack.set_ylabel("Milliseconds")
+    ax_stack.set_xticks(list(indices))
+    ax_stack.set_xticklabels(task_ids, rotation=18, ha="right")
+    ax_stack.legend()
+    figures["Average Components By Task"] = fig_stack
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(name="Queue", x=task_ids, y=queue, marker_color="#4C956C"))
-    fig.add_trace(go.Bar(name="Execute", x=task_ids, y=execute, marker_color="#2C6E49"))
-    fig.add_trace(
-        go.Bar(name="Server Framework", x=task_ids, y=server_framework, marker_color="#F4A259")
-    )
-    fig.add_trace(
-        go.Bar(name="Client + Network", x=task_ids, y=client_network, marker_color="#BC4B51")
-    )
-    fig.update_layout(
-        title="Average Latency Components By Task",
-        barmode="stack",
-        xaxis_title="Task",
-        yaxis_title="Average ms",
-        height=430,
-        margin={"l": 40, "r": 20, "t": 60, "b": 100},
-        xaxis={"tickangle": 18},
-    )
-    return fig
+    fig_box, ax_box = plt.subplots(figsize=(11, 6))
+    box_values = [task_metric_values(tasks[task_id], "rttMs") for task_id in task_ids]
+    ax_box.boxplot(box_values, tick_labels=task_ids, showfliers=True, showmeans=True)
+    ax_box.set_title("RTT Distribution By Task")
+    ax_box.set_ylabel("RTT (ms)")
+    ax_box.tick_params(axis="x", rotation=18)
+    figures["RTT Distribution By Task"] = fig_box
 
-
-def build_rtt_box(tasks: dict):
-    fig = go.Figure()
-    for task_id, task in tasks.items():
-        values = task_metric_values(task, "rttMs")
-        fig.add_trace(
-            go.Box(
-                y=values,
-                name=task_id,
-                boxmean=True,
-                boxpoints="outliers",
-                jitter=0.25,
-                pointpos=0,
-            )
-        )
-    fig.update_layout(
-        title="RTT Distribution By Task",
-        yaxis_title="RTT (ms)",
-        height=430,
-        margin={"l": 40, "r": 20, "t": 60, "b": 100},
-        xaxis={"tickangle": 18},
-    )
-    return fig
-
-
-def build_exec_vs_overhead(tasks: dict):
-    x_values = []
-    y_values = []
-    colors = []
-    for task_id, task in tasks.items():
+    fig_scatter, ax_scatter = plt.subplots(figsize=(10, 6))
+    for task_id in task_ids:
+        task = tasks[task_id]
+        exec_values = []
+        overhead_values = []
         for sample in task.get("samples", []):
             exec_ms = to_float(sample.get("execMs"))
             overhead_ms = to_float(sample.get("overheadMs"))
             if exec_ms is None or overhead_ms is None:
                 continue
-            x_values.append(exec_ms)
-            y_values.append(overhead_ms)
-            colors.append(task_id)
+            exec_values.append(exec_ms)
+            overhead_values.append(overhead_ms)
+        ax_scatter.scatter(exec_values, overhead_values, s=16, alpha=0.65, label=task_id)
+    ax_scatter.set_title("Exec vs Client+Network Overhead")
+    ax_scatter.set_xlabel("Exec (ms)")
+    ax_scatter.set_ylabel("Client + Network Overhead (ms)")
+    ax_scatter.legend(fontsize=8)
+    figures["Exec vs Overhead"] = fig_scatter
 
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scattergl(
-            x=x_values,
-            y=y_values,
-            mode="markers",
-            marker={"size": 8, "opacity": 0.7},
-            text=colors,
-            hovertemplate="task=%{text}<br>exec=%{x:.3f} ms<br>overhead=%{y:.3f} ms<extra></extra>",
-        )
-    )
-    fig.update_layout(
-        title="Exec vs Client+Network Overhead (All Samples)",
-        xaxis_title="Exec (ms)",
-        yaxis_title="Client + Network Overhead (ms)",
-        height=430,
-        margin={"l": 40, "r": 20, "t": 60, "b": 40},
-    )
-    return fig
+    fig_hist, ax_hist = plt.subplots(figsize=(10, 6))
+    overall_rtt = all_metric_values(tasks, "rttMs")
+    bins = min(40, max(10, len(overall_rtt) // 8 if overall_rtt else 10))
+    ax_hist.hist(overall_rtt, bins=bins)
+    ax_hist.set_title("Overall RTT Histogram")
+    ax_hist.set_xlabel("RTT (ms)")
+    ax_hist.set_ylabel("Count")
+    figures["Overall RTT Histogram"] = fig_hist
+
+    return figures, components
 
 
-def build_overall_table(data: dict, overall: dict, components: dict):
-    rows = []
+def save_figures(output_dir: Path, figures: dict):
+    for name, figure in figures.items():
+        filename = name.lower().replace(" ", "_").replace("+", "plus") + ".png"
+        figure.savefig(output_dir / filename, dpi=150, bbox_inches="tight")
+
+
+def launch_gui(data: dict, overall: dict, components: dict, figures: dict):
+    try:
+        import tkinter as tk
+        from tkinter import ttk
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+    except Exception as exc:
+        raise SystemExit("Tk GUI backend unavailable for matplotlib.") from exc
+
+    root = tk.Tk()
+    root.title("Offload Latency Dashboard")
+    root.geometry("1600x980")
+
+    header = ttk.Frame(root, padding=10)
+    header.pack(fill=tk.X)
+    ttk.Label(
+        header,
+        text=(
+            f"Host {data.get('host')}:{data.get('port')}    "
+            f"ReadTimeout {data.get('readTimeoutMs')} ms    "
+            f"Warmup {data.get('warmupSamples')}    "
+            f"Measured {data.get('measuredSamples')}"
+        ),
+        font=("Segoe UI", 11, "bold"),
+    ).pack(anchor="w")
+    total = components["total"] if components["total"] > 0 else 1.0
+    ttk.Label(
+        header,
+        text=(
+            f"Split avg: queue={components['queue']:.3f} ms ({components['queue']/total*100.0:.1f}%)  "
+            f"exec={components['exec']:.3f} ms ({components['exec']/total*100.0:.1f}%)  "
+            f"serverFramework={components['server_framework']:.3f} ms ({components['server_framework']/total*100.0:.1f}%)  "
+            f"client+network={components['client_network']:.3f} ms ({components['client_network']/total*100.0:.1f}%)"
+        ),
+        font=("Segoe UI", 10),
+    ).pack(anchor="w", pady=(4, 0))
+
+    metrics_frame = ttk.Frame(root, padding=(10, 0, 10, 4))
+    metrics_frame.pack(fill=tk.X)
+    columns = ("Metric", "Count", "Min", "P50", "Avg", "P95", "Max")
+    tree = ttk.Treeview(metrics_frame, columns=columns, show="headings", height=5)
+    for column in columns:
+        tree.heading(column, text=column)
+        tree.column(column, anchor="center", width=120 if column != "Metric" else 240)
     for metric, summary in overall.items():
         if not summary:
             continue
-        rows.append(
-            "<tr>"
-            f"<td>{metric}</td>"
-            f"<td>{summary['count']}</td>"
-            f"<td>{fmt(summary['min'])}</td>"
-            f"<td>{fmt(summary['p50'])}</td>"
-            f"<td>{fmt(summary['avg'])}</td>"
-            f"<td>{fmt(summary['p95'])}</td>"
-            f"<td>{fmt(summary['max'])}</td>"
-            "</tr>"
+        tree.insert(
+            "",
+            tk.END,
+            values=(
+                metric,
+                summary["count"],
+                fmt(summary["min"]),
+                fmt(summary["p50"]),
+                fmt(summary["avg"]),
+                fmt(summary["p95"]),
+                fmt(summary["max"]),
+            ),
         )
-    total = components["total"] if components["total"] > 0 else 1.0
-    split_rows = [
-        ("Queue", components["queue"]),
-        ("Execute", components["exec"]),
-        ("Server Framework", components["serverFramework"]),
-        ("Client + Network", components["clientNetwork"]),
-    ]
-    split_html = "".join(
-        f"<tr><td>{name}</td><td>{value:.3f}</td><td>{value / total * 100.0:.1f}%</td></tr>"
-        for name, value in split_rows
-    )
-    return f"""
-<div class="meta">
-  <div><strong>Host:</strong> {data.get('host')}:{data.get('port')}</div>
-  <div><strong>Read Timeout:</strong> {data.get('readTimeoutMs')} ms</div>
-  <div><strong>Warmup:</strong> {data.get('warmupSamples')}</div>
-  <div><strong>Measured:</strong> {data.get('measuredSamples')}</div>
-</div>
-<h3>Overall Metrics</h3>
-<table>
-  <thead><tr><th>Metric</th><th>Count</th><th>Min</th><th>P50</th><th>Avg</th><th>P95</th><th>Max</th></tr></thead>
-  <tbody>{''.join(rows)}</tbody>
-</table>
-<h3>Average RTT Component Split</h3>
-<table>
-  <thead><tr><th>Component</th><th>Avg ms</th><th>Percent</th></tr></thead>
-  <tbody>{split_html}</tbody>
-</table>
-"""
+    tree.pack(fill=tk.X)
 
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=8)
 
-def render_html_dashboard(output_dir: Path, data: dict, tasks: dict, overall: dict):
-    pie_fig, components = build_component_pie(tasks)
-    rtt_line_fig = build_rtt_line(tasks)
-    stacked_fig = build_component_stacked_per_task(tasks)
-    box_fig = build_rtt_box(tasks)
-    scatter_fig = build_exec_vs_overhead(tasks)
-    overview_html = build_overall_table(data, overall, components)
+    for title, figure in figures.items():
+        tab = ttk.Frame(notebook)
+        notebook.add(tab, text=title)
 
-    html_path = output_dir / DEFAULT_HTML_NAME
-    sections = [
-        ("Average RTT Composition", pie_fig),
-        ("RTT Over Samples", rtt_line_fig),
-        ("Average Components By Task", stacked_fig),
-        ("RTT Distribution By Task", box_fig),
-        ("Exec vs Overhead", scatter_fig),
-    ]
-    figure_blocks = "\n".join(
-        f"<section><h2>{title}</h2>{pio.to_html(fig, include_plotlyjs=False, full_html=False, config={'responsive': True, 'displaylogo': False})}</section>"
-        for title, fig in sections
-    )
+        toolbar_frame = ttk.Frame(tab)
+        toolbar_frame.pack(fill=tk.X)
+        canvas = FigureCanvasTkAgg(figure, master=tab)
+        canvas.draw()
+        toolbar = NavigationToolbar2Tk(canvas, toolbar_frame, pack_toolbar=False)
+        toolbar.update()
+        toolbar.pack(side=tk.LEFT)
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-    html = f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Offload Latency Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <style>
-    body {{
-      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      margin: 0;
-      background: linear-gradient(180deg, #f3f8f4 0%, #ffffff 100%);
-      color: #1f2933;
-    }}
-    header {{
-      padding: 20px 24px 12px 24px;
-      border-bottom: 1px solid #d9e2ec;
-      background: #ffffffcc;
-      backdrop-filter: blur(4px);
-      position: sticky;
-      top: 0;
-      z-index: 2;
-    }}
-    h1 {{
-      margin: 0;
-      font-size: 22px;
-    }}
-    main {{
-      padding: 16px 24px 28px 24px;
-      display: grid;
-      gap: 20px;
-    }}
-    section {{
-      background: #ffffff;
-      border: 1px solid #d9e2ec;
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: 0 4px 10px rgba(31, 41, 51, 0.05);
-    }}
-    h2 {{
-      margin: 0 0 8px 0;
-      font-size: 16px;
-    }}
-    h3 {{
-      margin: 14px 0 8px 0;
-      font-size: 14px;
-    }}
-    table {{
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 4px;
-      font-size: 13px;
-    }}
-    th, td {{
-      border: 1px solid #d9e2ec;
-      padding: 6px 8px;
-      text-align: right;
-    }}
-    th:first-child, td:first-child {{
-      text-align: left;
-    }}
-    .meta {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      font-size: 13px;
-      margin-bottom: 6px;
-    }}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Offload Latency Dashboard</h1>
-  </header>
-  <main>
-    <section>
-      <h2>Run Metadata + Overall Metrics</h2>
-      {overview_html}
-    </section>
-    {figure_blocks}
-  </main>
-</body>
-</html>"""
-    html_path.write_text(html, encoding="utf-8")
-    return html_path, components
+    root.mainloop()
 
 
 def main():
-    project_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
-        description="Interactive offload latency dashboard for realOffloadDragShotTest metrics."
+        description="Interactive matplotlib app for realOffloadDragShotTest metrics."
     )
     parser.add_argument("--input", default=DEFAULT_INPUT, help="Metrics JSON path.")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Report output directory.")
-    parser.add_argument("--no-open", action="store_true", help="Do not open the dashboard in a browser.")
+    parser.add_argument("--no-gui", action="store_true", help="Only write report files and PNG charts.")
     args = parser.parse_args()
 
+    project_root = Path(__file__).resolve().parents[1]
     input_path = resolve_path(project_root, args.input)
     output_dir = resolve_path(project_root, args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -639,22 +530,24 @@ def main():
         raise SystemExit(f"No task data found in: {input_path}")
 
     overall = compute_overall(tasks)
-    components = compute_component_averages(tasks)
+    figures, components = create_figures(tasks)
 
     write_summary_files(output_dir, data, tasks, overall, components)
     write_csv_exports(output_dir, tasks)
-    html_path, _ = render_html_dashboard(output_dir, data, tasks, overall)
+    save_figures(output_dir, figures)
 
-    print(f"Input:    {input_path}")
-    print(f"Output:   {output_dir}")
-    print(f"Summary:  {output_dir / 'summary.txt'}")
-    print(f"Markdown: {output_dir / 'summary.md'}")
-    print(f"CSV:      {output_dir / 'task_metrics.csv'}")
-    print(f"CSV:      {output_dir / 'sample_points.csv'}")
-    print(f"GUI:      {html_path}")
+    print(f"Input:   {input_path}")
+    print(f"Output:  {output_dir}")
+    print(f"Summary: {output_dir / 'summary.txt'}")
+    print(f"CSV:     {output_dir / 'task_metrics.csv'}")
+    print(f"CSV:     {output_dir / 'sample_points.csv'}")
+    print("PNG charts:")
+    for name in figures.keys():
+        filename = name.lower().replace(" ", "_").replace("+", "plus") + ".png"
+        print(f"  - {output_dir / filename}")
 
-    if not args.no_open:
-        webbrowser.open(html_path.as_uri(), new=2)
+    if not args.no_gui:
+        launch_gui(data, overall, components, figures)
 
 
 if __name__ == "__main__":
