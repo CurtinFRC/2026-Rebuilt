@@ -57,7 +57,7 @@ public class HoodedShooter extends SubsystemBase {
   private final LoggedTunableNumber tunableHoodSetpoint =
       new LoggedTunableNumber("HoodSetpoint", 90);
   private final LoggedTunableNumber tunableShooterSetpoint =
-      new LoggedTunableNumber("ShooterSetpoint", 26);
+      new LoggedTunableNumber("ShooterSetpoint", 16.7);
   private double shooterTarget = 0;
   private double hoodTarget = 0;
 
@@ -89,21 +89,37 @@ public class HoodedShooter extends SubsystemBase {
     this.robotPose = robotPose;
     this.robotVelocity = robotVelocity;
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 14.1035);
-    DISTANCE_TO_HOOD_ANGLE.put(2.45, 81.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.117);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(0.0, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(0.0, 90.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(0.0, 1.42);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(3.2, 14.1035);
-    DISTANCE_TO_HOOD_ANGLE.put(3.2, 74.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.2, 1.05);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(1.21, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(1.21, 86.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(1.21, 1.42);
 
-    DISTANCE_TO_SHOOTER_VELOCITY.put(4.15, 16.7);
-    DISTANCE_TO_HOOD_ANGLE.put(4.15, 70.0);
-    DISTANCE_TO_BALL_FLIGHT_TIME.put(4.15, 1.267);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(1.71, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(1.71, 85.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(1.71, 1.46);
 
-    // DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 19.5);
-    // DISTANCE_TO_HOOD_ANGLE.put(5.11, 65.0);
-    // DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.2);
+    DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(2.45, 77.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.31);
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.1, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(3.1, 75.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.1, 1.28);
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(3.7, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(3.7, 68.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(3.7, 1.29);
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(4.15, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(4.15, 62.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(4.15, 1.23);
+
+    DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, 16.5);
+    DISTANCE_TO_HOOD_ANGLE.put(5.11, 60.0);
+    DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.12);
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
       hoodMotorDisconnectedAlerts[motor] =

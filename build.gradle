@@ -32,7 +32,7 @@ deploy {
                     jvmArgs.add("-XX:+UnlockExperimentalVMOptions")
                     jvmArgs.add("-XX:GCTimeRatio=5")
                     jvmArgs.add("-XX:+UseSerialGC")
-                    jvmArgs.add("-XX:MaxGCPauseMillis=50")
+                    jvmArgs.add("-XX:MaxGCPauseMillis=5")
 
                     // The options below may improve performance, but should only be enabled on the RIO 2
                     final MAX_JAVA_HEAP_SIZE_MB = 100;
