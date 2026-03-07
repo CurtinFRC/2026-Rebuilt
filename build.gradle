@@ -248,15 +248,21 @@ task(buildOffloadServerJar) {
 
 task(generateOffloadNixPackage) {
     group = "offload"
-    description = "Generate a Nix package expression for the offload server bundle (includes jdk17_headless)."
+    description = "Generate a Nix package expression for the offload server bundle (includes jdk17_headless), with optional benchmarking defaults."
     dependsOn(buildOffloadServerJar, buildOffloadTasksJar, generateOffloadManifest)
 
     doLast {
+        def benchmarkingEnabled = (project.findProperty("offloadBenchmarking")
+                ?: System.getenv("OFFLOAD_BENCHMARKING")
+                ?: "false").toString().trim().toLowerCase() in ["1", "true", "yes", "on"]
+        def timingLogsDefault = benchmarkingEnabled ? "true" : "false"
+        def timingResponsesDefault = benchmarkingEnabled ? "true" : "false"
+
         def nixDir = layout.buildDirectory.dir("offload/nix").get().asFile
         nixDir.mkdirs()
 
         def nixFile = new File(nixDir, "default.nix")
-        nixFile.text = '''{ pkgs ? import <nixpkgs> {} }:
+        def nixTemplate = '''{ pkgs ? import <nixpkgs> {} }:
 let
   jre = pkgs.jdk17_headless;
 in pkgs.stdenvNoCC.mkDerivation {
@@ -281,6 +287,8 @@ in pkgs.stdenvNoCC.mkDerivation {
 set -euo pipefail
 export OFFLOAD_PLUGIN_DIR="''${OFFLOAD_PLUGIN_DIR:-$plugin_dir}"
 export OFFLOAD_MANIFEST="''${OFFLOAD_MANIFEST:-''$OFFLOAD_PLUGIN_DIR/offload-manifest.json}"
+export OFFLOAD_TIMING_LOGS="''${OFFLOAD_TIMING_LOGS:-__TIMING_LOGS_DEFAULT__}"
+export OFFLOAD_TIMING_IN_RESPONSES="''${OFFLOAD_TIMING_IN_RESPONSES:-__TIMING_RESPONSES_DEFAULT__}"
 exec ${jre}/bin/java -Drepulsor.profiler.enabled=false -Djava.net.preferIPv4Stack=true -jar "$server_jar" "$@"
 EOF
 
@@ -289,6 +297,10 @@ EOF
   '';
 }
 '''
+        nixFile.text = nixTemplate
+                .replace("__TIMING_LOGS_DEFAULT__", timingLogsDefault)
+                .replace("__TIMING_RESPONSES_DEFAULT__", timingResponsesDefault)
+        println "Generated offload Nix package (benchmarking=${benchmarkingEnabled}, OFFLOAD_TIMING_LOGS=${timingLogsDefault}, OFFLOAD_TIMING_IN_RESPONSES=${timingResponsesDefault})"
     }
 }
 
@@ -355,10 +367,13 @@ if (dedicatedOffloadOnlyRequested) {
 
 task(deployOffloadToCoprocessors) {
     group = "offload"
-    description = "Deploy offload Nix package sources to configured coprocessors for nixos-rebuild switch (no systemctl)."
+    description = "Deploy offload Nix package sources to configured coprocessors for nixos-rebuild switch (no systemctl). Use -PoffloadBenchmarking=true to enable benchmarking defaults."
     dependsOn(buildOffloadTasksJar, buildOffloadServerJar, generateOffloadManifest, generateOffloadNixPackage)
 
     doLast {
+        def benchmarkingEnabled = (project.findProperty("offloadBenchmarking")
+                ?: System.getenv("OFFLOAD_BENCHMARKING")
+                ?: "false").toString().trim().toLowerCase() in ["1", "true", "yes", "on"]
         def hostCsv = (project.findProperty("offloadHosts")
                 ?: System.getenv("OFFLOAD_HOSTS")
                 ?: "").toString()
@@ -389,7 +404,7 @@ hosts.each { host ->
     def remoteManifestTmp = "${remoteBundleDir}/offload-manifest.json"
     def remoteNixExprTmp = "${remoteBundleDir}/default.nix"
 
-    println "Deploying offload Nix bundle to ${target}:${nixBundleDir} (staging at ${remoteBundleDir})"
+    println "Deploying offload Nix bundle to ${target}:${nixBundleDir} (staging at ${remoteBundleDir}, benchmarking=${benchmarkingEnabled})"
 
     exec {
         commandLine "ssh",
