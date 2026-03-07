@@ -83,6 +83,8 @@ public class Drive extends SubsystemBase {
           hubHeadingKD,
           new TrapezoidProfile.Constraints(getMaxAngularSpeedRadPerSec(), ANGLE_MAX_ACCELERATION));
 
+  public Trigger aligned = new Trigger(() -> hubHeadingController.getPositionError() < 0.02);
+
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
   private SwerveModulePosition[] lastModulePositions = // For delta tracking
@@ -459,7 +461,10 @@ public class Drive extends SubsystemBase {
                   //   angleToHub =
                   //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
                   // }
-                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+                  double angleSpeed =
+                      hubHeadingController.calculate(robotAngle, angleToHub)
+                          - (hubHeadingController.calculate(robotAngle, angleToHub)
+                              * DRIVE_BASE_RADIUS);
 
                   Logger.recordOutput("TargetAngle", angleToHub);
                   Logger.recordOutput("RobotAngle", robotAngle);
