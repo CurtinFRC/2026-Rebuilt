@@ -3,12 +3,16 @@ package org.curtinfrc.frc2026.util.Repulsor.Offload;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -41,6 +45,8 @@ class RealOffloadServerDragShotTest {
       Integer.getInteger("repulsor.offload.real.warmupSamples", 5);
   private static final int LATENCY_MEASURED_SAMPLES =
       Integer.getInteger("repulsor.offload.real.samplesPerTask", 80);
+  private static final String METRICS_FILE_PROPERTY = "repulsor.offload.real.metricsFile";
+  private static final String DEFAULT_METRICS_FILE = "build/offload/real-offload-latency.json";
   private static final String OBSTACLE_LIST_TYPE =
       "java.util.List<? extends org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle>";
   private static final String DYNAMIC_OBJECT_LIST_TYPE =
@@ -51,6 +57,7 @@ class RealOffloadServerDragShotTest {
   void shouldRunAllCurrentOffloadedFunctionsAgainstRealOffloadServer() throws Exception {
     OffloadRpc.clearGateway();
     OffloadHost host = parseHost();
+    Path metricsFile = resolveMetricsFile();
     String tcpProbe = probeTcp(host, 2000);
     assertTrue(
         "reachable".equals(tcpProbe),
@@ -62,15 +69,24 @@ class RealOffloadServerDragShotTest {
               + tcpProbe
               + "). Check routing/firewall/server bind address.");
 
-    LatencyRecorder latencyRecorder = new LatencyRecorder();
+    LatencyRecorder latencyRecorder =
+        new LatencyRecorder(
+            host.host(),
+            host.port(),
+            CLIENT_READ_TIMEOUT_MS,
+            LATENCY_WARMUP_SAMPLES,
+            LATENCY_MEASURED_SAMPLES,
+            RPC_TIMEOUT_MS,
+            metricsFile);
     System.out.printf(
-        "offload-rtt config host=%s:%d readTimeoutMs=%d warmup=%d samples=%d rpcTimeoutMs=%d%n",
+        "offload-rtt config host=%s:%d readTimeoutMs=%d warmup=%d samples=%d rpcTimeoutMs=%d metricsFile=%s%n",
         host.host(),
         host.port(),
         CLIENT_READ_TIMEOUT_MS,
         LATENCY_WARMUP_SAMPLES,
         LATENCY_MEASURED_SAMPLES,
-        RPC_TIMEOUT_MS);
+        RPC_TIMEOUT_MS,
+        metricsFile.toAbsolutePath());
 
     try (TcpOffloadClient client =
         new TcpOffloadClient(
@@ -433,15 +449,46 @@ class RealOffloadServerDragShotTest {
   }
 
   private static final class LatencyRecorder {
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    private final String host;
+    private final int port;
+    private final int readTimeoutMs;
+    private final int warmupSamples;
+    private final int measuredSamples;
+    private final int rpcTimeoutMs;
+    private final Path metricsFile;
+
     private final Map<String, List<Long>> byTaskNs = new LinkedHashMap<>();
     private final Map<String, List<Long>> byTaskServerNs = new LinkedHashMap<>();
     private final Map<String, List<Long>> byTaskExecNs = new LinkedHashMap<>();
     private final Map<String, List<Long>> byTaskOverheadNs = new LinkedHashMap<>();
+    private final Map<String, List<SamplePoint>> byTaskSamples = new LinkedHashMap<>();
+
+    private int globalSampleIndex = 0;
+
+    private LatencyRecorder(
+        String host,
+        int port,
+        int readTimeoutMs,
+        int warmupSamples,
+        int measuredSamples,
+        int rpcTimeoutMs,
+        Path metricsFile) {
+      this.host = host;
+      this.port = port;
+      this.readTimeoutMs = readTimeoutMs;
+      this.warmupSamples = warmupSamples;
+      this.measuredSamples = measuredSamples;
+      this.rpcTimeoutMs = rpcTimeoutMs;
+      this.metricsFile = metricsFile;
+    }
 
     <T> T measure(String taskId, ThrowingSupplier<T> call, TcpOffloadClient client) throws Exception {
       long startNs = System.nanoTime();
       T value = call.get();
       long elapsedNs = System.nanoTime() - startNs;
+      globalSampleIndex++;
       byTaskNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(elapsedNs);
       Optional<OffloadServerTiming> timingOpt = client.latestServerTiming(taskId);
       if (timingOpt.isPresent()) {
@@ -452,6 +499,11 @@ class RealOffloadServerDragShotTest {
         byTaskServerNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(serverNs);
         byTaskExecNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(execNs);
         byTaskOverheadNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(overheadNs);
+        byTaskSamples
+            .computeIfAbsent(taskId, ignored -> new ArrayList<>())
+            .add(
+                new SamplePoint(
+                    globalSampleIndex, elapsedNs, serverNs, execNs, overheadNs, timing.queueNs()));
         System.out.printf(
             "offload-rtt task=%s rttMs=%.3f serverMs=%.3f execMs=%.3f overheadMs=%.3f%n",
             taskId,
@@ -460,6 +512,9 @@ class RealOffloadServerDragShotTest {
             execNs / 1_000_000.0,
             overheadNs / 1_000_000.0);
       } else {
+        byTaskSamples
+            .computeIfAbsent(taskId, ignored -> new ArrayList<>())
+            .add(new SamplePoint(globalSampleIndex, elapsedNs, -1L, -1L, -1L, -1L));
         System.out.printf("offload-rtt task=%s rttMs=%.3f%n", taskId, elapsedNs / 1_000_000.0);
       }
       return value;
@@ -517,6 +572,7 @@ class RealOffloadServerDragShotTest {
                 overheadStats.p95Ms,
                 overheadStats.maxMs);
           });
+      writeMetricsFile();
     }
 
     private static Stats statsMs(List<Long> samplesNs) {
@@ -552,6 +608,95 @@ class RealOffloadServerDragShotTest {
     }
 
     private record Stats(double minMs, double p50Ms, double avgMs, double p95Ms, double maxMs) {}
+
+    private record SamplePoint(
+        int sampleIndex, long rttNs, long serverNs, long execNs, long overheadNs, long queueNs) {}
+
+    private void writeMetricsFile() {
+      try {
+        if (metricsFile.getParent() != null) {
+          Files.createDirectories(metricsFile.getParent());
+        }
+
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("host", host);
+        root.put("port", port);
+        root.put("readTimeoutMs", readTimeoutMs);
+        root.put("warmupSamples", warmupSamples);
+        root.put("measuredSamples", measuredSamples);
+        root.put("rpcTimeoutMs", rpcTimeoutMs);
+        root.put("metricsFile", metricsFile.toAbsolutePath().toString());
+
+        Map<String, Object> tasksOut = new LinkedHashMap<>();
+        for (Map.Entry<String, List<SamplePoint>> entry : byTaskSamples.entrySet()) {
+          String taskId = entry.getKey();
+          List<SamplePoint> samples = entry.getValue();
+          Map<String, Object> taskOut = new LinkedHashMap<>();
+          taskOut.put("samples", samplesToMaps(samples));
+          taskOut.put("summary", summaryForTask(taskId));
+          tasksOut.put(taskId, taskOut);
+        }
+        root.put("tasks", tasksOut);
+
+        String json = JSON.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        Files.writeString(
+            metricsFile,
+            json,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE);
+        System.out.printf("offload-rtt wrote metrics file: %s%n", metricsFile.toAbsolutePath());
+      } catch (Exception ex) {
+        System.err.printf("offload-rtt failed to write metrics file: %s (%s)%n", metricsFile, ex);
+      }
+    }
+
+    private static List<Map<String, Object>> samplesToMaps(List<SamplePoint> samples) {
+      List<Map<String, Object>> out = new ArrayList<>(samples.size());
+      for (SamplePoint sample : samples) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("sampleIndex", sample.sampleIndex());
+        row.put("rttMs", sample.rttNs() / 1_000_000.0);
+        row.put("serverMs", nsToMsOrNull(sample.serverNs()));
+        row.put("execMs", nsToMsOrNull(sample.execNs()));
+        row.put("overheadMs", nsToMsOrNull(sample.overheadNs()));
+        row.put("queueMs", nsToMsOrNull(sample.queueNs()));
+        out.add(row);
+      }
+      return out;
+    }
+
+    private Map<String, Object> summaryForTask(String taskId) {
+      Map<String, Object> out = new LinkedHashMap<>();
+      out.put("rtt", statsMap(statsMs(byTaskNs.get(taskId))));
+      List<Long> server = byTaskServerNs.get(taskId);
+      List<Long> exec = byTaskExecNs.get(taskId);
+      List<Long> overhead = byTaskOverheadNs.get(taskId);
+      if (server != null) {
+        out.put("server", statsMap(statsMs(server)));
+      }
+      if (exec != null) {
+        out.put("exec", statsMap(statsMs(exec)));
+      }
+      if (overhead != null) {
+        out.put("overhead", statsMap(statsMs(overhead)));
+      }
+      return out;
+    }
+
+    private static Map<String, Object> statsMap(Stats stats) {
+      Map<String, Object> out = new LinkedHashMap<>();
+      out.put("minMs", stats.minMs());
+      out.put("p50Ms", stats.p50Ms());
+      out.put("avgMs", stats.avgMs());
+      out.put("p95Ms", stats.p95Ms());
+      out.put("maxMs", stats.maxMs());
+      return out;
+    }
+
+    private static Double nsToMsOrNull(long ns) {
+      return ns >= 0 ? ns / 1_000_000.0 : null;
+    }
   }
 
   private static OffloadHost parseHost() {
@@ -578,6 +723,15 @@ class RealOffloadServerDragShotTest {
       throw new IllegalArgumentException("Port out of range in " + HOST_PROPERTY + ": " + port);
     }
     return new OffloadHost(host, port);
+  }
+
+  private static Path resolveMetricsFile() {
+    String configured = System.getProperty(METRICS_FILE_PROPERTY, DEFAULT_METRICS_FILE).trim();
+    Path path = Path.of(configured);
+    if (!path.isAbsolute()) {
+      path = Path.of(System.getProperty("user.dir")).resolve(path);
+    }
+    return path.normalize();
   }
 
   private static void waitForHealthy(TcpOffloadClient client, long timeoutMs)

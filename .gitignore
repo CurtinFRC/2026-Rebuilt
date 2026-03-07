@@ -213,3 +213,5 @@ README_2.md
 *.png
 *.onnx
 *.pt
+
+.pytest_cache/
