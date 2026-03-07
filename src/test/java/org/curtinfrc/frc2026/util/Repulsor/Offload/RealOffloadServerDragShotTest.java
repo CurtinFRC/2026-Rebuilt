@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import org.curtinfrc.frc2026.util.Repulsor.ExtraPathing;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
+import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.PointObstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadClientConfig;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadServerTiming;
@@ -115,6 +118,8 @@ class RealOffloadServerDragShotTest {
 
       runSampleDoubleValueRpc(latencyRecorder, client);
       runSampleWorkerProbeRpc(latencyRecorder, client);
+      runFieldPlannerIsClearPathRpc(latencyRecorder, client);
+      runFieldPlannerRobotIntersectsRpc(latencyRecorder, client);
       runDragShotStaticRpc(latencyRecorder, client);
       runDragShotFindBestAutoRpc(latencyRecorder, client);
       runPredictiveShuttleRecoveryRpc(latencyRecorder, client);
@@ -170,6 +175,77 @@ class RealOffloadServerDragShotTest {
 
     boolean remote = (boolean) OffloadValueCodec.decode("boolean", response.getResult());
     assertTrue(remote, "Expected worker-thread probe to execute remotely");
+  }
+
+  private static void runFieldPlannerIsClearPathRpc(
+      LatencyRecorder latencyRecorder, UdpOffloadClient client) throws Exception {
+    String topicRoot = "Repulsor/Test/Offload/IsClear";
+    Translation2d start = new Translation2d(2.0, 2.0);
+    Translation2d goal = new Translation2d(6.0, 2.0);
+    double robotLengthMeters = 0.9;
+    double robotWidthMeters = 0.8;
+    List<Obstacle> obstacles = samplePathingObstacles();
+
+    FieldPlannerPathingOffloadEntrypoints_isClearPath_OffloadRequest request =
+        new FieldPlannerPathingOffloadEntrypoints_isClearPath_OffloadRequest();
+    request.setArg0(OffloadValueCodec.encode("java.lang.String", topicRoot));
+    request.setArg1(OffloadValueCodec.encode("edu.wpi.first.math.geometry.Translation2d", start));
+    request.setArg2(OffloadValueCodec.encode("edu.wpi.first.math.geometry.Translation2d", goal));
+    request.setArg3(OffloadValueCodec.encode(OBSTACLE_LIST_TYPE, obstacles));
+    request.setArg4(OffloadValueCodec.encode("double", robotLengthMeters));
+    request.setArg5(OffloadValueCodec.encode("double", robotWidthMeters));
+    request.setArg6(OffloadValueCodec.encode("boolean", false));
+
+    FieldPlannerPathingOffloadEntrypoints_isClearPath_OffloadResponse response =
+        warmupThenMeasure(
+            OffloadTaskIds.FIELD_PLANNER_IS_CLEAR_PATH,
+            latencyRecorder,
+            client,
+            () ->
+                OffloadRpc.callTyped(
+                        OffloadTaskIds.FIELD_PLANNER_IS_CLEAR_PATH,
+                        request,
+                        FieldPlannerPathingOffloadEntrypoints_isClearPath_OffloadResponse.class,
+                        RPC_TIMEOUT_MS)
+                    .get(4, TimeUnit.SECONDS));
+
+    boolean remote = (boolean) OffloadValueCodec.decode("boolean", response.getResult());
+    boolean local =
+        ExtraPathing.isClearPath(
+            topicRoot, start, goal, obstacles, robotLengthMeters, robotWidthMeters, false);
+    assertEquals(local, remote, "field planner isClearPath RPC vs local");
+  }
+
+  private static void runFieldPlannerRobotIntersectsRpc(
+      LatencyRecorder latencyRecorder, UdpOffloadClient client) throws Exception {
+    Translation2d center = new Translation2d(2.5, 2.0);
+    double robotLengthMeters = 0.9;
+    double robotWidthMeters = 0.8;
+    List<Obstacle> obstacles = samplePathingObstacles();
+
+    FieldPlannerPathingOffloadEntrypoints_robotIntersects_OffloadRequest request =
+        new FieldPlannerPathingOffloadEntrypoints_robotIntersects_OffloadRequest();
+    request.setArg0(OffloadValueCodec.encode("edu.wpi.first.math.geometry.Translation2d", center));
+    request.setArg1(OffloadValueCodec.encode("double", robotLengthMeters));
+    request.setArg2(OffloadValueCodec.encode("double", robotWidthMeters));
+    request.setArg3(OffloadValueCodec.encode(OBSTACLE_LIST_TYPE, obstacles));
+
+    FieldPlannerPathingOffloadEntrypoints_robotIntersects_OffloadResponse response =
+        warmupThenMeasure(
+            OffloadTaskIds.FIELD_PLANNER_ROBOT_INTERSECTS,
+            latencyRecorder,
+            client,
+            () ->
+                OffloadRpc.callTyped(
+                        OffloadTaskIds.FIELD_PLANNER_ROBOT_INTERSECTS,
+                        request,
+                        FieldPlannerPathingOffloadEntrypoints_robotIntersects_OffloadResponse.class,
+                        RPC_TIMEOUT_MS)
+                    .get(4, TimeUnit.SECONDS));
+
+    boolean remote = (boolean) OffloadValueCodec.decode("boolean", response.getResult());
+    boolean local = ExtraPathing.robotIntersects(center, robotLengthMeters, robotWidthMeters, obstacles);
+    assertEquals(local, remote, "field planner robotIntersects RPC vs local");
   }
 
   @SuppressWarnings("unchecked")
@@ -404,6 +480,12 @@ class RealOffloadServerDragShotTest {
     blocker.setAgeS(0.03);
 
     return List.of(fuel, blocker);
+  }
+
+  private static List<Obstacle> samplePathingObstacles() {
+    PointObstacle blocker = new PointObstacle(new Translation2d(4.0, 2.0), 1.0, true);
+    blocker.radius = 0.45;
+    return List.of(blocker);
   }
 
   private static void assertRecoveryPointEquals(

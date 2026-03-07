@@ -44,6 +44,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractor
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 import org.curtinfrc.frc2026.util.Repulsor.HeadingGate;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.FieldPlannerPathingOffloadEntrypoints_Offloaded;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.SetpointContext;
@@ -58,6 +59,9 @@ public class FieldPlanner {
   private static final double FORCE_THROUGH_GOAL_DIST = 2.0;
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   public static final double GOAL_STRENGTH = 2.2;
+  private static final boolean OFFLOAD_PATHING_ENABLED =
+      Boolean.parseBoolean(
+          System.getProperty("repulsor.offload.fieldplanner.pathing.enabled", "true"));
 
   private static final class ClearMemo {
     Boolean toGoalDyn;
@@ -66,15 +70,13 @@ public class FieldPlanner {
     boolean toGoalDyn(
         Translation2d a, Translation2d b, List<? extends Obstacle> dyn, double rx, double ry) {
       if (toGoalDyn != null) return toGoalDyn.booleanValue();
-      toGoalDyn = ExtraPathing.isClearPath("Repulsor/IsClear", a, b, dyn, rx, ry, true);
+      toGoalDyn = isClearPath("Repulsor/IsClear", a, b, dyn, rx, ry, true);
       return toGoalDyn.booleanValue();
     }
 
     boolean toGoalNoDyn(Translation2d a, Translation2d b, double rx, double ry) {
       if (toGoalNoDyn != null) return toGoalNoDyn.booleanValue();
-      toGoalNoDyn =
-          ExtraPathing.isClearPath(
-              "Repulsor/ForceThrough/NoDyn", a, b, Collections.emptyList(), rx, ry, false);
+      toGoalNoDyn = isClearPath("Repulsor/ForceThrough/NoDyn", a, b, Collections.emptyList(), rx, ry, false);
       return toGoalNoDyn.booleanValue();
     }
   }
@@ -283,7 +285,7 @@ public class FieldPlanner {
 
     if (!forceThrough && !suppressFallback) {
       boolean blockedWithDynamics =
-          !ExtraPathing.isClearPath(
+          !isClearPath(
               "Repulsor/ForceThrough/WithDyn",
               curTrans,
               goalManager.getGoalTranslation(),
@@ -308,8 +310,7 @@ public class FieldPlanner {
     }
 
     if (!suppressFallback) {
-      if (!forceThrough
-          && ExtraPathing.robotIntersects(curTrans, robot_x, robot_y, dynamicObstacles)) {
+      if (!forceThrough && robotIntersects(curTrans, robot_x, robot_y, dynamicObstacles)) {
         currentErr = Optional.of(Meters.of(curTrans.getDistance(goalManager.getGoalTranslation())));
         return new RepulsorSample(curTrans, 0, 0, Radians.of(pose.getRotation().getRadians()));
       }
@@ -346,7 +347,7 @@ public class FieldPlanner {
             continue;
 
           boolean clear =
-              ExtraPathing.isClearPath(
+              isClearPath(
                   "Repulsor/IsClear/Reroute",
                   curTrans,
                   altGoal.getTranslation(),
@@ -405,7 +406,7 @@ public class FieldPlanner {
             effectiveDynamicsFinal,
             rect -> rectIntersectsDynamic(rect, effectiveDynamicsFinal),
             tag ->
-                ExtraPathing.isClearPath(
+                isClearPath(
                     "Repulsor/Bypass/Rejoin",
                     curTrans,
                     goalManager.getGoalTranslation(),
@@ -478,6 +479,46 @@ public class FieldPlanner {
   public static double distanceFromPointToSegment(
       Translation2d p, Translation2d a, Translation2d b) {
     return FieldPlannerGeometry.distanceFromPointToSegment(p, a, b);
+  }
+
+  private static boolean isClearPath(
+      String topicRoot,
+      Translation2d start,
+      Translation2d goal,
+      List<? extends Obstacle> obstacles,
+      double robotLengthMeters,
+      double robotWidthMeters,
+      boolean publishSamples) {
+    if (!OFFLOAD_PATHING_ENABLED) {
+      return ExtraPathing.isClearPath(
+          topicRoot,
+          start,
+          goal,
+          obstacles,
+          robotLengthMeters,
+          robotWidthMeters,
+          publishSamples);
+    }
+    return FieldPlannerPathingOffloadEntrypoints_Offloaded.isClearPath_offload(
+        topicRoot,
+        start,
+        goal,
+        obstacles,
+        robotLengthMeters,
+        robotWidthMeters,
+        publishSamples);
+  }
+
+  private static boolean robotIntersects(
+      Translation2d center,
+      double robotLengthMeters,
+      double robotWidthMeters,
+      List<? extends Obstacle> obstacles) {
+    if (!OFFLOAD_PATHING_ENABLED) {
+      return ExtraPathing.robotIntersects(center, robotLengthMeters, robotWidthMeters, obstacles);
+    }
+    return FieldPlannerPathingOffloadEntrypoints_Offloaded.robotIntersects_offload(
+        center, robotLengthMeters, robotWidthMeters, obstacles);
   }
 
   public Optional<RepulsorSetpoint> pollChosenSetpoint() {
