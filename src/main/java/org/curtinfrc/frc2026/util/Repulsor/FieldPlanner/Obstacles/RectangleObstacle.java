@@ -391,7 +391,7 @@ public class RectangleObstacle extends Obstacle {
   }
 
   private boolean isCornerOrHandoffLocked() {
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     return (handoffShortSign != 0 && now < handoffUntilSec)
         || (cornerLockIdx >= 0 && now < cornerLockUntilSec);
   }
@@ -401,7 +401,7 @@ public class RectangleObstacle extends Obstacle {
 
     if (isCornerOrHandoffLocked()) return;
 
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     boolean nearCorner =
         (commitCornerWorld != null)
             && (pos.getDistance(commitCornerWorld) <= CORNER_RANGE_M + COMMIT_CLEAR_HYST_M);
@@ -425,7 +425,7 @@ public class RectangleObstacle extends Obstacle {
 
   private void setCommitDir(int dir, boolean corner, Translation2d cornerWorld) {
     if (dir == 0) return;
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     commitDir = (dir > 0) ? 1 : -1;
     commitUntilSec = now + (corner ? COMMIT_SEC_CORNER : COMMIT_SEC_BASE);
     commitCornerWorld = cornerWorld;
@@ -686,7 +686,7 @@ public class RectangleObstacle extends Obstacle {
   }
 
   private void updateHandoffLock(double wCorner, boolean want, int shortSign) {
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     boolean active = now < handoffUntilSec && handoffShortSign != 0;
 
     if (want) {
@@ -703,7 +703,7 @@ public class RectangleObstacle extends Obstacle {
 
   private void updateCornerLock(
       int bestIdx, double bestDist, double secondDist, double cornerBand) {
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     boolean active = cornerLockIdx >= 0 && now < cornerLockUntilSec;
 
     if (!active) {
@@ -1282,7 +1282,7 @@ public class RectangleObstacle extends Obstacle {
 
     updateCornerLock(bestIdx, dMin, dSecond, cornerBand);
 
-    double now = edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    double now = nowSecondsSafe();
     boolean cornerLocked = (cornerLockIdx >= 0 && now < cornerLockUntilSec);
     int useIdx = cornerLocked ? cornerLockIdx : bestIdx;
     Translation2d cornerWorld = c[useIdx];
@@ -1705,6 +1705,21 @@ public class RectangleObstacle extends Obstacle {
     if (Math.abs(o4) < 1e-9 && onSeg(c, d, b)) return true;
 
     return false;
+  }
+
+  private static double nowSecondsSafe() {
+    if (isOffloadWorkerThread()) {
+      return System.nanoTime() * 1.0e-9;
+    }
+    try {
+      return edu.wpi.first.wpilibj.Timer.getFPGATimestamp();
+    } catch (Throwable t) {
+      return System.nanoTime() * 1.0e-9;
+    }
+  }
+
+  private static boolean isOffloadWorkerThread() {
+    return Thread.currentThread().getName().startsWith("offload-server-worker");
   }
 
   @Override
