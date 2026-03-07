@@ -358,14 +358,14 @@ public class Robot extends LoggedRobot {
                                     : FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
-    // inOwnHalf
-    //     .and(RobotModeTriggers.teleop())
-    //     // .and(GameState.activeShift)
-    //     .whileTrue(
-    //         hoodedShooter.shootAtTarget(
-    //             () ->
-    //                 ChoreoAllianceFlipUtil.flip(
-    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+    inOwnHalf
+        .and(RobotModeTriggers.teleop())
+        // .and(GameState.activeShift)
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () ->
+                    ChoreoAllianceFlipUtil.flip(
+                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
     // isInNeutralZone
     //     .and(isLeft.negate())
@@ -416,11 +416,11 @@ public class Robot extends LoggedRobot {
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
 
     // TODO FIX
-    // RobotModeTriggers.disabled()
-    //     .negate()
-    //     .and(intaking)
-    //     .whileTrue(intake.RawControlConsume(0.8))
-    //     .onFalse(intake.RawIdle());
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(intake.RawControlConsume(0.8))
+        .onFalse(intake.RawIdle());
     RobotModeTriggers.disabled()
         .negate()
         .and(intaking)
