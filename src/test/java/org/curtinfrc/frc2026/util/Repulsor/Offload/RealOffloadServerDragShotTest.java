@@ -41,7 +41,7 @@ class RealOffloadServerDragShotTest {
   private static final int DEFAULT_PORT = 5808;
   private static final int RPC_TIMEOUT_MS = 1500;
   private static final int CLIENT_READ_TIMEOUT_MS =
-      Integer.getInteger("repulsor.offload.real.readTimeoutMs", 5);
+      Integer.getInteger("repulsor.offload.real.readTimeoutMs", 2);
   private static final int LATENCY_WARMUP_SAMPLES =
       Integer.getInteger("repulsor.offload.real.warmupSamples", 5);
   private static final int LATENCY_MEASURED_SAMPLES =

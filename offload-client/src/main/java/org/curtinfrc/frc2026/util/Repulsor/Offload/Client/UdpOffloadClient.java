@@ -279,6 +279,7 @@ public final class UdpOffloadClient implements OffloadGateway, AutoCloseable {
           pending.future().complete(envelope.getPayload());
           return;
         }
+        latestServerTimingByTask.remove(pending.taskId());
         pending.future().complete(payload);
       } else {
         OffloadError err = CborSerde.read(response.payload(), OffloadError.class);

@@ -59,7 +59,7 @@ public final class OffloadClientConfig {
   public static final class Builder {
     private final List<OffloadHost> hosts = new ArrayList<>();
     private int connectTimeoutMs = 60;
-    private int readTimeoutMs = 5;
+    private int readTimeoutMs = 2;
     private int queueCapacity = 128;
     private int probeTimeoutMs = 50;
     private boolean probeBeforeConnect = true;

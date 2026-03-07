@@ -120,7 +120,7 @@ public final class RepulsorOffloadRuntime {
             intProp("repulsor.offload.connectTimeoutMs", 50));
     builder =
         invokeBuilder(
-            builder, "readTimeoutMs", int.class, intProp("repulsor.offload.readTimeoutMs", 5));
+            builder, "readTimeoutMs", int.class, intProp("repulsor.offload.readTimeoutMs", 2));
     builder =
         invokeBuilder(
             builder, "queueCapacity", int.class, intProp("repulsor.offload.queueCapacity", 128));

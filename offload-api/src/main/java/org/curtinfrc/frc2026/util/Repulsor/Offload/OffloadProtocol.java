@@ -1,7 +1,5 @@
 package org.curtinfrc.frc2026.util.Repulsor.Offload;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -33,19 +31,17 @@ public final class OffloadProtocol {
   public static byte[] serializeRequest(long correlationId, String taskId, byte[] payload)
       throws IOException {
     byte[] taskBytes = taskId.getBytes(StandardCharsets.UTF_8);
-    ByteArrayOutputStream byteStream =
-        new ByteArrayOutputStream(32 + taskBytes.length + payload.length);
-    try (DataOutputStream output = new DataOutputStream(byteStream)) {
-      output.writeInt(MAGIC);
-      output.writeShort(VERSION);
-      output.writeLong(correlationId);
-      output.writeInt(taskBytes.length);
-      output.write(taskBytes);
-      output.writeInt(payload.length);
-      output.write(payload);
-      output.flush();
-    }
-    return byteStream.toByteArray();
+    byte[] frame = new byte[22 + taskBytes.length + payload.length];
+    int position = 0;
+    position = putInt(frame, position, MAGIC);
+    position = putShort(frame, position, VERSION);
+    position = putLong(frame, position, correlationId);
+    position = putInt(frame, position, taskBytes.length);
+    System.arraycopy(taskBytes, 0, frame, position, taskBytes.length);
+    position += taskBytes.length;
+    position = putInt(frame, position, payload.length);
+    System.arraycopy(payload, 0, frame, position, payload.length);
+    return frame;
   }
 
   public static RequestFrame readRequest(DataInputStream input) throws IOException {
@@ -58,14 +54,45 @@ public final class OffloadProtocol {
 
   public static RequestFrame parseRequest(byte[] frameBytes, int offset, int length)
       throws IOException {
-    try (DataInputStream input =
-        new DataInputStream(new ByteArrayInputStream(frameBytes, offset, length))) {
-      RequestFrame frame = parseRequestFrame(input);
-      if (input.available() != 0) {
-        throw new IOException("Trailing bytes in request frame");
-      }
-      return frame;
+    if (length < 22) {
+      throw new IOException("Invalid request frame length: " + length);
     }
+    int end = offset + length;
+    int position = offset;
+
+    int magic = getInt(frameBytes, position);
+    position += Integer.BYTES;
+    if (magic != MAGIC) {
+      throw new IOException("Invalid request magic: " + Integer.toHexString(magic));
+    }
+
+    short version = getShort(frameBytes, position);
+    position += Short.BYTES;
+    if (version != VERSION) {
+      throw new IOException("Unsupported protocol version: " + version);
+    }
+
+    long correlationId = getLong(frameBytes, position);
+    position += Long.BYTES;
+
+    int taskLength = getInt(frameBytes, position);
+    position += Integer.BYTES;
+    if (taskLength < 0 || taskLength > 64_000 || position + taskLength + Integer.BYTES > end) {
+      throw new IOException("Invalid task id length: " + taskLength);
+    }
+
+    String taskId = new String(frameBytes, position, taskLength, StandardCharsets.UTF_8);
+    position += taskLength;
+
+    int payloadLength = getInt(frameBytes, position);
+    position += Integer.BYTES;
+    if (payloadLength < 0 || payloadLength > 16_000_000 || position + payloadLength != end) {
+      throw new IOException("Invalid payload length: " + payloadLength);
+    }
+
+    byte[] payload = new byte[payloadLength];
+    System.arraycopy(frameBytes, position, payload, 0, payloadLength);
+    return new RequestFrame(correlationId, taskId, payload);
   }
 
   public static void writeResponse(
@@ -76,17 +103,15 @@ public final class OffloadProtocol {
 
   public static byte[] serializeResponse(long correlationId, byte status, byte[] payload)
       throws IOException {
-    ByteArrayOutputStream byteStream = new ByteArrayOutputStream(24 + payload.length);
-    try (DataOutputStream output = new DataOutputStream(byteStream)) {
-      output.writeInt(MAGIC);
-      output.writeShort(VERSION);
-      output.writeLong(correlationId);
-      output.writeByte(status);
-      output.writeInt(payload.length);
-      output.write(payload);
-      output.flush();
-    }
-    return byteStream.toByteArray();
+    byte[] frame = new byte[19 + payload.length];
+    int position = 0;
+    position = putInt(frame, position, MAGIC);
+    position = putShort(frame, position, VERSION);
+    position = putLong(frame, position, correlationId);
+    frame[position++] = status;
+    position = putInt(frame, position, payload.length);
+    System.arraycopy(payload, 0, frame, position, payload.length);
+    return frame;
   }
 
   public static ResponseFrame readResponse(DataInputStream input) throws IOException {
@@ -99,29 +124,49 @@ public final class OffloadProtocol {
 
   public static ResponseFrame parseResponse(byte[] frameBytes, int offset, int length)
       throws IOException {
-    try (DataInputStream input =
-        new DataInputStream(new ByteArrayInputStream(frameBytes, offset, length))) {
-      ResponseFrame frame = parseResponseFrame(input);
-      if (input.available() != 0) {
-        throw new IOException("Trailing bytes in response frame");
-      }
-      return frame;
+    if (length < 19) {
+      throw new IOException("Invalid response frame length: " + length);
     }
+    int end = offset + length;
+    int position = offset;
+
+    int magic = getInt(frameBytes, position);
+    position += Integer.BYTES;
+    if (magic != MAGIC) {
+      throw new IOException("Invalid response magic: " + Integer.toHexString(magic));
+    }
+
+    short version = getShort(frameBytes, position);
+    position += Short.BYTES;
+    if (version != VERSION) {
+      throw new IOException("Unsupported protocol version: " + version);
+    }
+
+    long correlationId = getLong(frameBytes, position);
+    position += Long.BYTES;
+    byte status = frameBytes[position++];
+
+    int payloadLength = getInt(frameBytes, position);
+    position += Integer.BYTES;
+    if (payloadLength < 0 || payloadLength > 16_000_000 || position + payloadLength != end) {
+      throw new IOException("Invalid payload length: " + payloadLength);
+    }
+
+    byte[] payload = new byte[payloadLength];
+    System.arraycopy(frameBytes, position, payload, 0, payloadLength);
+    return new ResponseFrame(correlationId, status, payload);
   }
 
   public static byte[] serializeTimedPayload(
       byte[] payload, long queueNs, long executeNs, long serverNs) throws IOException {
-    ByteArrayOutputStream byteStream =
-        new ByteArrayOutputStream(TIMED_PAYLOAD_HEADER_BYTES + payload.length);
-    try (DataOutputStream output = new DataOutputStream(byteStream)) {
-      output.writeInt(TIMED_PAYLOAD_MAGIC);
-      output.writeLong(queueNs);
-      output.writeLong(executeNs);
-      output.writeLong(serverNs);
-      output.write(payload);
-      output.flush();
-    }
-    return byteStream.toByteArray();
+    byte[] output = new byte[TIMED_PAYLOAD_HEADER_BYTES + payload.length];
+    int position = 0;
+    position = putInt(output, position, TIMED_PAYLOAD_MAGIC);
+    position = putLong(output, position, queueNs);
+    position = putLong(output, position, executeNs);
+    position = putLong(output, position, serverNs);
+    System.arraycopy(payload, 0, output, position, payload.length);
+    return output;
   }
 
   public static TimedPayload parseTimedPayload(byte[] payloadBytes) throws IOException {
@@ -133,19 +178,22 @@ public final class OffloadProtocol {
     if (length < TIMED_PAYLOAD_HEADER_BYTES) {
       throw new IOException("Invalid timed payload length: " + length);
     }
-
-    try (DataInputStream input =
-        new DataInputStream(new ByteArrayInputStream(payloadBytes, offset, length))) {
-      int magic = input.readInt();
-      if (magic != TIMED_PAYLOAD_MAGIC) {
-        throw new IOException("Invalid timed payload magic: " + Integer.toHexString(magic));
-      }
-      long queueNs = input.readLong();
-      long executeNs = input.readLong();
-      long serverNs = input.readLong();
-      byte[] payload = input.readAllBytes();
-      return new TimedPayload(payload, queueNs, executeNs, serverNs);
+    int end = offset + length;
+    int position = offset;
+    int magic = getInt(payloadBytes, position);
+    position += Integer.BYTES;
+    if (magic != TIMED_PAYLOAD_MAGIC) {
+      throw new IOException("Invalid timed payload magic: " + Integer.toHexString(magic));
     }
+    long queueNs = getLong(payloadBytes, position);
+    position += Long.BYTES;
+    long executeNs = getLong(payloadBytes, position);
+    position += Long.BYTES;
+    long serverNs = getLong(payloadBytes, position);
+    position += Long.BYTES;
+    byte[] payload = new byte[end - position];
+    System.arraycopy(payloadBytes, position, payload, 0, payload.length);
+    return new TimedPayload(payload, queueNs, executeNs, serverNs);
   }
 
   private static RequestFrame parseRequestFrame(DataInputStream input) throws IOException {
@@ -197,6 +245,54 @@ public final class OffloadProtocol {
       throw new EOFException("Unexpected EOF while reading frame payload");
     }
     return output;
+  }
+
+  private static int putInt(byte[] output, int offset, int value) {
+    output[offset] = (byte) (value >>> 24);
+    output[offset + 1] = (byte) (value >>> 16);
+    output[offset + 2] = (byte) (value >>> 8);
+    output[offset + 3] = (byte) value;
+    return offset + Integer.BYTES;
+  }
+
+  private static int putShort(byte[] output, int offset, short value) {
+    output[offset] = (byte) (value >>> 8);
+    output[offset + 1] = (byte) value;
+    return offset + Short.BYTES;
+  }
+
+  private static int putLong(byte[] output, int offset, long value) {
+    output[offset] = (byte) (value >>> 56);
+    output[offset + 1] = (byte) (value >>> 48);
+    output[offset + 2] = (byte) (value >>> 40);
+    output[offset + 3] = (byte) (value >>> 32);
+    output[offset + 4] = (byte) (value >>> 24);
+    output[offset + 5] = (byte) (value >>> 16);
+    output[offset + 6] = (byte) (value >>> 8);
+    output[offset + 7] = (byte) value;
+    return offset + Long.BYTES;
+  }
+
+  private static short getShort(byte[] input, int offset) {
+    return (short) (((input[offset] & 0xFF) << 8) | (input[offset + 1] & 0xFF));
+  }
+
+  private static int getInt(byte[] input, int offset) {
+    return ((input[offset] & 0xFF) << 24)
+        | ((input[offset + 1] & 0xFF) << 16)
+        | ((input[offset + 2] & 0xFF) << 8)
+        | (input[offset + 3] & 0xFF);
+  }
+
+  private static long getLong(byte[] input, int offset) {
+    return ((long) (input[offset] & 0xFF) << 56)
+        | ((long) (input[offset + 1] & 0xFF) << 48)
+        | ((long) (input[offset + 2] & 0xFF) << 40)
+        | ((long) (input[offset + 3] & 0xFF) << 32)
+        | ((long) (input[offset + 4] & 0xFF) << 24)
+        | ((long) (input[offset + 5] & 0xFF) << 16)
+        | ((long) (input[offset + 6] & 0xFF) << 8)
+        | ((long) (input[offset + 7] & 0xFF));
   }
 
   public record RequestFrame(long correlationId, String taskId, byte[] payload) {}
