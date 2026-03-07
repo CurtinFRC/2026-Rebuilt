@@ -351,9 +351,10 @@ public class Robot extends LoggedRobot {
         .and(RobotModeTriggers.teleop())
         // .and(GameState.activeShift)
         .whileTrue(
-        hoodedShooter.shootAtTarget(
-            () ->
-                ChoreoAllianceFlipUtil.flip(FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+            hoodedShooter.shootAtTarget(
+                () ->
+                    ChoreoAllianceFlipUtil.flip(
+                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
     // isInNeutralZone
     //     .and(isLeft.negate())
