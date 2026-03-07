@@ -171,8 +171,10 @@ public class HoodedShooter extends SubsystemBase {
             robotVelocity.get().vxMetersPerSecond, robotVelocity.get().vyMetersPerSecond);
     double airTime = DISTANCE_TO_BALL_FLIGHT_TIME.get(realDistanceLength);
 
-    Translation2d hubCompensationOffset = robotVel.times(airTime);
+    Translation2d hubCompensationOffset = robotVel.times(-airTime);
     Translation2d compensatedHubLocation = location.get().plus(hubCompensationOffset);
+    Logger.recordOutput(
+        "HoodedShooter/compensatedLocation", new Pose2d(compensatedHubLocation, Rotation2d.kZero));
     return (realDistanceLength > 1) ? compensatedHubLocation : location.get();
   }
 
