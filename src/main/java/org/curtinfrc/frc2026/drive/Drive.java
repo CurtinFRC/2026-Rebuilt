@@ -37,6 +37,7 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
@@ -68,7 +69,10 @@ public class Drive extends SubsystemBase {
   // Setting PID values for turning towards Hub.
   public static final double hubHeadingKP = 10;
   public static final double hubHeadingKI = 0;
-  private static final double hubHeadingKD = 0;
+  private static final double hubHeadingKD = 0.7;
+
+  LoggedTunableNumber p = new LoggedTunableNumber("P", 7.5);
+  LoggedTunableNumber d = new LoggedTunableNumber("D", 0.2);
 
   // Creating a new instance of the class PIDController and plugging in PID values from variables
   // above.
@@ -143,6 +147,11 @@ public class Drive extends SubsystemBase {
       module.periodic();
     }
     odometryLock.unlock();
+
+    if (p.hasChanged(hashCode()) || d.hasChanged(hashCode())) {
+      hubHeadingController.setP(p.get());
+      hubHeadingController.setD(d.get());
+    }
 
     // Stop moving when disabled
     if (DriverStation.isDisabled()) {
@@ -363,6 +372,26 @@ public class Drive extends SubsystemBase {
   }
 
   double targetAngle = 0;
+
+  public Command faceAngle(Rotation2d locationSupplier) {
+    return run(
+        () -> {
+          // Getting robot current angle in radians
+          double robotAngle = getPose().getRotation().getRadians();
+
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleSpeed =
+              hubHeadingController.calculate(robotAngle, locationSupplier.getRadians());
+          Logger.recordOutput("AngleSpeed", angleSpeed);
+          Logger.recordOutput("Rotation", getRotation());
+          Logger.recordOutput("Target", locationSupplier);
+          ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
+
+          // Running it
+          runVelocity(speed);
+        });
+  }
 
   public Command faceLocation(Supplier<Translation2d> locationSupplier) {
     return run(

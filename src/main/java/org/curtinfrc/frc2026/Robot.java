@@ -7,6 +7,7 @@ import choreo.auto.AutoFactory;
 import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
@@ -318,6 +319,9 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
+    controller.a().whileTrue(drive.faceAngle(Rotation2d.kZero));
+    controller.b().whileTrue(drive.faceAngle(Rotation2d.k180deg));
+
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
@@ -347,19 +351,20 @@ public class Robot extends LoggedRobot {
     //                 ChoreoAllianceFlipUtil.flip(
     //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
-    isInNeutralZone
-        .and(isLeft.negate())
-        .and(GameState.activeShift.negate())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+    // isInNeutralZone
+    //     .and(isLeft.negate())
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    // () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
 
-    isInNeutralZone
-        .and(isLeft)
-        .and(GameState.activeShift.negate())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+    // isInNeutralZone
+    //     .and(isLeft)
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    // ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
 
     isLeft
         .negate()
@@ -391,16 +396,16 @@ public class Robot extends LoggedRobot {
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
 
     // TODO FIX
-    RobotModeTriggers.disabled()
-        .negate()
-        .and(intaking)
-        .whileTrue(intake.RawControlConsume(0.8))
-        .onFalse(intake.RawIdle());
-    RobotModeTriggers.disabled()
-        .negate()
-        .and(intaking)
-        .whileTrue(mag.store(9.6))
-        .onFalse(mag.store(0));
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(intake.RawControlConsume(0.8))
+    //     .onFalse(intake.RawIdle());
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(mag.store(9.6))
+    //     .onFalse(mag.store(0));
     hoodedShooter
         .hoodedShooterReady
         .whileTrue(mag.spinIndexer(9.6))
