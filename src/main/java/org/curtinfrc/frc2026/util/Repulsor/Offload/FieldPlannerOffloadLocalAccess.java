@@ -9,6 +9,7 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.FieldPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.RepulsorSample;
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
+import org.curtinfrc.frc2026.util.Repulsor.Tracking.Model.Alliance;
 
 public final class FieldPlannerOffloadLocalAccess {
   private static final Object LOCK = new Object();
@@ -23,6 +24,7 @@ public final class FieldPlannerOffloadLocalAccess {
       double robot_x,
       double robot_y,
       String categoryName,
+      String preferredAllianceName,
       boolean suppressFallback,
       double shooterReleaseHeightMeters) {
     synchronized (LOCK) {
@@ -30,15 +32,22 @@ public final class FieldPlannerOffloadLocalAccess {
       localPlanner.setRequestedGoal(requestedGoalPose == null ? Pose2d.kZero : requestedGoalPose);
 
       CategorySpec cat = parseCategory(categoryName);
-      RepulsorSample sample =
-          localPlanner.calculate(
-              pose == null ? Pose2d.kZero : pose,
-              dynamicObstacles == null ? List.of() : dynamicObstacles,
-              robot_x,
-              robot_y,
-              cat,
-              suppressFallback,
-              shooterReleaseHeightMeters);
+      Alliance preferredAlliance = parseAlliance(preferredAllianceName);
+      RepulsorSample sample;
+      FieldPlanner.setOffloadFallbackAlliance(preferredAlliance);
+      try {
+        sample =
+            localPlanner.calculate(
+                pose == null ? Pose2d.kZero : pose,
+                dynamicObstacles == null ? List.of() : dynamicObstacles,
+                robot_x,
+                robot_y,
+                cat,
+                suppressFallback,
+                shooterReleaseHeightMeters);
+      } finally {
+        FieldPlanner.clearOffloadFallbackAlliance();
+      }
 
       FieldPlannerCalculateResultDTO out = new FieldPlannerCalculateResultDTO();
       Translation2d goal = sample.goal();
@@ -73,6 +82,17 @@ public final class FieldPlannerOffloadLocalAccess {
       return CategorySpec.valueOf(categoryName);
     } catch (IllegalArgumentException ignored) {
       return CategorySpec.kScore;
+    }
+  }
+
+  private static Alliance parseAlliance(String allianceName) {
+    if (allianceName == null || allianceName.isBlank()) {
+      return Alliance.kBlue;
+    }
+    try {
+      return Alliance.valueOf(allianceName);
+    } catch (IllegalArgumentException ignored) {
+      return Alliance.kBlue;
     }
   }
 }

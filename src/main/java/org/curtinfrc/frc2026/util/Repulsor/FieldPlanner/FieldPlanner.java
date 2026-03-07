@@ -61,12 +61,13 @@ public class FieldPlanner {
   private static final double FORCE_THROUGH_GOAL_DIST = 2.0;
   private static final double FORCE_THROUGH_WALL_DIST = 0.7;
   public static final double GOAL_STRENGTH = 2.2;
+  private static final ThreadLocal<Alliance> OFFLOAD_FALLBACK_ALLIANCE = new ThreadLocal<>();
   private static final boolean OFFLOAD_PATHING_ENABLED =
       Boolean.parseBoolean(
           System.getProperty("repulsor.offload.fieldplanner.pathing.enabled", "true"));
   private static final boolean OFFLOAD_CALCULATE_ENABLED =
       Boolean.parseBoolean(
-          System.getProperty("repulsor.offload.fieldplanner.calculate.enabled", "false"));
+          System.getProperty("repulsor.offload.fieldplanner.calculate.enabled", "true"));
 
   private static final class ClearMemo {
     Boolean toGoalDyn;
@@ -517,6 +518,7 @@ public class FieldPlanner {
             robot_x,
             robot_y,
             cat == null ? CategorySpec.kScore.name() : cat.name(),
+            preferredAllianceForFallback().name(),
             suppressFallback,
             shooterReleaseHeightMeters);
     if (remote == null) {
@@ -543,6 +545,10 @@ public class FieldPlanner {
 
   private static Alliance preferredAllianceForFallback() {
     if (isOffloadWorkerThread()) {
+      Alliance supplied = OFFLOAD_FALLBACK_ALLIANCE.get();
+      if (supplied != null) {
+        return supplied;
+      }
       String forced = System.getProperty("repulsor.offload.fieldplanner.fallbackAlliance", "blue");
       return "red".equalsIgnoreCase(forced) ? Alliance.kRed : Alliance.kBlue;
     }
@@ -554,6 +560,18 @@ public class FieldPlanner {
 
   private static boolean isOffloadWorkerThread() {
     return Thread.currentThread().getName().startsWith("offload-server-worker");
+  }
+
+  public static void setOffloadFallbackAlliance(Alliance alliance) {
+    if (alliance == null) {
+      OFFLOAD_FALLBACK_ALLIANCE.remove();
+    } else {
+      OFFLOAD_FALLBACK_ALLIANCE.set(alliance);
+    }
+  }
+
+  public static void clearOffloadFallbackAlliance() {
+    OFFLOAD_FALLBACK_ALLIANCE.remove();
   }
 
   private static RepulsorDriverStation safeDriverStation() {

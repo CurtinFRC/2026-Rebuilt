@@ -46,9 +46,9 @@ class RealOffloadServerDragShotTest {
   private static final int CLIENT_READ_TIMEOUT_MS =
       Integer.getInteger("repulsor.offload.real.readTimeoutMs", 2);
   private static final int LATENCY_WARMUP_SAMPLES =
-      Integer.getInteger("repulsor.offload.real.warmupSamples", 5);
+      Integer.getInteger("repulsor.offload.real.warmupSamples", 50);
   private static final int LATENCY_MEASURED_SAMPLES =
-      Integer.getInteger("repulsor.offload.real.samplesPerTask", 80);
+      Integer.getInteger("repulsor.offload.real.samplesPerTask", 800);
   private static final String METRICS_FILE_PROPERTY = "repulsor.offload.real.metricsFile";
   private static final String DEFAULT_METRICS_FILE = "build/offload/real-offload-latency.json";
   private static final String OBSTACLE_LIST_TYPE =
@@ -257,6 +257,7 @@ class RealOffloadServerDragShotTest {
     double robotHalfLengthMeters = 0.45;
     double robotHalfWidthMeters = 0.40;
     String categoryName = "kScore";
+    String preferredAllianceName = "kBlue";
     boolean suppressFallback = true;
     double shooterReleaseHeightMeters = 0.95;
 
@@ -269,8 +270,9 @@ class RealOffloadServerDragShotTest {
     request.setArg3(OffloadValueCodec.encode("double", robotHalfLengthMeters));
     request.setArg4(OffloadValueCodec.encode("double", robotHalfWidthMeters));
     request.setArg5(OffloadValueCodec.encode("java.lang.String", categoryName));
-    request.setArg6(OffloadValueCodec.encode("boolean", suppressFallback));
-    request.setArg7(OffloadValueCodec.encode("double", shooterReleaseHeightMeters));
+    request.setArg6(OffloadValueCodec.encode("java.lang.String", preferredAllianceName));
+    request.setArg7(OffloadValueCodec.encode("boolean", suppressFallback));
+    request.setArg8(OffloadValueCodec.encode("double", shooterReleaseHeightMeters));
 
     FieldPlannerOffloadEntrypoints_calculate_OffloadResponse response =
         warmupThenMeasure(

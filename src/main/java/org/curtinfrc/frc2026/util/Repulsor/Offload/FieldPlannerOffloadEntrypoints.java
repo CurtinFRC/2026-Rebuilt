@@ -20,6 +20,7 @@ public final class FieldPlannerOffloadEntrypoints {
       double robot_x,
       double robot_y,
       String categoryName,
+      String preferredAllianceName,
       boolean suppressFallback,
       double shooterReleaseHeightMeters) {
     return FieldPlannerOffloadLocalAccess.calculateLocal(
@@ -29,6 +30,7 @@ public final class FieldPlannerOffloadEntrypoints {
         robot_x,
         robot_y,
         categoryName,
+        preferredAllianceName,
         suppressFallback,
         shooterReleaseHeightMeters);
   }
