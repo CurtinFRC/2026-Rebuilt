@@ -246,61 +246,49 @@ task(buildOffloadServerJar) {
     dependsOn(":offload-server:jar")
 }
 
-task(generateOffloadServiceUnit) {
+task(generateOffloadNixPackage) {
     group = "offload"
-    description = "Generate systemd unit file for the offload server."
-    dependsOn(buildOffloadServerJar, generateOffloadManifest)
+    description = "Generate a Nix package expression for the offload server bundle (includes jdk17_headless)."
+    dependsOn(buildOffloadServerJar, buildOffloadTasksJar, generateOffloadManifest)
 
     doLast {
-        def deployDir = (project.findProperty("offloadDeployDir")
-                ?: System.getenv("OFFLOAD_DEPLOY_DIR")
-                ?: "/var/lib/offload").toString()
-        def pluginDir = (project.findProperty("offloadPluginDir")
-                ?: System.getenv("OFFLOAD_PLUGIN_DIR")
-                ?: "${deployDir}/plugins").toString()
-        def serviceName = (project.findProperty("offloadServiceName")
-                ?: System.getenv("OFFLOAD_SERVICE_NAME")
-                ?: "offload-server").toString()
-        def serviceUser = (project.findProperty("offloadServiceUser")
-                ?: System.getenv("OFFLOAD_SERVICE_USER")
-                ?: (project.findProperty("offloadUser")
-                    ?: System.getenv("OFFLOAD_USER")
-                    ?: "photon")).toString().trim()
-        def serviceGroup = (project.findProperty("offloadServiceGroup")
-                ?: System.getenv("OFFLOAD_SERVICE_GROUP")
-                ?: "users").toString().trim()
+        def nixDir = layout.buildDirectory.dir("offload/nix").get().asFile
+        nixDir.mkdirs()
 
-        def serverJarName = "offload-server.jar"
-        def defaultExec = "/home/photon/.nix-profile/bin/java -Djava.net.preferIPv4Stack=true -jar ${deployDir}/${serverJarName}"
-        def execStart = (project.findProperty("offloadServiceExec")
-                ?: System.getenv("OFFLOAD_SERVICE_EXEC")
-                ?: defaultExec).toString()
+        def nixFile = new File(nixDir, "default.nix")
+        nixFile.text = '''{ pkgs ? import <nixpkgs> {} }:
+let
+  jre = pkgs.jdk17_headless;
+in pkgs.stdenvNoCC.mkDerivation {
+  pname = "repulsor-offload-server";
+  version = "1.0.0";
+  src = ./.;
+  dontUnpack = true;
 
-        def userLine = serviceUser.isEmpty() ? "" : "User=${serviceUser}\n"
-        def groupLine = serviceGroup.isEmpty() ? "" : "Group=${serviceGroup}\n"
+  installPhase = ''
+    runHook preInstall
 
-        def unitDir = layout.buildDirectory.dir("offload/service").get().asFile
-        unitDir.mkdirs()
+    install -d "$out/libexec/repulsor-offload/plugins" "$out/bin"
+    install -m 0644 "$src/offload-server.jar" "$out/libexec/repulsor-offload/offload-server.jar"
+    install -m 0644 "$src/offload-tasks.jar" "$out/libexec/repulsor-offload/plugins/offload-tasks.jar"
+    install -m 0644 "$src/offload-manifest.json" "$out/libexec/repulsor-offload/plugins/offload-manifest.json"
 
-        def unitFile = new File(unitDir, "${serviceName}.service")
-        unitFile.text = """[Unit]
-Description=Repulsor Offload Server
-After=network-online.target
-Wants=network-online.target
+    plugin_dir="$out/libexec/repulsor-offload/plugins"
+    server_jar="$out/libexec/repulsor-offload/offload-server.jar"
 
-[Service]
-Type=simple
-WorkingDirectory=${deployDir}
-Environment=OFFLOAD_PLUGIN_DIR=${pluginDir}
-Environment=OFFLOAD_MANIFEST=${pluginDir}/offload-manifest.json
-ExecStart=${execStart}
-Restart=always
-RestartSec=1
-${userLine}${groupLine}
+    cat > "$out/bin/repulsor-offload-server" <<EOF
+#!${pkgs.runtimeShell}
+set -euo pipefail
+export OFFLOAD_PLUGIN_DIR="''${OFFLOAD_PLUGIN_DIR:-$plugin_dir}"
+export OFFLOAD_MANIFEST="''${OFFLOAD_MANIFEST:-''$OFFLOAD_PLUGIN_DIR/offload-manifest.json}"
+exec ${jre}/bin/java -Djava.net.preferIPv4Stack=true -jar "$server_jar" "$@"
+EOF
 
-[Install]
-WantedBy=multi-user.target
-"""
+    chmod +x "$out/bin/repulsor-offload-server"
+    runHook postInstall
+  '';
+}
+'''
     }
 }
 
@@ -354,8 +342,8 @@ if (dedicatedOffloadOnlyRequested) {
 
 task(deployOffloadToCoprocessors) {
     group = "offload"
-    description = "Deploy offload server + plugins + manifest to configured coprocessors and load the systemd service for the current boot."
-    dependsOn(buildOffloadTasksJar, buildOffloadServerJar, generateOffloadManifest, generateOffloadServiceUnit)
+    description = "Deploy offload Nix package sources to configured coprocessors for nixos-rebuild switch (no systemctl)."
+    dependsOn(buildOffloadTasksJar, buildOffloadServerJar, generateOffloadManifest, generateOffloadNixPackage)
 
     doLast {
         def hostCsv = (project.findProperty("offloadHosts")
@@ -368,40 +356,34 @@ task(deployOffloadToCoprocessors) {
 
         def user = (project.findProperty("offloadUser")
                 ?: System.getenv("OFFLOAD_USER")
-                ?: "photon").toString()
-        def deployDir = (project.findProperty("offloadDeployDir")
-                ?: System.getenv("OFFLOAD_DEPLOY_DIR")
-                ?: "/var/lib/offload").toString()
-        def pluginDir = (project.findProperty("offloadPluginDir")
-                ?: System.getenv("OFFLOAD_PLUGIN_DIR")
-                ?: "${deployDir}/plugins").toString()
-        def serviceName = (project.findProperty("offloadServiceName")
-                ?: System.getenv("OFFLOAD_SERVICE_NAME")
-                ?: "offload-server").toString()
+                ?: "nix").toString()
+        def nixBundleDir = (project.findProperty("offloadNixBundleDir")
+                ?: System.getenv("OFFLOAD_NIX_BUNDLE_DIR")
+                ?: "/etc/nixos/repulsor-offload").toString()
 
         def taskJar = project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile
         def serverJar = project(":offload-server").tasks.named("jar").get().archiveFile.get().asFile
         def manifestFile = layout.buildDirectory.file("offload/offload-manifest.json").get().asFile
-        def unitFile = new File(layout.buildDirectory.dir("offload/service").get().asFile, "${serviceName}.service")
+        def nixFile = new File(layout.buildDirectory.dir("offload/nix").get().asFile, "default.nix")
 
 hosts.each { host ->
     def target = "${user}@${host}"
-    def remoteUnitPath = "${deployDir}/${serviceName}.service"
 
     def remoteTmpDir = "/tmp/repulsor-offload-deploy"
-    def remoteServerJarTmp = "${remoteTmpDir}/offload-server.jar"
-    def remoteTaskJarTmp = "${remoteTmpDir}/offload-tasks.jar"
-    def remoteManifestTmp = "${remoteTmpDir}/offload-manifest.json"
-    def remoteUnitTmp = "${remoteTmpDir}/${serviceName}.service"
+    def remoteBundleDir = "${remoteTmpDir}/bundle"
+    def remoteServerJarTmp = "${remoteBundleDir}/offload-server.jar"
+    def remoteTaskJarTmp = "${remoteBundleDir}/offload-tasks.jar"
+    def remoteManifestTmp = "${remoteBundleDir}/offload-manifest.json"
+    def remoteNixExprTmp = "${remoteBundleDir}/default.nix"
 
-    println "Deploying offload bundle to ${target}:${deployDir}"
+    println "Deploying offload Nix bundle to ${target}:${nixBundleDir} (staging at ${remoteBundleDir})"
 
     exec {
         commandLine "ssh",
                 "-o", "BatchMode=yes",
                 "-o", "StrictHostKeyChecking=accept-new",
                 target,
-                "mkdir -p '${remoteTmpDir}'"
+                "mkdir -p '${remoteBundleDir}'"
     }
 
     exec {
@@ -432,25 +414,33 @@ hosts.each { host ->
         commandLine "scp",
                 "-o", "BatchMode=yes",
                 "-o", "StrictHostKeyChecking=accept-new",
-                unitFile.absolutePath,
-                "${target}:${remoteUnitTmp}"
+                nixFile.absolutePath,
+                "${target}:${remoteNixExprTmp}"
     }
 
-    def remoteCmd = """set -e
-sudo -n mkdir -p '${deployDir}' '${pluginDir}'
+    def remoteCmd = """set -euo pipefail
+run() { "\$@"; }
 
-sudo -n mv '${remoteServerJarTmp}' '${deployDir}/offload-server.jar'
-sudo -n mv '${remoteTaskJarTmp}' '${pluginDir}/offload-tasks.jar'
-sudo -n mv '${remoteManifestTmp}' '${pluginDir}/offload-manifest.json'
-sudo -n mv '${remoteUnitTmp}' '${remoteUnitPath}'
+if mkdir -p '${nixBundleDir}' 2>/dev/null; then
+  :
+elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+  run() { sudo -n "\$@"; }
+  run sudo mkdir -p '${nixBundleDir}'
+else
+  echo "Cannot write to ${nixBundleDir}. Grant sudo NOPASSWD for mkdir/mv/chown or set -PoffloadNixBundleDir to a writable path." >&2
+  exit 1
+fi
 
-sudo -n chown '${user}:users' '${deployDir}/offload-server.jar' '${pluginDir}/offload-tasks.jar' '${pluginDir}/offload-manifest.json' '${remoteUnitPath}' || true
+run sudo mv '${remoteServerJarTmp}' '${nixBundleDir}/offload-server.jar'
+run sudo mv '${remoteTaskJarTmp}' '${nixBundleDir}/offload-tasks.jar'
+run sudo mv '${remoteManifestTmp}' '${nixBundleDir}/offload-manifest.json'
+run sudo mv '${remoteNixExprTmp}' '${nixBundleDir}/default.nix'
+run sudo chown root:root '${nixBundleDir}/offload-server.jar' '${nixBundleDir}/offload-tasks.jar' '${nixBundleDir}/offload-manifest.json' '${nixBundleDir}/default.nix' || true
 
-sudo -n systemctl link --runtime '${remoteUnitPath}'
-sudo -n systemctl daemon-reload
-sudo -n systemctl stop '${serviceName}.service' || true
-sudo -n systemctl start '${serviceName}.service'
-sudo -n systemctl is-active --quiet '${serviceName}.service'
+rm -rf '${remoteTmpDir}' || true
+
+echo "Uploaded offload bundle to ${nixBundleDir} on ${host}."
+echo 'Next: ssh ${target} "sudo nixos-rebuild switch"'
 """
 
     def result = exec {
@@ -464,8 +454,8 @@ sudo -n systemctl is-active --quiet '${serviceName}.service'
 
     if (result.exitValue != 0) {
         throw new GradleException(
-                "Copied offload artifacts to ${host}, but service start failed. " +
-                "Check logs with: ssh ${target} \"sudo -n systemctl status ${serviceName}.service --no-pager && sudo -n journalctl -u ${serviceName}.service -n 100 --no-pager\""
+                "Copied offload artifacts to ${host}, but syncing into ${nixBundleDir} failed. " +
+                "Grant passwordless sudo for mkdir/mv/chown or set -PoffloadNixBundleDir to a writable path."
         )
     }
 }
