@@ -25,11 +25,14 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadError;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadGateway;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadHelloResponse;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadProtocol;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadResponseEnvelope;
 
 public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
   private final OffloadClientConfig config;
   private final ArrayBlockingQueue<OutboundRequest> outboundQueue;
   private final Map<Long, PendingRequest> pendingByCorrelation = new ConcurrentHashMap<>();
+  private final Map<String, OffloadServerTiming> latestServerTimingByTask =
+      new ConcurrentHashMap<>();
   private final AtomicLong nextCorrelation = new AtomicLong(1L);
 
   private final ExecutorService ioExecutor;
@@ -77,7 +80,10 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
     CompletableFuture<byte[]> future = new CompletableFuture<>();
     PendingRequest pending =
         new PendingRequest(
-            correlationId, future, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs));
+            correlationId,
+            taskId,
+            future,
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs));
 
     pendingByCorrelation.put(correlationId, pending);
     boolean queued = outboundQueue.offer(new OutboundRequest(correlationId, taskId, payloadBytes));
@@ -101,6 +107,13 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
 
   public String manifestHash() {
     return manifestHash;
+  }
+
+  public Optional<OffloadServerTiming> latestServerTiming(String taskId) {
+    if (taskId == null) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(latestServerTimingByTask.get(taskId));
   }
 
   private void ioLoop() {
@@ -210,7 +223,21 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
         return;
       }
       if (response.status() == OffloadProtocol.STATUS_OK) {
-        pending.future().complete(response.payload());
+        byte[] payload = response.payload();
+        OffloadResponseEnvelope envelope = tryDecodeEnvelope(payload);
+        if (envelope != null
+            && envelope.getPayload() != null
+            && envelope.getQueueNs() >= 0
+            && envelope.getExecuteNs() >= 0
+            && envelope.getServerNs() > 0) {
+          latestServerTimingByTask.put(
+              pending.taskId(),
+              new OffloadServerTiming(
+                  envelope.getQueueNs(), envelope.getExecuteNs(), envelope.getServerNs()));
+          pending.future().complete(envelope.getPayload());
+          return;
+        }
+        pending.future().complete(payload);
       } else {
         OffloadError err = CborSerde.read(response.payload(), OffloadError.class);
         pending
@@ -242,6 +269,14 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
 
   private static String safe(String value) {
     return value == null ? "" : value;
+  }
+
+  private static OffloadResponseEnvelope tryDecodeEnvelope(byte[] payload) {
+    try {
+      return CborSerde.read(payload, OffloadResponseEnvelope.class);
+    } catch (RuntimeException ignored) {
+      return null;
+    }
   }
 
   private void disconnect(Exception cause) {
@@ -288,7 +323,7 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
   private record OutboundRequest(long correlationId, String taskId, byte[] payload) {}
 
   private record PendingRequest(
-      long correlationId, CompletableFuture<byte[]> future, long deadlineNanos) {}
+      long correlationId, String taskId, CompletableFuture<byte[]> future, long deadlineNanos) {}
 
   private record ProbeResult(OffloadHost host, long latencyNanos) {}
 }

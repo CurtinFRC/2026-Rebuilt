@@ -24,6 +24,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadError;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadFunction;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadHelloResponse;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadProtocol;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadResponseEnvelope;
 
 public final class OffloadServer implements AutoCloseable {
   private final OffloadServerConfig config;
@@ -174,8 +175,21 @@ public final class OffloadServer implements AutoCloseable {
             (payload, error) -> {
               long writeStartNs = System.nanoTime();
               if (error == null) {
+                long queueNs = Math.max(0L, timing.executeStartNs - timing.receivedNs);
+                long executeNs = Math.max(0L, timing.executeEndNs - timing.executeStartNs);
+                byte[] responsePayload =
+                    CborSerde.write(
+                        new OffloadResponseEnvelope(
+                            payload,
+                            queueNs,
+                            executeNs,
+                            Math.max(0L, writeStartNs - timing.receivedNs)));
                 writeResponse(
-                    output, writeLock, request.correlationId(), OffloadProtocol.STATUS_OK, payload);
+                    output,
+                    writeLock,
+                    request.correlationId(),
+                    OffloadProtocol.STATUS_OK,
+                    responsePayload);
                 if (timingLogsEnabled) {
                   long writeEndNs = System.nanoTime();
                   logTaskStop(

@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadClientConfig;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadServerTiming;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.TcpOffloadClient;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateLocalAccess;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
@@ -95,19 +96,20 @@ class RealOffloadServerDragShotTest {
               + tcpProbe
               + "). Possible protocol mismatch or handshake failure.");
 
-      runSampleDoubleValueRpc(latencyRecorder);
-      runSampleWorkerProbeRpc(latencyRecorder);
-      runDragShotStaticRpc(latencyRecorder);
-      runDragShotFindBestAutoRpc(latencyRecorder);
-      runPredictiveShuttleRecoveryRpc(latencyRecorder);
-      runFieldTrackerRecoveryGoalRpc(latencyRecorder);
+      runSampleDoubleValueRpc(latencyRecorder, client);
+      runSampleWorkerProbeRpc(latencyRecorder, client);
+      runDragShotStaticRpc(latencyRecorder, client);
+      runDragShotFindBestAutoRpc(latencyRecorder, client);
+      runPredictiveShuttleRecoveryRpc(latencyRecorder, client);
+      runFieldTrackerRecoveryGoalRpc(latencyRecorder, client);
     } finally {
       OffloadRpc.clearGateway();
       latencyRecorder.printSummary();
     }
   }
 
-  private static void runSampleDoubleValueRpc(LatencyRecorder latencyRecorder) throws Exception {
+  private static void runSampleDoubleValueRpc(LatencyRecorder latencyRecorder, TcpOffloadClient client)
+      throws Exception {
     SampleMathOffloadEntrypoints_doubleValue_OffloadRequest request =
         new SampleMathOffloadEntrypoints_doubleValue_OffloadRequest();
     request.setArg0(OffloadValueCodec.encode("int", 7));
@@ -116,6 +118,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.SAMPLE_DOUBLE_VALUE,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.SAMPLE_DOUBLE_VALUE,
@@ -128,7 +131,8 @@ class RealOffloadServerDragShotTest {
     assertEquals(14, remote, "sample doubleValue remote result");
   }
 
-  private static void runSampleWorkerProbeRpc(LatencyRecorder latencyRecorder) throws Exception {
+  private static void runSampleWorkerProbeRpc(
+      LatencyRecorder latencyRecorder, TcpOffloadClient client) throws Exception {
     SampleMathOffloadEntrypoints_runsOnOffloadWorkerThread_OffloadRequest request =
         new SampleMathOffloadEntrypoints_runsOnOffloadWorkerThread_OffloadRequest();
     request.setArg0(OffloadValueCodec.encode("int", 1));
@@ -137,6 +141,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.SAMPLE_WORKER_THREAD_PROBE,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.SAMPLE_WORKER_THREAD_PROBE,
@@ -151,7 +156,8 @@ class RealOffloadServerDragShotTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static void runDragShotStaticRpc(LatencyRecorder latencyRecorder) throws Exception {
+  private static void runDragShotStaticRpc(LatencyRecorder latencyRecorder, TcpOffloadClient client)
+      throws Exception {
     GamePiecePhysics gamePiece = new TestGamePiecePhysics(0.25, 0.018, 0.47, 1.225);
     Translation2d shooterFieldPosition = new Translation2d(4.0, 3.5);
     Translation2d targetFieldPosition = new Translation2d(8.0, 4.0);
@@ -177,6 +183,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.DRAG_SHOT_CALC_STATIC_SHOT_ANGLE_SPEED,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.DRAG_SHOT_CALC_STATIC_SHOT_ANGLE_SPEED,
@@ -215,7 +222,8 @@ class RealOffloadServerDragShotTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static void runDragShotFindBestAutoRpc(LatencyRecorder latencyRecorder) throws Exception {
+  private static void runDragShotFindBestAutoRpc(
+      LatencyRecorder latencyRecorder, TcpOffloadClient client) throws Exception {
     GamePiecePhysics gamePiece = new TestGamePiecePhysics(0.25, 0.018, 0.47, 1.225);
     Translation2d targetFieldPosition = new Translation2d(8.0, 4.0);
     double targetHeightMeters = 2.2;
@@ -246,6 +254,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.DRAG_SHOT_FIND_BEST_SHOT_AUTO,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.DRAG_SHOT_FIND_BEST_SHOT_AUTO,
@@ -274,7 +283,8 @@ class RealOffloadServerDragShotTest {
     assertShotEquals(remote, local, "dragshot auto RPC vs local");
   }
 
-  private static void runPredictiveShuttleRecoveryRpc(LatencyRecorder latencyRecorder)
+  private static void runPredictiveShuttleRecoveryRpc(
+      LatencyRecorder latencyRecorder, TcpOffloadClient client)
       throws Exception {
     Pose2d robotPose = new Pose2d(2.2, 3.4, Rotation2d.fromDegrees(25.0));
     double ourSpeedCap = 2.8;
@@ -294,6 +304,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.PREDICTIVE_SELECT_SHUTTLE_RECOVERY_POINT,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.PREDICTIVE_SELECT_SHUTTLE_RECOVERY_POINT,
@@ -314,7 +325,8 @@ class RealOffloadServerDragShotTest {
     assertRecoveryPointEquals(remote, local, "predictive shuttle recovery RPC vs local");
   }
 
-  private static void runFieldTrackerRecoveryGoalRpc(LatencyRecorder latencyRecorder)
+  private static void runFieldTrackerRecoveryGoalRpc(
+      LatencyRecorder latencyRecorder, TcpOffloadClient client)
       throws Exception {
     Pose2d robotPose = new Pose2d(2.2, 3.4, Rotation2d.fromDegrees(25.0));
     double ourSpeedCap = 2.8;
@@ -334,6 +346,7 @@ class RealOffloadServerDragShotTest {
         warmupThenMeasure(
             OffloadTaskIds.FIELD_TRACKER_NEXT_SHUTTLE_RECOVERY_GOAL_BLUE,
             latencyRecorder,
+            client,
             () ->
                 OffloadRpc.callTyped(
                         OffloadTaskIds.FIELD_TRACKER_NEXT_SHUTTLE_RECOVERY_GOAL_BLUE,
@@ -404,26 +417,51 @@ class RealOffloadServerDragShotTest {
   }
 
   private static <T> T warmupThenMeasure(
-      String taskId, LatencyRecorder latencyRecorder, ThrowingSupplier<T> call) throws Exception {
+      String taskId,
+      LatencyRecorder latencyRecorder,
+      TcpOffloadClient client,
+      ThrowingSupplier<T> call)
+      throws Exception {
     for (int i = 0; i < Math.max(0, LATENCY_WARMUP_SAMPLES); i++) {
       call.get();
     }
     T last = null;
     for (int i = 0; i < Math.max(1, LATENCY_MEASURED_SAMPLES); i++) {
-      last = latencyRecorder.measure(taskId, call);
+      last = latencyRecorder.measure(taskId, call, client);
     }
     return last;
   }
 
   private static final class LatencyRecorder {
     private final Map<String, List<Long>> byTaskNs = new LinkedHashMap<>();
+    private final Map<String, List<Long>> byTaskServerNs = new LinkedHashMap<>();
+    private final Map<String, List<Long>> byTaskExecNs = new LinkedHashMap<>();
+    private final Map<String, List<Long>> byTaskOverheadNs = new LinkedHashMap<>();
 
-    <T> T measure(String taskId, ThrowingSupplier<T> call) throws Exception {
+    <T> T measure(String taskId, ThrowingSupplier<T> call, TcpOffloadClient client) throws Exception {
       long startNs = System.nanoTime();
       T value = call.get();
       long elapsedNs = System.nanoTime() - startNs;
       byTaskNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(elapsedNs);
-      System.out.printf("offload-rtt task=%s rttMs=%.3f%n", taskId, elapsedNs / 1_000_000.0);
+      Optional<OffloadServerTiming> timingOpt = client.latestServerTiming(taskId);
+      if (timingOpt.isPresent()) {
+        OffloadServerTiming timing = timingOpt.get();
+        long serverNs = timing.serverNs();
+        long execNs = timing.executeNs();
+        long overheadNs = Math.max(0L, elapsedNs - serverNs);
+        byTaskServerNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(serverNs);
+        byTaskExecNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(execNs);
+        byTaskOverheadNs.computeIfAbsent(taskId, ignored -> new ArrayList<>()).add(overheadNs);
+        System.out.printf(
+            "offload-rtt task=%s rttMs=%.3f serverMs=%.3f execMs=%.3f overheadMs=%.3f%n",
+            taskId,
+            elapsedNs / 1_000_000.0,
+            serverNs / 1_000_000.0,
+            execNs / 1_000_000.0,
+            overheadNs / 1_000_000.0);
+      } else {
+        System.out.printf("offload-rtt task=%s rttMs=%.3f%n", taskId, elapsedNs / 1_000_000.0);
+      }
       return value;
     }
 
@@ -434,31 +472,70 @@ class RealOffloadServerDragShotTest {
       System.out.println("offload-rtt summary:");
       byTaskNs.forEach(
           (taskId, samples) -> {
-            double minMs = Double.POSITIVE_INFINITY;
-            double maxMs = 0.0;
-            double sumMs = 0.0;
-            List<Double> sortedMs = new ArrayList<>(samples.size());
-            for (long ns : samples) {
-              double ms = ns / 1_000_000.0;
-              minMs = Math.min(minMs, ms);
-              maxMs = Math.max(maxMs, ms);
-              sumMs += ms;
-              sortedMs.add(ms);
+            Stats rtt = statsMs(samples);
+            List<Long> server = byTaskServerNs.get(taskId);
+            List<Long> exec = byTaskExecNs.get(taskId);
+            List<Long> overhead = byTaskOverheadNs.get(taskId);
+            if (server == null || exec == null || overhead == null) {
+              System.out.printf(
+                  "  task=%s samples=%d minMs=%.3f p50Ms=%.3f avgMs=%.3f p95Ms=%.3f maxMs=%.3f%n",
+                  taskId,
+                  samples.size(),
+                  rtt.minMs,
+                  rtt.p50Ms,
+                  rtt.avgMs,
+                  rtt.p95Ms,
+                  rtt.maxMs);
+              return;
             }
-            Collections.sort(sortedMs);
-            double avgMs = sumMs / samples.size();
-            double p50Ms = percentile(sortedMs, 0.50);
-            double p95Ms = percentile(sortedMs, 0.95);
+
+            Stats serverStats = statsMs(server);
+            Stats execStats = statsMs(exec);
+            Stats overheadStats = statsMs(overhead);
             System.out.printf(
-                "  task=%s samples=%d minMs=%.3f p50Ms=%.3f avgMs=%.3f p95Ms=%.3f maxMs=%.3f%n",
+                "  task=%s samples=%d rtt[min/p50/avg/p95/max]=%.3f/%.3f/%.3f/%.3f/%.3f server[min/p50/avg/p95/max]=%.3f/%.3f/%.3f/%.3f/%.3f exec[min/p50/avg/p95/max]=%.3f/%.3f/%.3f/%.3f/%.3f overhead[min/p50/avg/p95/max]=%.3f/%.3f/%.3f/%.3f/%.3f%n",
                 taskId,
                 samples.size(),
-                minMs,
-                p50Ms,
-                avgMs,
-                p95Ms,
-                maxMs);
+                rtt.minMs,
+                rtt.p50Ms,
+                rtt.avgMs,
+                rtt.p95Ms,
+                rtt.maxMs,
+                serverStats.minMs,
+                serverStats.p50Ms,
+                serverStats.avgMs,
+                serverStats.p95Ms,
+                serverStats.maxMs,
+                execStats.minMs,
+                execStats.p50Ms,
+                execStats.avgMs,
+                execStats.p95Ms,
+                execStats.maxMs,
+                overheadStats.minMs,
+                overheadStats.p50Ms,
+                overheadStats.avgMs,
+                overheadStats.p95Ms,
+                overheadStats.maxMs);
           });
+    }
+
+    private static Stats statsMs(List<Long> samplesNs) {
+      double minMs = Double.POSITIVE_INFINITY;
+      double maxMs = 0.0;
+      double sumMs = 0.0;
+      List<Double> sortedMs = new ArrayList<>(samplesNs.size());
+      for (long ns : samplesNs) {
+        double ms = ns / 1_000_000.0;
+        minMs = Math.min(minMs, ms);
+        maxMs = Math.max(maxMs, ms);
+        sumMs += ms;
+        sortedMs.add(ms);
+      }
+      Collections.sort(sortedMs);
+      double avgMs = sumMs / samplesNs.size();
+      double p50Ms = percentile(sortedMs, 0.50);
+      double p95Ms = percentile(sortedMs, 0.95);
+      return new Stats(minMs, p50Ms, avgMs, p95Ms, maxMs);
     }
 
     private static double percentile(List<Double> sorted, double q) {
@@ -473,6 +550,8 @@ class RealOffloadServerDragShotTest {
       index = Math.max(0, Math.min(sorted.size() - 1, index));
       return sorted.get(index);
     }
+
+    private record Stats(double minMs, double p50Ms, double avgMs, double p95Ms, double maxMs) {}
   }
 
   private static OffloadHost parseHost() {
