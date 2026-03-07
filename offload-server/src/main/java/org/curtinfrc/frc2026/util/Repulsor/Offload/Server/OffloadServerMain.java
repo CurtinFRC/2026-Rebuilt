@@ -11,6 +11,7 @@ public final class OffloadServerMain {
     System.out.println(
         "Offload server listening on port "
             + config.port()
+            + " (udp)"
             + " with "
             + server.taskCount()
             + " loaded tasks"

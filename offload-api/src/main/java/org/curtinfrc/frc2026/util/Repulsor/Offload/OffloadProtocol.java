@@ -1,5 +1,7 @@
 package org.curtinfrc.frc2026.util.Repulsor.Offload;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -21,18 +23,78 @@ public final class OffloadProtocol {
   public static void writeRequest(
       DataOutputStream output, long correlationId, String taskId, byte[] payload)
       throws IOException {
-    byte[] taskBytes = taskId.getBytes(StandardCharsets.UTF_8);
-    output.writeInt(MAGIC);
-    output.writeShort(VERSION);
-    output.writeLong(correlationId);
-    output.writeInt(taskBytes.length);
-    output.write(taskBytes);
-    output.writeInt(payload.length);
-    output.write(payload);
+    output.write(serializeRequest(correlationId, taskId, payload));
     output.flush();
   }
 
+  public static byte[] serializeRequest(long correlationId, String taskId, byte[] payload)
+      throws IOException {
+    byte[] taskBytes = taskId.getBytes(StandardCharsets.UTF_8);
+    ByteArrayOutputStream byteStream =
+        new ByteArrayOutputStream(32 + taskBytes.length + payload.length);
+    try (DataOutputStream output = new DataOutputStream(byteStream)) {
+      output.writeInt(MAGIC);
+      output.writeShort(VERSION);
+      output.writeLong(correlationId);
+      output.writeInt(taskBytes.length);
+      output.write(taskBytes);
+      output.writeInt(payload.length);
+      output.write(payload);
+      output.flush();
+    }
+    return byteStream.toByteArray();
+  }
+
   public static RequestFrame readRequest(DataInputStream input) throws IOException {
+    return parseRequest(input);
+  }
+
+  public static RequestFrame parseRequest(byte[] frameBytes) throws IOException {
+    try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(frameBytes))) {
+      RequestFrame frame = parseRequest(input);
+      if (input.available() != 0) {
+        throw new IOException("Trailing bytes in request frame");
+      }
+      return frame;
+    }
+  }
+
+  public static void writeResponse(
+      DataOutputStream output, long correlationId, byte status, byte[] payload) throws IOException {
+    output.write(serializeResponse(correlationId, status, payload));
+    output.flush();
+  }
+
+  public static byte[] serializeResponse(long correlationId, byte status, byte[] payload)
+      throws IOException {
+    ByteArrayOutputStream byteStream = new ByteArrayOutputStream(24 + payload.length);
+    try (DataOutputStream output = new DataOutputStream(byteStream)) {
+      output.writeInt(MAGIC);
+      output.writeShort(VERSION);
+      output.writeLong(correlationId);
+      output.writeByte(status);
+      output.writeInt(payload.length);
+      output.write(payload);
+      output.flush();
+    }
+    return byteStream.toByteArray();
+  }
+
+  public static ResponseFrame readResponse(DataInputStream input) throws IOException {
+    return parseResponse(input);
+  }
+
+  public static ResponseFrame parseResponse(byte[] frameBytes) throws IOException {
+    try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(frameBytes))) {
+      ResponseFrame frame = parseResponse(input);
+      if (input.available() != 0) {
+        throw new IOException("Trailing bytes in response frame");
+      }
+      return frame;
+    }
+  }
+
+  private static RequestFrame parseRequest(DataInputStream input) throws IOException {
     int magic = input.readInt();
     if (magic != MAGIC) {
       throw new IOException("Invalid request magic: " + Integer.toHexString(magic));
@@ -56,18 +118,7 @@ public final class OffloadProtocol {
     return new RequestFrame(correlationId, taskId, payload);
   }
 
-  public static void writeResponse(
-      DataOutputStream output, long correlationId, byte status, byte[] payload) throws IOException {
-    output.writeInt(MAGIC);
-    output.writeShort(VERSION);
-    output.writeLong(correlationId);
-    output.writeByte(status);
-    output.writeInt(payload.length);
-    output.write(payload);
-    output.flush();
-  }
-
-  public static ResponseFrame readResponse(DataInputStream input) throws IOException {
+  private static ResponseFrame parseResponse(DataInputStream input) throws IOException {
     int magic = input.readInt();
     if (magic != MAGIC) {
       throw new IOException("Invalid response magic: " + Integer.toHexString(magic));

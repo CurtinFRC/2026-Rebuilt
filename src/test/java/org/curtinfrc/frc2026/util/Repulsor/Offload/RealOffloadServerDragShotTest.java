@@ -8,8 +8,9 @@ import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -23,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadClientConfig;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadServerTiming;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.TcpOffloadClient;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.UdpOffloadClient;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateLocalAccess;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.DragShotPlanner;
 import org.curtinfrc.frc2026.util.Repulsor.Shooting.Constraints;
@@ -58,15 +59,15 @@ class RealOffloadServerDragShotTest {
     OffloadRpc.clearGateway();
     OffloadHost host = parseHost();
     Path metricsFile = resolveMetricsFile();
-    String tcpProbe = probeTcp(host, 2000);
+    String udpProbe = probeUdp(host, 2000);
     assertTrue(
-        "reachable".equals(tcpProbe),
-        "TCP probe failed for "
+        "reachable".equals(udpProbe),
+        "UDP probe failed for "
             + host.host()
             + ":"
             + host.port()
             + " ("
-              + tcpProbe
+              + udpProbe
               + "). Check routing/firewall/server bind address.");
 
     LatencyRecorder latencyRecorder =
@@ -88,8 +89,8 @@ class RealOffloadServerDragShotTest {
         RPC_TIMEOUT_MS,
         metricsFile.toAbsolutePath());
 
-    try (TcpOffloadClient client =
-        new TcpOffloadClient(
+    try (UdpOffloadClient client =
+        new UdpOffloadClient(
             OffloadClientConfig.builder()
                 .hosts(List.of(host))
                 .connectTimeoutMs(2500)
@@ -108,8 +109,8 @@ class RealOffloadServerDragShotTest {
               + host.host()
               + ":"
               + host.port()
-              + " (TCP probe: "
-              + tcpProbe
+              + " (UDP probe: "
+              + udpProbe
               + "). Possible protocol mismatch or handshake failure.");
 
       runSampleDoubleValueRpc(latencyRecorder, client);
@@ -124,7 +125,7 @@ class RealOffloadServerDragShotTest {
     }
   }
 
-  private static void runSampleDoubleValueRpc(LatencyRecorder latencyRecorder, TcpOffloadClient client)
+  private static void runSampleDoubleValueRpc(LatencyRecorder latencyRecorder, UdpOffloadClient client)
       throws Exception {
     SampleMathOffloadEntrypoints_doubleValue_OffloadRequest request =
         new SampleMathOffloadEntrypoints_doubleValue_OffloadRequest();
@@ -148,7 +149,7 @@ class RealOffloadServerDragShotTest {
   }
 
   private static void runSampleWorkerProbeRpc(
-      LatencyRecorder latencyRecorder, TcpOffloadClient client) throws Exception {
+      LatencyRecorder latencyRecorder, UdpOffloadClient client) throws Exception {
     SampleMathOffloadEntrypoints_runsOnOffloadWorkerThread_OffloadRequest request =
         new SampleMathOffloadEntrypoints_runsOnOffloadWorkerThread_OffloadRequest();
     request.setArg0(OffloadValueCodec.encode("int", 1));
@@ -172,7 +173,7 @@ class RealOffloadServerDragShotTest {
   }
 
   @SuppressWarnings("unchecked")
-  private static void runDragShotStaticRpc(LatencyRecorder latencyRecorder, TcpOffloadClient client)
+  private static void runDragShotStaticRpc(LatencyRecorder latencyRecorder, UdpOffloadClient client)
       throws Exception {
     GamePiecePhysics gamePiece = new TestGamePiecePhysics(0.25, 0.018, 0.47, 1.225);
     Translation2d shooterFieldPosition = new Translation2d(4.0, 3.5);
@@ -239,7 +240,7 @@ class RealOffloadServerDragShotTest {
 
   @SuppressWarnings("unchecked")
   private static void runDragShotFindBestAutoRpc(
-      LatencyRecorder latencyRecorder, TcpOffloadClient client) throws Exception {
+      LatencyRecorder latencyRecorder, UdpOffloadClient client) throws Exception {
     GamePiecePhysics gamePiece = new TestGamePiecePhysics(0.25, 0.018, 0.47, 1.225);
     Translation2d targetFieldPosition = new Translation2d(8.0, 4.0);
     double targetHeightMeters = 2.2;
@@ -300,7 +301,7 @@ class RealOffloadServerDragShotTest {
   }
 
   private static void runPredictiveShuttleRecoveryRpc(
-      LatencyRecorder latencyRecorder, TcpOffloadClient client)
+      LatencyRecorder latencyRecorder, UdpOffloadClient client)
       throws Exception {
     Pose2d robotPose = new Pose2d(2.2, 3.4, Rotation2d.fromDegrees(25.0));
     double ourSpeedCap = 2.8;
@@ -342,7 +343,7 @@ class RealOffloadServerDragShotTest {
   }
 
   private static void runFieldTrackerRecoveryGoalRpc(
-      LatencyRecorder latencyRecorder, TcpOffloadClient client)
+      LatencyRecorder latencyRecorder, UdpOffloadClient client)
       throws Exception {
     Pose2d robotPose = new Pose2d(2.2, 3.4, Rotation2d.fromDegrees(25.0));
     double ourSpeedCap = 2.8;
@@ -435,7 +436,7 @@ class RealOffloadServerDragShotTest {
   private static <T> T warmupThenMeasure(
       String taskId,
       LatencyRecorder latencyRecorder,
-      TcpOffloadClient client,
+      UdpOffloadClient client,
       ThrowingSupplier<T> call)
       throws Exception {
     for (int i = 0; i < Math.max(0, LATENCY_WARMUP_SAMPLES); i++) {
@@ -484,7 +485,7 @@ class RealOffloadServerDragShotTest {
       this.metricsFile = metricsFile;
     }
 
-    <T> T measure(String taskId, ThrowingSupplier<T> call, TcpOffloadClient client) throws Exception {
+    <T> T measure(String taskId, ThrowingSupplier<T> call, UdpOffloadClient client) throws Exception {
       long startNs = System.nanoTime();
       T value = call.get();
       long elapsedNs = System.nanoTime() - startNs;
@@ -734,7 +735,7 @@ class RealOffloadServerDragShotTest {
     return path.normalize();
   }
 
-  private static void waitForHealthy(TcpOffloadClient client, long timeoutMs)
+  private static void waitForHealthy(UdpOffloadClient client, long timeoutMs)
       throws InterruptedException {
     long deadline = System.currentTimeMillis() + timeoutMs;
     while (!client.isHealthy() && System.currentTimeMillis() < deadline) {
@@ -742,11 +743,32 @@ class RealOffloadServerDragShotTest {
     }
   }
 
-  private static String probeTcp(OffloadHost host, int timeoutMs) {
-    try (Socket socket = new Socket()) {
-      socket.connect(new InetSocketAddress(host.host(), host.port()), timeoutMs);
+  private static String probeUdp(OffloadHost host, int timeoutMs) {
+    try (DatagramSocket socket = new DatagramSocket()) {
+      socket.connect(new InetSocketAddress(host.host(), host.port()));
+      socket.setSoTimeout(timeoutMs);
+
+      long correlationId = System.nanoTime();
+      byte[] request =
+          OffloadProtocol.serializeRequest(correlationId, OffloadProtocol.TASK_PING, new byte[0]);
+      socket.send(new DatagramPacket(request, request.length));
+
+      byte[] receive = new byte[4096];
+      DatagramPacket responsePacket = new DatagramPacket(receive, receive.length);
+      socket.receive(responsePacket);
+
+      byte[] frame = new byte[responsePacket.getLength()];
+      System.arraycopy(
+          responsePacket.getData(), responsePacket.getOffset(), frame, 0, responsePacket.getLength());
+      OffloadProtocol.ResponseFrame response = OffloadProtocol.parseResponse(frame);
+      if (response.correlationId() != correlationId) {
+        return "unexpected-correlation:" + response.correlationId();
+      }
+      if (response.status() != OffloadProtocol.STATUS_OK) {
+        return "unexpected-status:" + response.status();
+      }
       return "reachable";
-    } catch (IOException ex) {
+    } catch (Exception ex) {
       return ex.getClass().getSimpleName() + ": " + ex.getMessage();
     }
   }

@@ -1,13 +1,10 @@
 package org.curtinfrc.frc2026.util.Repulsor.Offload.Server;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.Inet4Address;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +24,8 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadProtocol;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadResponseEnvelope;
 
 public final class OffloadServer implements AutoCloseable {
+  private static final int MAX_UDP_PACKET_BYTES = 65_507;
+
   private final OffloadServerConfig config;
   private final boolean timingLogsEnabled;
   private final Map<String, OffloadFunction<?, ?>> functionsById;
@@ -35,9 +34,10 @@ public final class OffloadServer implements AutoCloseable {
   private final ExecutorService workerPool;
   private final String manifestHash;
   private final List<String> manifestTaskIds;
+  private final Object udpWriteLock = new Object();
 
   private volatile boolean running;
-  private volatile ServerSocket serverSocket;
+  private volatile DatagramSocket datagramSocket;
 
   public OffloadServer(OffloadServerConfig config) throws IOException {
     this.config = Objects.requireNonNull(config);
@@ -53,11 +53,11 @@ public final class OffloadServer implements AutoCloseable {
     this.manifestTaskIds = List.copyOf(manifestInfo.taskIds());
 
     this.connectionPool =
-        Executors.newCachedThreadPool(
+        Executors.newSingleThreadExecutor(
             new ThreadFactory() {
               @Override
               public Thread newThread(Runnable runnable) {
-                Thread thread = new Thread(runnable, "offload-server-connection");
+                Thread thread = new Thread(runnable, "offload-server-udp-receiver");
                 thread.setDaemon(true);
                 return thread;
               }
@@ -80,49 +80,42 @@ public final class OffloadServer implements AutoCloseable {
       return;
     }
     running = true;
-    serverSocket = new ServerSocket(config.port(), 50, Inet4Address.getByName("0.0.0.0"));
-
-    connectionPool.submit(
-        () -> {
-          while (running) {
-            try {
-              Socket socket = serverSocket.accept();
-              socket.setTcpNoDelay(true);
-              connectionPool.submit(() -> handleConnection(socket));
-            } catch (SocketException ex) {
-              if (running) {
-                ex.printStackTrace();
-              }
-              break;
-            } catch (IOException ex) {
-              if (running) {
-                ex.printStackTrace();
-              }
-            }
-          }
-        });
+    datagramSocket =
+        new DatagramSocket(new InetSocketAddress(Inet4Address.getByName("0.0.0.0"), config.port()));
+    connectionPool.submit(this::receiveLoop);
   }
 
-  private void handleConnection(Socket socket) {
-    Object writeLock = new Object();
-    try (socket;
-        DataInputStream input = new DataInputStream(socket.getInputStream());
-        DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
-      while (running && !socket.isClosed()) {
-        OffloadProtocol.RequestFrame request = OffloadProtocol.readRequest(input);
-        dispatchRequest(request, output, writeLock);
+  private void receiveLoop() {
+    byte[] receiveBuffer = new byte[MAX_UDP_PACKET_BYTES];
+    while (running) {
+      try {
+        DatagramPacket packet = new DatagramPacket(receiveBuffer, receiveBuffer.length);
+        datagramSocket.receive(packet);
+        byte[] frameBytes = new byte[packet.getLength()];
+        System.arraycopy(packet.getData(), packet.getOffset(), frameBytes, 0, packet.getLength());
+        OffloadProtocol.RequestFrame request = OffloadProtocol.parseRequest(frameBytes);
+        InetSocketAddress remote =
+            new InetSocketAddress(packet.getAddress(), packet.getPort());
+        dispatchRequest(request, remote);
+      } catch (SocketException ex) {
+        if (running) {
+          ex.printStackTrace();
+        }
+        break;
+      } catch (IOException ex) {
+        if (running) {
+          ex.printStackTrace();
+        }
       }
-    } catch (IOException ignored) {
     }
   }
 
-  private void dispatchRequest(
-      OffloadProtocol.RequestFrame request, DataOutputStream output, Object writeLock) {
+  private void dispatchRequest(OffloadProtocol.RequestFrame request, InetSocketAddress remoteAddress) {
     String taskId = request.taskId();
 
     if (OffloadProtocol.TASK_PING.equals(taskId)) {
-      writeResponse(
-          output, writeLock, request.correlationId(), OffloadProtocol.STATUS_OK, new byte[0]);
+      sendResponse(
+          remoteAddress, request.correlationId(), OffloadProtocol.STATUS_OK, new byte[0]);
       return;
     }
 
@@ -134,9 +127,8 @@ public final class OffloadServer implements AutoCloseable {
       OffloadHelloResponse hello =
           new OffloadHelloResponse(
               config.serverName(), config.serverVersion(), manifestHash, tasks);
-      writeResponse(
-          output,
-          writeLock,
+      sendResponse(
+          remoteAddress,
           request.correlationId(),
           OffloadProtocol.STATUS_OK,
           CborSerde.write(hello));
@@ -145,9 +137,8 @@ public final class OffloadServer implements AutoCloseable {
 
     OffloadFunction<?, ?> function = functionsById.get(taskId);
     if (function == null) {
-      writeResponse(
-          output,
-          writeLock,
+      sendResponse(
+          remoteAddress,
           request.correlationId(),
           OffloadProtocol.STATUS_ERR,
           CborSerde.write(new OffloadError("UNKNOWN_TASK", "No task registered for id=" + taskId)));
@@ -173,8 +164,8 @@ public final class OffloadServer implements AutoCloseable {
         .orTimeout(function.timeoutMs(), TimeUnit.MILLISECONDS)
         .whenComplete(
             (payload, error) -> {
-              long writeStartNs = System.nanoTime();
               if (error == null) {
+                long responseStartNs = System.nanoTime();
                 long queueNs = Math.max(0L, timing.executeStartNs - timing.receivedNs);
                 long executeNs = Math.max(0L, timing.executeEndNs - timing.executeStartNs);
                 byte[] responsePayload =
@@ -183,10 +174,9 @@ public final class OffloadServer implements AutoCloseable {
                             payload,
                             queueNs,
                             executeNs,
-                            Math.max(0L, writeStartNs - timing.receivedNs)));
-                writeResponse(
-                    output,
-                    writeLock,
+                            Math.max(0L, responseStartNs - timing.receivedNs)));
+                sendResponse(
+                    remoteAddress,
                     request.correlationId(),
                     OffloadProtocol.STATUS_OK,
                     responsePayload);
@@ -197,16 +187,14 @@ public final class OffloadServer implements AutoCloseable {
                       request.correlationId(),
                       timing,
                       writeEndNs,
-                      writeEndNs - writeStartNs,
                       "OK",
                       "");
                 }
               } else {
                 Throwable resolved = unwrapCompletionError(error);
                 resolved.printStackTrace(System.err);
-                writeResponse(
-                    output,
-                    writeLock,
+                sendResponse(
+                    remoteAddress,
                     request.correlationId(),
                     OffloadProtocol.STATUS_ERR,
                     CborSerde.write(new OffloadError("EXEC_ERROR", summarizeRootCause(resolved))));
@@ -217,12 +205,38 @@ public final class OffloadServer implements AutoCloseable {
                       request.correlationId(),
                       timing,
                       writeEndNs,
-                      writeEndNs - writeStartNs,
                       "ERR",
                       summarizeRootCause(resolved));
                 }
               }
             });
+  }
+
+  private void sendResponse(
+      InetSocketAddress remoteAddress, long correlationId, byte status, byte[] payload) {
+    DatagramSocket activeSocket = datagramSocket;
+    if (activeSocket == null || activeSocket.isClosed()) {
+      return;
+    }
+    try {
+      byte[] frame = OffloadProtocol.serializeResponse(correlationId, status, payload);
+      if (frame.length > MAX_UDP_PACKET_BYTES) {
+        byte[] errPayload =
+            CborSerde.write(
+                new OffloadError(
+                    "FRAME_TOO_LARGE",
+                    "Response frame exceeds UDP packet size limit: " + frame.length + " bytes"));
+        frame = OffloadProtocol.serializeResponse(correlationId, OffloadProtocol.STATUS_ERR, errPayload);
+      }
+      if (frame.length > MAX_UDP_PACKET_BYTES) {
+        return;
+      }
+      DatagramPacket packet = new DatagramPacket(frame, frame.length, remoteAddress);
+      synchronized (udpWriteLock) {
+        activeSocket.send(packet);
+      }
+    } catch (IOException ignored) {
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -267,16 +281,6 @@ public final class OffloadServer implements AutoCloseable {
     return current;
   }
 
-  private void writeResponse(
-      DataOutputStream output, Object writeLock, long correlationId, byte status, byte[] payload) {
-    synchronized (writeLock) {
-      try {
-        OffloadProtocol.writeResponse(output, correlationId, status, payload);
-      } catch (IOException ignored) {
-      }
-    }
-  }
-
   private void logTaskStart(
       String taskId, long correlationId, long receivedNs, long executeStartNs, int timeoutMs) {
     System.out.printf(
@@ -293,7 +297,6 @@ public final class OffloadServer implements AutoCloseable {
       long correlationId,
       RequestTiming timing,
       long responseWrittenNs,
-      long responseWriteNs,
       String status,
       String errorSummary) {
     double queueMs =
@@ -306,8 +309,8 @@ public final class OffloadServer implements AutoCloseable {
 
     String error = (errorSummary == null || errorSummary.isBlank()) ? "-" : errorSummary;
     System.out.printf(
-        "offload-server task-stop corr=%d task=%s status=%s queueMs=%.3f execMs=%.3f serverMs=%.3f writeMs=%.3f error=%s%n",
-        correlationId, taskId, status, queueMs, execMs, serverMs, nanosToMillis(responseWriteNs), error);
+        "offload-server task-stop corr=%d task=%s status=%s queueMs=%.3f execMs=%.3f serverMs=%.3f error=%s%n",
+        correlationId, taskId, status, queueMs, execMs, serverMs, error);
   }
 
   private static double nanosToMillis(long nanos) {
@@ -339,11 +342,10 @@ public final class OffloadServer implements AutoCloseable {
   public void close() {
     running = false;
 
-    if (serverSocket != null) {
-      try {
-        serverSocket.close();
-      } catch (IOException ignored) {
-      }
+    DatagramSocket activeSocket = datagramSocket;
+    datagramSocket = null;
+    if (activeSocket != null) {
+      activeSocket.close();
     }
 
     connectionPool.shutdownNow();

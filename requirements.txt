@@ -11,4 +11,5 @@ opencv-python==4.13.0.92
 pyright
 opencv-contrib-python
 matplotlib
+plotly>=5.22
 nuitka

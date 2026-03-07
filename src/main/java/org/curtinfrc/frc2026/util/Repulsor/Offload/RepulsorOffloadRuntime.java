@@ -17,6 +17,8 @@ public final class RepulsorOffloadRuntime {
       "org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost";
   private static final String OFFLOAD_CLIENT_CONFIG_CLASS =
       "org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadClientConfig";
+  private static final String UDP_OFFLOAD_CLIENT_CLASS =
+      "org.curtinfrc.frc2026.util.Repulsor.Offload.Client.UdpOffloadClient";
   private static final String TCP_OFFLOAD_CLIENT_CLASS =
       "org.curtinfrc.frc2026.util.Repulsor.Offload.Client.TcpOffloadClient";
 
@@ -46,7 +48,7 @@ public final class RepulsorOffloadRuntime {
         return;
       }
 
-      Class<?> clientClass = Class.forName(TCP_OFFLOAD_CLIENT_CLASS);
+      Class<?> clientClass = Class.forName(selectClientClassName());
       Constructor<?> ctor = clientClass.getConstructor(config.getClass());
       Object newClient = ctor.newInstance(config);
       clientClass.getMethod("start").invoke(newClient);
@@ -126,6 +128,14 @@ public final class RepulsorOffloadRuntime {
         invokeBuilder(
             builder, "probeTimeoutMs", int.class, intProp("repulsor.offload.probeTimeoutMs", 40));
     return builder.getClass().getMethod("build").invoke(builder);
+  }
+
+  private static String selectClientClassName() {
+    String transport = System.getProperty("repulsor.offload.transport", "udp");
+    if ("tcp".equalsIgnoreCase(transport)) {
+      return TCP_OFFLOAD_CLIENT_CLASS;
+    }
+    return UDP_OFFLOAD_CLIENT_CLASS;
   }
 
   private static Object invokeBuilder(Object target, String method, Class<?> argType, Object arg)

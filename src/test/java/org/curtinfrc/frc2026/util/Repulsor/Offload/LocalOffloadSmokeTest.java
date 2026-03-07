@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.net.ServerSocket;
+import java.net.DatagramSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadClientConfig;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.OffloadHost;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.TcpOffloadClient;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.Client.UdpOffloadClient;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Server.OffloadServer;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.Server.OffloadServerConfig;
 import org.junit.jupiter.api.Test;
@@ -41,8 +41,8 @@ class LocalOffloadSmokeTest {
           new OffloadServerConfig(port, pluginDirectory, 2, "local-smoke", "1.0", true, true);
 
       try (OffloadServer server = new OffloadServer(config);
-          TcpOffloadClient client =
-              new TcpOffloadClient(
+          UdpOffloadClient client =
+              new UdpOffloadClient(
                   OffloadClientConfig.builder()
                       .hosts(List.of(new OffloadHost("127.0.0.1", port)))
                       .connectTimeoutMs(500)
@@ -86,12 +86,12 @@ class LocalOffloadSmokeTest {
   }
 
   private static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
+    try (DatagramSocket socket = new DatagramSocket(0)) {
       return socket.getLocalPort();
     }
   }
 
-  private static void waitForHealthy(TcpOffloadClient client, long timeoutMs)
+  private static void waitForHealthy(UdpOffloadClient client, long timeoutMs)
       throws InterruptedException {
     long deadline = System.currentTimeMillis() + timeoutMs;
     while (!client.isHealthy() && System.currentTimeMillis() < deadline) {
@@ -99,7 +99,7 @@ class LocalOffloadSmokeTest {
     }
   }
 
-  private static void waitForUnhealthy(TcpOffloadClient client, long timeoutMs)
+  private static void waitForUnhealthy(UdpOffloadClient client, long timeoutMs)
       throws InterruptedException {
     long deadline = System.currentTimeMillis() + timeoutMs;
     while (client.isHealthy() && System.currentTimeMillis() < deadline) {
