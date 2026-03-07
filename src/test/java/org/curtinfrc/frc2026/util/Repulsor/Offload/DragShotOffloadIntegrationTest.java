@@ -25,10 +25,11 @@ class DragShotOffloadIntegrationTest {
           new TcpOffloadClient(
               OffloadClientConfig.builder()
                   .hosts(List.of(new OffloadHost("127.0.0.1", server.port())))
+                  // .hosts(List.of(new OffloadHost("10.47.88.11", 5808)))
                   .connectTimeoutMs(250)
                   .probeTimeoutMs(250)
                   .readTimeoutMs(50)
-                  .probeBeforeConnect(false)
+                  .probeBeforeConnect(true)
                   .queueCapacity(16)
                   .build());
       OffloadRpc.setGateway(client);

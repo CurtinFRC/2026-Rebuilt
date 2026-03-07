@@ -716,7 +716,7 @@ public class Robot extends LoggedRobot {
     final ArrayList<String> runningDefaultCommands = new ArrayList<>();
     for (final Command command : runningNonInterrupters) {
       boolean isDefaultCommand = false;
-      for (Subsystem subsystem : command.getRequirements()) {
+      for (Subsystem subsystem : command.getRequirements()) { 
         if (subsystem.getDefaultCommand() == command) {
           runningDefaultCommands.add(getCommandName(command));
           isDefaultCommand = true;

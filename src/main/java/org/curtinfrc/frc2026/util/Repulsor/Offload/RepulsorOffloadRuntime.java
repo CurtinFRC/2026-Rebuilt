@@ -138,7 +138,7 @@ public final class RepulsorOffloadRuntime {
     String configured =
         System.getProperty(
             "repulsor.offload.hosts",
-            System.getenv().getOrDefault("REPULSOR_OFFLOAD_HOSTS", "127.0.0.1:5808"));
+            System.getenv().getOrDefault("REPULSOR_OFFLOAD_HOSTS", "10.47.88.11:5808"));
 
     List<Object> hosts = new ArrayList<>();
     for (String token : configured.split(",")) {

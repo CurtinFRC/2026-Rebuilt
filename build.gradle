@@ -240,6 +240,70 @@ def configureOffloadSmokeInputs = { Test testTask ->
     }
 }
 
+task(buildOffloadServerJar) {
+    group = "offload"
+    description = "Build the offload server JAR."
+    dependsOn(":offload-server:jar")
+}
+
+task(generateOffloadServiceUnit) {
+    group = "offload"
+    description = "Generate systemd unit file for the offload server."
+    dependsOn(buildOffloadServerJar, generateOffloadManifest)
+
+    doLast {
+        def deployDir = (project.findProperty("offloadDeployDir")
+                ?: System.getenv("OFFLOAD_DEPLOY_DIR")
+                ?: "/var/lib/offload").toString()
+        def pluginDir = (project.findProperty("offloadPluginDir")
+                ?: System.getenv("OFFLOAD_PLUGIN_DIR")
+                ?: "${deployDir}/plugins").toString()
+        def serviceName = (project.findProperty("offloadServiceName")
+                ?: System.getenv("OFFLOAD_SERVICE_NAME")
+                ?: "offload-server").toString()
+        def serviceUser = (project.findProperty("offloadServiceUser")
+                ?: System.getenv("OFFLOAD_SERVICE_USER")
+                ?: (project.findProperty("offloadUser")
+                    ?: System.getenv("OFFLOAD_USER")
+                    ?: "photon")).toString().trim()
+        def serviceGroup = (project.findProperty("offloadServiceGroup")
+                ?: System.getenv("OFFLOAD_SERVICE_GROUP")
+                ?: "users").toString().trim()
+
+        def serverJarName = "offload-server.jar"
+        def defaultExec = "/home/photon/.nix-profile/bin/java -jar ${deployDir}/${serverJarName}"
+        def execStart = (project.findProperty("offloadServiceExec")
+                ?: System.getenv("OFFLOAD_SERVICE_EXEC")
+                ?: defaultExec).toString()
+
+        def userLine = serviceUser.isEmpty() ? "" : "User=${serviceUser}\n"
+        def groupLine = serviceGroup.isEmpty() ? "" : "Group=${serviceGroup}\n"
+
+        def unitDir = layout.buildDirectory.dir("offload/service").get().asFile
+        unitDir.mkdirs()
+
+        def unitFile = new File(unitDir, "${serviceName}.service")
+        unitFile.text = """[Unit]
+Description=Repulsor Offload Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${deployDir}
+Environment=OFFLOAD_PLUGIN_DIR=${pluginDir}
+Environment=OFFLOAD_MANIFEST=${pluginDir}/offload-manifest.json
+ExecStart=${execStart}
+Restart=always
+RestartSec=1
+${userLine}${groupLine}
+
+[Install]
+WantedBy=multi-user.target
+"""
+    }
+}
+
 task(localOffloadSmokeTest, type: Test) {
     group = "offload"
     description = "Run local end-to-end offload smoke test against a real offload server."
@@ -269,36 +333,106 @@ if (localOffloadOnlyRequested) {
 
 task(deployOffloadToCoprocessors) {
     group = "offload"
-    description = "Deploy offload plugins + manifest to configured coprocessors and restart service."
-    dependsOn(buildOffloadTasksJar, generateOffloadManifest)
+    description = "Deploy offload server + plugins + manifest to configured coprocessors and load the systemd service for the current boot."
+    dependsOn(buildOffloadTasksJar, buildOffloadServerJar, generateOffloadManifest, generateOffloadServiceUnit)
 
     doLast {
-        def hostCsv = (project.findProperty("offloadHosts") ?: System.getenv("OFFLOAD_HOSTS") ?: "").toString()
+        def hostCsv = (project.findProperty("offloadHosts")
+                ?: System.getenv("OFFLOAD_HOSTS")
+                ?: "").toString()
         def hosts = hostCsv.split(",").collect { it.trim() }.findAll { !it.isEmpty() }
         if (hosts.isEmpty()) {
             throw new GradleException("No coprocessor hosts configured. Set -PoffloadHosts=host1,host2 or OFFLOAD_HOSTS.")
         }
 
-        def user = (project.findProperty("offloadUser") ?: System.getenv("OFFLOAD_USER") ?: "lvuser").toString()
-        def pluginDir = (project.findProperty("offloadPluginDir") ?: "/opt/offload/plugins").toString()
-        def serviceName = (project.findProperty("offloadServiceName") ?: "offload-server").toString()
+        def user = (project.findProperty("offloadUser")
+                ?: System.getenv("OFFLOAD_USER")
+                ?: "photon").toString()
+        def deployDir = (project.findProperty("offloadDeployDir")
+                ?: System.getenv("OFFLOAD_DEPLOY_DIR")
+                ?: "/var/lib/offload").toString()
+        def pluginDir = (project.findProperty("offloadPluginDir")
+                ?: System.getenv("OFFLOAD_PLUGIN_DIR")
+                ?: "${deployDir}/plugins").toString()
+        def serviceName = (project.findProperty("offloadServiceName")
+                ?: System.getenv("OFFLOAD_SERVICE_NAME")
+                ?: "offload-server").toString()
 
         def taskJar = project(":offload-tasks").tasks.named("jar").get().archiveFile.get().asFile
+        def serverJar = project(":offload-server").tasks.named("jar").get().archiveFile.get().asFile
         def manifestFile = layout.buildDirectory.file("offload/offload-manifest.json").get().asFile
+        def unitFile = new File(layout.buildDirectory.dir("offload/service").get().asFile, "${serviceName}.service")
 
         hosts.each { host ->
-            println "Deploying offload artifacts to ${user}@${host}:${pluginDir}"
+            def target = "${user}@${host}"
+            def remoteUnitPath = "${deployDir}/${serviceName}.service"
+
+            println "Deploying offload bundle to ${target}:${deployDir}"
+
             exec {
-                commandLine "ssh", "${user}@${host}", "mkdir -p ${pluginDir}"
+                commandLine "ssh",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        target,
+                        "mkdir -p '${deployDir}' '${pluginDir}'"
             }
+
             exec {
-                commandLine "scp", taskJar.absolutePath, "${user}@${host}:${pluginDir}/offload-tasks.jar"
+                commandLine "scp",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        serverJar.absolutePath,
+                        "${target}:${deployDir}/offload-server.jar"
             }
+
             exec {
-                commandLine "scp", manifestFile.absolutePath, "${user}@${host}:${pluginDir}/offload-manifest.json"
+                commandLine "scp",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        taskJar.absolutePath,
+                        "${target}:${pluginDir}/offload-tasks.jar"
             }
+
             exec {
-                commandLine "ssh", "${user}@${host}", "sudo systemctl restart ${serviceName}"
+                commandLine "scp",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        manifestFile.absolutePath,
+                        "${target}:${pluginDir}/offload-manifest.json"
+            }
+
+            exec {
+                commandLine "scp",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        unitFile.absolutePath,
+                        "${target}:${remoteUnitPath}"
+            }
+
+            def remoteCmd = """set -e
+sudo -n mkdir -p '${deployDir}' '${pluginDir}'
+sudo -n chown '${user}:users' '${deployDir}/offload-server.jar' '${pluginDir}/offload-tasks.jar' '${pluginDir}/offload-manifest.json' '${remoteUnitPath}' || true
+sudo -n systemctl link --runtime '${remoteUnitPath}'
+sudo -n systemctl daemon-reload
+sudo -n systemctl stop '${serviceName}.service' || true
+sudo -n systemctl start '${serviceName}.service'
+sudo -n systemctl is-active --quiet '${serviceName}.service'
+"""
+
+            def result = exec {
+                ignoreExitValue = true
+                commandLine "ssh",
+                        "-o", "BatchMode=yes",
+                        "-o", "StrictHostKeyChecking=accept-new",
+                        target,
+                        remoteCmd
+            }
+
+            if (result.exitValue != 0) {
+                throw new GradleException(
+                        "Copied offload artifacts to ${host}, but service start failed. " +
+                        "Check logs with: ssh ${target} \"sudo -n systemctl status ${serviceName}.service --no-pager && sudo -n journalctl -u ${serviceName}.service -n 100 --no-pager\""
+                )
             }
         }
     }

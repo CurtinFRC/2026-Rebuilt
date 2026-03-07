@@ -25,3 +25,23 @@ application {
 test {
     useJUnitPlatform()
 }
+
+def offloadApiJar = project(':offload-api').tasks.named('jar')
+
+tasks.named('jar', Jar) {
+    dependsOn(offloadApiJar)
+
+    manifest {
+        attributes(
+            'Main-Class': 'org.curtinfrc.frc2026.util.Repulsor.Offload.Server.OffloadServerMain'
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    from {
+        configurations.runtimeClasspath.collect { file ->
+            file.isDirectory() ? file : zipTree(file)
+        }
+    }
+}
