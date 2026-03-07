@@ -44,6 +44,8 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacles.GatedAttractor
 import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 import org.curtinfrc.frc2026.util.Repulsor.HeadingGate;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.FieldPlannerCalculateResultDTO;
+import org.curtinfrc.frc2026.util.Repulsor.Offload.FieldPlannerOffloadEntrypoints_Offloaded;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.FieldPlannerPathingOffloadEntrypoints_Offloaded;
 import org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass.ReactiveBypass;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -62,6 +64,9 @@ public class FieldPlanner {
   private static final boolean OFFLOAD_PATHING_ENABLED =
       Boolean.parseBoolean(
           System.getProperty("repulsor.offload.fieldplanner.pathing.enabled", "true"));
+  private static final boolean OFFLOAD_CALCULATE_ENABLED =
+      Boolean.parseBoolean(
+          System.getProperty("repulsor.offload.fieldplanner.calculate.enabled", "false"));
 
   private static final class ClearMemo {
     Boolean toGoalDyn;
@@ -197,6 +202,10 @@ public class FieldPlanner {
     return goalManager.getGoalTranslation();
   }
 
+  public Pose2d getGoalPose() {
+    return goalManager.getGoalPose();
+  }
+
   public FieldPlanner withFallback(PlannerFallback _fallback) {
     fallback = Optional.of(_fallback);
     return this;
@@ -266,11 +275,26 @@ public class FieldPlanner {
       boolean suppressFallback,
       double shooterReleaseHeightMeters) {
 
+    if (OFFLOAD_CALCULATE_ENABLED && !isOffloadWorkerThread()) {
+      try {
+        return calculateOffloaded(
+            pose,
+            dynamicObstacles,
+            robot_x,
+            robot_y,
+            cat,
+            suppressFallback,
+            shooterReleaseHeightMeters);
+      } catch (RuntimeException ignored) {
+        // If remote calculate fails, continue with local calculate behavior.
+      }
+    }
+
     Translation2d curTrans = pose.getTranslation();
     double distToGoal = curTrans.getDistance(goalManager.getGoalTranslation());
 
-    var dsBase = RepulsorDriverStation.getInstance();
-    if (dsBase instanceof NtRepulsorDriverStation ds) {
+    var dsBase = safeDriverStation();
+    if (!isOffloadWorkerThread() && dsBase instanceof NtRepulsorDriverStation ds) {
       ds.forcedGoalPose("main").ifPresent(this::setRequestedGoal);
     }
 
@@ -323,11 +347,7 @@ public class FieldPlanner {
       }
 
       if (pathBlocked && !suppressFallback) {
-        Alliance preferred =
-            DriverStation.getAlliance().isPresent()
-                    && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
-                ? Alliance.kBlue
-                : Alliance.kRed;
+        Alliance preferred = preferredAllianceForFallback();
 
         var cands =
             FieldTrackerCore.getInstance().getPredictedSetpoints(preferred, curTrans, 3.5, cat, 8);
@@ -457,7 +477,7 @@ public class FieldPlanner {
 
     step = step.times(turn.speedScale);
 
-    if (!RobotBase.isReal()) {
+    if (!isOffloadWorkerThread() && !RobotBase.isReal()) {
       Pose2d arrowPose = new Pose2d(curTrans, netForce.getAngle());
     }
 
@@ -481,6 +501,69 @@ public class FieldPlanner {
     return FieldPlannerGeometry.distanceFromPointToSegment(p, a, b);
   }
 
+  private RepulsorSample calculateOffloaded(
+      Pose2d pose,
+      List<? extends Obstacle> dynamicObstacles,
+      double robot_x,
+      double robot_y,
+      CategorySpec cat,
+      boolean suppressFallback,
+      double shooterReleaseHeightMeters) {
+    FieldPlannerCalculateResultDTO remote =
+        FieldPlannerOffloadEntrypoints_Offloaded.calculate_offload(
+            pose,
+            goalManager.getGoalPose(),
+            dynamicObstacles,
+            robot_x,
+            robot_y,
+            cat == null ? CategorySpec.kScore.name() : cat.name(),
+            suppressFallback,
+            shooterReleaseHeightMeters);
+    if (remote == null) {
+      throw new IllegalStateException("Null field planner offload result");
+    }
+
+    setActiveGoal(
+        new Pose2d(
+            remote.getActiveGoalX(),
+            remote.getActiveGoalY(),
+            Rotation2d.fromRadians(remote.getActiveGoalThetaRadians())));
+    if (remote.isHasErrMeters()) {
+      currentErr = Optional.of(Meters.of(remote.getErrMeters()));
+    } else {
+      currentErr = Optional.empty();
+    }
+
+    return new RepulsorSample(
+        new Translation2d(remote.getGoalX(), remote.getGoalY()),
+        remote.getVxMetersPerSecond(),
+        remote.getVyMetersPerSecond(),
+        Radians.of(remote.getOmegaRadians()));
+  }
+
+  private static Alliance preferredAllianceForFallback() {
+    if (isOffloadWorkerThread()) {
+      String forced = System.getProperty("repulsor.offload.fieldplanner.fallbackAlliance", "blue");
+      return "red".equalsIgnoreCase(forced) ? Alliance.kRed : Alliance.kBlue;
+    }
+    return DriverStation.getAlliance().isPresent()
+            && DriverStation.getAlliance().get() == DriverStation.Alliance.Blue
+        ? Alliance.kBlue
+        : Alliance.kRed;
+  }
+
+  private static boolean isOffloadWorkerThread() {
+    return Thread.currentThread().getName().startsWith("offload-server-worker");
+  }
+
+  private static RepulsorDriverStation safeDriverStation() {
+    try {
+      return RepulsorDriverStation.getInstance();
+    } catch (Throwable ignored) {
+      return null;
+    }
+  }
+
   private static boolean isClearPath(
       String topicRoot,
       Translation2d start,
@@ -489,7 +572,7 @@ public class FieldPlanner {
       double robotLengthMeters,
       double robotWidthMeters,
       boolean publishSamples) {
-    if (!OFFLOAD_PATHING_ENABLED) {
+    if (!OFFLOAD_PATHING_ENABLED || isOffloadWorkerThread()) {
       return ExtraPathing.isClearPath(
           topicRoot,
           start,
@@ -514,7 +597,7 @@ public class FieldPlanner {
       double robotLengthMeters,
       double robotWidthMeters,
       List<? extends Obstacle> obstacles) {
-    if (!OFFLOAD_PATHING_ENABLED) {
+    if (!OFFLOAD_PATHING_ENABLED || isOffloadWorkerThread()) {
       return ExtraPathing.robotIntersects(center, robotLengthMeters, robotWidthMeters, obstacles);
     }
     return FieldPlannerPathingOffloadEntrypoints_Offloaded.robotIntersects_offload(

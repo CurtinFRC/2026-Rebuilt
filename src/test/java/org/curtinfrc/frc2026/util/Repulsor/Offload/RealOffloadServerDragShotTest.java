@@ -120,6 +120,7 @@ class RealOffloadServerDragShotTest {
       runSampleWorkerProbeRpc(latencyRecorder, client);
       runFieldPlannerIsClearPathRpc(latencyRecorder, client);
       runFieldPlannerRobotIntersectsRpc(latencyRecorder, client);
+      runFieldPlannerCalculateRpc(latencyRecorder, client);
       runDragShotStaticRpc(latencyRecorder, client);
       runDragShotFindBestAutoRpc(latencyRecorder, client);
       runPredictiveShuttleRecoveryRpc(latencyRecorder, client);
@@ -246,6 +247,60 @@ class RealOffloadServerDragShotTest {
     boolean remote = (boolean) OffloadValueCodec.decode("boolean", response.getResult());
     boolean local = ExtraPathing.robotIntersects(center, robotLengthMeters, robotWidthMeters, obstacles);
     assertEquals(local, remote, "field planner robotIntersects RPC vs local");
+  }
+
+  private static void runFieldPlannerCalculateRpc(
+      LatencyRecorder latencyRecorder, UdpOffloadClient client) throws Exception {
+    Pose2d pose = new Pose2d(2.6, 2.0, Rotation2d.fromDegrees(8.0));
+    Pose2d requestedGoalPose = new Pose2d(7.8, 2.4, Rotation2d.fromDegrees(0.0));
+    List<Obstacle> dynamicObstacles = samplePathingObstacles();
+    double robotHalfLengthMeters = 0.45;
+    double robotHalfWidthMeters = 0.40;
+    String categoryName = "kScore";
+    boolean suppressFallback = true;
+    double shooterReleaseHeightMeters = 0.95;
+
+    FieldPlannerOffloadEntrypoints_calculate_OffloadRequest request =
+        new FieldPlannerOffloadEntrypoints_calculate_OffloadRequest();
+    request.setArg0(OffloadValueCodec.encode("edu.wpi.first.math.geometry.Pose2d", pose));
+    request.setArg1(
+        OffloadValueCodec.encode("edu.wpi.first.math.geometry.Pose2d", requestedGoalPose));
+    request.setArg2(OffloadValueCodec.encode(OBSTACLE_LIST_TYPE, dynamicObstacles));
+    request.setArg3(OffloadValueCodec.encode("double", robotHalfLengthMeters));
+    request.setArg4(OffloadValueCodec.encode("double", robotHalfWidthMeters));
+    request.setArg5(OffloadValueCodec.encode("java.lang.String", categoryName));
+    request.setArg6(OffloadValueCodec.encode("boolean", suppressFallback));
+    request.setArg7(OffloadValueCodec.encode("double", shooterReleaseHeightMeters));
+
+    FieldPlannerOffloadEntrypoints_calculate_OffloadResponse response =
+        warmupThenMeasure(
+            OffloadTaskIds.FIELD_PLANNER_CALCULATE,
+            latencyRecorder,
+            client,
+            () ->
+                OffloadRpc.callTyped(
+                        OffloadTaskIds.FIELD_PLANNER_CALCULATE,
+                        request,
+                        FieldPlannerOffloadEntrypoints_calculate_OffloadResponse.class,
+                        RPC_TIMEOUT_MS)
+                    .get(4, TimeUnit.SECONDS));
+
+    FieldPlannerCalculateResultDTO remote =
+        (FieldPlannerCalculateResultDTO)
+            OffloadValueCodec.decode(
+                "org.curtinfrc.frc2026.util.Repulsor.Offload.FieldPlannerCalculateResultDTO",
+                response.getResult());
+    assertTrue(Double.isFinite(remote.getGoalX()), "field planner calculate goal x should be finite");
+    assertTrue(Double.isFinite(remote.getGoalY()), "field planner calculate goal y should be finite");
+    assertTrue(
+        Double.isFinite(remote.getVxMetersPerSecond()),
+        "field planner calculate vx should be finite");
+    assertTrue(
+        Double.isFinite(remote.getVyMetersPerSecond()),
+        "field planner calculate vy should be finite");
+    assertTrue(
+        Double.isFinite(remote.getOmegaRadians()),
+        "field planner calculate omega should be finite");
   }
 
   @SuppressWarnings("unchecked")

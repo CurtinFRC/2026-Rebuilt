@@ -19,9 +19,10 @@
 
 package org.curtinfrc.frc2026.util.Repulsor.ReactiveBypass.Runtime;
 
-import edu.wpi.first.wpilibj.Filesystem;
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,7 +33,7 @@ final class ReactiveBypassConfigLoader {
 
   static void loadConfigFromYaml(Object cfg, Class<?> schemaClass) {
     try {
-      Path deployDir = Filesystem.getDeployDirectory().toPath();
+      Path deployDir = resolveDeployDirectory();
       Path yamlPath = deployDir.resolve("ReactiveBypassConfig.yaml");
       if (!Files.exists(yamlPath)) return;
       List<String> lines = Files.readAllLines(yamlPath, StandardCharsets.UTF_8);
@@ -46,9 +47,40 @@ final class ReactiveBypassConfigLoader {
         String valueStr = line.substring(idx + 1).trim();
         if (!valueStr.isEmpty()) applyConfigField(cfg, schemaClass, key, valueStr);
       }
-    } catch (IOException e) {
+    } catch (Throwable e) {
       System.err.println("ReactiveBypass: Failed to load config from YAML: " + e);
     }
+  }
+
+  private static Path resolveDeployDirectory() {
+    String forced = System.getProperty("repulsor.deploy.dir");
+    if (forced != null && !forced.isBlank()) {
+      return Path.of(forced.trim());
+    }
+
+    String env = System.getenv("REPULSOR_DEPLOY_DIR");
+    if (env != null && !env.isBlank()) {
+      return Path.of(env.trim());
+    }
+
+    if (!isOffloadWorkerThread()) {
+      try {
+        Class<?> fs = Class.forName("edu.wpi.first.wpilibj.Filesystem");
+        Method getDeployDirectory = fs.getMethod("getDeployDirectory");
+        Object dir = getDeployDirectory.invoke(null);
+        if (dir instanceof File file) {
+          return file.toPath();
+        }
+      } catch (Throwable ignored) {
+      }
+    }
+
+    Path cwd = Path.of(System.getProperty("user.dir", "."));
+    return cwd.resolve("deploy");
+  }
+
+  private static boolean isOffloadWorkerThread() {
+    return Thread.currentThread().getName().startsWith("offload-server-worker");
   }
 
   private static void applyConfigField(

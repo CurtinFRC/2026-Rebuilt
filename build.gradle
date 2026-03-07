@@ -248,7 +248,7 @@ task(buildOffloadServerJar) {
 
 task(generateOffloadNixPackage) {
     group = "offload"
-    description = "Generate a Nix package expression for the offload server bundle (includes jdk17_headless), with optional benchmarking defaults."
+    description = "Generate a Nix package expression for the offload server bundle (includes jdk17_headless and ReactiveBypassConfig.yaml), with optional benchmarking defaults."
     dependsOn(buildOffloadServerJar, buildOffloadTasksJar, generateOffloadManifest)
 
     doLast {
@@ -274,13 +274,17 @@ in pkgs.stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    install -d "$out/libexec/repulsor-offload/plugins" "$out/bin"
+    install -d "$out/libexec/repulsor-offload/plugins" "$out/libexec/repulsor-offload/deploy" "$out/bin"
     install -m 0644 "$src/offload-server.jar" "$out/libexec/repulsor-offload/offload-server.jar"
     install -m 0644 "$src/offload-tasks.jar" "$out/libexec/repulsor-offload/plugins/offload-tasks.jar"
     install -m 0644 "$src/offload-manifest.json" "$out/libexec/repulsor-offload/plugins/offload-manifest.json"
+    if [ -f "$src/ReactiveBypassConfig.yaml" ]; then
+      install -m 0644 "$src/ReactiveBypassConfig.yaml" "$out/libexec/repulsor-offload/deploy/ReactiveBypassConfig.yaml"
+    fi
 
     plugin_dir="$out/libexec/repulsor-offload/plugins"
     server_jar="$out/libexec/repulsor-offload/offload-server.jar"
+    deploy_dir="$out/libexec/repulsor-offload/deploy"
 
     cat > "$out/bin/repulsor-offload-server" <<EOF
 #!${pkgs.runtimeShell}
@@ -289,7 +293,8 @@ export OFFLOAD_PLUGIN_DIR="''${OFFLOAD_PLUGIN_DIR:-$plugin_dir}"
 export OFFLOAD_MANIFEST="''${OFFLOAD_MANIFEST:-''$OFFLOAD_PLUGIN_DIR/offload-manifest.json}"
 export OFFLOAD_TIMING_LOGS="''${OFFLOAD_TIMING_LOGS:-__TIMING_LOGS_DEFAULT__}"
 export OFFLOAD_TIMING_IN_RESPONSES="''${OFFLOAD_TIMING_IN_RESPONSES:-__TIMING_RESPONSES_DEFAULT__}"
-exec ${jre}/bin/java -Drepulsor.profiler.enabled=false -Djava.net.preferIPv4Stack=true -jar "$server_jar" "$@"
+export REPULSOR_DEPLOY_DIR="''${REPULSOR_DEPLOY_DIR:-$deploy_dir}"
+exec ${jre}/bin/java -Drepulsor.profiler.enabled=false -Djava.net.preferIPv4Stack=true -Drepulsor.deploy.dir="$REPULSOR_DEPLOY_DIR" -jar "$server_jar" "$@"
 EOF
 
     chmod +x "$out/bin/repulsor-offload-server"
@@ -367,7 +372,7 @@ if (dedicatedOffloadOnlyRequested) {
 
 task(deployOffloadToCoprocessors) {
     group = "offload"
-    description = "Deploy offload Nix package sources to configured coprocessors for nixos-rebuild switch (no systemctl). Use -PoffloadBenchmarking=true to enable benchmarking defaults."
+    description = "Deploy offload Nix package sources and ReactiveBypassConfig.yaml to configured coprocessors for nixos-rebuild switch (no systemctl). Use -PoffloadBenchmarking=true to enable benchmarking defaults."
     dependsOn(buildOffloadTasksJar, buildOffloadServerJar, generateOffloadManifest, generateOffloadNixPackage)
 
     doLast {
@@ -393,6 +398,11 @@ task(deployOffloadToCoprocessors) {
         def serverJar = project(":offload-server").tasks.named("jar").get().archiveFile.get().asFile
         def manifestFile = layout.buildDirectory.file("offload/offload-manifest.json").get().asFile
         def nixFile = new File(layout.buildDirectory.dir("offload/nix").get().asFile, "default.nix")
+        def reactiveBypassConfigFile = file("src/main/deploy/ReactiveBypassConfig.yaml")
+        def hasReactiveBypassConfig = reactiveBypassConfigFile.exists()
+        if (!hasReactiveBypassConfig) {
+            println "Warning: ${reactiveBypassConfigFile} not found. Deploy will continue without ReactiveBypassConfig.yaml."
+        }
 
 hosts.each { host ->
     def target = "${user}@${host}"
@@ -403,6 +413,7 @@ hosts.each { host ->
     def remoteTaskJarTmp = "${remoteBundleDir}/offload-tasks.jar"
     def remoteManifestTmp = "${remoteBundleDir}/offload-manifest.json"
     def remoteNixExprTmp = "${remoteBundleDir}/default.nix"
+    def remoteReactiveBypassConfigTmp = "${remoteBundleDir}/ReactiveBypassConfig.yaml"
 
     println "Deploying offload Nix bundle to ${target}:${nixBundleDir} (staging at ${remoteBundleDir}, benchmarking=${benchmarkingEnabled})"
 
@@ -446,6 +457,16 @@ hosts.each { host ->
                 "${target}:${remoteNixExprTmp}"
     }
 
+    if (hasReactiveBypassConfig) {
+        exec {
+            commandLine "scp",
+                    "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=accept-new",
+                    reactiveBypassConfigFile.absolutePath,
+                    "${target}:${remoteReactiveBypassConfigTmp}"
+        }
+    }
+
     def remoteCmd = """set -euo pipefail
 run() { "\$@"; }
 
@@ -463,6 +484,10 @@ run sudo mv '${remoteServerJarTmp}' '${nixBundleDir}/offload-server.jar'
 run sudo mv '${remoteTaskJarTmp}' '${nixBundleDir}/offload-tasks.jar'
 run sudo mv '${remoteManifestTmp}' '${nixBundleDir}/offload-manifest.json'
 run sudo mv '${remoteNixExprTmp}' '${nixBundleDir}/default.nix'
+if [ -f '${remoteReactiveBypassConfigTmp}' ]; then
+  run sudo mv '${remoteReactiveBypassConfigTmp}' '${nixBundleDir}/ReactiveBypassConfig.yaml'
+  run sudo chown root:root '${nixBundleDir}/ReactiveBypassConfig.yaml' || true
+fi
 run sudo chown root:root '${nixBundleDir}/offload-server.jar' '${nixBundleDir}/offload-tasks.jar' '${nixBundleDir}/offload-manifest.json' '${nixBundleDir}/default.nix' || true
 
 rm -rf '${remoteTmpDir}' || true

@@ -32,8 +32,8 @@ import org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Obstacle;
 import org.curtinfrc.frc2026.util.Repulsor.Force;
 
 public final class FieldPlannerForceModel {
-  private static final int ARROWS_X = RobotBase.isSimulation() ? 40 : 0;
-  private static final int ARROWS_Y = RobotBase.isSimulation() ? 20 : 0;
+  private static final int ARROWS_X = isSimulationSafe() ? 40 : 0;
+  private static final int ARROWS_Y = isSimulationSafe() ? 20 : 0;
   private static final int ARROWS_SIZE = (ARROWS_X + 1) * (ARROWS_Y + 1);
   private static final double CORNER_CHAMFER = 0.0;
 
@@ -72,7 +72,7 @@ public final class FieldPlannerForceModel {
   }
 
   public void updateArrows(Translation2d goal, List<? extends Obstacle> dynamicObstacles) {
-    if (RobotBase.isReal()) {
+    if (isOffloadWorkerThread() || isRealSafe()) {
       return;
     }
 
@@ -127,7 +127,7 @@ public final class FieldPlannerForceModel {
   public Force getObstacleForce(
       Translation2d curLocation, Translation2d target, List<? extends Obstacle> extra) {
     var force = Force.kZero;
-    var dsBase = RepulsorDriverStation.getInstance();
+    var dsBase = safeDriverStation();
     for (Obstacle obs : fieldObstacles)
       force = force.plus(obs.getForceAtPosition(curLocation, target));
     for (Obstacle obs : extra)
@@ -153,5 +153,39 @@ public final class FieldPlannerForceModel {
         .plus(getObstacleForce(curLocation, target))
         .plus(getWallForce(curLocation, target))
         .times(Math.min(1.0, curLocation.getDistance(target)));
+  }
+
+  private static boolean isOffloadWorkerThread() {
+    return Thread.currentThread().getName().startsWith("offload-server-worker");
+  }
+
+  private static boolean isSimulationSafe() {
+    if (isOffloadWorkerThread()) {
+      return false;
+    }
+    try {
+      return RobotBase.isSimulation();
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
+  private static boolean isRealSafe() {
+    if (isOffloadWorkerThread()) {
+      return true;
+    }
+    try {
+      return RobotBase.isReal();
+    } catch (Throwable ignored) {
+      return true;
+    }
+  }
+
+  private static RepulsorDriverStation safeDriverStation() {
+    try {
+      return RepulsorDriverStation.getInstance();
+    } catch (Throwable ignored) {
+      return null;
+    }
   }
 }

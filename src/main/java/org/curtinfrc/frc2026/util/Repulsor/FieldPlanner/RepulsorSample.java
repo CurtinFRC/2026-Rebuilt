@@ -62,4 +62,16 @@ public class RepulsorSample {
   public Translation2d goal() {
     return m_goal;
   }
+
+  public double vxMetersPerSecond() {
+    return m_vx.in(MetersPerSecond);
+  }
+
+  public double vyMetersPerSecond() {
+    return m_vy.in(MetersPerSecond);
+  }
+
+  public double omegaRadians() {
+    return m_omega == null ? 0.0 : m_omega.in(Radians);
+  }
 }

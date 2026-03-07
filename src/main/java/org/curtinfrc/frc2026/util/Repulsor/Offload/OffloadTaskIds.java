@@ -11,6 +11,7 @@ public final class OffloadTaskIds {
       "repulsor.predictive.selectShuttleRecoveryPoint.v1";
   public static final String FIELD_TRACKER_NEXT_SHUTTLE_RECOVERY_GOAL_BLUE =
       "repulsor.fieldtracker.nextShuttleRecoveryGoalBlue.v1";
+  public static final String FIELD_PLANNER_CALCULATE = "repulsor.fieldplanner.calculate.v1";
   public static final String FIELD_PLANNER_IS_CLEAR_PATH = "repulsor.fieldplanner.isClearPath.v1";
   public static final String FIELD_PLANNER_ROBOT_INTERSECTS =
       "repulsor.fieldplanner.robotIntersects.v1";
