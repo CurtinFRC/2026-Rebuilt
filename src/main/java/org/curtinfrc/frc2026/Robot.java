@@ -10,6 +10,7 @@ import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Alert;
@@ -21,6 +22,7 @@ import edu.wpi.first.wpilibj.Filesystem;
 import edu.wpi.first.wpilibj.Threads;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
@@ -60,12 +62,14 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
+import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.AutoPathBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.DefenceBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.ShuttleRecoveryBehaviour;
 import org.curtinfrc.frc2026.util.Repulsor.Behaviours.TestBehaviour;
+import org.curtinfrc.frc2026.util.Repulsor.Commands.GateTelemetry;
 import org.curtinfrc.frc2026.util.Repulsor.Commands.Triggers;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStation;
 import org.curtinfrc.frc2026.util.Repulsor.DriverStation.RepulsorDriverStationBootstrap;
@@ -221,7 +225,7 @@ public class Robot extends LoggedRobot {
     reasoner.setTesting(true);
     repulsor.setReasoner(reasoner);
 
-    repulsor.disableBehaviours();
+    // repulsor.disableBehaviours();
     repulsor.setup();
 
     StaticInstance.initialize(repulsor);
@@ -423,6 +427,10 @@ public class Robot extends LoggedRobot {
         new Pose2d(
             15.391 - (Constants.ROBOT_X / 2), 3.84 + (Constants.ROBOT_Y / 2), new Rotation2d()));
 
+    RepulsorDriverStationBootstrap.useDefaultNt();
+
+    wireRepulsor();
+    
     // drive.setPose(new Pose2d(0, 0, new Rotation2d()));
 
     DriverStation.silenceJoystickConnectionWarning(true);
@@ -435,135 +443,111 @@ public class Robot extends LoggedRobot {
             () -> -controller.getLeftX(),
             () -> -controller.getRightX()));
 
-<<<<<<< HEAD
-    inOwnHalf
-        .and(edging)
-        .and(GameState.activeShift)
+    // inOwnHalf
+    //     .and(edging)
+    //     .and(GameState.activeShift)
+    //     .whileTrue(
+    //         drive
+    //             .locationHeadingjoyStickDrive(
+    //                 () -> -controller.getLeftY(),
+    //                 () -> -controller.getLeftX(),
+    //                 () -> -controller.getRightX(),
+    //                 aligning,
+    //                 () ->
+    //                     ChoreoAllianceFlipUtil.flip(
+    //                         FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+    //             .withName("Scoring"));
+
+    // inOwnHalf
+    //     .and(GameState.activeShift)
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    //                 ChoreoAllianceFlipUtil.flip(
+    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+
+    // isInNeutralZone
+    //     .and(isLeft.negate())
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+
+    // isInNeutralZone
+    //     .and(isLeft)
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+
+    // isLeft
+    //     .negate()
+    //     .and(isInNeutralZone)
+    //     .whileTrue(
+    //         drive
+    //             .locationHeadingjoyStickDrive(
+    //                 () -> -controller.getLeftY(),
+    //                 () -> -controller.getLeftX(),
+    //                 () -> -controller.getRightX(),
+    //                 aligning,
+    //                 () ->
+    //                     ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+    //             .withName("RightShuttling"));
+
+    // isLeft
+    //     .and(isInNeutralZone)
+    //     .whileTrue(
+    //         drive
+    //             .locationHeadingjoyStickDrive(
+    //                 () -> -controller.getLeftY(),
+    //                 () -> -controller.getLeftX(),
+    //                 () -> -controller.getRightX(),
+    //                 aligning,
+    //                 () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+    //             .withName("LeftShuttling"));
+
+    // controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    // controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+
+    // // TODO FIX
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(intake.RawControlConsume(0.8))
+    //     .onFalse(intake.RawIdle());
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(mag.store(9.6))
+    //     .onFalse(mag.store(0));
+    // hoodedShooter
+    //     .hoodedShooterReady
+    //     .whileTrue(mag.spinIndexer(9.6))
+    //     .whileFalse(mag.holdIndexerCommand());
+
+    // controller
+    //     .leftBumper()
+    //     .whileTrue(
+    //         Commands.runOnce(() -> edge = false)
+    //             .andThen(
+    //                 drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+    //                     .finallyDo(() -> edge = true)));
+      controller
+        .a()
         .whileTrue(
-            drive
-                .locationHeadingjoyStickDrive(
-                    () -> -controller.getLeftY(),
-                    () -> -controller.getLeftX(),
-                    () -> -controller.getRightX(),
-                    aligning,
-                    () ->
-                        ChoreoAllianceFlipUtil.flip(
-                            FieldConstants.Hub.topCenterPoint.toTranslation2d()))
-                .withName("Scoring"));
-=======
-    drive.setDefaultCommand(
-        drive.joystickDrive(
-            () -> -controller.getLeftY(),
-            () -> -controller.getLeftX(),
-            () -> -controller.getRightX()));
-    // RepulsorDriverStation dsBase = RepulsorDriverStation.getInstance();
-    // if (dsBase instanceof NtRepulsorDriverStation ds) {
-    //   // new Trigger(() -> ds.getConfigBool("force_controller_override"))
-    //   //     .whileTrue(
-    //   //   Commands.parallel(
-    //   //             drive.joystickDrive(
-    //   //                 () -> -controller.getLeftY(),
-    //   //                 () -> -controller.getLeftX(),
-    //   //                 () -> -controller.getRightX())
-    //   //       // intake.RawControlConsume(1.0),
-    //   //       // mag.store(0.7),
-    //   //       // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
-    //   //       ));
-    //   Trigger automaticLocation =
-    //       new Trigger(
-    //           () -> {
-    //             Pose2d currentPosition = drive.getPose();
-    //             if (DriverStation.getAlliance().get().equals(Alliance.Red)) {
-    //               if (currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX()) {
-    //                 drive.locationHeadingjoyStickDrive(
-    //                     () -> -controller.getLeftY(),
-    //                     () -> -controller.getLeftX(),
-    //                     () -> -controller.getRightX(),
-    //                     () -> true,
-    //                     () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
-    //               } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
-    //                 drive.locationHeadingjoyStickDrive(
-    //                     () -> -controller.getLeftY(),
-    //                     () -> -controller.getLeftX(),
-    //                     () -> -controller.getRightX(),
-    //                     () -> true,
-    //                     () -> FieldConstants.ShuttlePoint.ShuttlePointRight);
->>>>>>> 254c4d8 (a)
-
-    inOwnHalf
-        .and(GameState.activeShift)
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () ->
-                    ChoreoAllianceFlipUtil.flip(
-                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
-
-    isInNeutralZone
-        .and(isLeft.negate())
-        .and(GameState.activeShift.negate())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
-
-    isInNeutralZone
-        .and(isLeft)
-        .and(GameState.activeShift.negate())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
-
-    isLeft
-        .negate()
-        .and(isInNeutralZone)
-        .whileTrue(
-            drive
-                .locationHeadingjoyStickDrive(
-                    () -> -controller.getLeftY(),
-                    () -> -controller.getLeftX(),
-                    () -> -controller.getRightX(),
-                    aligning,
-                    () ->
-                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
-                .withName("RightShuttling"));
-
-    isLeft
-        .and(isInNeutralZone)
-        .whileTrue(
-            drive
-                .locationHeadingjoyStickDrive(
-                    () -> -controller.getLeftY(),
-                    () -> -controller.getLeftX(),
-                    () -> -controller.getRightX(),
-                    aligning,
-                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
-                .withName("LeftShuttling"));
-
-    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
-    controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
-
-    // TODO FIX
-    RobotModeTriggers.disabled()
-        .negate()
-        .and(intaking)
-        .whileTrue(intake.RawControlConsume(0.8))
-        .onFalse(intake.RawIdle());
-    RobotModeTriggers.disabled()
-        .negate()
-        .and(intaking)
-        .whileTrue(mag.store(9.6))
-        .onFalse(mag.store(0));
-    hoodedShooter
-        .hoodedShooterReady
-        .whileTrue(mag.spinIndexer(9.6))
-        .whileFalse(mag.holdIndexerCommand());
-
+            drive.alignTo(
+                new Pose2d(
+                    Constants.FIELD_LENGTH / 2, Constants.FIELD_WIDTH / 2, new Rotation2d())));
     controller
-        .leftBumper()
+        .b()
         .whileTrue(
-            Commands.runOnce(() -> edge = false)
-                .andThen(
-                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
-                        .finallyDo(() -> edge = true)));
+            drive.alignTo(
+                ChoreoAllianceFlipUtil.flip(
+                    new Pose2d(
+                        15.391 - (Constants.ROBOT_X / 2),
+                        3.84 + (Constants.ROBOT_Y / 2),
+                        new Rotation2d()))));
+
   }
 
   /** This function is called periodically during all modes. */
@@ -595,6 +579,7 @@ public class Robot extends LoggedRobot {
     Logger.recordOutput(
         "LoggedRobot/MemoryUsageMb",
         (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1e6);
+
     Threads.setCurrentThreadPriority(false, 10);
 
     // telem.poll();
@@ -625,7 +610,6 @@ public class Robot extends LoggedRobot {
   /** This function is called once when teleop is enabled. */
   @Override
   public void teleopInit() {
-    // wireRepulsor();
   }
 
   /** This function is called periodically during operator control. */
