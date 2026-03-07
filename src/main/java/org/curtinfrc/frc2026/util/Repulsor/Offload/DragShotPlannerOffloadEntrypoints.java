@@ -17,7 +17,7 @@ public final class DragShotPlannerOffloadEntrypoints {
   @Offloadable(
       id = OffloadTaskIds.DRAG_SHOT_FIND_BEST_SHOT_AUTO,
       version = 1,
-      timeoutMs = 20,
+      timeoutMs = 250,
       fallback = true)
   public static Optional<ShotSolution> findBestShotAuto(
       GamePiecePhysics gamePiece,
@@ -44,7 +44,7 @@ public final class DragShotPlannerOffloadEntrypoints {
   @Offloadable(
       id = OffloadTaskIds.DRAG_SHOT_CALC_STATIC_SHOT_ANGLE_SPEED,
       version = 1,
-      timeoutMs = 20,
+      timeoutMs = 250,
       fallback = true)
   public static Optional<ShotSolution> calculateStaticShotAngleAndSpeed(
       GamePiecePhysics gamePiece,

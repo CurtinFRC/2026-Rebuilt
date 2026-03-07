@@ -112,7 +112,8 @@ public final class Profiler {
   }
 
   public static void ensureInit() {
-    if (!RobotBase.isSimulation()) return;
+    if (!profilerExplicitlyEnabled()) return;
+    if (!isSimulationRuntime()) return;
     if (INSTANCE != null) return;
     synchronized (Profiler.class) {
       if (INSTANCE != null) return;
@@ -127,7 +128,8 @@ public final class Profiler {
   }
 
   public static AutoCloseable section(String name) {
-    if (!RobotBase.isSimulation()) return NOOP;
+    if (!profilerExplicitlyEnabled()) return NOOP;
+    if (!isSimulationRuntime()) return NOOP;
     ensureInit();
     Profiler p = INSTANCE;
     if (p == null || !p.cfg.enabled) return NOOP;
@@ -135,7 +137,8 @@ public final class Profiler {
   }
 
   public static void counterAdd(String name, long delta) {
-    if (!RobotBase.isSimulation()) return;
+    if (!profilerExplicitlyEnabled()) return;
+    if (!isSimulationRuntime()) return;
     ensureInit();
     Profiler p = INSTANCE;
     if (p == null || !p.cfg.enabled) return;
@@ -143,7 +146,8 @@ public final class Profiler {
   }
 
   public static void gaugeSet(String name, long value) {
-    if (!RobotBase.isSimulation()) return;
+    if (!profilerExplicitlyEnabled()) return;
+    if (!isSimulationRuntime()) return;
     ensureInit();
     Profiler p = INSTANCE;
     if (p == null || !p.cfg.enabled) return;
@@ -157,7 +161,8 @@ public final class Profiler {
   }
 
   public static void dumpNow(String reason) {
-    if (!RobotBase.isSimulation()) return;
+    if (!profilerExplicitlyEnabled()) return;
+    if (!isSimulationRuntime()) return;
     ensureInit();
     Profiler p = INSTANCE;
     if (p == null || !p.cfg.enabled) return;
@@ -252,6 +257,30 @@ public final class Profiler {
 
   private static long nowMs() {
     return System.currentTimeMillis();
+  }
+
+  private static boolean isSimulationRuntime() {
+    if (System.getenv("OFFLOAD_PLUGIN_DIR") != null || System.getenv("OFFLOAD_PORT") != null) {
+      return false;
+    }
+    try {
+      return RobotBase.isSimulation();
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
+  private static boolean profilerExplicitlyEnabled() {
+    String value = System.getProperty("repulsor.profiler.enabled");
+    if (value == null) {
+      return false;
+    }
+    String normalized = value.trim().toLowerCase();
+    return normalized.equals("1")
+        || normalized.equals("true")
+        || normalized.equals("yes")
+        || normalized.equals("y")
+        || normalized.equals("on");
   }
 
   public static void shutdown() {

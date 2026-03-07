@@ -77,6 +77,13 @@ public final class OffloadValueCodec {
       case "boolean" -> Boolean.class;
       case "char" -> Character.class;
       default -> {
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        if (contextClassLoader != null) {
+          try {
+            yield Class.forName(typeName, true, contextClassLoader);
+          } catch (ClassNotFoundException ignored) {
+          }
+        }
         try {
           yield Class.forName(typeName);
         } catch (ClassNotFoundException ex) {

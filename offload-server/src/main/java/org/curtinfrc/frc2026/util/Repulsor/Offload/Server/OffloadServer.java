@@ -159,12 +159,14 @@ public final class OffloadServer implements AutoCloseable {
                 writeResponse(
                     output, writeLock, request.correlationId(), OffloadProtocol.STATUS_OK, payload);
               } else {
+                Throwable resolved = unwrapCompletionError(error);
+                resolved.printStackTrace(System.err);
                 writeResponse(
                     output,
                     writeLock,
                     request.correlationId(),
                     OffloadProtocol.STATUS_ERR,
-                    CborSerde.write(new OffloadError("EXEC_ERROR", error.getMessage())));
+                    CborSerde.write(new OffloadError("EXEC_ERROR", summarizeRootCause(resolved))));
               }
             });
   }
@@ -172,13 +174,43 @@ public final class OffloadServer implements AutoCloseable {
   @SuppressWarnings("unchecked")
   private static <RequestT, ResponseT> byte[] executeFunction(
       OffloadFunction<RequestT, ResponseT> function, byte[] payloadBytes) {
+    Thread thread = Thread.currentThread();
+    ClassLoader previousClassLoader = thread.getContextClassLoader();
+    ClassLoader pluginClassLoader = function.getClass().getClassLoader();
     try {
+      thread.setContextClassLoader(pluginClassLoader);
       RequestT request = CborSerde.read(payloadBytes, function.requestType());
       ResponseT response = function.execute(request);
       return CborSerde.write(response);
     } catch (Exception ex) {
-      throw new IllegalStateException("Offload task failed: " + function.taskId(), ex);
+      throw new IllegalStateException(
+          "Offload task failed: " + function.taskId() + " (" + summarizeRootCause(ex) + ")", ex);
+    } finally {
+      thread.setContextClassLoader(previousClassLoader);
     }
+  }
+
+  private static String summarizeRootCause(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String message = root.getMessage();
+    if (message == null || message.isBlank()) {
+      return root.getClass().getName();
+    }
+    return root.getClass().getName() + ": " + message;
+  }
+
+  private static Throwable unwrapCompletionError(Throwable throwable) {
+    Throwable current = throwable;
+    while ((current instanceof java.util.concurrent.CompletionException
+            || current instanceof java.util.concurrent.ExecutionException)
+        && current.getCause() != null
+        && current.getCause() != current) {
+      current = current.getCause();
+    }
+    return current;
   }
 
   private void writeResponse(

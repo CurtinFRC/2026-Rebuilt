@@ -281,7 +281,7 @@ in pkgs.stdenvNoCC.mkDerivation {
 set -euo pipefail
 export OFFLOAD_PLUGIN_DIR="''${OFFLOAD_PLUGIN_DIR:-$plugin_dir}"
 export OFFLOAD_MANIFEST="''${OFFLOAD_MANIFEST:-''$OFFLOAD_PLUGIN_DIR/offload-manifest.json}"
-exec ${jre}/bin/java -Djava.net.preferIPv4Stack=true -jar "$server_jar" "$@"
+exec ${jre}/bin/java -Drepulsor.profiler.enabled=false -Djava.net.preferIPv4Stack=true -jar "$server_jar" "$@"
 EOF
 
     chmod +x "$out/bin/repulsor-offload-server"
