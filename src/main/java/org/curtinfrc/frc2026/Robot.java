@@ -225,7 +225,7 @@ public class Robot extends LoggedRobot {
     reasoner.setTesting(true);
     repulsor.setReasoner(reasoner);
 
-    // repulsor.disableBehaviours();
+    repulsor.disableBehaviours();
     repulsor.setup();
 
     StaticInstance.initialize(repulsor);
