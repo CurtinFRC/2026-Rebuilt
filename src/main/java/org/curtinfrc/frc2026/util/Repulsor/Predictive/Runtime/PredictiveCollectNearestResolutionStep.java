@@ -21,12 +21,12 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.function.Predicate;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAggCont;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.CollectProbe;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.PointCandidate;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveClock;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
 import org.littletonrobotics.junction.Logger;
@@ -129,7 +129,7 @@ public final class PredictiveCollectNearestResolutionStep {
     Rotation2d chosenHeading = bestHeading;
     CollectEval chosenE = bestE;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
 
     if (ops.currentCollectTarget != null && inShootBand.test(ops.currentCollectTarget)) {
       ops.addDepletedMark(

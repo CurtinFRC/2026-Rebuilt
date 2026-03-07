@@ -13,7 +13,10 @@ public final class OffloadServerMain {
             + config.port()
             + " with "
             + server.taskCount()
-            + " loaded tasks");
+            + " loaded tasks"
+            + " (timingLogs="
+            + server.timingLogsEnabled()
+            + ")");
 
     Runtime.getRuntime().addShutdownHook(new Thread(server::close, "offload-server-shutdown"));
 

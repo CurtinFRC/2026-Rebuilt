@@ -27,6 +27,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadProtocol;
 
 public final class OffloadServer implements AutoCloseable {
   private final OffloadServerConfig config;
+  private final boolean timingLogsEnabled;
   private final Map<String, OffloadFunction<?, ?>> functionsById;
   private final List<ClassLoader> pluginClassLoaders;
   private final ExecutorService connectionPool;
@@ -39,6 +40,7 @@ public final class OffloadServer implements AutoCloseable {
 
   public OffloadServer(OffloadServerConfig config) throws IOException {
     this.config = Objects.requireNonNull(config);
+    this.timingLogsEnabled = config.timingLogsEnabled();
 
     OffloadPluginLoader.LoadedPlugins loaded = OffloadPluginLoader.load(config.pluginDirectory());
     this.functionsById = loaded.functionsById();
@@ -151,13 +153,40 @@ public final class OffloadServer implements AutoCloseable {
       return;
     }
 
-    CompletableFuture.supplyAsync(() -> executeFunction(function, request.payload()), workerPool)
+    RequestTiming timing = new RequestTiming(System.nanoTime());
+    CompletableFuture.supplyAsync(
+            () -> {
+              long executeStartNs = System.nanoTime();
+              timing.executeStartNs = executeStartNs;
+              if (timingLogsEnabled) {
+                logTaskStart(
+                    taskId, request.correlationId(), timing.receivedNs, executeStartNs, function.timeoutMs());
+              }
+              try {
+                return executeFunction(function, request.payload());
+              } finally {
+                timing.executeEndNs = System.nanoTime();
+              }
+            },
+            workerPool)
         .orTimeout(function.timeoutMs(), TimeUnit.MILLISECONDS)
         .whenComplete(
             (payload, error) -> {
+              long writeStartNs = System.nanoTime();
               if (error == null) {
                 writeResponse(
                     output, writeLock, request.correlationId(), OffloadProtocol.STATUS_OK, payload);
+                if (timingLogsEnabled) {
+                  long writeEndNs = System.nanoTime();
+                  logTaskStop(
+                      taskId,
+                      request.correlationId(),
+                      timing,
+                      writeEndNs,
+                      writeEndNs - writeStartNs,
+                      "OK",
+                      "");
+                }
               } else {
                 Throwable resolved = unwrapCompletionError(error);
                 resolved.printStackTrace(System.err);
@@ -167,6 +196,17 @@ public final class OffloadServer implements AutoCloseable {
                     request.correlationId(),
                     OffloadProtocol.STATUS_ERR,
                     CborSerde.write(new OffloadError("EXEC_ERROR", summarizeRootCause(resolved))));
+                if (timingLogsEnabled) {
+                  long writeEndNs = System.nanoTime();
+                  logTaskStop(
+                      taskId,
+                      request.correlationId(),
+                      timing,
+                      writeEndNs,
+                      writeEndNs - writeStartNs,
+                      "ERR",
+                      summarizeRootCause(resolved));
+                }
               }
             });
   }
@@ -223,6 +263,43 @@ public final class OffloadServer implements AutoCloseable {
     }
   }
 
+  private void logTaskStart(
+      String taskId, long correlationId, long receivedNs, long executeStartNs, int timeoutMs) {
+    System.out.printf(
+        "offload-server task-start corr=%d task=%s queueMs=%.3f timeoutMs=%d thread=%s%n",
+        correlationId,
+        taskId,
+        nanosToMillis(executeStartNs - receivedNs),
+        timeoutMs,
+        Thread.currentThread().getName());
+  }
+
+  private void logTaskStop(
+      String taskId,
+      long correlationId,
+      RequestTiming timing,
+      long responseWrittenNs,
+      long responseWriteNs,
+      String status,
+      String errorSummary) {
+    double queueMs =
+        timing.executeStartNs > 0 ? nanosToMillis(timing.executeStartNs - timing.receivedNs) : -1.0;
+    double execMs =
+        (timing.executeStartNs > 0 && timing.executeEndNs > 0)
+            ? nanosToMillis(timing.executeEndNs - timing.executeStartNs)
+            : -1.0;
+    double serverMs = nanosToMillis(responseWrittenNs - timing.receivedNs);
+
+    String error = (errorSummary == null || errorSummary.isBlank()) ? "-" : errorSummary;
+    System.out.printf(
+        "offload-server task-stop corr=%d task=%s status=%s queueMs=%.3f execMs=%.3f serverMs=%.3f writeMs=%.3f error=%s%n",
+        correlationId, taskId, status, queueMs, execMs, serverMs, nanosToMillis(responseWriteNs), error);
+  }
+
+  private static double nanosToMillis(long nanos) {
+    return nanos / 1_000_000.0;
+  }
+
   private List<String> sortedTaskIds() {
     if (!manifestTaskIds.isEmpty()) {
       return manifestTaskIds;
@@ -238,6 +315,10 @@ public final class OffloadServer implements AutoCloseable {
 
   public int taskCount() {
     return functionsById.size();
+  }
+
+  public boolean timingLogsEnabled() {
+    return timingLogsEnabled;
   }
 
   @Override
@@ -261,6 +342,16 @@ public final class OffloadServer implements AutoCloseable {
         } catch (Exception ignored) {
         }
       }
+    }
+  }
+
+  private static final class RequestTiming {
+    private final long receivedNs;
+    private volatile long executeStartNs = -1L;
+    private volatile long executeEndNs = -1L;
+
+    private RequestTiming(long receivedNs) {
+      this.receivedNs = receivedNs;
     }
   }
 }

@@ -11,7 +11,7 @@ public final class PredictiveFieldStateOffloadEntrypoints {
   @Offloadable(
       id = OffloadTaskIds.PREDICTIVE_SELECT_SHUTTLE_RECOVERY_POINT,
       version = 1,
-      timeoutMs = 16,
+      timeoutMs = 250,
       fallback = true)
   public static ShuttleRecoveryPointDTO selectShuttleRecoveryPoint(
       Pose2d robotPoseBlue,

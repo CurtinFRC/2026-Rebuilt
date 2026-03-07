@@ -20,7 +20,6 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
@@ -28,6 +27,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.FootprintEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.HeadingPick;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAggCont;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveClock;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
 
@@ -78,7 +78,7 @@ public final class PredictiveCollectNearestSearchStep {
     double[] topEv = new double[topScore.length];
     int topN = 0;
 
-    double now0 = Timer.getFPGATimestamp();
+    double now0 = PredictiveClock.nowSeconds();
 
     for (int si = 0; si < maxCheck; si++) {
       int idx = shortlist.get(si);

@@ -19,7 +19,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Predictive;
 
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.DepletedMark;
@@ -37,7 +36,7 @@ public final class PredictiveCollectPenaltyTracker {
   void sweepDepletedMarks(boolean errorMode) {
     if (errorMode) return;
     if (depletedMarks.isEmpty()) return;
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     depletedMarks.removeIf(m -> now - m.t > m.ttl);
     if (depletedMarks.size() > DEPLETED_MARKS_MAX) {
       while (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
@@ -54,7 +53,7 @@ public final class PredictiveCollectPenaltyTracker {
     if (errorMode) return;
     if (p == null) return;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     double r = Math.max(0.10, radiusM);
     double s = Math.max(0.0, strength);
     double ttl = Math.max(0.1, ttlS);
@@ -81,7 +80,7 @@ public final class PredictiveCollectPenaltyTracker {
       Translation2d p, double r0, double r1, double strength, double ttlS, boolean errorMode) {
     if (errorMode) return;
     if (p == null) return;
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     depletedMarks.add(
         new DepletedMark(p, now, Math.max(0.0, strength), r0, r1, Math.max(0.1, ttlS)));
     if (depletedMarks.size() > DEPLETED_MARKS_MAX) depletedMarks.remove(0);
@@ -91,7 +90,7 @@ public final class PredictiveCollectPenaltyTracker {
     if (errorMode) return 0.0;
     if (p == null || depletedMarks.isEmpty()) return 0.0;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     double sum = 0.0;
 
     for (int i = 0; i < depletedMarks.size(); i++) {

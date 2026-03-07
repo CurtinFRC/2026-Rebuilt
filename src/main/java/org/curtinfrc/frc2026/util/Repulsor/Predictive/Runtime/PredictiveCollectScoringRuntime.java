@@ -20,13 +20,13 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.HashMap;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.CollectEval;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAggCont;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.Track;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.CollectProbe;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveClock;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
 
@@ -200,7 +200,7 @@ public final class PredictiveCollectScoringRuntime {
     if (cur.depleted > 0.90) return true;
     if (cur.evidence < minEvidence(ops, totalEv) * 0.75) return true;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     double dist = ourPos.getDistance(ops.currentCollectTarget);
 
     if (!Double.isFinite(ops.collectProgressLastDist)) {

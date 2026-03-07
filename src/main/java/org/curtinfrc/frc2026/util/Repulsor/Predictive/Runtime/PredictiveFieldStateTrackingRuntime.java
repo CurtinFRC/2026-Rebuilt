@@ -19,7 +19,6 @@
 package org.curtinfrc.frc2026.util.Repulsor.Predictive.Runtime;
 
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -28,6 +27,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Fields.FieldMapBuilder.CategorySpec;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.IntentAgg;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Internal.Track;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.Model.Candidate;
+import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveClock;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.PredictiveFieldStateOps;
 import org.curtinfrc.frc2026.util.Repulsor.Predictive.SpatialDyn;
 import org.curtinfrc.frc2026.util.Repulsor.Setpoints.RepulsorSetpoint;
@@ -44,7 +44,7 @@ public final class PredictiveFieldStateTrackingRuntime {
       Double speedCap) {
     if (pos == null) return;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     Track t =
         ops.allyMap.getOrDefault(
             id,
@@ -89,7 +89,7 @@ public final class PredictiveFieldStateTrackingRuntime {
       Double speedCap) {
     if (pos == null) return;
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     Track t =
         ops.enemyMap.getOrDefault(
             id,
@@ -127,7 +127,7 @@ public final class PredictiveFieldStateTrackingRuntime {
   }
 
   public static void clearStale(PredictiveFieldStateOps ops, double maxAgeS) {
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     ops.allyMap.entrySet().removeIf(e -> now - e.getValue().lastTs > maxAgeS);
     ops.enemyMap.entrySet().removeIf(e -> now - e.getValue().lastTs > maxAgeS);
   }
@@ -162,7 +162,7 @@ public final class PredictiveFieldStateTrackingRuntime {
     IntentAgg allyAgg = ops.softIntentAgg(ops.allyMap, targets);
     IntentAgg enemyAgg = ops.softIntentAgg(ops.enemyMap, targets);
 
-    double now = Timer.getFPGATimestamp();
+    double now = PredictiveClock.nowSeconds();
     List<Candidate> out = new ArrayList<>();
     double cap = ourSpeedCap > 0 ? ourSpeedCap : PredictiveFieldStateOps.DEFAULT_OUR_SPEED;
 

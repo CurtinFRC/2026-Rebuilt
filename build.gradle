@@ -319,6 +319,19 @@ task(realOffloadDragShotTest, type: Test) {
     filter {
         includeTestsMatching "org.curtinfrc.frc2026.util.Repulsor.Offload.RealOffloadServerDragShotTest"
     }
+    testLogging {
+        events "started", "passed", "failed", "skipped"
+        showStandardStreams = true
+        exceptionFormat "full"
+    }
+    doFirst {
+        println "Running real offload test against ${systemProperties['repulsor.offload.real.host']}"
+    }
+    afterSuite { desc, result ->
+        if (!desc.parent) {
+            println "realOffloadDragShotTest summary: ${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped (${result.resultType})"
+        }
+    }
 }
 tasks.named("test", Test) {
     configureOffloadSmokeInputs(it)

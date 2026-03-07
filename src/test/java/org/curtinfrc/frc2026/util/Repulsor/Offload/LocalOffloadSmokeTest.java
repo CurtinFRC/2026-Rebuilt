@@ -38,7 +38,7 @@ class LocalOffloadSmokeTest {
       copy(manifest, pluginDirectory.resolve("offload-manifest.json"));
 
       OffloadServerConfig config =
-          new OffloadServerConfig(port, pluginDirectory, 2, "local-smoke", "1.0", true);
+          new OffloadServerConfig(port, pluginDirectory, 2, "local-smoke", "1.0", true, true);
 
       try (OffloadServer server = new OffloadServer(config);
           TcpOffloadClient client =

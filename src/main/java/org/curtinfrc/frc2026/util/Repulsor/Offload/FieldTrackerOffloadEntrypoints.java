@@ -11,7 +11,7 @@ public final class FieldTrackerOffloadEntrypoints {
   @Offloadable(
       id = OffloadTaskIds.FIELD_TRACKER_NEXT_SHUTTLE_RECOVERY_GOAL_BLUE,
       version = 1,
-      timeoutMs = 16,
+      timeoutMs = 250,
       fallback = true)
   public static Pose2d nextShuttleRecoveryGoalBlue(
       Pose2d robotPoseBlue,

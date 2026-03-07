@@ -21,8 +21,6 @@ package org.curtinfrc.frc2026.util.Repulsor.Predictive;
 
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
-import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.Timer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -110,6 +108,9 @@ public final class PredictiveFieldStateOps {
   public static final double MIN_DT = 0.02;
   public static final double MAX_MEAS_DT = 0.20;
   public static final double ETA_FLOOR = 0.05;
+  // Keep offload runtime independent from robot-wide constants static init.
+  public static final double OFFLOAD_SAFE_ROBOT_X_M = 0.85;
+  public static final double OFFLOAD_SAFE_ROBOT_Y_M = 0.85;
   public static final double DEFAULT_ENEMY_SPEED = 2.2;
   public static final double DEFAULT_ALLY_SPEED = 3.0;
   public static final double DEFAULT_OUR_SPEED = 3.5;
@@ -274,10 +275,7 @@ public final class PredictiveFieldStateOps {
   public final HashMap<Integer, Track> enemyMap = new HashMap<>();
 
   public volatile List<GameElement> worldElements = List.of();
-  public volatile Alliance ourAlliance =
-      DriverStation.getAlliance()
-          .map(al -> (al == DriverStation.Alliance.Blue) ? Alliance.kBlue : Alliance.kRed)
-          .orElse(Alliance.kRed);
+  public volatile Alliance ourAlliance = Alliance.kBlue;
 
   public volatile RepulsorSetpoint lastChosen = null;
   public volatile double lastChosenTs = 0.0;
@@ -485,8 +483,7 @@ public final class PredictiveFieldStateOps {
 
     final double robotHalf =
         0.5
-            * Math.max(
-                org.curtinfrc.frc2026.Constants.ROBOT_X, org.curtinfrc.frc2026.Constants.ROBOT_Y);
+            * Math.max(OFFLOAD_SAFE_ROBOT_X_M, OFFLOAD_SAFE_ROBOT_Y_M);
     final double robotWallMargin = robotHalf + 0.03;
     final double wallClearMin = robotWallMargin + 0.05;
     final java.util.function.ToDoubleFunction<Translation2d> wallPenalty =
@@ -543,7 +540,7 @@ public final class PredictiveFieldStateOps {
     double footprintMinUnits = Math.max(minHardUnits, minUnits * 0.95);
 
     if (lastReturnedCollect != null) {
-      double now = Timer.getFPGATimestamp();
+      double now = PredictiveClock.nowSeconds();
       double age = now - lastReturnedCollectTs;
       if (age >= 0.0
           && age <= 0.55
