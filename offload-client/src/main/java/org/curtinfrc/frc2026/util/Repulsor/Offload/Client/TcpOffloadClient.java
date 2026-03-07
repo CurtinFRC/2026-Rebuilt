@@ -222,7 +222,14 @@ public final class TcpOffloadClient implements OffloadGateway, AutoCloseable {
       if (pending == null) {
         return;
       }
-      if (response.status() == OffloadProtocol.STATUS_OK) {
+      if (response.status() == OffloadProtocol.STATUS_OK_TIMED) {
+        OffloadProtocol.TimedPayload timingPayload = OffloadProtocol.parseTimedPayload(response.payload());
+        latestServerTimingByTask.put(
+            pending.taskId(),
+            new OffloadServerTiming(
+                timingPayload.queueNs(), timingPayload.executeNs(), timingPayload.serverNs()));
+        pending.future().complete(timingPayload.payload());
+      } else if (response.status() == OffloadProtocol.STATUS_OK) {
         byte[] payload = response.payload();
         OffloadResponseEnvelope envelope = tryDecodeEnvelope(payload);
         if (envelope != null

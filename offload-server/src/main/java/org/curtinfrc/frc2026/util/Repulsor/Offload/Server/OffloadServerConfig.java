@@ -9,7 +9,8 @@ public record OffloadServerConfig(
     String serverName,
     String serverVersion,
     boolean includeTaskListInHello,
-    boolean timingLogsEnabled) {
+    boolean timingLogsEnabled,
+    boolean timingInResponsesEnabled) {
 
   public static OffloadServerConfig fromEnvironment() {
     int port = Integer.parseInt(System.getenv().getOrDefault("OFFLOAD_PORT", "5808"));
@@ -21,7 +22,9 @@ public record OffloadServerConfig(
     boolean includeTaskList =
         Boolean.parseBoolean(System.getenv().getOrDefault("OFFLOAD_HELLO_TASK_LIST", "false"));
     boolean timingLogsEnabled =
-        Boolean.parseBoolean(System.getenv().getOrDefault("OFFLOAD_TIMING_LOGS", "true"));
+        Boolean.parseBoolean(System.getenv().getOrDefault("OFFLOAD_TIMING_LOGS", "false"));
+    boolean timingInResponsesEnabled =
+        Boolean.parseBoolean(System.getenv().getOrDefault("OFFLOAD_TIMING_IN_RESPONSES", "true"));
     return new OffloadServerConfig(
         port,
         pluginDirectory,
@@ -29,6 +32,7 @@ public record OffloadServerConfig(
         serverName,
         serverVersion,
         includeTaskList,
-        timingLogsEnabled);
+        timingLogsEnabled,
+        timingInResponsesEnabled);
   }
 }

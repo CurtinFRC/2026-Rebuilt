@@ -37,6 +37,8 @@ public final class UdpOffloadClient implements OffloadGateway, AutoCloseable {
   private final AtomicLong nextCorrelation = new AtomicLong(1L);
 
   private final ExecutorService ioExecutor;
+  private final byte[] receiveBuffer = new byte[MAX_UDP_PACKET_BYTES];
+  private final DatagramPacket receivePacket = new DatagramPacket(receiveBuffer, receiveBuffer.length);
   private volatile boolean running;
 
   private volatile DatagramSocket socket;
@@ -255,7 +257,14 @@ public final class UdpOffloadClient implements OffloadGateway, AutoCloseable {
       if (pending == null) {
         return;
       }
-      if (response.status() == OffloadProtocol.STATUS_OK) {
+      if (response.status() == OffloadProtocol.STATUS_OK_TIMED) {
+        OffloadProtocol.TimedPayload timingPayload = OffloadProtocol.parseTimedPayload(response.payload());
+        latestServerTimingByTask.put(
+            pending.taskId(),
+            new OffloadServerTiming(
+                timingPayload.queueNs(), timingPayload.executeNs(), timingPayload.serverNs()));
+        pending.future().complete(timingPayload.payload());
+      } else if (response.status() == OffloadProtocol.STATUS_OK) {
         byte[] payload = response.payload();
         OffloadResponseEnvelope envelope = tryDecodeEnvelope(payload);
         if (envelope != null
@@ -286,14 +295,11 @@ public final class UdpOffloadClient implements OffloadGateway, AutoCloseable {
     }
   }
 
-  private static OffloadProtocol.ResponseFrame receivePacket(DatagramSocket sourceSocket)
-      throws IOException {
-    byte[] receiveBuffer = new byte[MAX_UDP_PACKET_BYTES];
-    DatagramPacket packet = new DatagramPacket(receiveBuffer, receiveBuffer.length);
-    sourceSocket.receive(packet);
-    byte[] frame = new byte[packet.getLength()];
-    System.arraycopy(packet.getData(), packet.getOffset(), frame, 0, packet.getLength());
-    return OffloadProtocol.parseResponse(frame);
+  private OffloadProtocol.ResponseFrame receivePacket(DatagramSocket sourceSocket) throws IOException {
+    receivePacket.setLength(receiveBuffer.length);
+    sourceSocket.receive(receivePacket);
+    return OffloadProtocol.parseResponse(
+        receivePacket.getData(), receivePacket.getOffset(), receivePacket.getLength());
   }
 
   private static void sendPacket(DatagramSocket targetSocket, byte[] frame) throws IOException {

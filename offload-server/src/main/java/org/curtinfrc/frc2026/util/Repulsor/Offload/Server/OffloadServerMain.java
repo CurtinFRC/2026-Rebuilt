@@ -17,6 +17,8 @@ public final class OffloadServerMain {
             + " loaded tasks"
             + " (timingLogs="
             + server.timingLogsEnabled()
+            + ", timingInResponses="
+            + config.timingInResponsesEnabled()
             + ")");
 
     Runtime.getRuntime().addShutdownHook(new Thread(server::close, "offload-server-shutdown"));

@@ -21,7 +21,6 @@ import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadError;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadFunction;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadHelloResponse;
 import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadProtocol;
-import org.curtinfrc.frc2026.util.Repulsor.Offload.OffloadResponseEnvelope;
 
 public final class OffloadServer implements AutoCloseable {
   private static final int MAX_UDP_PACKET_BYTES = 65_507;
@@ -91,11 +90,9 @@ public final class OffloadServer implements AutoCloseable {
       try {
         DatagramPacket packet = new DatagramPacket(receiveBuffer, receiveBuffer.length);
         datagramSocket.receive(packet);
-        byte[] frameBytes = new byte[packet.getLength()];
-        System.arraycopy(packet.getData(), packet.getOffset(), frameBytes, 0, packet.getLength());
-        OffloadProtocol.RequestFrame request = OffloadProtocol.parseRequest(frameBytes);
-        InetSocketAddress remote =
-            new InetSocketAddress(packet.getAddress(), packet.getPort());
+        OffloadProtocol.RequestFrame request =
+            OffloadProtocol.parseRequest(packet.getData(), packet.getOffset(), packet.getLength());
+        InetSocketAddress remote = new InetSocketAddress(packet.getAddress(), packet.getPort());
         dispatchRequest(request, remote);
       } catch (SocketException ex) {
         if (running) {
@@ -168,17 +165,28 @@ public final class OffloadServer implements AutoCloseable {
                 long responseStartNs = System.nanoTime();
                 long queueNs = Math.max(0L, timing.executeStartNs - timing.receivedNs);
                 long executeNs = Math.max(0L, timing.executeEndNs - timing.executeStartNs);
-                byte[] responsePayload =
-                    CborSerde.write(
-                        new OffloadResponseEnvelope(
+                byte status = OffloadProtocol.STATUS_OK;
+                byte[] responsePayload = payload;
+                if (config.timingInResponsesEnabled()) {
+                  status = OffloadProtocol.STATUS_OK_TIMED;
+                  try {
+                    responsePayload =
+                        OffloadProtocol.serializeTimedPayload(
                             payload,
                             queueNs,
                             executeNs,
-                            Math.max(0L, responseStartNs - timing.receivedNs)));
+                            Math.max(0L, responseStartNs - timing.receivedNs));
+                  } catch (IOException serializeEx) {
+                    status = OffloadProtocol.STATUS_ERR;
+                    responsePayload =
+                        CborSerde.write(
+                            new OffloadError("TIMING_WRAP_ERROR", summarizeRootCause(serializeEx)));
+                  }
+                }
                 sendResponse(
                     remoteAddress,
                     request.correlationId(),
-                    OffloadProtocol.STATUS_OK,
+                    status,
                     responsePayload);
                 if (timingLogsEnabled) {
                   long writeEndNs = System.nanoTime();
