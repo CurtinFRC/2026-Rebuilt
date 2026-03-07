@@ -67,7 +67,7 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 10;
+  public static final double hubHeadingKP = 15;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0.7;
 
