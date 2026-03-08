@@ -567,8 +567,14 @@ public class Drive extends SubsystemBase {
                       new ChassisSpeeds(
                           linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                           linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                          -angleSpeed);
-                  runVelocity(speeds);
+                          angleSpeed);
+                  boolean isFlipped =
+                      DriverStation.getAlliance().isPresent()
+                          && DriverStation.getAlliance().get() == Alliance.Red;
+                  runVelocity(
+                      ChassisSpeeds.fromFieldRelativeSpeeds(
+                          speeds,
+                          isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
                 }));
   }
 }
