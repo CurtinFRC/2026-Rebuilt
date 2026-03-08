@@ -416,7 +416,7 @@ public class Robot extends LoggedRobot {
 
     controller
         .leftBumper()
-        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftX(), () -> -controller.getLeftY()));
+        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
     // .whileTrue(
     //     Commands.runOnce(() -> edge = false)
     //         .andThen(
