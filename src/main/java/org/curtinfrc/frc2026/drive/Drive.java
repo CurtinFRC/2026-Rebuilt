@@ -66,7 +66,7 @@ public class Drive extends SubsystemBase {
       new Alert("Disconnected gyro, using kinematics as fallback.", AlertType.kError);
 
   // Setting PID values for turning towards Hub.
-  public static final double hubHeadingKP = 10;
+  public static final double hubHeadingKP = 5;
   public static final double hubHeadingKI = 0;
   private static final double hubHeadingKD = 0;
 
@@ -538,7 +538,7 @@ public class Drive extends SubsystemBase {
                       new ChassisSpeeds(
                           linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
                           linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                          -angleSpeed);
+                          angleSpeed);
                   runVelocity(speeds);
                 }));
   }

@@ -93,6 +93,9 @@ public class Robot extends LoggedRobot {
   @AutoLogOutput(key = "Triggers/IsRed")
   Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
 
+  @AutoLogOutput(key = "Triggers/TrenchAlign")
+  Trigger TrenchAlign = controller.leftBumper();
+
   @AutoLogOutput(key = "Triggers/IsBlue")
   Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
 
@@ -113,7 +116,7 @@ public class Robot extends LoggedRobot {
   @AutoLogOutput(key = "Triggers/Edging")
   Trigger edging = new Trigger(() -> edge);
 
-  private boolean intaker = true;
+  private boolean intaker = false;
   private boolean aligner = true;
 
   @AutoLogOutput(key = "Triggers/Intaking")
@@ -327,6 +330,7 @@ public class Robot extends LoggedRobot {
     inOwnHalf
         .and(RobotModeTriggers.teleop())
         .and(GameState.activeShift)
+        .and(TrenchAlign.negate())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -350,6 +354,7 @@ public class Robot extends LoggedRobot {
     isInNeutralZone
         .and(isLeft.negate())
         .and(GameState.activeShift.negate())
+        .and(TrenchAlign.negate())
         .whileTrue(
             hoodedShooter.shootAtTarget(
                 () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
@@ -357,6 +362,7 @@ public class Robot extends LoggedRobot {
     isInNeutralZone
         .and(isLeft)
         .and(GameState.activeShift.negate())
+        .and(TrenchAlign.negate())
         .whileTrue(
             hoodedShooter.shootAtTarget(
                 () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
@@ -364,6 +370,7 @@ public class Robot extends LoggedRobot {
     isLeft
         .negate()
         .and(isInNeutralZone)
+        .and(TrenchAlign.negate())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -377,6 +384,7 @@ public class Robot extends LoggedRobot {
 
     isLeft
         .and(isInNeutralZone)
+        .and(TrenchAlign.negate())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -408,11 +416,12 @@ public class Robot extends LoggedRobot {
 
     controller
         .leftBumper()
-        .whileTrue(
-            Commands.runOnce(() -> edge = false)
-                .andThen(
-                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
-                        .finallyDo(() -> edge = true)));
+        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftX(), () -> -controller.getLeftY()));
+    // .whileTrue(
+    //     Commands.runOnce(() -> edge = false)
+    //         .andThen(
+    //             drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+    //                 .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */
