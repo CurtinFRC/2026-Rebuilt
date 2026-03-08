@@ -442,72 +442,58 @@ public class Drive extends SubsystemBase {
       DoubleSupplier rotationSupplier,
       BooleanSupplier aligningSupplier,
       Supplier<Translation2d> locationTransform) {
-    return runOnce(() -> hubHeadingController.reset(getRotation().getRadians()))
-        .andThen(
-            run(
-                () -> {
+    return run(
+        () -> {
+          Pose2d currentPosition = getPose();
 
-                  // Get current position using the getPose method.
-                  Pose2d currentPosition = getPose();
+          double robotAngle = currentPosition.getRotation().getRadians();
 
-                  // targetAngle = Math.toDegrees(targetAngle);
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+          }
+          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
-                  // Getting robot current angle in radians
-                  double robotAngle = currentPosition.getRotation().getRadians();
+          Logger.recordOutput("TargetAngle", angleToHub);
+          Logger.recordOutput("RobotAngle", robotAngle);
 
-                  double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-                  Logger.recordOutput("Aiming Target", locationTransform.get());
-                  // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-                  //   angleToHub =
-                  //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-                  // }
-                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+          // Apply rotation deadband
+          double omega = rotationSupplier.getAsDouble();
 
-                  Logger.recordOutput("TargetAngle", angleToHub);
-                  Logger.recordOutput("RobotAngle", robotAngle);
+          // Square rotation value for more precise control
+          omega = Math.copySign(omega * omega, omega);
 
-                  // Apply rotation deadband
-                  double omega = rotationSupplier.getAsDouble();
+          Translation2d linearVelocity =
+              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
-                  // Square rotation value for more precise control
-                  omega = Math.copySign(omega * omega, omega);
-
-                  // Get linear velocity
-                  Translation2d linearVelocity =
-                      getLinearVelocityFromJoysticks(
-                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
-
-                  // Convert to field relative speeds & send command
-                  boolean isFlipped =
-                      DriverStation.getAlliance().isPresent()
-                          && DriverStation.getAlliance().get() == Alliance.Red;
-                  boolean rotating = Math.abs(rotationSupplier.getAsDouble()) > 0.005;
-                  if (!aligningSupplier.getAsBoolean() || rotating) {
-                    ChassisSpeeds speeds =
-                        new ChassisSpeeds(
-                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                            omega * getMaxAngularSpeedRadPerSec());
-                    runVelocity(
-                        ChassisSpeeds.fromFieldRelativeSpeeds(
-                            speeds,
-                            isFlipped
-                                ? getRotation().plus(new Rotation2d(Math.PI))
-                                : getRotation()));
-                  } else {
-                    ChassisSpeeds speeds =
-                        new ChassisSpeeds(
-                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                            angleSpeed);
-                    runVelocity(
-                        ChassisSpeeds.fromFieldRelativeSpeeds(
-                            speeds,
-                            isFlipped
-                                ? getRotation().plus(new Rotation2d(Math.PI))
-                                : getRotation()));
-                  }
-                }));
+          // Convert to field relative speeds & send command
+          boolean isFlipped =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          boolean rotating = Math.abs(rotationSupplier.getAsDouble()) > 0.005;
+          if (!aligningSupplier.getAsBoolean() || rotating) {
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    omega * getMaxAngularSpeedRadPerSec());
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          } else {
+            ChassisSpeeds speeds =
+                new ChassisSpeeds(
+                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                    angleSpeed);
+            runVelocity(
+                ChassisSpeeds.fromFieldRelativeSpeeds(
+                    speeds,
+                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
+          }
+        });
   }
 
   public Command prepareAutonomous(double x, double y) {
