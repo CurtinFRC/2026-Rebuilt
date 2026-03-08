@@ -441,6 +441,7 @@ public class Drive extends SubsystemBase {
       DoubleSupplier ySupplier,
       DoubleSupplier rotationSupplier,
       BooleanSupplier aligningSupplier,
+      boolean isShuttling,
       Supplier<Translation2d> locationTransform) {
     return run(
         () -> {
@@ -450,7 +451,7 @@ public class Drive extends SubsystemBase {
 
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians() && !isShuttling) {
             angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);

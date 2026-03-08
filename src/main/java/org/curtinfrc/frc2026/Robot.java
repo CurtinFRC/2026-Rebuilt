@@ -302,7 +302,7 @@ public class Robot extends LoggedRobot {
     }
 
     autoFactory =
-        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, false, drive);
     autoChooser = new AutoChooser();
     autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
 
@@ -348,6 +348,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    false,
                     () ->
                         hoodedShooter.getVirtualTargetLocation(
                             () ->
@@ -357,14 +358,14 @@ public class Robot extends LoggedRobot {
                                     : FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
-    inOwnHalf
-        .and(RobotModeTriggers.teleop())
-        // .and(GameState.activeShift)
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () ->
-                    ChoreoAllianceFlipUtil.flip(
-                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+    // inOwnHalf
+    //     .and(RobotModeTriggers.teleop())
+    //     // .and(GameState.activeShift)
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    //                 ChoreoAllianceFlipUtil.flip(
+    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
     isInNeutralZone
         .and(isLeft.negate())
@@ -393,6 +394,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    true,
                     () ->
                         ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
                 .withName("RightShuttling"));
@@ -407,6 +409,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    true,
                     () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
                 .withName("LeftShuttling"));
 
