@@ -302,7 +302,7 @@ public class Robot extends LoggedRobot {
     }
 
     autoFactory =
-        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, false, drive);
     autoChooser = new AutoChooser();
     autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
 

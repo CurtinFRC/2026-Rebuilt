@@ -29,7 +29,7 @@ public class Autos {
 
   public Command leftHalfAuto() {
     return autoFactory
-        .trajectoryCmd("leftHalfAuto")
+        .trajectoryCmd("LeftHalfAuto")
         .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   }
 
