@@ -81,8 +81,9 @@ public class Drive extends SubsystemBase {
           hubHeadingKP,
           hubHeadingKI,
           hubHeadingKD,
-          new TrapezoidProfile.Constraints(
-              getMaxAngularSpeedRadPerSec() - 0.5, ANGLE_MAX_ACCELERATION));
+          new TrapezoidProfile.Constraints(getMaxAngularSpeedRadPerSec(), ANGLE_MAX_ACCELERATION));
+
+  public Trigger aligned = new Trigger(() -> hubHeadingController.getPositionError() < 0.02);
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;

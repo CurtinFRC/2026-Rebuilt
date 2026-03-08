@@ -8,7 +8,6 @@ import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
 import edu.wpi.first.math.geometry.Rotation2d;
-import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -57,7 +56,6 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
 import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
-import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
@@ -105,19 +103,24 @@ public class Robot extends LoggedRobot {
       new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
 
   @AutoLogOutput(key = "Triggers/inOwnHalf")
-  // TODO doesnt work with both sides you dumb dumb sim fix btw
   Trigger inOwnHalf =
       new Trigger(
-          () ->
-              drive.getPose().getX()
-                  > ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
+          () -> {
+            double robotX = drive.getPose().getX();
+            double boundaryX =
+                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+            boolean isRedAlliance =
+                DriverStation.getAlliance().isPresent()
+                    && DriverStation.getAlliance().get() == Alliance.Red;
+            return isRedAlliance ? robotX > boundaryX : robotX < boundaryX;
+          });
 
   private boolean edge = true;
 
   @AutoLogOutput(key = "Triggers/Edging")
   Trigger edging = new Trigger(() -> edge);
 
-  private boolean intaker = true;
+  private boolean intaker = false;
   private boolean aligner = true;
 
   @AutoLogOutput(key = "Triggers/Intaking")
@@ -129,12 +132,15 @@ public class Robot extends LoggedRobot {
   @AutoLogOutput(key = "Triggers/isInNeutral")
   Trigger isInNeutralZone =
       new Trigger(
-          () ->
-              drive.getPose().getX()
-                  < ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
-
-  private LoggedNetworkStruct<Translation2d> shootTargetPose =
-      new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
+          () -> {
+            double robotX = drive.getPose().getX();
+            double boundaryX =
+                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+            boolean isRedAlliance =
+                DriverStation.getAlliance().isPresent()
+                    && DriverStation.getAlliance().get() == Alliance.Red;
+            return isRedAlliance ? robotX < boundaryX : robotX > boundaryX;
+          });
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -343,18 +349,22 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getRightX(),
                     aligning,
                     () ->
-                        ChoreoAllianceFlipUtil.flip(
-                            FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+                        hoodedShooter.getVirtualTargetLocation(
+                            () ->
+                                ChoreoAllianceFlipUtil.shouldFlip()
+                                    ? ChoreoAllianceFlipUtil.flip(
+                                        FieldConstants.Hub.topCenterPoint.toTranslation2d())
+                                    : FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
-    // inOwnHalf
-    //     .and(GameState.activeShift)
-    //     .and(TrenchAlign.negate())
-    //     .whileTrue(
-    //         hoodedShooter.shootAtTarget(
-    //             () ->
-    //                 ChoreoAllianceFlipUtil.flip(
-    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+    inOwnHalf
+        .and(RobotModeTriggers.teleop())
+        // .and(GameState.activeShift)
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () ->
+                    ChoreoAllianceFlipUtil.flip(
+                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
     // isInNeutralZone
     //     .and(isLeft.negate())
@@ -405,16 +415,16 @@ public class Robot extends LoggedRobot {
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
 
     // TODO FIX
-    // RobotModeTriggers.disabled()
-    //     .negate()
-    //     .and(intaking)
-    //     .whileTrue(intake.RawControlConsume(0.8))
-    //     .onFalse(intake.RawIdle());
-    // RobotModeTriggers.disabled()
-    //     .negate()
-    //     .and(intaking)
-    //     .whileTrue(mag.store(9.6))
-    //     .onFalse(mag.store(0));
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(intake.RawControlConsume(0.8))
+        .onFalse(intake.RawIdle());
+    RobotModeTriggers.disabled()
+        .negate()
+        .and(intaking)
+        .whileTrue(mag.store(9.6))
+        .onFalse(mag.store(0));
     hoodedShooter
         .hoodedShooterReady
         .whileTrue(mag.spinIndexer(9.6))
