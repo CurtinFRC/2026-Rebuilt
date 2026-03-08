@@ -109,9 +109,9 @@ public class Robot extends LoggedRobot {
             double robotX = drive.getPose().getX();
             double boundaryX =
                 ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
-            boolean isRedAlliance = true;
-            // DriverStation.getAlliance().isPresent()
-            //     && DriverStation.getAlliance().get() == Alliance.Red;
+            boolean isRedAlliance =
+                DriverStation.getAlliance().isPresent()
+                    && DriverStation.getAlliance().get() == Alliance.Red;
             return isRedAlliance ? robotX > boundaryX : robotX < boundaryX;
           });
 
