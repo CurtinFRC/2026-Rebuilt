@@ -35,13 +35,13 @@ public class ShooterIOComp implements ShooterIO {
   public static final double VELOCITY_TOLERANCE = 1;
 
   public static final double GEAR_RATIO = 1.0;
-  private static final double KP = 0.04;
+  private static final double KP = 0.307;
   private static final double KI = 0.0;
   private static final double KD = 0.0;
   private static final double KS = 0.4;
-  private static final double KV = 0.1147;
+  private static final double KV = 0.1256;
   // private static final double KV_SHOOTING = 0.2;
-  private static final double KA = 0.67;
+  private static final double KA = 0.047;
 
   // private final LoggedTunableNumber shooterKP =
   //     new LoggedTunableNumber("Shooter/KP", KP);
@@ -67,7 +67,10 @@ public class ShooterIOComp implements ShooterIO {
                   .withInverted(InvertedValue.CounterClockwise_Positive))
           .withCurrentLimits(
               new CurrentLimitsConfigs().withSupplyCurrentLimit(100).withStatorCurrentLimit(120))
-          .withFeedback(new FeedbackConfigs().withSensorToMechanismRatio(GEAR_RATIO))
+          .withFeedback(
+              new FeedbackConfigs()
+                  .withSensorToMechanismRatio(GEAR_RATIO)
+                  .withVelocityFilterTimeConstant(0.1))
           .withSlot0(
               new Slot0Configs().withKP(KP).withKI(KI).withKD(KD).withKS(KS).withKV(KV).withKA(KA))
           .withSlot1(
