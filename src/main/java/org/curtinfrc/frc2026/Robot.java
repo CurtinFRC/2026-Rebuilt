@@ -426,6 +426,7 @@ public class Robot extends LoggedRobot {
         .onFalse(mag.store(0));
     hoodedShooter
         .hoodedShooterReady
+        .and(drive.aligned)
         .whileTrue(mag.spinIndexer(9.6))
         .whileFalse(mag.holdIndexerCommand());
 
