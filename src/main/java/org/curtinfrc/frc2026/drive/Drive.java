@@ -461,10 +461,7 @@ public class Drive extends SubsystemBase {
                   //   angleToHub =
                   //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
                   // }
-                  double angleSpeed =
-                      hubHeadingController.calculate(robotAngle, angleToHub)
-                          - (hubHeadingController.calculate(robotAngle, angleToHub)
-                              * DRIVE_BASE_RADIUS);
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
                   Logger.recordOutput("TargetAngle", angleToHub);
                   Logger.recordOutput("RobotAngle", robotAngle);
