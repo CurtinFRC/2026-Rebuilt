@@ -17,6 +17,8 @@ import edu.wpi.first.wpilibj.RobotController;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Supplier;
+import org.curtinfrc.frc2026.Constants;
+import org.curtinfrc.frc2026.Constants.RobotType;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.littletonrobotics.junction.Logger;
 import org.photonvision.common.hardware.VisionLEDMode;
@@ -27,7 +29,7 @@ public class Vision extends VirtualSubsystem {
 
   public static record CameraConfig(String name, Transform3d robotToCamera, double stdDev) {}
 
-  public static CameraConfig[] cameraConfigs =
+  public static CameraConfig[] devCameraConfigs =
       new CameraConfig[] {
         new CameraConfig(
             "Intake Left",
@@ -51,6 +53,35 @@ public class Vision extends VirtualSubsystem {
             "PC_Camera",
             new Transform3d(
                 new Translation3d(0.291955, 0.474879, -0.041151), new Rotation3d(0, 40, 135)),
+            1.0),
+      };
+
+  public static CameraConfig[] compCameraConfigs =
+      new CameraConfig[] {
+        // todo
+        new CameraConfig(
+            "Intake Left",
+            new Transform3d(
+                new Translation3d(-0.072565, 0.100743, 0.470752),
+                new Rotation3d(0, -0.27052603, -0.17453293)),
+            1.0),
+        new CameraConfig(
+            "Intake Right",
+            new Transform3d(
+                new Translation3d(-0.07227, -0.129622, 0.470979),
+                new Rotation3d(0, -0.2530727, 0.08726646)),
+            1.0),
+        new CameraConfig(
+            "Shooter Left",
+            new Transform3d(
+                new Translation3d(0.21424577, .28474389, 0.36319361),
+                new Rotation3d(0, -0.388662903083, 0.174533 + Math.PI)),
+            1.0),
+        new CameraConfig(
+            "Shooter Right",
+            new Transform3d(
+                new Translation3d(0.21503940, -0.271795980, 0.36355173),
+                new Rotation3d(0, -0.388662903083, -0.174533 + Math.PI)),
             1.0),
       };
 
@@ -156,9 +187,16 @@ public class Vision extends VirtualSubsystem {
             Math.pow(observation.averageTagDistance(), 2.0) / observation.tagCount();
         double linearStdDev = linearStdDevBaseline * stdDevFactor;
         double angularStdDev = angularStdDevBaseline * stdDevFactor;
-        if (cameraIndex < cameraConfigs.length) {
-          linearStdDev *= cameraConfigs[cameraIndex].stdDev;
-          angularStdDev *= cameraConfigs[cameraIndex].stdDev;
+        if (Constants.robotType == RobotType.DEV) {
+          if (cameraIndex < devCameraConfigs.length) {
+            linearStdDev *= devCameraConfigs[cameraIndex].stdDev;
+            angularStdDev *= devCameraConfigs[cameraIndex].stdDev;
+          }
+        } else {
+          if (cameraIndex < compCameraConfigs.length) {
+            linearStdDev *= compCameraConfigs[cameraIndex].stdDev;
+            angularStdDev *= compCameraConfigs[cameraIndex].stdDev;
+          }
         }
 
         // Send vision observation

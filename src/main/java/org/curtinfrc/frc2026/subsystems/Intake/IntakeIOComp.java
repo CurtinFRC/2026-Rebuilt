@@ -87,6 +87,5 @@ public class IntakeIOComp implements IntakeIO {
   public void setVoltage(double Volts) {
     frontMotor.set(Volts);
     backMotor.set(Volts);
-    System.out.println("running");
   }
 }

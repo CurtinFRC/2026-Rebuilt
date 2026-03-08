@@ -1,10 +1,14 @@
 package org.curtinfrc.frc2026;
 
-import static org.curtinfrc.frc2026.vision.Vision.cameraConfigs;
+import static org.curtinfrc.frc2026.vision.Vision.compCameraConfigs;
+import static org.curtinfrc.frc2026.vision.Vision.devCameraConfigs;
 
+import choreo.auto.AutoFactory;
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -18,6 +22,7 @@ import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -33,7 +38,6 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
-import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOComp;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
@@ -50,14 +54,17 @@ import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIO;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOComp;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIODev;
 import org.curtinfrc.frc2026.subsystems.hoodedshooter.ShooterIOSim;
+import org.curtinfrc.frc2026.util.AutoChooser;
 import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.GameState;
+import org.curtinfrc.frc2026.util.LoggedNetworkStruct;
 import org.curtinfrc.frc2026.util.PhoenixUtil;
 import org.curtinfrc.frc2026.util.VirtualSubsystem;
 import org.curtinfrc.frc2026.vision.Vision;
 import org.curtinfrc.frc2026.vision.VisionIO;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVision;
 import org.curtinfrc.frc2026.vision.VisionIOPhotonVisionSim;
+import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.LogFileUtil;
 import org.littletonrobotics.junction.LoggedRobot;
 import org.littletonrobotics.junction.Logger;
@@ -73,6 +80,9 @@ import org.littletonrobotics.junction.wpilog.WPILOGWriter;
  */
 public class Robot extends LoggedRobot {
   private Drive drive;
+  private final AutoFactory autoFactory;
+  private final AutoChooser autoChooser;
+  private final Autos autos;
   private Vision vision;
   private Intake intake;
   private Mag mag;
@@ -80,6 +90,48 @@ public class Robot extends LoggedRobot {
   private final CommandXboxController controller = new CommandXboxController(0);
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
+
+  @AutoLogOutput(key = "Triggers/IsRed")
+  Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
+
+  @AutoLogOutput(key = "Triggers/IsBlue")
+  Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
+
+  @AutoLogOutput(key = "Triggers/IsLeft")
+  Trigger isLeft =
+      new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
+
+  @AutoLogOutput(key = "Triggers/inOwnHalf")
+  // TODO doesnt work with both sides you dumb dumb sim fix btw
+  Trigger inOwnHalf =
+      new Trigger(
+          () ->
+              drive.getPose().getX()
+                  > ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
+
+  private boolean edge = true;
+
+  @AutoLogOutput(key = "Triggers/Edging")
+  Trigger edging = new Trigger(() -> edge);
+
+  private boolean intaker = true;
+  private boolean aligner = true;
+
+  @AutoLogOutput(key = "Triggers/Intaking")
+  Trigger intaking = new Trigger(() -> intaker);
+
+  @AutoLogOutput(key = "Triggers/Aligning")
+  Trigger aligning = new Trigger(() -> aligner);
+
+  @AutoLogOutput(key = "Triggers/isInNeutral")
+  Trigger isInNeutralZone =
+      new Trigger(
+          () ->
+              drive.getPose().getX()
+                  < ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX());
+
+  private LoggedNetworkStruct<Translation2d> shootTargetPose =
+      new LoggedNetworkStruct<Translation2d>("ShootTargetPose", HoodedShooter.HUB_LOCATION);
 
   public Robot() {
     Logger.recordMetadata("ProjectName", BuildConstants.MAVEN_NAME);
@@ -115,6 +167,8 @@ public class Robot extends LoggedRobot {
     SignalLogger.start();
     DataLogManager.start();
 
+    DriverStation.waitForDsConnection(600);
+
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
         case COMP -> {
@@ -130,9 +184,19 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVision(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()));
+                      compCameraConfigs[0].name(), compCameraConfigs[0].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[1].name(), compCameraConfigs[1].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[2].name(), compCameraConfigs[2].robotToCamera()),
+                  new VisionIOPhotonVision(
+                      compCameraConfigs[3].name(), compCameraConfigs[3].robotToCamera()));
           hoodedShooter =
-              new HoodedShooter(new HoodIOComp() {}, new ShooterIOComp() {}, drive::getPose);
+              new HoodedShooter(
+                  new HoodIOComp() {},
+                  new ShooterIOComp() {},
+                  drive::getPose,
+                  drive::getChassisSpeeds);
           intake = new Intake(new IntakeIOComp());
           mag =
               new Mag(
@@ -156,13 +220,13 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVision(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera()),
+                      devCameraConfigs[0].name(), devCameraConfigs[0].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera()),
+                      devCameraConfigs[1].name(), devCameraConfigs[1].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera()),
+                      devCameraConfigs[2].name(), devCameraConfigs[2].robotToCamera()),
                   new VisionIOPhotonVision(
-                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera()));
+                      devCameraConfigs[3].name(), devCameraConfigs[3].robotToCamera()));
 
           intake = new Intake(new IntakeIODev());
           mag =
@@ -174,7 +238,9 @@ public class Robot extends LoggedRobot {
                       Constants.alphaMiddleMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIODev(
                       Constants.alphaIndexerMagRollerMotorID, InvertedValue.Clockwise_Positive));
-          hoodedShooter = new HoodedShooter(new HoodIODev(), new ShooterIODev(), drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(
+                  new HoodIODev(), new ShooterIODev(), drive::getPose, drive::getChassisSpeeds);
         }
         case SIM -> {
           drive =
@@ -189,16 +255,26 @@ public class Robot extends LoggedRobot {
                   drive::addVisionMeasurement,
                   drive::getRotation,
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[0].name(), cameraConfigs[0].robotToCamera(), drive::getPose),
+                      compCameraConfigs[0].name(),
+                      compCameraConfigs[0].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[1].name(), cameraConfigs[1].robotToCamera(), drive::getPose),
+                      compCameraConfigs[1].name(),
+                      compCameraConfigs[1].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[2].name(), cameraConfigs[2].robotToCamera(), drive::getPose),
+                      compCameraConfigs[2].name(),
+                      compCameraConfigs[2].robotToCamera(),
+                      drive::getPose),
                   new VisionIOPhotonVisionSim(
-                      cameraConfigs[3].name(), cameraConfigs[3].robotToCamera(), drive::getPose));
+                      compCameraConfigs[3].name(),
+                      compCameraConfigs[3].robotToCamera(),
+                      drive::getPose));
           mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
           intake = new Intake(new IntakeIOSim());
-          hoodedShooter = new HoodedShooter(new HoodIOSim(), new ShooterIOSim(), drive::getPose);
+          hoodedShooter =
+              new HoodedShooter(
+                  new HoodIOSim(), new ShooterIOSim(), drive::getPose, drive::getChassisSpeeds);
         }
       }
     } else {
@@ -210,10 +286,24 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {});
       vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
-      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {});
-      hoodedShooter = new HoodedShooter(new HoodIO() {}, new ShooterIO() {}, drive::getPose);
-      intake = new Intake(new IntakeIO() {});
+      mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
+      hoodedShooter =
+          new HoodedShooter(
+              new HoodIO() {}, new ShooterIO() {}, drive::getPose, drive::getChassisSpeeds);
     }
+
+    autoFactory =
+        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+    autoChooser = new AutoChooser();
+    autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
+
+    autoChooser.addCmd("Left then forward", autos::testDrive);
+    autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
+    autoChooser.addCmd("Left trench", autos::leftTrench);
+
+    autoChooser.addRoutine("Left trench, half routine", autos::leftHalfAutoRoutine);
+
+    RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
     CommandScheduler.getInstance().onCommandInitialize(this::commandStarted);
     CommandScheduler.getInstance().onCommandFinish(this::commandEnded);
@@ -229,180 +319,105 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
+    controller.a().whileTrue(drive.faceAngle(Rotation2d.kZero));
+    controller.b().whileTrue(drive.faceAngle(Rotation2d.k180deg));
+
     drive.setDefaultCommand(
-        Commands.parallel(
-            drive.joystickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX())
-            // intake.RawControlConsume(1.0),
-            // mag.store(0.7),
-            // Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))
-            ));
-    Trigger automaticLocation =
-        new Trigger(
-            () -> {
-              Pose2d currentPosition = drive.getPose();
-              if (DriverStation.getAlliance().get().equals(Alliance.Red)) {
-                if (currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX()) {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
-                } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.ShuttlePoint.ShuttlePointRight);
+        drive.joystickDrive(
+            () -> -controller.getLeftY(),
+            () -> -controller.getLeftX(),
+            () -> -controller.getRightX()));
 
-                } else {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.ShuttlePoint.ShuttlePointLeft);
-                }
-
-              } else {
-                // If alliance is blue, then check if it is in the alliance zone by checking the x
-                // value is less than the left trench opening (opponent) Then set the location to
-                // hub.
-                if (currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX()) {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.Hub.topCenterPoint.toTranslation2d());
-                } else if (currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY()) {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft);
-                } else {
-                  drive.locationHeadingjoyStickDrive(
-                      () -> -controller.getLeftY(),
-                      () -> -controller.getLeftX(),
-                      () -> -controller.getRightX(),
-                      () -> true,
-                      () -> FieldConstants.ShuttlePoint.OppShuttlePointRight);
-                }
-              }
-              return true;
-            });
-    Pose2d currentPosition = drive.getPose();
-    Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
-    Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
-
-    Trigger isLeft =
-        new Trigger(() -> currentPosition.getY() < FieldConstants.Hub.topCenterPoint.getY());
-    Trigger isOppLeft =
-        new Trigger(() -> currentPosition.getY() > FieldConstants.Hub.topCenterPoint.getY());
-    Trigger isInRedAllianceHalf =
-        new Trigger(() -> currentPosition.getX() > FieldConstants.LeftTrench.openingTopLeft.getX());
-    Trigger isInBlueAllianceHalf =
-        new Trigger(
-            () -> currentPosition.getX() < FieldConstants.LeftTrench.oppOpeningTopLeft.getX());
-
-    isRed
-        .and(isInRedAllianceHalf)
+    inOwnHalf
+        .and(RobotModeTriggers.teleop())
+        .and(GameState.activeShift)
         .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
-    isBlue
-        .and(isInBlueAllianceHalf)
-        .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () ->
+                        ChoreoAllianceFlipUtil.flip(
+                            FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+                .withName("Scoring"));
 
-    isRed
-        .and(isLeft.negate())
-        .and(isInRedAllianceHalf.negate())
-        .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.ShuttlePoint.ShuttlePointRight));
-    isRed
-        .and(isLeft)
-        .and(isInRedAllianceHalf.negate())
-        .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.ShuttlePoint.ShuttlePointLeft));
-    isBlue
-        .and(isOppLeft)
-        .and(isInBlueAllianceHalf.negate())
-        .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft));
-    isBlue
-        .and(isOppLeft.negate())
-        .and(isInBlueAllianceHalf.negate())
-        .whileTrue(
-            drive.locationHeadingjoyStickDrive(
-                () -> -controller.getLeftY(),
-                () -> -controller.getLeftX(),
-                () -> -controller.getRightX(),
-                () -> true,
-                () -> FieldConstants.ShuttlePoint.OppShuttlePointRight));
+    // inOwnHalf
+    //     .and(GameState.activeShift)
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    //                 ChoreoAllianceFlipUtil.flip(
+    //                     FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
-    drive.locationHeadingjoyStickDrive(
-        () -> -controller.getLeftY(),
-        () -> -controller.getLeftX(),
-        () -> -controller.getRightX(),
-        () -> true,
-        () -> FieldConstants.ShuttlePoint.OppShuttlePointLeft);
+    // isInNeutralZone
+    //     .and(isLeft.negate())
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    // () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
 
-    controller
-        .leftTrigger()
+    // isInNeutralZone
+    //     .and(isLeft)
+    //     .and(GameState.activeShift.negate())
+    //     .whileTrue(
+    //         hoodedShooter.shootAtTarget(
+    //             () ->
+    // ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+
+    isLeft
+        .negate()
+        .and(isInNeutralZone)
         .whileTrue(
-            Commands.parallel(
-                intake.RawControlConsume(10),
-                mag.store(0.7),
-                Commands.defer(() -> mag.holdIndexerCommand(), Set.of(mag))))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () ->
+                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+                .withName("RightShuttling"));
 
-    controller.rightTrigger().whileTrue(mag.moveAll(0.5)).onFalse(mag.stop());
+    isLeft
+        .and(isInNeutralZone)
+        .whileTrue(
+            drive
+                .locationHeadingjoyStickDrive(
+                    () -> -controller.getLeftY(),
+                    () -> -controller.getLeftX(),
+                    () -> -controller.getRightX(),
+                    aligning,
+                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+                .withName("LeftShuttling"));
 
-    controller
-        .a()
-        .whileTrue(Commands.parallel(intake.RawControlConsume(1.0), mag.moveAll(0.5)))
-        .onFalse(Commands.parallel(intake.RawIdle(), mag.stop()));
+    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
 
-    controller
-        .rightBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(1.5, 21))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+    // TODO FIX
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(intake.RawControlConsume(0.8))
+    //     .onFalse(intake.RawIdle());
+    // RobotModeTriggers.disabled()
+    //     .negate()
+    //     .and(intaking)
+    //     .whileTrue(mag.store(9.6))
+    //     .onFalse(mag.store(0));
+    hoodedShooter
+        .hoodedShooterReady
+        .whileTrue(mag.spinIndexer(9.6))
+        .whileFalse(mag.holdIndexerCommand());
+
     controller
         .leftBumper()
-        .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2)) // in front of hub
-        // .whileTrue(hoodedShooter.setHoodedShooterPositionAndVelocity(0.4, 23))
-        .onFalse(hoodedShooter.stopHoodedShooter());
+        .whileTrue(
+            Commands.runOnce(() -> edge = false)
+                .andThen(
+                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+                        .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */
@@ -428,19 +443,13 @@ public class Robot extends LoggedRobot {
 
   /** This function is called periodically when disabled. */
   @Override
-  public void disabledPeriodic() {}
+  public void disabledPeriodic() {
+    autoChooser.periodic();
+  }
 
   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
   @Override
-  public void autonomousInit() {
-    // CommandScheduler.getInstance()
-    //     .schedule(
-    //         hoodedShooter
-    //             .hoodSysIdDynamicForward()
-    //             .andThen(hoodedShooter.hoodSysIdDynamicBackward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticForward())
-    //             .andThen(hoodedShooter.hoodSysIdQuasistaticBackward()));
-  }
+  public void autonomousInit() {}
 
   /** This function is called periodically during autonomous. */
   @Override

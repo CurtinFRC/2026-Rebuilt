@@ -2,10 +2,13 @@ package org.curtinfrc.frc2026.drive;
 
 import static edu.wpi.first.units.Units.*;
 
+import choreo.trajectory.SwerveSample;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.Matrix;
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -34,10 +37,15 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
 
 public class Drive extends SubsystemBase {
+  private final PIDController xController = new PIDController(10, 0.0, 0.0);
+  private final PIDController yController = new PIDController(10, 0.0, 0.0);
+  private final PIDController headingController = new PIDController(7.5, 0.0, 0.0);
+
   // TunerConstants doesn't include these constants, so they are declared locally
   static final double ODOMETRY_FREQUENCY = TunerConstants.kCANBus.isNetworkFD() ? 250.0 : 100.0;
   public static final double DRIVE_BASE_RADIUS =
@@ -49,10 +57,7 @@ public class Drive extends SubsystemBase {
               Math.hypot(TunerConstants.BackLeft.LocationX, TunerConstants.BackLeft.LocationY),
               Math.hypot(TunerConstants.BackRight.LocationX, TunerConstants.BackRight.LocationY)));
 
-  private static final double MAX_ANGULAR_SPEED = 2.0; // rad/s
   private static final double ANGLE_MAX_ACCELERATION = 12.608 / DRIVE_BASE_RADIUS - 0.5;
-  private static final double WHEEL_RADIUS_MAX_VELOCITY = 0.25; // Rad/Sec
-  private static final double WHEEL_RADIUS_RAMP_RATE = 0.05; // Rad/Sec^2
 
   static final Lock odometryLock = new ReentrantLock();
   private final GyroIO gyroIO;
@@ -64,7 +69,10 @@ public class Drive extends SubsystemBase {
   // Setting PID values for turning towards Hub.
   public static final double hubHeadingKP = 10;
   public static final double hubHeadingKI = 0;
-  private static final double hubHeadingKD = 0.2;
+  private static final double hubHeadingKD = 0.7;
+
+  LoggedTunableNumber p = new LoggedTunableNumber("P", 7.5);
+  LoggedTunableNumber d = new LoggedTunableNumber("D", 0.2);
 
   // Creating a new instance of the class PIDController and plugging in PID values from variables
   // above.
@@ -73,7 +81,8 @@ public class Drive extends SubsystemBase {
           hubHeadingKP,
           hubHeadingKI,
           hubHeadingKD,
-          new TrapezoidProfile.Constraints(MAX_ANGULAR_SPEED - 0.5, ANGLE_MAX_ACCELERATION));
+          new TrapezoidProfile.Constraints(
+              getMaxAngularSpeedRadPerSec() - 0.5, ANGLE_MAX_ACCELERATION));
 
   private SwerveDriveKinematics kinematics = new SwerveDriveKinematics(getModuleTranslations());
   private Rotation2d rawGyroRotation = Rotation2d.kZero;
@@ -110,6 +119,23 @@ public class Drive extends SubsystemBase {
 
     // Start odometry thread
     PhoenixOdometryThread.getInstance().start();
+
+    headingController.enableContinuousInput(-Math.PI, Math.PI);
+  }
+
+  public void followTrajectory(SwerveSample sample) {
+
+    Pose2d pose = getPose();
+
+    ChassisSpeeds speeds =
+        new ChassisSpeeds(
+            -sample.vx - xController.calculate(pose.getX(), sample.x),
+            -sample.vy - yController.calculate(pose.getY(), sample.y),
+            -sample.omega
+                - headingController.calculate(pose.getRotation().getRadians(), sample.heading));
+
+    Logger.recordOutput("Odometry/target", sample.getPose());
+    runVelocity(speeds);
   }
 
   @Override
@@ -121,6 +147,11 @@ public class Drive extends SubsystemBase {
       module.periodic();
     }
     odometryLock.unlock();
+
+    if (p.hasChanged(hashCode()) || d.hasChanged(hashCode())) {
+      hubHeadingController.setP(p.get());
+      hubHeadingController.setD(d.get());
+    }
 
     // Stop moving when disabled
     if (DriverStation.isDisabled()) {
@@ -287,7 +318,7 @@ public class Drive extends SubsystemBase {
     // Square magnitude for more precise control
     linearMagnitude = linearMagnitude * linearMagnitude;
 
-    // Return new linear velocity
+    // Return new linear velocit
     return new Pose2d(Translation2d.kZero, linearDirection)
         .transformBy(new Transform2d(linearMagnitude, 0.0, Rotation2d.kZero))
         .getTranslation();
@@ -342,6 +373,26 @@ public class Drive extends SubsystemBase {
 
   double targetAngle = 0;
 
+  public Command faceAngle(Rotation2d locationSupplier) {
+    return run(
+        () -> {
+          // Getting robot current angle in radians
+          double robotAngle = getPose().getRotation().getRadians();
+
+          // Getting optimal angle speed by providing the current robot angle and the angle we want
+          // to go to
+          double angleSpeed =
+              hubHeadingController.calculate(robotAngle, locationSupplier.getRadians());
+          Logger.recordOutput("AngleSpeed", angleSpeed);
+          Logger.recordOutput("Rotation", getRotation());
+          Logger.recordOutput("Target", locationSupplier);
+          ChassisSpeeds speed = new ChassisSpeeds(0, 0, angleSpeed);
+
+          // Running it
+          runVelocity(speed);
+        });
+  }
+
   public Command faceLocation(Supplier<Translation2d> locationSupplier) {
     return run(
         () -> {
@@ -390,63 +441,134 @@ public class Drive extends SubsystemBase {
       DoubleSupplier rotationSupplier,
       BooleanSupplier aligningSupplier,
       Supplier<Translation2d> locationTransform) {
-    return run(
-        () -> {
+    return runOnce(() -> hubHeadingController.reset(getRotation().getRadians()))
+        .andThen(
+            run(
+                () -> {
 
-          // Get current position using the getPose method.
-          Pose2d currentPosition = getPose();
+                  // Get current position using the getPose method.
+                  Pose2d currentPosition = getPose();
 
-          // targetAngle = Math.toDegrees(targetAngle);
+                  // targetAngle = Math.toDegrees(targetAngle);
 
-          // Getting robot current angle in radians
-          double robotAngle = currentPosition.getRotation().getRadians();
+                  // Getting robot current angle in radians
+                  double robotAngle = currentPosition.getRotation().getRadians();
 
-          // Getting optimal angle speed by providing the current robot angle and the angle we want
-          // to go to
-          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
-            angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
-          }
-          double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
+                  double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+                  Logger.recordOutput("Aiming Target", locationTransform.get());
+                  // if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+                  //   angleToHub =
+                  //       new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
+                  // }
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
-          Logger.recordOutput("TargetAngle", angleToHub);
-          Logger.recordOutput("RobotAngle", robotAngle);
+                  Logger.recordOutput("TargetAngle", angleToHub);
+                  Logger.recordOutput("RobotAngle", robotAngle);
 
-          // Apply rotation deadband
-          double omega = rotationSupplier.getAsDouble();
+                  // Apply rotation deadband
+                  double omega = rotationSupplier.getAsDouble();
 
-          // Square rotation value for more precise control
-          omega = Math.copySign(omega * omega, omega);
+                  // Square rotation value for more precise control
+                  omega = Math.copySign(omega * omega, omega);
 
-          // Get linear velocity
-          Translation2d linearVelocity =
-              getLinearVelocityFromJoysticks(xSupplier.getAsDouble(), ySupplier.getAsDouble());
+                  // Get linear velocity
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
-          // Convert to field relative speeds & send command
-          boolean isFlipped =
-              DriverStation.getAlliance().isPresent()
-                  && DriverStation.getAlliance().get() == Alliance.Red;
-          if (aligningSupplier.getAsBoolean()) {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    angleSpeed);
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          } else {
-            ChassisSpeeds speeds =
-                new ChassisSpeeds(
-                    linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
-                    linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
-                    omega * getMaxAngularSpeedRadPerSec());
-            runVelocity(
-                ChassisSpeeds.fromFieldRelativeSpeeds(
-                    speeds,
-                    isFlipped ? getRotation().plus(new Rotation2d(Math.PI)) : getRotation()));
-          }
-        });
+                  // Convert to field relative speeds & send command
+                  boolean isFlipped =
+                      DriverStation.getAlliance().isPresent()
+                          && DriverStation.getAlliance().get() == Alliance.Red;
+                  boolean rotating = Math.abs(rotationSupplier.getAsDouble()) > 0.005;
+                  if (!aligningSupplier.getAsBoolean() || rotating) {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            omega * getMaxAngularSpeedRadPerSec());
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  } else {
+                    ChassisSpeeds speeds =
+                        new ChassisSpeeds(
+                            linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                            linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                            angleSpeed);
+                    runVelocity(
+                        ChassisSpeeds.fromFieldRelativeSpeeds(
+                            speeds,
+                            isFlipped
+                                ? getRotation().plus(new Rotation2d(Math.PI))
+                                : getRotation()));
+                  }
+                }));
+  }
+
+  public Command prepareAutonomous(double x, double y) {
+    return run(() -> {
+          double omega = 0.0;
+
+          ChassisSpeeds leftAutoSpeeds =
+              new ChassisSpeeds(
+                  xController.calculate(getPose().getX(), x) * getMaxLinearSpeedMetersPerSec(),
+                  yController.calculate(getPose().getY(), y) * getMaxLinearSpeedMetersPerSec(),
+                  omega * getMaxAngularSpeedRadPerSec());
+
+          runVelocity(leftAutoSpeeds);
+        })
+        .until(
+            () -> {
+              double xPose = getPose().getX();
+              double yPose = getPose().getY();
+              return Math.abs(xPose - x) < 0.1 && Math.abs(yPose - y) < 0.1;
+            });
+  }
+
+  public Rotation2d Goal = Rotation2d.kZero;
+
+  public Command stopCmd() {
+    return runOnce(() -> stop());
+  }
+
+  public Command TrenchAlign(DoubleSupplier xSupplier, DoubleSupplier ySupplier) {
+    return runOnce(
+            () -> {
+              Pose2d currentPosition = getPose();
+              double robotAngle = currentPosition.getRotation().getRadians();
+              Logger.recordOutput("Robot Angle", robotAngle);
+              hubHeadingController.reset(robotAngle);
+              if (robotAngle >= -Math.PI / 2 && robotAngle <= Math.PI / 2) {
+                Goal = Rotation2d.kZero;
+              } else {
+                Goal = Rotation2d.k180deg;
+              }
+            })
+        .andThen(
+            run(
+                () -> {
+                  Pose2d currentPosition = getPose();
+                  double robotAngle =
+                      MathUtil.angleModulus(currentPosition.getRotation().getRadians());
+                  Logger.recordOutput("Robot Angle", robotAngle);
+                  double angleSpeed = hubHeadingController.calculate(robotAngle, Goal.getRadians());
+                  Logger.recordOutput("Angle Speed", angleSpeed);
+                  Logger.recordOutput("Goal", Goal);
+
+                  Translation2d linearVelocity =
+                      getLinearVelocityFromJoysticks(
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
+
+                  ChassisSpeeds speeds =
+                      new ChassisSpeeds(
+                          linearVelocity.getX() * getMaxLinearSpeedMetersPerSec(),
+                          linearVelocity.getY() * getMaxLinearSpeedMetersPerSec(),
+                          -angleSpeed);
+                  runVelocity(speeds);
+                }));
   }
 }
