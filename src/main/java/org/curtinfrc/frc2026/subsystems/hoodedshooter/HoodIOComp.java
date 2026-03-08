@@ -135,8 +135,8 @@ public class HoodIOComp implements HoodIO {
 
     followerMotor.setControl(new Follower(LEADER_ID, MotorAlignmentValue.Opposed));
 
-    BaseStatusSignal.setUpdateFrequencyForAll(
-        50.0, velocity, voltage, current, position, encoderPosition);
+    BaseStatusSignal.setUpdateFrequencyForAll(50.0, velocity, current, position, encoderPosition);
+    BaseStatusSignal.setUpdateFrequencyForAll(1000.0, voltage);
     leaderMotor.optimizeBusUtilization();
     followerMotor.optimizeBusUtilization();
     encoder.optimizeBusUtilization();
