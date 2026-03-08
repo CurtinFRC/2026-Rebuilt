@@ -348,6 +348,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    false,
                     () ->
                         hoodedShooter.getVirtualTargetLocation(
                             () ->
@@ -393,6 +394,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    true,
                     () ->
                         ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
                 .withName("RightShuttling"));
@@ -407,6 +409,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
+                    true,
                     () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
                 .withName("LeftShuttling"));
 
