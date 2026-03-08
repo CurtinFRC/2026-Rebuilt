@@ -366,22 +366,21 @@ public class Robot extends LoggedRobot {
                     ChoreoAllianceFlipUtil.flip(
                         FieldConstants.Hub.topCenterPoint.toTranslation2d())));
 
-    // isInNeutralZone
-    //     .and(isLeft.negate())
-    //     .and(TrenchAlign.negate())
-    //     .and(GameState.activeShift.negate())
-    //     .whileTrue(
-    //         hoodedShooter.shootAtTarget(
-    // () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+    isInNeutralZone
+        .and(isLeft.negate())
+        .and(TrenchAlign.negate())
+        .and(GameState.activeShift.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
 
-    // isInNeutralZone
-    //     .and(isLeft)
-    //     .and(GameState.activeShift.negate())
-    //     .and(TrenchAlign.negate())
-    //     .whileTrue(
-    //         hoodedShooter.shootAtTarget(
-    //             () ->
-    // ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+    isInNeutralZone
+        .and(isLeft)
+        .and(GameState.activeShift.negate())
+        .and(TrenchAlign.negate())
+        .whileTrue(
+            hoodedShooter.shootAtTarget(
+                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
 
     isLeft
         .negate()

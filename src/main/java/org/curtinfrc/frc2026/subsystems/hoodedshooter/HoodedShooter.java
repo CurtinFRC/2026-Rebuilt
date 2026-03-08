@@ -40,7 +40,9 @@ public class HoodedShooter extends SubsystemBase {
 
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_SHOOTER_VELOCITY =
       new InterpolatingDoubleTreeMap();
-  public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE =
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE_FORWARDS =
+      new InterpolatingDoubleTreeMap();
+  public static final InterpolatingDoubleTreeMap DISTANCE_TO_HOOD_ANGLE_BACKWARDS =
       new InterpolatingDoubleTreeMap();
   public static final InterpolatingDoubleTreeMap DISTANCE_TO_BALL_FLIGHT_TIME =
       new InterpolatingDoubleTreeMap();
@@ -92,35 +94,43 @@ public class HoodedShooter extends SubsystemBase {
     this.robotVelocity = robotVelocity;
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(0.0, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(0.0, 90.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(0.2, 90.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(-0.2, 180 - 90.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(0.0, 1.42);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(1.21, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(1.21, 86.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(1.21, 86.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(0.81, 180 - 86.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(1.21, 1.42);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(1.71, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(1.71, 85.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(1.71, 85.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(1.31, 180 - 85.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(1.71, 1.46);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(2.45, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(2.45, 77.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(2.45, 77.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(2.05, 100.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(2.45, 1.31);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.1, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(3.1, 75.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(3.1, 75.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(2.7, 103.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(3.1, 1.28);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(3.7, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(3.7, 68.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(3.7, 68.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(3.3, 107.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(3.7, 1.29);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(4.15, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(4.15, 62.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(4.15, 62.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(3.75, 109.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(4.15, 1.23);
 
     DISTANCE_TO_SHOOTER_VELOCITY.put(5.11, SHOT_SPEED);
-    DISTANCE_TO_HOOD_ANGLE.put(5.11, 60.0);
+    DISTANCE_TO_HOOD_ANGLE_FORWARDS.put(5.11, 60.0);
+    DISTANCE_TO_HOOD_ANGLE_BACKWARDS.put(4.71, 115.0);
     DISTANCE_TO_BALL_FLIGHT_TIME.put(5.11, 1.12);
 
     for (int motor = 0; motor < HOOD_MOTOR_NUMBER; motor++) {
@@ -189,22 +199,25 @@ public class HoodedShooter extends SubsystemBase {
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
 
-          if (Constants.tuningMode) {
-            hoodTarget = tunableHoodSetpoint.get();
-            shooterTarget = tunableShooterSetpoint.get();
-          } else {
-            hoodTarget = DISTANCE_TO_HOOD_ANGLE.get(compensatedDistanceLength);
-            shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
-          }
-
           double target =
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
           double robotAngle =
               robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
 
-          // Adjust hood angle based on robot angle compared to hood
-          if (Math.abs(robotAngle) < Rotation2d.kCCW_90deg.getRadians()) {
-            hoodTarget = Math.max(180 - hoodTarget, HoodIODev.FORWARD_LIMIT_ROTATIONS * 360);
+          if (Constants.tuningMode) {
+            hoodTarget = tunableHoodSetpoint.get();
+            shooterTarget = tunableShooterSetpoint.get();
+          } else {
+            // Adjust hood angle based on robot angle compared to hood
+            Logger.recordOutput(
+                "HoodedShooter/Direction",
+                Math.abs(robotAngle) < Rotation2d.kCCW_90deg.getRadians());
+            if (Math.abs(robotAngle) < Rotation2d.kCCW_90deg.getRadians()) {
+              hoodTarget = DISTANCE_TO_HOOD_ANGLE_BACKWARDS.get(compensatedDistanceLength);
+            } else {
+              hoodTarget = DISTANCE_TO_HOOD_ANGLE_FORWARDS.get(compensatedDistanceLength);
+            }
+            shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
           }
 
           if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
