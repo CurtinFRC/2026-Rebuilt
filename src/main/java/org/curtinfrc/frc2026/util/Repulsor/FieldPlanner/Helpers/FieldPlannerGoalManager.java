@@ -21,6 +21,7 @@ package org.curtinfrc.frc2026.util.Repulsor.FieldPlanner.Helpers;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
 import java.util.List;
 import org.curtinfrc.frc2026.util.Repulsor.Constants;
@@ -89,10 +90,19 @@ public final class FieldPlannerGoalManager {
 
   public FieldPlannerGoalManager(List<GatedAttractorObstacle> gatedAttractors) {
     this.gatedAttractors = gatedAttractors;
-  }
+    Logger.recordOutput(
+        "GoalManagerGatedAttractors",
+        this.gatedAttractors.stream()
+            .map(g -> new Pose2d(g.center, new Rotation2d()))
+            .toArray(Pose2d[]::new));
+        }
 
   public Pose2d getGoalPose() {
     return goal;
+  }
+
+  public Pose2d getRequestedGoalPose() {
+    return requestedGoal;
   }
 
   public Translation2d getGoalTranslation() {
@@ -100,6 +110,7 @@ public final class FieldPlannerGoalManager {
   }
 
   public void setRequestedGoal(Pose2d requested) {
+    Logger.recordOutput("RequestedGoal", requested);
     boolean same = isPoseNear(this.requestedGoal, requested);
     this.requestedGoal = requested;
 
@@ -141,6 +152,8 @@ public final class FieldPlannerGoalManager {
 
     Translation2d reqT = requestedGoal.getTranslation();
     GatedAttractorObstacle firstBlock = firstOccludingGateAlongSegment(curPos, reqT);
+
+    Logger.recordOutput("FirstOccludingGate", firstBlock != null ? new Pose2d(firstBlock.center, new Rotation2d()) : null);
 
     boolean stageForOccludingGate =
         firstBlock != null && !shouldDeferCenterReturnStage(curPos, reqT, firstBlock);
@@ -771,6 +784,7 @@ public final class FieldPlannerGoalManager {
       }
     }
 
+    Logger.recordOutput("ChosenStagedGate", best.center);
     return best;
   }
 

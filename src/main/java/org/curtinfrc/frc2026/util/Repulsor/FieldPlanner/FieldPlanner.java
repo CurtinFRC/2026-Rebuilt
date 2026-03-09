@@ -56,6 +56,7 @@ import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultDriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DefaultTurnTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.DriveTuning;
 import org.curtinfrc.frc2026.util.Repulsor.Tuning.TurnTuning;
+import org.littletonrobotics.junction.Logger;
 
 public class FieldPlanner {
   private static final double FORCE_THROUGH_GOAL_DIST = 2.0;
@@ -154,7 +155,10 @@ public class FieldPlanner {
 
     for (Obstacle obs : this.fieldObstacles) {
       if (obs instanceof GatedAttractorObstacle gated) {
-        if (gated.waypoint) {
+        if (gated.waypoint) { 
+          if (gated.center.getY() > Constants.FIELD_WIDTH / 2.0) { // TODO REMOVE FOR REAL MATCH
+            continue;
+          }
           gatedAttractors.add(gated);
         }
       }
@@ -207,6 +211,10 @@ public class FieldPlanner {
     return goalManager.getGoalPose();
   }
 
+  public Pose2d getRequestedGoalPose() {
+    return goalManager.getRequestedGoalPose();
+  }
+
   public FieldPlanner withFallback(PlannerFallback _fallback) {
     fallback = Optional.of(_fallback);
     return this;
@@ -244,6 +252,12 @@ public class FieldPlanner {
   public void setRequestedGoal(Pose2d requested) {
     goalManager.setRequestedGoal(requested);
     lastChosenSetpoint = Optional.empty();
+  }
+
+  public void syncGoalManagerState(Pose2d requested, Pose2d active) {
+    Pose2d requestedGoal = requested == null ? Pose2d.kZero : requested;
+    setRequestedGoal(requestedGoal);
+    setActiveGoal(active == null ? requestedGoal : active);
   }
 
   void setActiveGoal(Pose2d active) {
@@ -290,6 +304,8 @@ public class FieldPlanner {
         // If remote calculate fails, continue with local calculate behavior.
       }
     }
+
+    Logger.recordOutput("CalculateCalled", true);
 
     Translation2d curTrans = pose.getTranslation();
     double distToGoal = curTrans.getDistance(goalManager.getGoalTranslation());
@@ -513,6 +529,7 @@ public class FieldPlanner {
     FieldPlannerCalculateResultDTO remote =
         FieldPlannerOffloadEntrypoints_Offloaded.calculate_offload(
             pose,
+            goalManager.getRequestedGoalPose(),
             goalManager.getGoalPose(),
             dynamicObstacles,
             robot_x,

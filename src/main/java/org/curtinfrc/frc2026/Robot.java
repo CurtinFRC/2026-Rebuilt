@@ -542,11 +542,10 @@ public class Robot extends LoggedRobot {
         .b()
         .whileTrue(
             drive.alignTo(
-                ChoreoAllianceFlipUtil.flip(
                     new Pose2d(
                         15.391 - (Constants.ROBOT_X / 2),
                         3.84 + (Constants.ROBOT_Y / 2),
-                        new Rotation2d()))));
+                        new Rotation2d())));
 
   }
 

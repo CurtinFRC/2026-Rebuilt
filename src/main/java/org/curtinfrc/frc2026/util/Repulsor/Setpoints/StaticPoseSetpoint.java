@@ -6,7 +6,7 @@ public class StaticPoseSetpoint extends GameSetpoint {
   private final Pose2d bluePose;
 
   public StaticPoseSetpoint(String name, SetpointType type, Pose2d bluePose) {
-    super(name, type);
+    super(name, type, false);
     this.bluePose = bluePose == null ? Pose2d.kZero : bluePose;
   }
 
@@ -14,4 +14,9 @@ public class StaticPoseSetpoint extends GameSetpoint {
   public Pose2d bluePose(SetpointContext ctx) {
     return bluePose;
   }
+
+    @Override
+    public Pose2d redPose(SetpointContext ctx) {
+      return bluePose;
+    }
 }

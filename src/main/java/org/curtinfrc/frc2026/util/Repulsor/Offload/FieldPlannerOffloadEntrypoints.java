@@ -10,12 +10,13 @@ public final class FieldPlannerOffloadEntrypoints {
 
   @Offloadable(
       id = OffloadTaskIds.FIELD_PLANNER_CALCULATE,
-      version = 1,
+      version = 2,
       timeoutMs = 250,
       fallback = false)
   public static FieldPlannerCalculateResultDTO calculate(
       Pose2d pose,
       Pose2d requestedGoalPose,
+      Pose2d activeGoalPose,
       List<? extends Obstacle> dynamicObstacles,
       double robot_x,
       double robot_y,
@@ -26,6 +27,7 @@ public final class FieldPlannerOffloadEntrypoints {
     return FieldPlannerOffloadLocalAccess.calculateLocal(
         pose,
         requestedGoalPose,
+        activeGoalPose,
         dynamicObstacles,
         robot_x,
         robot_y,

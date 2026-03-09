@@ -56,7 +56,8 @@ public class Vision extends VirtualSubsystem {
             1.0),
       };
 
-  public static CameraConfig[] compCameraConfigs =
+
+        public static CameraConfig[] compCameraConfigs =
       new CameraConfig[] {
         // todo
         new CameraConfig(
@@ -74,14 +75,14 @@ public class Vision extends VirtualSubsystem {
         new CameraConfig(
             "Shooter Left",
             new Transform3d(
-                new Translation3d(0.21424577, -0.27179598, 0.36319361),
-                new Rotation3d(0, -0.388662903083, 0.174533)),
+                new Translation3d(0.21424577, .28474389, 0.36319361),
+                new Rotation3d(0, -0.388662903083, 0.174533 + Math.PI)),
             1.0),
         new CameraConfig(
             "Shooter Right",
             new Transform3d(
-                new Translation3d(0.21503940, 0.28474389, 0.36355173),
-                new Rotation3d(0, -0.388662903083, -0.174533)),
+                new Translation3d(0.21503940, -0.271795980, 0.36355173),
+                new Rotation3d(0, -0.388662903083, -0.174533 + Math.PI)),
             1.0),
       };
 

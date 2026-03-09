@@ -20,6 +20,7 @@ public final class FieldPlannerOffloadLocalAccess {
   public static FieldPlannerCalculateResultDTO calculateLocal(
       Pose2d pose,
       Pose2d requestedGoalPose,
+      Pose2d activeGoalPose,
       List<? extends Obstacle> dynamicObstacles,
       double robot_x,
       double robot_y,
@@ -29,7 +30,9 @@ public final class FieldPlannerOffloadLocalAccess {
       double shooterReleaseHeightMeters) {
     synchronized (LOCK) {
       FieldPlanner localPlanner = planner();
-      localPlanner.setRequestedGoal(requestedGoalPose == null ? Pose2d.kZero : requestedGoalPose);
+      localPlanner.syncGoalManagerState(
+          requestedGoalPose == null ? Pose2d.kZero : requestedGoalPose,
+          activeGoalPose);
 
       CategorySpec cat = parseCategory(categoryName);
       Alliance preferredAlliance = parseAlliance(preferredAllianceName);
