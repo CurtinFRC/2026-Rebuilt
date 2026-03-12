@@ -210,7 +210,8 @@ public class Robot extends LoggedRobot {
           mag =
               new Mag(
                   new MagRollerIOComp(
-                      Constants.bBotIntakeMagRollerMotorID, InvertedValue.Clockwise_Positive),
+                      Constants.bBotIntakeMagRollerMotorID,
+                      InvertedValue.CounterClockwise_Positive),
                   new MagRollerIOComp(
                       Constants.bBotIndexerMagRollerMotorID,
                       InvertedValue.CounterClockwise_Positive));
@@ -305,11 +306,11 @@ public class Robot extends LoggedRobot {
     autoChooser = new AutoChooser();
     autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
 
-    autoChooser.addCmd("Left then forward", autos::testDrive);
-    autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
-    autoChooser.addCmd("Left trench", autos::leftTrench);
+    // autoChooser.addCmd("Left then forward", autos::testDrive);
+    // autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
+    // autoChooser.addCmd("Left trench", autos::leftTrench);
 
-    autoChooser.addRoutine("Left trench, half routine", autos::leftHalfAutoRoutine);
+    autoChooser.addRoutine("Left Full Auto", autos::leftFullAuto);
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -368,15 +369,17 @@ public class Robot extends LoggedRobot {
     isInNeutralZone
         .and(isLeft.negate())
         .and(TrenchAlign.negate())
-        .and(GameState.activeShift.negate())
+        // .and(GameState.activeShift.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             hoodedShooter.shootAtTarget(
                 () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
 
     isInNeutralZone
         .and(isLeft)
-        .and(GameState.activeShift.negate())
+        // .and(GameState.activeShift.negate())
         .and(TrenchAlign.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             hoodedShooter.shootAtTarget(
                 () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
@@ -385,6 +388,7 @@ public class Robot extends LoggedRobot {
         .negate()
         .and(isInNeutralZone)
         .and(TrenchAlign.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -399,6 +403,7 @@ public class Robot extends LoggedRobot {
     isLeft
         .and(isInNeutralZone)
         .and(TrenchAlign.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -423,19 +428,22 @@ public class Robot extends LoggedRobot {
         .and(intaking)
         .whileTrue(mag.store(9.6))
         .onFalse(mag.store(0));
+
     hoodedShooter
         .hoodedShooterReady
         .and(drive.aligned)
+        .and(RobotModeTriggers.teleop())
         .whileTrue(Commands.parallel(mag.moveAll(0.8), intake.RawControlConsume(0.8)));
 
     controller
         .leftBumper()
-        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
-    // .whileTrue(
-    //     Commands.runOnce(() -> edge = false)
-    //         .andThen(
-    //             drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
-    //                 .finallyDo(() -> edge = true)));
+        // .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () ->
+        // -controller.getLeftX()));
+        .whileTrue(
+            Commands.runOnce(() -> edge = false)
+                .andThen(
+                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
+                        .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */

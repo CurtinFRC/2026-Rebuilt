@@ -3,7 +3,6 @@ package org.curtinfrc.frc2026;
 import choreo.auto.AutoFactory;
 import choreo.auto.AutoRoutine;
 import choreo.auto.AutoTrajectory;
-import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import org.curtinfrc.frc2026.drive.Drive;
@@ -56,12 +55,16 @@ public class Autos {
                 // intake.RawControlConsume(4),
                 // hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
                 // mag.spinIndexer(4),
-                drive.prepareAutonomous(
-                    ChoreoAllianceFlipUtil.flipX(4.35), ChoreoAllianceFlipUtil.flipY(7.5)),
                 leftHalfAuto.cmd()));
 
     return routine;
   }
+
+  // public Command leftFullAuto() {
+  //   return autoFactory
+  //       .trajectoryCmd("LeftFullAuto")
+  //       .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
+  // }
 
   public AutoRoutine rightHalfAutoRoutine() {
     AutoRoutine routine = autoFactory.newRoutine("rightHalfAuto");
@@ -87,10 +90,13 @@ public class Autos {
         .active()
         .onTrue(
             Commands.sequence(
-                intake.RawControlConsume(4),
-                hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
-                mag.spinIndexer(4),
-                leftFullAuto.cmd()));
+                Commands.run(() -> drive.setPose(leftFullAuto.getInitialPose().get()))
+                    .withTimeout(0.2),
+                Commands.parallel(
+                    // intake.RawControlConsume(4),
+                    // hoodedShooter.setHoodedShooterPositionAndVelocity(0.40, 18.2),
+                    // mag.spinIndexer(4),
+                    leftFullAuto.cmd())));
 
     return routine;
   }

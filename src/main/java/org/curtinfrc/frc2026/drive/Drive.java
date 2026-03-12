@@ -37,7 +37,6 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
-import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
@@ -449,13 +448,24 @@ public class Drive extends SubsystemBase {
 
           double robotAngle = currentPosition.getRotation().getRadians();
 
-          // Getting optimal angle speed by providing the current robot angle and the angle we want
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()
-              && !(currentPosition.getX() >= (FieldConstants.fieldLength / 2) - 3
-                  && currentPosition.getX() <= (FieldConstants.fieldLength / 2) + 3)) {
+
+          double delta = MathUtil.angleModulus(angleToHub - robotAngle);
+
+          double enterFlip = Math.PI / 2.0 + Math.toRadians(2.0);
+          double exitFlip = Math.PI / 2.0 - Math.toRadians(2.0);
+
+          boolean wasFlipped =
+              Math.abs(MathUtil.angleModulus(targetAngle - robotAngle)) > Math.PI / 2.0;
+
+          boolean shouldFlip =
+              wasFlipped ? Math.abs(delta) > exitFlip : Math.abs(delta) > enterFlip;
+
+          if (shouldFlip) {
             angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
+
+          targetAngle = angleToHub;
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput("TargetAngle", angleToHub);

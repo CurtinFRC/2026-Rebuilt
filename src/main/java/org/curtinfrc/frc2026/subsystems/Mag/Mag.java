@@ -46,7 +46,7 @@ public class Mag extends SubsystemBase {
 
   public Command store(double volts) {
     if (middleMagRoller == null) {
-      return intakeMagRoller.runMotor(volts);
+      return Commands.parallel(indexerMagRoller.runMotor(-volts), intakeMagRoller.runMotor(volts));
     } else {
       return Commands.parallel(middleMagRoller.runMotor(volts), intakeMagRoller.runMotor(volts));
     }

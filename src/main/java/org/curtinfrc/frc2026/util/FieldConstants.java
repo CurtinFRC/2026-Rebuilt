@@ -307,9 +307,9 @@ public class FieldConstants {
 
   public static class ShuttlePoint {
     public static final Translation2d ShuttlePointLeft =
-        new Translation2d(1.25910484790802, 7.153144836425781);
+        new Translation2d(1.50910484790802, 7.153144836425781);
     public static final Translation2d ShuttlePointRight =
-        new Translation2d(1.2346100807189941, 0.9551800489425659);
+        new Translation2d(1.5046100807189941, 0.9551800489425659);
   }
 
   public enum FieldType {
