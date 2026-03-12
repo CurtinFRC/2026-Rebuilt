@@ -37,6 +37,7 @@ import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 import org.curtinfrc.frc2026.Constants;
 import org.curtinfrc.frc2026.Constants.Mode;
+import org.curtinfrc.frc2026.util.FieldConstants;
 import org.curtinfrc.frc2026.util.LoggedTunableNumber;
 import org.littletonrobotics.junction.AutoLogOutput;
 import org.littletonrobotics.junction.Logger;
@@ -450,7 +451,9 @@ public class Drive extends SubsystemBase {
 
           // Getting optimal angle speed by providing the current robot angle and the angle we want
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
-          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()) {
+          if (Math.abs(robotAngle) > Rotation2d.kCCW_90deg.getRadians()
+              && !(currentPosition.getX() >= (FieldConstants.fieldLength / 2) - 3
+                  && currentPosition.getX() <= (FieldConstants.fieldLength / 2) + 3)) {
             angleToHub = new Rotation2d(angleToHub).rotateBy(Rotation2d.k180deg).getRadians();
           }
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);

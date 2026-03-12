@@ -210,8 +210,7 @@ public class Robot extends LoggedRobot {
           mag =
               new Mag(
                   new MagRollerIOComp(
-                      Constants.bBotIntakeMagRollerMotorID,
-                      InvertedValue.CounterClockwise_Positive),
+                      Constants.bBotIntakeMagRollerMotorID, InvertedValue.Clockwise_Positive),
                   new MagRollerIOComp(
                       Constants.bBotIndexerMagRollerMotorID,
                       InvertedValue.CounterClockwise_Positive));
@@ -427,8 +426,7 @@ public class Robot extends LoggedRobot {
     hoodedShooter
         .hoodedShooterReady
         .and(drive.aligned)
-        .whileTrue(mag.spinIndexer(9.6))
-        .whileFalse(mag.holdIndexerCommand());
+        .whileTrue(Commands.parallel(mag.moveAll(0.8), intake.RawControlConsume(0.8)));
 
     controller
         .leftBumper()
