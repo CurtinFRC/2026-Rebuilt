@@ -117,9 +117,6 @@ public class Robot extends LoggedRobot {
 
   private boolean edge = true;
 
-  @AutoLogOutput(key = "Triggers/Edging")
-  Trigger edging = new Trigger(() -> edge);
-
   private boolean runner = false;
   private boolean aligner = true;
 
@@ -448,11 +445,7 @@ public class Robot extends LoggedRobot {
         .leftBumper()
         // .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () ->
         // -controller.getLeftX()));
-        .whileTrue(
-            Commands.runOnce(() -> edge = false)
-                .andThen(
-                    drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
-                        .finallyDo(() -> edge = true)));
+        .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
   }
 
   /** This function is called periodically during all modes. */
