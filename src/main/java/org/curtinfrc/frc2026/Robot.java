@@ -120,11 +120,11 @@ public class Robot extends LoggedRobot {
   @AutoLogOutput(key = "Triggers/Edging")
   Trigger edging = new Trigger(() -> edge);
 
-  private boolean intaker = false;
+  private boolean runner = false;
   private boolean aligner = true;
 
   @AutoLogOutput(key = "Triggers/Intaking")
-  Trigger intaking = new Trigger(() -> intaker);
+  Trigger running = new Trigger(() -> runner);
 
   @AutoLogOutput(key = "Triggers/Aligning")
   Trigger aligning = new Trigger(() -> aligner);
@@ -422,23 +422,24 @@ public class Robot extends LoggedRobot {
                     () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
                 .withName("LeftShuttling"));
 
-    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller.rightBumper().onTrue(Commands.runOnce(() -> runner = !runner));
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
 
     // TODO FIX
     RobotModeTriggers.disabled()
         .negate()
-        .and(intaking)
+        .and(running)
         .whileTrue(intake.RawControlConsume(0.8))
         .onFalse(intake.RawIdle());
     RobotModeTriggers.disabled()
         .negate()
-        .and(intaking)
+        .and(running)
         .whileTrue(mag.store(9.6))
         .onFalse(mag.store(0));
 
     hoodedShooter
         .hoodedShooterReady
+        .and(running)
         .and(drive.aligned)
         .and(RobotModeTriggers.teleop())
         .whileTrue(Commands.parallel(mag.moveAll(0.8), intake.RawControlConsume(0.8)));
