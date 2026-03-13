@@ -152,6 +152,14 @@ public class Vision extends VirtualSubsystem {
       // Loop over pose observations
       for (var observation : inputs[cameraIndex].poseObservations) {
         var rotation = headingBuffer.getSample(observation.timestamp()).get();
+
+        var correctSide = true;
+        if (Math.abs(rotation.getRadians()) > (Math.PI / 2)) {
+          correctSide = cameraIndex == 2 || cameraIndex == 3;
+        } else {
+          correctSide = cameraIndex == 0 || cameraIndex == 1;
+        }
+
         var pose = observation.pose();
         // Check whether to reject pose
         boolean rejectPose =
@@ -162,6 +170,7 @@ public class Vision extends VirtualSubsystem {
                 || pose.getX() > aprilTagLayout.getFieldLength()
                 || pose.getY() < 0.0
                 || pose.getY() > aprilTagLayout.getFieldWidth()
+                || correctSide
                 // If the measurement is high ambiguity check it against the gyro
                 || ((observation.tagCount() == 1 && observation.ambiguity() > maxAmbiguity)
                     && !(Math.abs(pose.getRotation().toRotation2d().minus(rotation).getDegrees())
