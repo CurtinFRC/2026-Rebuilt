@@ -468,7 +468,7 @@ public class Drive extends SubsystemBase {
                   ? ChoreoAllianceFlipUtil.flip(locationTransform.get())
                   : locationTransform.get();
 
-          double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
+          double angleToHub = angleToLocation(flippedLocation, currentPosition);
 
           double delta = MathUtil.angleModulus(angleToHub - robotAngle);
 
@@ -489,7 +489,7 @@ public class Drive extends SubsystemBase {
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
           Logger.recordOutput(
-              "Drive/TargetLocation", new Pose2d(locationTransform.get(), Rotation2d.kZero));
+              "Drive/TargetLocation", new Pose2d(flippedLocation, Rotation2d.kZero));
           Logger.recordOutput("TargetAngle", angleToHub);
           Logger.recordOutput("RobotAngle", robotAngle);
 
@@ -583,7 +583,7 @@ public class Drive extends SubsystemBase {
 
                   Translation2d linearVelocity =
                       getLinearVelocityFromJoysticks(
-                          -xSupplier.getAsDouble(), -ySupplier.getAsDouble());
+                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
 
                   ChassisSpeeds speeds =
                       new ChassisSpeeds(

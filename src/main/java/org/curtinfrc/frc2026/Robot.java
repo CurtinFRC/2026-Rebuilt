@@ -320,9 +320,9 @@ public class Robot extends LoggedRobot {
     // autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
     // autoChooser.addCmd("Left trench", autos::leftTrench);
 
-    autoChooser.addRoutine("Left Full Auto", autos::leftFullAuto);
+    autoChooser.addRoutine("Right Side Auto", autos::rightSideAuto);
+    autoChooser.addRoutine("Left Side Auto", autos::leftSideAuto);
     autoChooser.addRoutine("Straight Line", autos::test1);
-    autoChooser.addRoutine("Turn Auto", autos::test2);
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 

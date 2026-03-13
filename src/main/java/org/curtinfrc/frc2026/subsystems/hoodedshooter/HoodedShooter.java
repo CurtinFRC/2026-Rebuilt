@@ -211,12 +211,12 @@ public class HoodedShooter extends SubsystemBase {
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
 
           Logger.recordOutput(
-              "Drive/TargetLocation", new Pose2d(compensatedHubLocation, Rotation2d.kZero));
+              "HoodedShooter/TargetLocation", new Pose2d(compensatedHubLocation, Rotation2d.kZero));
 
           double target =
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
 
-          double robotAngle = robotPose.get().getRotation().plus(Rotation2d.k180deg).getRadians();
+          double robotAngle = robotPose.get().getRotation().getRadians();
           // if ((robotPose.get().getX() > FieldConstants.fieldLength / 2 - 3
           //     && robotPose.get().getX() < FieldConstants.fieldLength / 2 + 3)) {
           //   robotAngle = robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();

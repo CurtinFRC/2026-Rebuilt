@@ -66,6 +66,24 @@ public class Autos {
   //       .andThen(drive.joystickDrive(() -> 0, () -> 0, () -> 0));
   // }
 
+  public AutoRoutine leftSideAuto() {
+    AutoRoutine routine = autoFactory.newRoutine("Left Side Auto");
+    AutoTrajectory traj = routine.trajectory("AutoForRobertLeft");
+
+    routine.active().onTrue(traj.resetOdometry().andThen(traj.cmd()));
+
+    return routine;
+  }
+
+  public AutoRoutine rightSideAuto() {
+    AutoRoutine routine = autoFactory.newRoutine("Right Side Auto");
+    AutoTrajectory traj = routine.trajectory("AutoForRobertRight");
+
+    routine.active().onTrue(traj.resetOdometry().andThen(traj.cmd()));
+
+    return routine;
+  }
+
   public AutoRoutine test1() {
     AutoRoutine routine = autoFactory.newRoutine("Straight Test");
     AutoTrajectory straightTraj = routine.trajectory("StraightLine");
