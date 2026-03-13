@@ -11,6 +11,8 @@ import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -217,10 +219,17 @@ public class HoodedShooter extends SubsystemBase {
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
 
           double robotAngle = robotPose.get().getRotation().getRadians();
-          // if ((robotPose.get().getX() > FieldConstants.fieldLength / 2 - 3
-          //     && robotPose.get().getX() < FieldConstants.fieldLength / 2 + 3)) {
-          //   robotAngle = robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
-          // }
+          double robotX = robotPose.get().getX();
+          double boundaryX =
+              ChoreoAllianceFlipUtil.shouldFlip()
+                  ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                  : FieldConstants.LeftTrench.openingTopLeft.getX();
+          boolean isRedAlliance =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+          if (isRedAlliance ? robotX > boundaryX : robotX < boundaryX) {
+            robotAngle = robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
+          }
 
           if (Constants.tuningMode) {
             hoodTarget = tunableHoodSetpoint.get();
