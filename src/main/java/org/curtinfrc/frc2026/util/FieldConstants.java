@@ -7,6 +7,7 @@
 
 package org.curtinfrc.frc2026.util;
 
+import choreo.util.ChoreoAllianceFlipUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.math.geometry.Pose2d;
@@ -307,9 +308,9 @@ public class FieldConstants {
 
   public static class ShuttlePoint {
     public static final Translation2d ShuttlePointLeft =
-        new Translation2d(1.50910484790802, 7.153144836425781);
+        ChoreoAllianceFlipUtil.flip(new Translation2d(1.50910484790802, 7.153144836425781));
     public static final Translation2d ShuttlePointRight =
-        new Translation2d(1.5046100807189941, 0.9551800489425659);
+        ChoreoAllianceFlipUtil.flip(new Translation2d(1.5046100807189941, 0.9551800489425659));
   }
 
   public enum FieldType {

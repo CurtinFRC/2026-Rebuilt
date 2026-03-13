@@ -37,6 +37,7 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOComp;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
@@ -89,14 +90,8 @@ public class Robot extends LoggedRobot {
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
 
-  @AutoLogOutput(key = "Triggers/IsRed")
-  Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
-
   @AutoLogOutput(key = "Triggers/TrenchAlign")
   Trigger TrenchAlign = controller.leftBumper();
-
-  @AutoLogOutput(key = "Triggers/IsBlue")
-  Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
 
   @AutoLogOutput(key = "Triggers/IsLeft")
   Trigger isLeft =
@@ -177,7 +172,7 @@ public class Robot extends LoggedRobot {
     SignalLogger.start();
     DataLogManager.start();
 
-    DriverStation.waitForDsConnection(600);
+    // DriverStation.waitForDsConnection(600);
 
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
@@ -295,7 +290,15 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {},
               new ModuleIO() {});
-      vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      vision =
+          new Vision(
+              drive::addVisionMeasurement,
+              drive::getRotation,
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {});
+      intake = new Intake(new IntakeIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter =
           new HoodedShooter(
