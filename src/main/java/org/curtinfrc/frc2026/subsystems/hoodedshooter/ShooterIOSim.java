@@ -47,7 +47,11 @@ public class ShooterIOSim extends ShooterIOComp {
     motorSim.setSupplyVoltage(RobotController.getBatteryVoltage());
     motorSim.setRawRotorPosition(motorSimModel.getAngularPositionRotations());
     motorSim.setRotorVelocity(motorSimModel.getAngularVelocityRPM());
+  }
 
+  @Override
+  public void updateInputs(ShooterIOInputs inputs) {
+    super.updateInputs(inputs);
     for (int ball = 0; ball < simBalls.size(); ball++) {
       Pose3d ballPose = simBalls.get(ball).update(0.02);
       Logger.recordOutput("Balls/Ball " + String.valueOf(ball), ballPose);
