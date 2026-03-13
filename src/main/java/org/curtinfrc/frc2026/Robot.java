@@ -419,21 +419,26 @@ public class Robot extends LoggedRobot {
                     () -> FieldConstants.ShuttlePoint.ShuttlePointLeft)
                 .withName("LeftShuttling"));
 
-    controller.rightBumper().onTrue(Commands.runOnce(() -> runner = !runner));
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
-    controller.povLeft().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller
+        .rightBumper()
+        .onTrue(
+            Commands.runOnce(
+                () -> {
+                  runner = !runner;
+                  intaker = !intaker;
+                }));
+    controller.povRight().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller
+        .povLeft()
+        .whileTrue(Commands.parallel(mag.moveAll(-0.8), intake.RawControlConsume(-0.8)));
 
     // TODO FIX
     RobotModeTriggers.teleop()
-        .and(running)
         .and(intaking)
         .whileTrue(intake.RawControlConsume(0.8))
         .onFalse(intake.RawIdle());
-    RobotModeTriggers.teleop()
-        .and(running)
-        .and(intaking)
-        .whileTrue(mag.store(9.6))
-        .onFalse(mag.store(0));
+    RobotModeTriggers.teleop().and(intaking).whileTrue(mag.store(9.6)).onFalse(mag.store(0));
 
     hoodedShooter
         .hoodedShooterReady
