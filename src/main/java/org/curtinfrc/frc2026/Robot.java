@@ -95,7 +95,7 @@ public class Robot extends LoggedRobot {
 
   @AutoLogOutput(key = "Triggers/IsLeft")
   Trigger isLeft =
-      new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
+      new Trigger(() -> ChoreoAllianceFlipUtil.shouldFlip() ? drive.getPose().getY() > FieldConstants.Hub.topCenterPoint.getY() : drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
 
   @AutoLogOutput(key = "Triggers/inOwnHalf")
   Trigger inOwnHalf =
