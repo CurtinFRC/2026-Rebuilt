@@ -302,7 +302,13 @@ public class Robot extends LoggedRobot {
     }
 
     autoFactory =
-        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+        new AutoFactory(
+            drive::getPose,
+            drive::setPose,
+            drive::followTrajectory,
+            true,
+            drive,
+            drive::logTrajectory);
     autoChooser = new AutoChooser();
     autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
 
@@ -311,6 +317,8 @@ public class Robot extends LoggedRobot {
     // autoChooser.addCmd("Left trench", autos::leftTrench);
 
     autoChooser.addRoutine("Left Full Auto", autos::leftFullAuto);
+    autoChooser.addRoutine("Straight Line", autos::test1);
+    autoChooser.addRoutine("Turn Auto", autos::test2);
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 

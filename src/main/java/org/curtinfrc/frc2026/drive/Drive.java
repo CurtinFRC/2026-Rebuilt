@@ -3,6 +3,7 @@ package org.curtinfrc.frc2026.drive;
 import static edu.wpi.first.units.Units.*;
 
 import choreo.trajectory.SwerveSample;
+import choreo.trajectory.Trajectory;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
@@ -125,18 +126,31 @@ public class Drive extends SubsystemBase {
   }
 
   public void followTrajectory(SwerveSample sample) {
-
     Pose2d pose = getPose();
+
+    boolean isFlipped =
+        DriverStation.getAlliance().isPresent()
+            && DriverStation.getAlliance().get() == Alliance.Red;
 
     ChassisSpeeds speeds =
         new ChassisSpeeds(
-            -sample.vx - xController.calculate(pose.getX(), sample.x),
-            -sample.vy - yController.calculate(pose.getY(), sample.y),
-            -sample.omega
-                - headingController.calculate(pose.getRotation().getRadians(), sample.heading));
+            sample.vx + xController.calculate(pose.getX(), sample.x),
+            sample.vy + yController.calculate(pose.getY(), sample.y),
+            sample.omega
+                + headingController.calculate(pose.getRotation().getRadians(), sample.heading));
 
-    Logger.recordOutput("Odometry/target", sample.getPose());
-    runVelocity(speeds);
+    Logger.recordOutput("Odometry/Target", sample.getPose());
+    runVelocity(ChassisSpeeds.fromFieldRelativeSpeeds(speeds, getRotation()));
+  }
+
+  public void logTrajectory(Trajectory<SwerveSample> traj, boolean isFinished) {
+    SwerveSample[] trajarray = new SwerveSample[0];
+    boolean flip =
+        DriverStation.isDSAttached() && DriverStation.getAlliance().get() != Alliance.Blue;
+    Logger.recordOutput(
+        "Odometry/Trajectory",
+        flip ? traj.flipped().samples().toArray(trajarray) : traj.samples().toArray(trajarray));
+    Logger.recordOutput("Odometry/TrajectoryFinished", isFinished);
   }
 
   @Override
@@ -561,7 +575,7 @@ public class Drive extends SubsystemBase {
 
                   Translation2d linearVelocity =
                       getLinearVelocityFromJoysticks(
-                          xSupplier.getAsDouble(), ySupplier.getAsDouble());
+                          -xSupplier.getAsDouble(), -ySupplier.getAsDouble());
 
                   ChassisSpeeds speeds =
                       new ChassisSpeeds(
