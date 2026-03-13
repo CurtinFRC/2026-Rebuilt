@@ -218,7 +218,6 @@ public class HoodedShooter extends SubsystemBase {
           double target =
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
 
-          double robotAngle = robotPose.get().getRotation().getRadians();
           double robotX = robotPose.get().getX();
           double boundaryX =
               ChoreoAllianceFlipUtil.shouldFlip()
@@ -227,9 +226,17 @@ public class HoodedShooter extends SubsystemBase {
           boolean isRedAlliance =
               DriverStation.getAlliance().isPresent()
                   && DriverStation.getAlliance().get() == Alliance.Red;
-          if (isRedAlliance ? robotX > boundaryX : robotX < boundaryX) {
-            robotAngle = robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
+
+          boolean inOwnHalf = (isRedAlliance ? (robotX > boundaryX) : (robotX < boundaryX));
+
+          Pose2d robotPose =
+              (ChoreoAllianceFlipUtil.shouldFlip() && inOwnHalf)
+                  ? this.robotPose.get().rotateBy(Rotation2d.k180deg)
+                  : this.robotPose.get();
+          if (!ChoreoAllianceFlipUtil.shouldFlip() && !inOwnHalf) {
+            robotPose = robotPose.rotateBy(Rotation2d.k180deg);
           }
+          double robotAngle = robotPose.getRotation().getRadians();
 
           if (Constants.tuningMode) {
             hoodTarget = tunableHoodSetpoint.get();
@@ -265,8 +272,7 @@ public class HoodedShooter extends SubsystemBase {
                 new BallSim(
                     shooterTarget,
                     Rotation2d.fromDegrees(hoodTarget + 90),
-                    new Pose3d(robotPose.get())
-                        .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
+                    new Pose3d(robotPose).plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
           }
         });
   }
