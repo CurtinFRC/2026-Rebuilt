@@ -66,7 +66,7 @@ public class ShooterIOComp implements ShooterIO {
                   .withNeutralMode(NeutralModeValue.Coast)
                   .withInverted(InvertedValue.CounterClockwise_Positive))
           .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(100).withStatorCurrentLimit(120))
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(40).withStatorCurrentLimit(120))
           .withFeedback(
               new FeedbackConfigs()
                   .withSensorToMechanismRatio(GEAR_RATIO)

@@ -39,7 +39,7 @@ public class IntakeIOComp implements IntakeIO {
                   .withInverted(InvertedValue.Clockwise_Positive)
                   .withNeutralMode(NeutralModeValue.Coast))
           .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(15).withStatorCurrentLimit(60));
   private static final TalonFXConfiguration backMotorConfig =
       new TalonFXConfiguration()
           .withMotorOutput(
@@ -47,7 +47,7 @@ public class IntakeIOComp implements IntakeIO {
                   .withInverted(InvertedValue.Clockwise_Positive)
                   .withNeutralMode(NeutralModeValue.Coast))
           .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60));
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(15).withStatorCurrentLimit(60));
 
   public IntakeIOComp() {
 

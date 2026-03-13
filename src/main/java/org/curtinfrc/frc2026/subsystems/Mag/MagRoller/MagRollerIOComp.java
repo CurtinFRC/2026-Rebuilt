@@ -26,7 +26,7 @@ public class MagRollerIOComp implements MagRollerIO {
   private final StatusSignal<Angle> angle;
   private final StatusSignal<Current> current;
   private static final CurrentLimitsConfigs currentLimits =
-      new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60);
+      new CurrentLimitsConfigs().withSupplyCurrentLimit(15).withStatorCurrentLimit(60);
 
   public MagRollerIOComp(int motorID, InvertedValue inverted) {
 

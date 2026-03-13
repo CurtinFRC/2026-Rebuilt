@@ -115,10 +115,8 @@ public class Robot extends LoggedRobot {
             return isRedAlliance ? robotX > boundaryX : robotX < boundaryX;
           });
 
-  private boolean edge = true;
-
-  private boolean runner = true;
-  private boolean intaker = true;
+  private boolean runner = false;
+  private boolean intaker = false;
   private boolean aligner = true;
 
   @AutoLogOutput(key = "Triggers/Running")
@@ -357,6 +355,8 @@ public class Robot extends LoggedRobot {
         .and(RobotModeTriggers.teleop())
         .and(GameState.activeShift)
         .and(TrenchAlign.negate())
+        .and(running)
+        .and(controller.rightBumper().negate())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -371,12 +371,16 @@ public class Robot extends LoggedRobot {
 
     inOwnHalf
         .and(RobotModeTriggers.teleop())
+        .and(running)
+        .and(controller.rightBumper().negate())
         // .and(GameState.activeShift)
         .whileTrue(
             hoodedShooter.shootAtTarget(() -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
 
     isInNeutralZone
         .and(isLeft.negate())
+        .and(running)
+        .and(controller.rightBumper().negate())
         .and(TrenchAlign.negate())
         // .and(GameState.activeShift.negate())
         .and(RobotModeTriggers.teleop())
@@ -384,6 +388,8 @@ public class Robot extends LoggedRobot {
             hoodedShooter.shootAtTarget(() -> FieldConstants.ShuttlePoint.ShuttlePointRight));
 
     isInNeutralZone
+        .and(running)
+        .and(controller.rightBumper().negate())
         .and(isLeft)
         // .and(GameState.activeShift.negate())
         .and(TrenchAlign.negate())
@@ -436,13 +442,19 @@ public class Robot extends LoggedRobot {
     // TODO FIX
     RobotModeTriggers.teleop()
         .and(intaking)
-        .whileTrue(intake.RawControlConsume(0.8))
-        .onFalse(intake.RawIdle());
-    RobotModeTriggers.teleop().and(intaking).whileTrue(mag.store(9.6)).onFalse(mag.store(0));
+        .and(controller.povLeft().negate())
+        .and(controller.rightBumper().negate())
+        .whileTrue(intake.RawControlConsume(0.8));
+    RobotModeTriggers.teleop()
+        .and(intaking)
+        .and(controller.povLeft().negate())
+        .and(controller.rightBumper().negate())
+        .whileTrue(mag.store(9.6));
 
     hoodedShooter
         .hoodedShooterReady
         .and(running)
+        .and(controller.rightBumper().negate())
         .and(drive.aligned)
         .and(RobotModeTriggers.teleop())
         .whileTrue(Commands.parallel(mag.moveAll(0.8), intake.RawControlConsume(0.8)));
