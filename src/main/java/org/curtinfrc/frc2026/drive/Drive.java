@@ -4,6 +4,7 @@ import static edu.wpi.first.units.Units.*;
 
 import choreo.trajectory.SwerveSample;
 import choreo.trajectory.Trajectory;
+import choreo.util.ChoreoAllianceFlipUtil;
 import edu.wpi.first.hal.FRCNetComm.tInstances;
 import edu.wpi.first.hal.FRCNetComm.tResourceType;
 import edu.wpi.first.hal.HAL;
@@ -462,6 +463,11 @@ public class Drive extends SubsystemBase {
 
           double robotAngle = currentPosition.getRotation().getRadians();
 
+          Translation2d flippedLocation =
+              ChoreoAllianceFlipUtil.shouldFlip()
+                  ? ChoreoAllianceFlipUtil.flip(locationTransform.get())
+                  : locationTransform.get();
+
           double angleToHub = angleToLocation(locationTransform.get(), currentPosition);
 
           double delta = MathUtil.angleModulus(angleToHub - robotAngle);
@@ -482,6 +488,8 @@ public class Drive extends SubsystemBase {
           targetAngle = angleToHub;
           double angleSpeed = hubHeadingController.calculate(robotAngle, angleToHub);
 
+          Logger.recordOutput(
+              "Drive/TargetLocation", new Pose2d(locationTransform.get(), Rotation2d.kZero));
           Logger.recordOutput("TargetAngle", angleToHub);
           Logger.recordOutput("RobotAngle", robotAngle);
 

@@ -108,7 +108,9 @@ public class Robot extends LoggedRobot {
           () -> {
             double robotX = drive.getPose().getX();
             double boundaryX =
-                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+                ChoreoAllianceFlipUtil.shouldFlip()
+                    ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                    : FieldConstants.LeftTrench.openingTopLeft.getX();
             boolean isRedAlliance =
                 DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == Alliance.Red;
@@ -132,7 +134,9 @@ public class Robot extends LoggedRobot {
           () -> {
             double robotX = drive.getPose().getX();
             double boundaryX =
-                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+                ChoreoAllianceFlipUtil.shouldFlip()
+                    ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                    : FieldConstants.LeftTrench.openingTopLeft.getX();
             boolean isRedAlliance =
                 DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == Alliance.Red;
@@ -355,21 +359,14 @@ public class Robot extends LoggedRobot {
                     aligning,
                     () ->
                         hoodedShooter.getVirtualTargetLocation(
-                            () ->
-                                ChoreoAllianceFlipUtil.shouldFlip()
-                                    ? ChoreoAllianceFlipUtil.flip(
-                                        FieldConstants.Hub.topCenterPoint.toTranslation2d())
-                                    : FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+                            () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
     inOwnHalf
         .and(RobotModeTriggers.teleop())
         // .and(GameState.activeShift)
         .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () ->
-                    ChoreoAllianceFlipUtil.flip(
-                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+            hoodedShooter.shootAtTarget(() -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
 
     isInNeutralZone
         .and(isLeft.negate())
@@ -377,17 +374,14 @@ public class Robot extends LoggedRobot {
         // .and(GameState.activeShift.negate())
         .and(RobotModeTriggers.teleop())
         .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+            hoodedShooter.shootAtTarget(() -> FieldConstants.ShuttlePoint.ShuttlePointRight));
 
     isInNeutralZone
         .and(isLeft)
         // .and(GameState.activeShift.negate())
         .and(TrenchAlign.negate())
         .and(RobotModeTriggers.teleop())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+        .whileTrue(hoodedShooter.shootAtTarget(() -> FieldConstants.ShuttlePoint.ShuttlePointLeft));
 
     isLeft
         .negate()
@@ -401,8 +395,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
-                    () ->
-                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+                    () -> FieldConstants.ShuttlePoint.ShuttlePointRight)
                 .withName("RightShuttling"));
 
     isLeft
@@ -416,7 +409,7 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
-                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+                    () -> FieldConstants.ShuttlePoint.ShuttlePointLeft)
                 .withName("LeftShuttling"));
 
     controller.rightBumper().onTrue(Commands.runOnce(() -> runner = !runner));

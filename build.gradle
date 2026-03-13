@@ -108,7 +108,7 @@ test {
 // AdvantageKit log replay, which requires that all HAL
 // sim extensions be disabled.
 // wpi.sim.addGui().defaultEnabled = !project.hasProperty("replay");
-wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addGui().defaultEnabled = false
 wpi.sim.addDriverstation()
 
 // Setting up my Jar File. In this case, adding all libraries into the main jar ('fat jar')

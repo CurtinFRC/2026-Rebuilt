@@ -200,20 +200,27 @@ public class HoodedShooter extends SubsystemBase {
   public Command shootAtTarget(Supplier<Translation2d> shotLocation) {
     return run(
         () -> {
-          Translation2d compensatedHubLocation = getVirtualTargetLocation(shotLocation);
+          Supplier<Translation2d> flippedTarget =
+              () ->
+                  ChoreoAllianceFlipUtil.shouldFlip()
+                      ? ChoreoAllianceFlipUtil.flip(shotLocation.get())
+                      : shotLocation.get();
+          Translation2d compensatedHubLocation = getVirtualTargetLocation(flippedTarget);
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
 
+          Logger.recordOutput(
+              "Drive/TargetLocation", new Pose2d(compensatedHubLocation, Rotation2d.kZero));
+
           double target =
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
 
-          double robotAngle =
-              robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
-          if ((robotPose.get().getX() > FieldConstants.fieldLength / 2 - 3
-              && robotPose.get().getX() < FieldConstants.fieldLength / 2 + 3)) {
-            robotAngle = robotPose.get().getRotation().getRadians();
-          }
+          double robotAngle = robotPose.get().getRotation().getRadians();
+          // if ((robotPose.get().getX() > FieldConstants.fieldLength / 2 - 3
+          //     && robotPose.get().getX() < FieldConstants.fieldLength / 2 + 3)) {
+          //   robotAngle = robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
+          // }
 
           if (Constants.tuningMode) {
             hoodTarget = tunableHoodSetpoint.get();
