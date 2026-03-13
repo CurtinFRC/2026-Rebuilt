@@ -7,7 +7,6 @@ import choreo.auto.AutoFactory;
 import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -118,11 +117,15 @@ public class Robot extends LoggedRobot {
 
   private boolean edge = true;
 
-  private boolean runner = false;
+  private boolean runner = true;
+  private boolean intaker = true;
   private boolean aligner = true;
 
-  @AutoLogOutput(key = "Triggers/Intaking")
+  @AutoLogOutput(key = "Triggers/Running")
   Trigger running = new Trigger(() -> runner);
+
+  @AutoLogOutput(key = "Triggers/Intaking")
+  Trigger intaking = new Trigger(() -> intaker);
 
   @AutoLogOutput(key = "Triggers/Aligning")
   Trigger aligning = new Trigger(() -> aligner);
@@ -344,9 +347,6 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
-    controller.a().whileTrue(drive.faceAngle(Rotation2d.kZero));
-    controller.b().whileTrue(drive.faceAngle(Rotation2d.k180deg));
-
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
@@ -421,16 +421,17 @@ public class Robot extends LoggedRobot {
 
     controller.rightBumper().onTrue(Commands.runOnce(() -> runner = !runner));
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+    controller.povLeft().onTrue(Commands.runOnce(() -> intaker = !intaker));
 
     // TODO FIX
-    RobotModeTriggers.disabled()
-        .negate()
+    RobotModeTriggers.teleop()
         .and(running)
+        .and(intaking)
         .whileTrue(intake.RawControlConsume(0.8))
         .onFalse(intake.RawIdle());
-    RobotModeTriggers.disabled()
-        .negate()
+    RobotModeTriggers.teleop()
         .and(running)
+        .and(intaking)
         .whileTrue(mag.store(9.6))
         .onFalse(mag.store(0));
 
