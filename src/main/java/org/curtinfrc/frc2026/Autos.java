@@ -75,6 +75,16 @@ public class Autos {
     return routine;
   }
 
+  public AutoRoutine leftSideAutoReturn() {
+    AutoRoutine routine = autoFactory.newRoutine("Left Side Auto Delay");
+    AutoTrajectory traj = routine.trajectory("AutoForRobertLeftReturn");
+    routine
+        .active()
+        .onTrue(Commands.waitSeconds(3).andThen(traj.resetOdometry().andThen(traj.cmd())));
+
+    return routine;
+  }
+
   public AutoRoutine rightSideAuto() {
     AutoRoutine routine = autoFactory.newRoutine("Right Side Auto");
     AutoTrajectory traj = routine.trajectory("AutoForRobertRight");

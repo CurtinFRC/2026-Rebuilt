@@ -328,6 +328,7 @@ public class Robot extends LoggedRobot {
     autoChooser.addRoutine("Right Side Auto", autos::rightSideAuto);
     autoChooser.addRoutine("Left Side Auto", autos::leftSideAuto);
     autoChooser.addRoutine("Straight Line", autos::test1);
+    autoChooser.addRoutine("Left Side Auto Return", autos::leftSideAutoReturn);
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -426,6 +427,8 @@ public class Robot extends LoggedRobot {
                 .withName("LeftShuttling"));
 
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+    intaking.whileFalse(Commands.parallel(intake.Stop(), mag.store(0)));
+    running.whileFalse(hoodedShooter.stopHoodedShooter());
     controller
         .rightBumper()
         .onTrue(
