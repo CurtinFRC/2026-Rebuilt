@@ -82,7 +82,7 @@ public class HoodIOComp implements HoodIO {
                   .withSensorToMechanismRatio(ENCODER_TO_MECHANISM_RATIO)
                   .withRotorToSensorRatio(MOTOR_TO_SENSOR_RATIO))
           .withCurrentLimits(
-              new CurrentLimitsConfigs().withSupplyCurrentLimit(30).withStatorCurrentLimit(60))
+              new CurrentLimitsConfigs().withSupplyCurrentLimit(15).withStatorCurrentLimit(60))
           .withSoftwareLimitSwitch(
               new SoftwareLimitSwitchConfigs()
                   .withForwardSoftLimitThreshold(FORWARD_LIMIT_ROTATIONS)

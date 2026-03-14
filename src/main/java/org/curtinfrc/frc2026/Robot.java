@@ -7,7 +7,6 @@ import choreo.auto.AutoFactory;
 import choreo.util.ChoreoAllianceFlipUtil;
 import com.ctre.phoenix6.SignalLogger;
 import com.ctre.phoenix6.signals.InvertedValue;
-import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.net.WebServer;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
@@ -37,6 +36,7 @@ import org.curtinfrc.frc2026.drive.ModuleIOSim;
 import org.curtinfrc.frc2026.drive.ModuleIOTalonFX;
 import org.curtinfrc.frc2026.drive.TunerConstants;
 import org.curtinfrc.frc2026.subsystems.Intake.Intake;
+import org.curtinfrc.frc2026.subsystems.Intake.IntakeIO;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOComp;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIODev;
 import org.curtinfrc.frc2026.subsystems.Intake.IntakeIOSim;
@@ -89,18 +89,16 @@ public class Robot extends LoggedRobot {
   private final Alert controllerDisconnected =
       new Alert("Driver controller disconnected!", AlertType.kError);
 
-  @AutoLogOutput(key = "Triggers/IsRed")
-  Trigger isRed = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Red));
-
   @AutoLogOutput(key = "Triggers/TrenchAlign")
   Trigger TrenchAlign = controller.leftBumper();
 
-  @AutoLogOutput(key = "Triggers/IsBlue")
-  Trigger isBlue = new Trigger(() -> DriverStation.getAlliance().get().equals(Alliance.Blue));
-
   @AutoLogOutput(key = "Triggers/IsLeft")
   Trigger isLeft =
-      new Trigger(() -> drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY());
+      new Trigger(
+          () ->
+              ChoreoAllianceFlipUtil.shouldFlip()
+                  ? drive.getPose().getY() < FieldConstants.Hub.topCenterPoint.getY()
+                  : drive.getPose().getY() > FieldConstants.Hub.topCenterPoint.getY());
 
   @AutoLogOutput(key = "Triggers/inOwnHalf")
   Trigger inOwnHalf =
@@ -108,20 +106,21 @@ public class Robot extends LoggedRobot {
           () -> {
             double robotX = drive.getPose().getX();
             double boundaryX =
-                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+                ChoreoAllianceFlipUtil.shouldFlip()
+                    ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                    : FieldConstants.LeftTrench.openingTopLeft.getX();
             boolean isRedAlliance =
                 DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == Alliance.Red;
             return isRedAlliance ? robotX > boundaryX : robotX < boundaryX;
           });
 
-  private boolean edge = true;
-
-  @AutoLogOutput(key = "Triggers/Edging")
-  Trigger edging = new Trigger(() -> edge);
-
+  private boolean runner = false;
   private boolean intaker = false;
   private boolean aligner = true;
+
+  @AutoLogOutput(key = "Triggers/Running")
+  Trigger running = new Trigger(() -> runner);
 
   @AutoLogOutput(key = "Triggers/Intaking")
   Trigger intaking = new Trigger(() -> intaker);
@@ -135,7 +134,9 @@ public class Robot extends LoggedRobot {
           () -> {
             double robotX = drive.getPose().getX();
             double boundaryX =
-                ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX();
+                ChoreoAllianceFlipUtil.shouldFlip()
+                    ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                    : FieldConstants.LeftTrench.openingTopLeft.getX();
             boolean isRedAlliance =
                 DriverStation.getAlliance().isPresent()
                     && DriverStation.getAlliance().get() == Alliance.Red;
@@ -176,7 +177,7 @@ public class Robot extends LoggedRobot {
     SignalLogger.start();
     DataLogManager.start();
 
-    DriverStation.waitForDsConnection(600);
+    // DriverStation.waitForDsConnection(600);
 
     if (Constants.getMode() != Constants.Mode.REPLAY) {
       switch (Constants.robotType) {
@@ -294,7 +295,15 @@ public class Robot extends LoggedRobot {
               new ModuleIO() {},
               new ModuleIO() {},
               new ModuleIO() {});
-      vision = new Vision(drive::addVisionMeasurement, drive::getRotation, new VisionIO() {});
+      vision =
+          new Vision(
+              drive::addVisionMeasurement,
+              drive::getRotation,
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {},
+              new VisionIO() {});
+      intake = new Intake(new IntakeIO() {});
       mag = new Mag(new MagRollerIO() {}, new MagRollerIO() {}, new MagRollerIO() {});
       hoodedShooter =
           new HoodedShooter(
@@ -302,15 +311,24 @@ public class Robot extends LoggedRobot {
     }
 
     autoFactory =
-        new AutoFactory(drive::getPose, drive::setPose, drive::followTrajectory, true, drive);
+        new AutoFactory(
+            drive::getPose,
+            drive::setPose,
+            drive::followTrajectory,
+            true,
+            drive,
+            drive::logTrajectory);
     autoChooser = new AutoChooser();
     autos = new Autos(autoFactory, drive, intake, hoodedShooter, mag);
 
-    autoChooser.addCmd("Left then forward", autos::testDrive);
-    autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
-    autoChooser.addCmd("Left trench", autos::leftTrench);
+    // autoChooser.addCmd("Left then forward", autos::testDrive);
+    // autoChooser.addCmd("Left trench, half", autos::leftHalfAuto);
+    // autoChooser.addCmd("Left trench", autos::leftTrench);
 
-    autoChooser.addRoutine("Left trench, half routine", autos::leftHalfAutoRoutine);
+    autoChooser.addRoutine("Right Side Auto", autos::rightSideAuto);
+    autoChooser.addRoutine("Left Side Auto", autos::leftSideAuto);
+    autoChooser.addRoutine("Straight Line", autos::test1);
+    autoChooser.addRoutine("Left Side Auto Return", autos::leftSideAutoReturn);
 
     RobotModeTriggers.autonomous().whileTrue((autoChooser.selectedCommandScheduler()));
 
@@ -328,9 +346,6 @@ public class Robot extends LoggedRobot {
 
     WebServer.start(5800, Filesystem.getDeployDirectory().getPath());
 
-    controller.a().whileTrue(drive.faceAngle(Rotation2d.kZero));
-    controller.b().whileTrue(drive.faceAngle(Rotation2d.k180deg));
-
     drive.setDefaultCommand(
         drive.joystickDrive(
             () -> -controller.getLeftY(),
@@ -341,6 +356,8 @@ public class Robot extends LoggedRobot {
         .and(RobotModeTriggers.teleop())
         .and(GameState.activeShift)
         .and(TrenchAlign.negate())
+        .and(running)
+        .and(controller.rightBumper().negate())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -350,42 +367,41 @@ public class Robot extends LoggedRobot {
                     aligning,
                     () ->
                         hoodedShooter.getVirtualTargetLocation(
-                            () ->
-                                ChoreoAllianceFlipUtil.shouldFlip()
-                                    ? ChoreoAllianceFlipUtil.flip(
-                                        FieldConstants.Hub.topCenterPoint.toTranslation2d())
-                                    : FieldConstants.Hub.topCenterPoint.toTranslation2d()))
+                            () -> FieldConstants.Hub.topCenterPoint.toTranslation2d()))
                 .withName("Scoring"));
 
     inOwnHalf
         .and(RobotModeTriggers.teleop())
+        .and(running)
+        .and(controller.rightBumper().negate())
         // .and(GameState.activeShift)
         .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () ->
-                    ChoreoAllianceFlipUtil.flip(
-                        FieldConstants.Hub.topCenterPoint.toTranslation2d())));
+            hoodedShooter.shootAtTarget(() -> FieldConstants.Hub.topCenterPoint.toTranslation2d()));
 
     isInNeutralZone
         .and(isLeft.negate())
+        .and(running)
+        .and(controller.rightBumper().negate())
         .and(TrenchAlign.negate())
-        .and(GameState.activeShift.negate())
+        // .and(GameState.activeShift.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight)));
+            hoodedShooter.shootAtTarget(() -> FieldConstants.ShuttlePoint.ShuttlePointRight));
 
     isInNeutralZone
+        .and(running)
+        .and(controller.rightBumper().negate())
         .and(isLeft)
-        .and(GameState.activeShift.negate())
+        // .and(GameState.activeShift.negate())
         .and(TrenchAlign.negate())
-        .whileTrue(
-            hoodedShooter.shootAtTarget(
-                () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft)));
+        .and(RobotModeTriggers.teleop())
+        .whileTrue(hoodedShooter.shootAtTarget(() -> FieldConstants.ShuttlePoint.ShuttlePointLeft));
 
     isLeft
         .negate()
         .and(isInNeutralZone)
         .and(TrenchAlign.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -393,13 +409,13 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
-                    () ->
-                        ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointRight))
+                    () -> FieldConstants.ShuttlePoint.ShuttlePointRight)
                 .withName("RightShuttling"));
 
     isLeft
         .and(isInNeutralZone)
         .and(TrenchAlign.negate())
+        .and(RobotModeTriggers.teleop())
         .whileTrue(
             drive
                 .locationHeadingjoyStickDrive(
@@ -407,37 +423,50 @@ public class Robot extends LoggedRobot {
                     () -> -controller.getLeftX(),
                     () -> -controller.getRightX(),
                     aligning,
-                    () -> ChoreoAllianceFlipUtil.flip(FieldConstants.ShuttlePoint.ShuttlePointLeft))
+                    () -> FieldConstants.ShuttlePoint.ShuttlePointLeft)
                 .withName("LeftShuttling"));
 
-    controller.rightBumper().onTrue(Commands.runOnce(() -> intaker = !intaker));
     controller.leftTrigger().onTrue(Commands.runOnce(() -> aligner = !aligner));
+    intaking.whileFalse(Commands.parallel(intake.Stop(), mag.store(0)));
+    running.whileFalse(hoodedShooter.stopHoodedShooter());
+    controller
+        .rightBumper()
+        .onTrue(
+            Commands.runOnce(
+                () -> {
+                  runner = !runner;
+                  intaker = !intaker;
+                }));
+    controller.povRight().onTrue(Commands.runOnce(() -> intaker = !intaker));
+    controller
+        .povLeft()
+        .whileTrue(Commands.parallel(mag.moveAll(-0.8), intake.RawControlConsume(-0.8)));
 
     // TODO FIX
-    RobotModeTriggers.disabled()
-        .negate()
+    RobotModeTriggers.teleop()
         .and(intaking)
-        .whileTrue(intake.RawControlConsume(0.8))
-        .onFalse(intake.RawIdle());
-    RobotModeTriggers.disabled()
-        .negate()
+        .and(controller.povLeft().negate())
+        .and(controller.rightBumper().negate())
+        .whileTrue(intake.RawControlConsume(0.8));
+    RobotModeTriggers.teleop()
         .and(intaking)
-        .whileTrue(mag.store(9.6))
-        .onFalse(mag.store(0));
+        .and(controller.povLeft().negate())
+        .and(controller.rightBumper().negate())
+        .whileTrue(mag.store(9.6));
+
     hoodedShooter
         .hoodedShooterReady
+        .and(running)
+        .and(controller.rightBumper().negate())
         .and(drive.aligned)
-        .whileTrue(mag.spinIndexer(9.6))
-        .whileFalse(mag.holdIndexerCommand());
+        .and(RobotModeTriggers.teleop())
+        .whileTrue(Commands.parallel(mag.moveAll(0.8), intake.RawControlConsume(0.8)));
 
     controller
         .leftBumper()
+        // .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () ->
+        // -controller.getLeftX()));
         .whileTrue(drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX()));
-    // .whileTrue(
-    //     Commands.runOnce(() -> edge = false)
-    //         .andThen(
-    //             drive.TrenchAlign(() -> -controller.getLeftY(), () -> -controller.getLeftX())
-    //                 .finallyDo(() -> edge = true)));
   }
 
   /** This function is called periodically during all modes. */

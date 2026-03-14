@@ -134,7 +134,11 @@ public class AutoChooser extends LoggedNetworkInput {
         lastCommandName = selectStr;
       }
     }
-    lastCommand = autoRoutines.get(lastCommandName).get();
+    if (lastCommandName == NONE_NAME) {
+      lastCommand = Commands.none();
+    } else {
+      lastCommand = autoRoutines.get(lastCommandName).get();
+    }
     active.set(lastCommandName);
     Logger.processInputs(prefix + " " + key, inputs);
   }

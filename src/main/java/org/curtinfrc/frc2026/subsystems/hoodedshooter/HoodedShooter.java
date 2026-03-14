@@ -11,6 +11,8 @@ import edu.wpi.first.math.interpolation.InterpolatingDoubleTreeMap;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.Alert;
 import edu.wpi.first.wpilibj.Alert.AlertType;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -68,6 +70,8 @@ public class HoodedShooter extends SubsystemBase {
   private final Alert[] shooterMotorDisconnectedAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
   private final Alert[] shooterMotorTempAlerts = new Alert[SHOOTER_MOTOR_NUMBER];
 
+  private boolean canshoot = false;
+
   public final Trigger hoodedShooterReady =
       new Trigger(
               () -> {
@@ -79,7 +83,8 @@ public class HoodedShooter extends SubsystemBase {
                         <= READY_SHOOTER_VELOCITY_TOLERANCE;
                 return hoodReady && shooterReady;
               })
-          .debounce(0.1);
+          .debounce(0.1)
+          .and(() -> canshoot);
 
   private final double SHOT_SPEED = 16.5;
 
@@ -197,15 +202,41 @@ public class HoodedShooter extends SubsystemBase {
   public Command shootAtTarget(Supplier<Translation2d> shotLocation) {
     return run(
         () -> {
-          Translation2d compensatedHubLocation = getVirtualTargetLocation(shotLocation);
+          Supplier<Translation2d> flippedTarget =
+              () ->
+                  ChoreoAllianceFlipUtil.shouldFlip()
+                      ? ChoreoAllianceFlipUtil.flip(shotLocation.get())
+                      : shotLocation.get();
+          Translation2d compensatedHubLocation = getVirtualTargetLocation(flippedTarget);
 
           double compensatedDistanceLength =
               compensatedHubLocation.minus(robotPose.get().getTranslation()).getNorm();
 
+          Logger.recordOutput(
+              "HoodedShooter/TargetLocation", new Pose2d(compensatedHubLocation, Rotation2d.kZero));
+
           double target =
               Drive.angleToLocation(this.getVirtualTargetLocation(shotLocation), robotPose.get());
-          double robotAngle =
-              robotPose.get().getRotation().rotateBy(Rotation2d.k180deg).getRadians();
+
+          double robotX = robotPose.get().getX();
+          double boundaryX =
+              ChoreoAllianceFlipUtil.shouldFlip()
+                  ? ChoreoAllianceFlipUtil.flip(FieldConstants.LeftTrench.openingTopLeft).getX()
+                  : FieldConstants.LeftTrench.openingTopLeft.getX();
+          boolean isRedAlliance =
+              DriverStation.getAlliance().isPresent()
+                  && DriverStation.getAlliance().get() == Alliance.Red;
+
+          boolean inOwnHalf = (isRedAlliance ? (robotX > boundaryX) : (robotX < boundaryX));
+
+          Pose2d robotPose =
+              (ChoreoAllianceFlipUtil.shouldFlip() && inOwnHalf)
+                  ? this.robotPose.get().rotateBy(Rotation2d.k180deg)
+                  : this.robotPose.get();
+          if (!ChoreoAllianceFlipUtil.shouldFlip() && !inOwnHalf) {
+            robotPose = robotPose.rotateBy(Rotation2d.k180deg);
+          }
+          double robotAngle = robotPose.getRotation().getRadians();
 
           if (Constants.tuningMode) {
             hoodTarget = tunableHoodSetpoint.get();
@@ -223,21 +254,25 @@ public class HoodedShooter extends SubsystemBase {
             shooterTarget = DISTANCE_TO_SHOOTER_VELOCITY.get(compensatedDistanceLength);
           }
 
-          if (Math.abs(target - robotAngle) < READY_ROBOT_ROTATION_TOLERANCE) {
-            hoodIO.setPosition(hoodTarget / 360);
-            shooterIO.setVelocity(shooterTarget, hoodedShooterReady.getAsBoolean());
+          double angleDiff =
+              Math.atan2(Math.sin(target - robotAngle), Math.cos(target - robotAngle));
+          if (Math.toDegrees(Math.abs(angleDiff)) < READY_ROBOT_ROTATION_TOLERANCE) {
+            canshoot = true;
           } else {
-            hoodIO.setVoltage(0);
-            shooterIO.setVoltage(0);
+            canshoot = false;
+            // hoodIO.setVoltage(0);
+            // shooterIO.setVoltage(0);
           }
+
+          hoodIO.setPosition(hoodTarget / 360);
+          shooterIO.setVelocity(shooterTarget, hoodedShooterReady.getAsBoolean());
 
           if (Constants.getMode() == Mode.SIM) {
             shooterIO.addSimBall(
                 new BallSim(
                     shooterTarget,
                     Rotation2d.fromDegrees(hoodTarget + 90),
-                    new Pose3d(robotPose.get())
-                        .plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
+                    new Pose3d(robotPose).plus(new Transform3d(0.2, 0.0, 0.3, Rotation3d.kZero))));
           }
         });
   }
