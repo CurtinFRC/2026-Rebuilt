@@ -1,12 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <future>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include "repulsor3d/render/RenderFeature.hpp"
@@ -60,18 +62,26 @@ class CadModelRenderFeature final : public IRenderFeature {
   };
 
   struct GpuMesh {
-    GlVertexArrayHandle vao;
-    GlBufferHandle vbo;
-    GlBufferHandle ebo;
-    int vertexCount = 0;
-    int indexCount = 0;
+    struct LodGpu {
+      GlVertexArrayHandle vao;
+      GlBufferHandle vbo;
+      GlBufferHandle ebo;
+      int vertexCount = 0;
+      int indexCount = 0;
+    };
+    std::vector<LodGpu> lods;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+    float boundsRadius = 1.0F;
   };
 
   struct PreparedCpuMesh {
-    std::vector<PositionNormalMesh::Vertex> vertices;
-    std::vector<std::uint32_t> indices;
+    struct LodCpu {
+      std::vector<PositionNormalMesh::Vertex> vertices;
+      std::vector<std::uint32_t> indices;
+    };
+    std::vector<LodCpu> lods;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+    float boundsRadius = 1.0F;
   };
 
   struct PendingLoad {
@@ -85,6 +95,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   static PreparedCpuMesh PrepareCpuMesh(const PositionNormalMesh& cpu);
   static bool UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
+  static std::size_t SelectLodLevel(const GpuMesh& mesh, const glm::mat4& mvp, int viewportWidth, int viewportHeight);
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);
 
@@ -94,7 +105,6 @@ class CadModelRenderFeature final : public IRenderFeature {
 
   GlProgramHandle shader_;
   int uMvpLoc_ = -1;
-  int uModelLoc_ = -1;
   int uNormalMatrixLoc_ = -1;
   int uColorLoc_ = -1;
   int uLightDirLoc_ = -1;

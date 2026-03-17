@@ -146,11 +146,30 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
+- `CAD_LOD_COUNT` (default `4`)
+- `CAD_LOD_RATIO` (default `0.55`)
+- `CAD_LOD_MIN_VERTICES` (default `30000`)
+- `CAD_LOD0_MAX_VERTICES` (default `1800000`)
+- `CAD_LOD_KEEP_FULL` (default `false`)
+- `CAD_LOD_MAX_DRAW_INDICES` (default `12000000`)
+- `CAD_LOD0_SCREEN_RADIUS_PX` (default `520`)
+- `CAD_LOD_SCREEN_RADIUS_DECAY` (default `0.5`)
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 - `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
 - `SEASON_MODULE_PLUGIN_PATH` (optional path to season module plugin `.dll`/`.so`)
 - `HOT_RELOAD_SCENE_DESCRIPTOR` (default `true`)
 - `HOT_RELOAD_SEASON_MODULE` (default `true`)
+
+### CAD LOD Pipeline
+
+CAD meshes now go through an abstract multi-stage path in `CadModelRenderFeature`:
+1. triangle-soup indexing + dedup
+2. degenerate-triangle cleanup
+3. shape-preserving vertex-cluster simplification
+4. multi-LOD chain generation
+5. screen-space + draw-budget LOD selection at render time
+
+This is season-agnostic and applies to any mesh instance (including `2026Rebuilt` field CAD).
 
 ## Plugin SDK + ABI Checks
 
