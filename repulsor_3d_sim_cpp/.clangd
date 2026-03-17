@@ -1,0 +1,35 @@
+CompileFlags:
+  CompilationDatabase: None
+  Compiler: clang-cl
+  Add:
+    - /std:c++20
+    - /EHsc
+    - /DWIN32
+    - /D_WINDOWS
+    - /DUNICODE
+    - /D_UNICODE
+    - /D_CRT_SECURE_NO_WARNINGS
+    - -Iinclude
+    - -I../include
+    - -I../../include
+    - -Ibuild/_deps/glm-src
+    - -I../build/_deps/glm-src
+    - -I../../build/_deps/glm-src
+    - -Ibuild/_deps/nlohmann_json-src/include
+    - -I../build/_deps/nlohmann_json-src/include
+    - -I../../build/_deps/nlohmann_json-src/include
+    - -Ibuild/_deps/stb-src
+    - -I../build/_deps/stb-src
+    - -I../../build/_deps/stb-src
+    - -Ibuild/_deps/glfw-src/include
+    - -I../build/_deps/glfw-src/include
+    - -I../../build/_deps/glfw-src/include
+    - -Ibuild/_deps/glew-src/include
+    - -I../build/_deps/glew-src/include
+    - -I../../build/_deps/glew-src/include
+  Remove:
+    - -fno-*
+    - -m*
+
+Diagnostics:
+  UnusedIncludes: None

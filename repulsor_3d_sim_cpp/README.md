@@ -72,3 +72,11 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
+
+## Clangd / LSP
+
+This folder includes:
+- `.clangd`
+- `compile_flags.txt`
+
+These provide a fallback compile configuration for clangd so IntelliSense/LSP does not report spurious errors when `compile_commands.json` is unavailable.

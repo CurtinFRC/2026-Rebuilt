@@ -199,7 +199,7 @@ repulsor-profiler
 *.onnx
 *.png
 *.pt
-README_2.md 
+README_2.md
 vision/train/data
 
 *.pyc
@@ -215,3 +215,5 @@ README_2.md
 *.pt
 
 .pytest_cache/
+
+repulsor_3d_sim_cpp/build-clangd

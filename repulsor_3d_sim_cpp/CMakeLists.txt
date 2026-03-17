@@ -4,6 +4,7 @@ project(repulsor_3d_sim_cpp LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
