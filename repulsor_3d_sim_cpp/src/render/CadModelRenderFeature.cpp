@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <limits>
@@ -83,13 +85,15 @@ bool GetEnvBool(const char* name, const bool fallback) {
 }
 
 struct CadLodPolicy {
-  std::size_t maxLodCount = 4;
-  float reductionRatio = 0.55F;
-  std::size_t minVertexCount = 30000;
-  std::size_t lod0VertexCap = 1800000;
-  bool keepOriginalLod0 = false;
-  std::size_t maxPreferredDrawIndices = 12000000;
-  float lod0ScreenRadiusPx = 520.0F;
+  std::size_t maxLodCount = 1;
+  float reductionRatio = 0.88F;
+  std::size_t minVertexCount = 260000;
+  std::size_t lod0VertexCap = 4500000;
+  bool keepOriginalLod0 = true;
+  std::size_t maxPreferredDrawIndices = 30000000;
+  int normalBins = 20;
+  bool preserveFlatShading = true;
+  float lod0ScreenRadiusPx = 860.0F;
   float screenRadiusDecay = 0.5F;
 };
 
@@ -103,11 +107,315 @@ const CadLodPolicy& LoadCadLodPolicy() {
     out.keepOriginalLod0 = GetEnvBool("CAD_LOD_KEEP_FULL", out.keepOriginalLod0);
     out.maxPreferredDrawIndices = static_cast<std::size_t>(
         std::max(0, GetEnvInt("CAD_LOD_MAX_DRAW_INDICES", static_cast<int>(out.maxPreferredDrawIndices))));
+    out.normalBins = std::clamp(GetEnvInt("CAD_LOD_NORMAL_BINS", out.normalBins), 4, 28);
+    out.preserveFlatShading = GetEnvBool("CAD_LOD_PRESERVE_FLAT", out.preserveFlatShading);
     out.lod0ScreenRadiusPx = std::max(32.0F, GetEnvFloat("CAD_LOD0_SCREEN_RADIUS_PX", out.lod0ScreenRadiusPx));
     out.screenRadiusDecay = std::clamp(GetEnvFloat("CAD_LOD_SCREEN_RADIUS_DECAY", out.screenRadiusDecay), 0.2F, 0.95F);
     return out;
   }();
   return policy;
+}
+
+constexpr std::uint64_t kFnv64OffsetBasis = 1469598103934665603ULL;
+constexpr std::uint64_t kFnv64Prime = 1099511628211ULL;
+constexpr std::uint32_t kPreparedCacheMagic = 0x524C4F44U;  // "RLOD"
+constexpr std::uint32_t kPreparedCacheVersion = 1U;
+
+void FnvMixBytes(std::uint64_t& hash, const std::uint8_t* data, const std::size_t count) {
+  for (std::size_t i = 0; i < count; ++i) {
+    hash ^= static_cast<std::uint64_t>(data[i]);
+    hash *= kFnv64Prime;
+  }
+}
+
+void FnvMixString(std::uint64_t& hash, const std::string& text) {
+  FnvMixBytes(hash, reinterpret_cast<const std::uint8_t*>(text.data()), text.size());
+}
+
+void FnvMixU64(std::uint64_t& hash, const std::uint64_t value) {
+  std::array<std::uint8_t, sizeof(std::uint64_t)> bytes{};
+  for (std::size_t i = 0; i < bytes.size(); ++i) {
+    bytes[i] = static_cast<std::uint8_t>((value >> (i * 8U)) & 0xFFU);
+  }
+  FnvMixBytes(hash, bytes.data(), bytes.size());
+}
+
+std::string ToHexString(const std::uint64_t value) {
+  std::ostringstream out;
+  out << std::hex << value;
+  return out.str();
+}
+
+struct AssetFileMetadata {
+  std::uint64_t fileSize = 0;
+  std::uint64_t modifiedTicks = 0;
+  bool found = false;
+};
+
+AssetFileMetadata ProbeAssetFileMetadata(const std::string& assetPath) {
+  AssetFileMetadata meta;
+  std::error_code ec;
+
+  const std::filesystem::path cwd = std::filesystem::current_path(ec);
+  std::vector<std::filesystem::path> candidates;
+  candidates.reserve(5);
+  candidates.emplace_back(assetPath);
+  if (!ec) {
+    candidates.push_back(cwd / assetPath);
+    candidates.push_back(cwd / "assets" / assetPath);
+    if (cwd.has_parent_path()) {
+      candidates.push_back(cwd.parent_path() / "assets" / assetPath);
+    }
+    if (cwd.has_parent_path() && cwd.parent_path().has_parent_path()) {
+      candidates.push_back(cwd.parent_path().parent_path() / "assets" / assetPath);
+    }
+  }
+
+  for (const auto& candidate : candidates) {
+    std::error_code existsEc;
+    if (!std::filesystem::exists(candidate, existsEc) || existsEc) {
+      continue;
+    }
+    if (!std::filesystem::is_regular_file(candidate, existsEc) || existsEc) {
+      continue;
+    }
+
+    const auto fileSize = std::filesystem::file_size(candidate, ec);
+    if (ec) {
+      continue;
+    }
+    const auto writeTime = std::filesystem::last_write_time(candidate, ec);
+    if (ec) {
+      continue;
+    }
+
+    meta.fileSize = static_cast<std::uint64_t>(fileSize);
+    meta.modifiedTicks = static_cast<std::uint64_t>(writeTime.time_since_epoch().count());
+    meta.found = true;
+    return meta;
+  }
+  return meta;
+}
+
+std::string BuildPreparedCacheKey(const std::string& assetPath, const CadLodPolicy& policy) {
+  std::uint64_t hash = kFnv64OffsetBasis;
+  FnvMixString(hash, assetPath);
+
+  const AssetFileMetadata meta = ProbeAssetFileMetadata(assetPath);
+  FnvMixU64(hash, meta.fileSize);
+  FnvMixU64(hash, meta.modifiedTicks);
+  FnvMixU64(hash, meta.found ? 1ULL : 0ULL);
+
+  FnvMixU64(hash, static_cast<std::uint64_t>(policy.maxLodCount));
+  FnvMixU64(hash, static_cast<std::uint64_t>(policy.minVertexCount));
+  FnvMixU64(hash, static_cast<std::uint64_t>(policy.lod0VertexCap));
+  FnvMixU64(hash, static_cast<std::uint64_t>(policy.maxPreferredDrawIndices));
+  FnvMixU64(hash, static_cast<std::uint64_t>(policy.normalBins));
+  FnvMixU64(hash, static_cast<std::uint64_t>(FloatBits(policy.reductionRatio)));
+  FnvMixU64(hash, static_cast<std::uint64_t>(FloatBits(policy.lod0ScreenRadiusPx)));
+  FnvMixU64(hash, static_cast<std::uint64_t>(FloatBits(policy.screenRadiusDecay)));
+  FnvMixU64(hash, policy.keepOriginalLod0 ? 1ULL : 0ULL);
+  FnvMixU64(hash, policy.preserveFlatShading ? 1ULL : 0ULL);
+  FnvMixU64(hash, static_cast<std::uint64_t>(kPreparedCacheVersion));
+  return ToHexString(hash);
+}
+
+std::filesystem::path GetPreparedCacheRoot() {
+  if (const char* env = std::getenv("CAD_PREPARED_CACHE_DIR"); env != nullptr && *env != '\0') {
+    return std::filesystem::path(env);
+  }
+
+#ifdef _WIN32
+  if (const char* localAppData = std::getenv("LOCALAPPDATA"); localAppData != nullptr && *localAppData != '\0') {
+    return std::filesystem::path(localAppData) / "repulsor_3d_sim_cpp" / "cad_prepared_cache";
+  }
+#endif
+  return std::filesystem::path(".repulsor_cache") / "cad_prepared_lod";
+}
+
+struct PreparedCpuMeshBlob {
+  struct LodBlob {
+    std::vector<PositionNormalMesh::Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+  };
+  std::vector<LodBlob> lods;
+  glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+  float boundsRadius = 1.0F;
+};
+
+template <typename T>
+bool WriteScalar(std::ofstream& out, const T& value) {
+  out.write(reinterpret_cast<const char*>(&value), sizeof(T));
+  return static_cast<bool>(out);
+}
+
+template <typename T>
+bool ReadScalar(std::ifstream& in, T& value) {
+  in.read(reinterpret_cast<char*>(&value), sizeof(T));
+  return static_cast<bool>(in);
+}
+
+bool WriteVertex(std::ofstream& out, const PositionNormalMesh::Vertex& vertex) {
+  const std::array<float, 10> payload{
+      vertex.position.x,
+      vertex.position.y,
+      vertex.position.z,
+      vertex.normal.x,
+      vertex.normal.y,
+      vertex.normal.z,
+      vertex.color.r,
+      vertex.color.g,
+      vertex.color.b,
+      vertex.color.a,
+  };
+  out.write(reinterpret_cast<const char*>(payload.data()), static_cast<std::streamsize>(payload.size() * sizeof(float)));
+  return static_cast<bool>(out);
+}
+
+bool ReadVertex(std::ifstream& in, PositionNormalMesh::Vertex& vertex) {
+  std::array<float, 10> payload{};
+  in.read(reinterpret_cast<char*>(payload.data()), static_cast<std::streamsize>(payload.size() * sizeof(float)));
+  if (!in) {
+    return false;
+  }
+  vertex.position = glm::vec3{payload[0], payload[1], payload[2]};
+  vertex.normal = glm::vec3{payload[3], payload[4], payload[5]};
+  vertex.color = glm::vec4{payload[6], payload[7], payload[8], payload[9]};
+  return true;
+}
+
+bool TryLoadPreparedCpuMeshCache(
+    const std::string& assetPath,
+    const CadLodPolicy& policy,
+    PreparedCpuMeshBlob& outPrepared) {
+  const std::filesystem::path cachePath = GetPreparedCacheRoot() / (BuildPreparedCacheKey(assetPath, policy) + ".bin");
+  std::ifstream in(cachePath, std::ios::binary);
+  if (!in) {
+    return false;
+  }
+
+  std::uint32_t magic = 0;
+  std::uint32_t version = 0;
+  std::uint32_t lodCount = 0;
+  if (!ReadScalar(in, magic) || !ReadScalar(in, version) || !ReadScalar(in, lodCount)) {
+    return false;
+  }
+  if (magic != kPreparedCacheMagic || version != kPreparedCacheVersion || lodCount == 0 || lodCount > 8) {
+    return false;
+  }
+
+  std::array<float, 3> center{};
+  float radius = 1.0F;
+  in.read(reinterpret_cast<char*>(center.data()), static_cast<std::streamsize>(center.size() * sizeof(float)));
+  if (!in || !ReadScalar(in, radius)) {
+    return false;
+  }
+
+  PreparedCpuMeshBlob prepared;
+  prepared.lods.reserve(lodCount);
+  for (std::uint32_t i = 0; i < lodCount; ++i) {
+    std::uint64_t vertexCount = 0;
+    std::uint64_t indexCount = 0;
+    if (!ReadScalar(in, vertexCount) || !ReadScalar(in, indexCount)) {
+      return false;
+    }
+    if (vertexCount == 0 || vertexCount > 100000000ULL || indexCount > 300000000ULL) {
+      return false;
+    }
+
+    PreparedCpuMeshBlob::LodBlob lod;
+    lod.vertices.resize(static_cast<std::size_t>(vertexCount));
+    lod.indices.resize(static_cast<std::size_t>(indexCount));
+    for (auto& vertex : lod.vertices) {
+      if (!ReadVertex(in, vertex)) {
+        return false;
+      }
+    }
+    if (!lod.indices.empty()) {
+      in.read(
+          reinterpret_cast<char*>(lod.indices.data()),
+          static_cast<std::streamsize>(lod.indices.size() * sizeof(std::uint32_t)));
+      if (!in) {
+        return false;
+      }
+    }
+    prepared.lods.push_back(std::move(lod));
+  }
+
+  prepared.boundsCenter = glm::vec3{center[0], center[1], center[2]};
+  prepared.boundsRadius = radius;
+  outPrepared = std::move(prepared);
+  return true;
+}
+
+void StorePreparedCpuMeshCache(
+    const std::string& assetPath,
+    const CadLodPolicy& policy,
+    const PreparedCpuMeshBlob& prepared) {
+  if (prepared.lods.empty()) {
+    return;
+  }
+
+  std::error_code ec;
+  const std::filesystem::path root = GetPreparedCacheRoot();
+  std::filesystem::create_directories(root, ec);
+  if (ec) {
+    return;
+  }
+
+  const std::filesystem::path finalPath = root / (BuildPreparedCacheKey(assetPath, policy) + ".bin");
+  const std::filesystem::path tmpPath = finalPath.string() + ".tmp";
+
+  std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
+  if (!out) {
+    return;
+  }
+
+  const std::uint32_t lodCount = static_cast<std::uint32_t>(prepared.lods.size());
+  const std::array<float, 3> center{
+      prepared.boundsCenter.x,
+      prepared.boundsCenter.y,
+      prepared.boundsCenter.z,
+  };
+  if (!WriteScalar(out, kPreparedCacheMagic) ||
+      !WriteScalar(out, kPreparedCacheVersion) ||
+      !WriteScalar(out, lodCount)) {
+    return;
+  }
+  out.write(reinterpret_cast<const char*>(center.data()), static_cast<std::streamsize>(center.size() * sizeof(float)));
+  if (!out || !WriteScalar(out, prepared.boundsRadius)) {
+    return;
+  }
+
+  for (const auto& lod : prepared.lods) {
+    const std::uint64_t vertexCount = static_cast<std::uint64_t>(lod.vertices.size());
+    const std::uint64_t indexCount = static_cast<std::uint64_t>(lod.indices.size());
+    if (!WriteScalar(out, vertexCount) || !WriteScalar(out, indexCount)) {
+      return;
+    }
+    for (const auto& vertex : lod.vertices) {
+      if (!WriteVertex(out, vertex)) {
+        return;
+      }
+    }
+    if (!lod.indices.empty()) {
+      out.write(
+          reinterpret_cast<const char*>(lod.indices.data()),
+          static_cast<std::streamsize>(lod.indices.size() * sizeof(std::uint32_t)));
+      if (!out) {
+        return;
+      }
+    }
+  }
+  out.flush();
+  out.close();
+
+  std::filesystem::remove(finalPath, ec);
+  ec.clear();
+  std::filesystem::rename(tmpPath, finalPath, ec);
+  if (ec) {
+    std::filesystem::remove(tmpPath, ec);
+  }
 }
 
 struct VertexKey {
@@ -170,32 +478,62 @@ struct IndexedMesh {
   std::vector<std::uint32_t> indices;
 };
 
-struct BoundsInfo {
-  glm::vec3 center{0.0F, 0.0F, 0.0F};
-  float radius = 1.0F;
-};
-
-BoundsInfo ComputeBounds(const std::vector<PositionNormalMesh::Vertex>& vertices) {
-  BoundsInfo bounds;
+glm::vec3 ComputeTrimmedBoundsCenterXY(const std::vector<PositionNormalMesh::Vertex>& vertices) {
   if (vertices.empty()) {
-    return bounds;
+    return glm::vec3{0.0F, 0.0F, 0.0F};
   }
 
-  glm::vec3 minV = vertices.front().position;
-  glm::vec3 maxV = vertices.front().position;
-  for (const auto& vertex : vertices) {
-    minV = glm::min(minV, vertex.position);
-    maxV = glm::max(maxV, vertex.position);
+  std::size_t sampleCount = vertices.size();
+  std::size_t stride = 1;
+  constexpr std::size_t kMaxSamples = 500000;
+  if (sampleCount > kMaxSamples) {
+    stride = (sampleCount + kMaxSamples - 1) / kMaxSamples;
+    sampleCount = (vertices.size() + stride - 1) / stride;
   }
-  bounds.center = (minV + maxV) * 0.5F;
 
+  std::vector<float> xs;
+  std::vector<float> ys;
+  xs.reserve(sampleCount);
+  ys.reserve(sampleCount);
+  float minZ = std::numeric_limits<float>::max();
+  float maxZ = std::numeric_limits<float>::lowest();
+  for (std::size_t i = 0; i < vertices.size(); i += stride) {
+    const glm::vec3& p = vertices[i].position;
+    xs.push_back(p.x);
+    ys.push_back(p.y);
+    minZ = std::min(minZ, p.z);
+    maxZ = std::max(maxZ, p.z);
+  }
+  if (xs.empty() || ys.empty()) {
+    return glm::vec3{0.0F, 0.0F, 0.0F};
+  }
+
+  std::sort(xs.begin(), xs.end());
+  std::sort(ys.begin(), ys.end());
+  const auto quantile = [](const std::vector<float>& sorted, const float q) -> float {
+    const std::size_t idx = static_cast<std::size_t>(q * static_cast<float>(sorted.size() - 1));
+    return sorted[idx];
+  };
+
+  const float xLo = quantile(xs, 0.01F);
+  const float xHi = quantile(xs, 0.99F);
+  const float yLo = quantile(ys, 0.01F);
+  const float yHi = quantile(ys, 0.99F);
+  return glm::vec3{(xLo + xHi) * 0.5F, (yLo + yHi) * 0.5F, (minZ + maxZ) * 0.5F};
+}
+
+float ComputeRadiusFromCenter(
+    const std::vector<PositionNormalMesh::Vertex>& vertices,
+    const glm::vec3& center) {
+  if (vertices.empty()) {
+    return 1.0F;
+  }
   float radiusSq = 0.0F;
   for (const auto& vertex : vertices) {
-    const glm::vec3 delta = vertex.position - bounds.center;
+    const glm::vec3 delta = vertex.position - center;
     radiusSq = std::max(radiusSq, glm::dot(delta, delta));
   }
-  bounds.radius = std::max(std::sqrt(radiusSq), 1e-3F);
-  return bounds;
+  return std::max(std::sqrt(radiusSq), 1e-3F);
 }
 
 IndexedMesh BuildIndexedMesh(const PositionNormalMesh& mesh) {
@@ -323,13 +661,22 @@ struct ClusterAccum {
   glm::vec3 positionSum{0.0F, 0.0F, 0.0F};
   glm::vec3 normalSum{0.0F, 0.0F, 0.0F};
   glm::vec4 colorSum{0.0F, 0.0F, 0.0F, 0.0F};
+  glm::vec3 representativePosition{0.0F, 0.0F, 0.0F};
+  glm::vec3 representativeNormal{0.0F, 0.0F, 1.0F};
+  glm::vec4 representativeColor{1.0F, 1.0F, 1.0F, 1.0F};
+  bool hasRepresentative = false;
   std::uint32_t count = 0;
 };
 
-IndexedMesh SimplifyByVertexClustering(const IndexedMesh& source, const std::size_t targetVertices) {
-  if (source.vertices.empty() || source.indices.empty() || targetVertices < 3 ||
-      source.vertices.size() <= targetVertices) {
-    return source;
+IndexedMesh BuildClusteredMesh(
+    const IndexedMesh& source,
+    const int cellResolution,
+    const int normalBins,
+    const bool keepRepresentativePosition,
+    const bool preserveFlatShading) {
+  IndexedMesh out;
+  if (source.vertices.empty() || source.indices.empty() || cellResolution < 2 || normalBins < 2) {
+    return out;
   }
 
   glm::vec3 minV = source.vertices.front().position;
@@ -344,15 +691,11 @@ IndexedMesh SimplifyByVertexClustering(const IndexedMesh& source, const std::siz
   extent.y = std::max(extent.y, 1e-6F);
   extent.z = std::max(extent.z, 1e-6F);
 
-  const float targetCube = std::cbrt(static_cast<float>(targetVertices));
-  const int cellResolution = std::clamp(static_cast<int>(std::ceil(targetCube * 1.3F)), 8, 640);
-  const int normalBins = 8;
-
   std::unordered_map<ClusterKey, std::uint32_t, ClusterKeyHash> clusterIndex;
-  clusterIndex.reserve(targetVertices * 2);
+  clusterIndex.reserve(source.vertices.size() / 3);
 
   std::vector<ClusterAccum> accumulators;
-  accumulators.reserve(targetVertices);
+  accumulators.reserve(source.vertices.size() / 3);
   std::vector<std::uint32_t> oldToCluster(source.vertices.size(), std::numeric_limits<std::uint32_t>::max());
 
   for (std::size_t i = 0; i < source.vertices.size(); ++i) {
@@ -365,13 +708,19 @@ IndexedMesh SimplifyByVertexClustering(const IndexedMesh& source, const std::siz
     }
 
     const glm::vec3 normalized = (vertex.position - minV) / extent;
-    auto q = [&](const float value) -> int {
+    const auto q = [&](const float value) -> int {
       const float clamped = std::clamp(value, 0.0F, 1.0F);
-      return std::clamp(static_cast<int>(std::lround(clamped * static_cast<float>(cellResolution - 1))), 0, cellResolution - 1);
+      return std::clamp(
+          static_cast<int>(std::lround(clamped * static_cast<float>(cellResolution - 1))),
+          0,
+          cellResolution - 1);
     };
-    auto qn = [&](const float value) -> int {
+    const auto qn = [&](const float value) -> int {
       const float clamped = std::clamp(value * 0.5F + 0.5F, 0.0F, 1.0F);
-      return std::clamp(static_cast<int>(std::lround(clamped * static_cast<float>(normalBins - 1))), 0, normalBins - 1);
+      return std::clamp(
+          static_cast<int>(std::lround(clamped * static_cast<float>(normalBins - 1))),
+          0,
+          normalBins - 1);
     };
 
     const ClusterKey key{
@@ -397,25 +746,35 @@ IndexedMesh SimplifyByVertexClustering(const IndexedMesh& source, const std::siz
     accum.positionSum += vertex.position;
     accum.normalSum += n;
     accum.colorSum += vertex.color;
+    if (!accum.hasRepresentative) {
+      accum.representativePosition = vertex.position;
+      accum.representativeNormal = n;
+      accum.representativeColor = vertex.color;
+      accum.hasRepresentative = true;
+    }
     accum.count += 1;
     oldToCluster[i] = clusterId;
   }
 
-  IndexedMesh out;
   out.vertices.reserve(accumulators.size());
   out.indices.reserve(source.indices.size());
 
   for (const auto& accum : accumulators) {
     const float inv = accum.count > 0 ? 1.0F / static_cast<float>(accum.count) : 1.0F;
     PositionNormalMesh::Vertex vertex;
-    vertex.position = accum.positionSum * inv;
-    const glm::vec3 averagedNormal = accum.normalSum * inv;
-    if (glm::dot(averagedNormal, averagedNormal) > 1e-10F) {
-      vertex.normal = glm::normalize(averagedNormal);
+    vertex.position = keepRepresentativePosition ? accum.representativePosition : (accum.positionSum * inv);
+    if (preserveFlatShading) {
+      vertex.normal = glm::normalize(accum.representativeNormal);
+      vertex.color = accum.representativeColor;
     } else {
-      vertex.normal = glm::vec3{0.0F, 0.0F, 1.0F};
+      const glm::vec3 averagedNormal = accum.normalSum * inv;
+      if (glm::dot(averagedNormal, averagedNormal) > 1e-10F) {
+        vertex.normal = glm::normalize(averagedNormal);
+      } else {
+        vertex.normal = glm::vec3{0.0F, 0.0F, 1.0F};
+      }
+      vertex.color = accum.colorSum * inv;
     }
-    vertex.color = accum.colorSum * inv;
     out.vertices.push_back(vertex);
   }
 
@@ -430,6 +789,39 @@ IndexedMesh SimplifyByVertexClustering(const IndexedMesh& source, const std::siz
   return out;
 }
 
+IndexedMesh SimplifyByVertexClustering(
+    const IndexedMesh& source,
+    const std::size_t targetVertices,
+    const int normalBins,
+    const bool preserveFlatShading) {
+  if (source.vertices.empty() || source.indices.empty() || targetVertices < 3 ||
+      source.vertices.size() <= targetVertices) {
+    return source;
+  }
+  const float targetCube = std::cbrt(static_cast<float>(targetVertices));
+  int cellResolution = std::clamp(static_cast<int>(std::ceil(targetCube * 1.95F)), 12, 1536);
+  IndexedMesh result = BuildClusteredMesh(source, cellResolution, normalBins, true, preserveFlatShading);
+  if (result.vertices.empty() || result.indices.empty()) {
+    return source;
+  }
+
+  const float tooSmallThreshold = 0.80F;
+  if (result.vertices.size() < static_cast<std::size_t>(static_cast<float>(targetVertices) * tooSmallThreshold) &&
+      result.vertices.size() > 0) {
+    const float scale = std::cbrt(static_cast<float>(targetVertices) / static_cast<float>(result.vertices.size()));
+    const int refinedResolution = std::clamp(
+        static_cast<int>(std::ceil(static_cast<float>(cellResolution) * scale * 1.10F)),
+        cellResolution + 1,
+        2048);
+    IndexedMesh refined = BuildClusteredMesh(source, refinedResolution, normalBins, true, preserveFlatShading);
+    if (!refined.vertices.empty() && !refined.indices.empty() &&
+        refined.vertices.size() > result.vertices.size()) {
+      result = std::move(refined);
+    }
+  }
+  return result;
+}
+
 std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const CadLodPolicy& policy) {
   std::vector<IndexedMesh> lods;
   if (baseMesh.vertices.empty() || baseMesh.indices.empty()) {
@@ -440,7 +832,7 @@ std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const CadLod
 
   IndexedMesh lod0 = baseMesh;
   if (!policy.keepOriginalLod0 && lod0.vertices.size() > policy.lod0VertexCap) {
-    lod0 = SimplifyByVertexClustering(baseMesh, policy.lod0VertexCap);
+    lod0 = SimplifyByVertexClustering(baseMesh, policy.lod0VertexCap, policy.normalBins, policy.preserveFlatShading);
   }
   if (lod0.vertices.empty() || lod0.indices.empty()) {
     lod0 = baseMesh;
@@ -459,7 +851,7 @@ std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const CadLod
       break;
     }
 
-    IndexedMesh next = SimplifyByVertexClustering(previous, targetVertices);
+    IndexedMesh next = SimplifyByVertexClustering(previous, targetVertices, policy.normalBins, policy.preserveFlatShading);
     if (next.vertices.empty() || next.indices.empty()) {
       break;
     }
@@ -769,7 +1161,8 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
     return prepared;
   }
 
-  const BoundsInfo bounds = ComputeBounds(indexed.vertices);
+  const glm::vec3 center = ComputeTrimmedBoundsCenterXY(indexed.vertices);
+  const float radius = ComputeRadiusFromCenter(indexed.vertices, center);
   std::vector<IndexedMesh> lodMeshes = BuildLodChain(indexed, lodPolicy);
   prepared.lods.reserve(lodMeshes.size());
   for (auto& lod : lodMeshes) {
@@ -782,8 +1175,8 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
     prepared.lods.push_back(std::move(outLod));
   }
 
-  prepared.boundsCenter = bounds.center;
-  prepared.boundsRadius = bounds.radius;
+  prepared.boundsCenter = center;
+  prepared.boundsRadius = radius;
   return prepared;
 }
 
@@ -945,11 +1338,43 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
       assetPath,
       PendingLoad{
           std::async(std::launch::async, [provider, assetPath]() {
+            const CadLodPolicy& policy = LoadCadLodPolicy();
+            PreparedCpuMeshBlob cachedBlob;
+            if (TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob)) {
+              PreparedCpuMesh prepared;
+              prepared.boundsCenter = cachedBlob.boundsCenter;
+              prepared.boundsRadius = cachedBlob.boundsRadius;
+              prepared.lods.reserve(cachedBlob.lods.size());
+              for (auto& cachedLod : cachedBlob.lods) {
+                PreparedCpuMesh::LodCpu lod;
+                lod.vertices = std::move(cachedLod.vertices);
+                lod.indices = std::move(cachedLod.indices);
+                prepared.lods.push_back(std::move(lod));
+              }
+              std::cerr << "CAD prepared cache hit: " << assetPath << "\n";
+              return prepared;
+            }
+            std::cerr << "CAD prepared cache miss: " << assetPath << "\n";
+
             PositionNormalMesh cpu;
             if (provider == nullptr || !provider->GetCadMesh(assetPath, cpu)) {
               return PreparedCpuMesh{};
             }
-            return PrepareCpuMesh(cpu);
+            PreparedCpuMesh prepared = PrepareCpuMesh(cpu);
+            if (!prepared.lods.empty()) {
+              PreparedCpuMeshBlob blob;
+              blob.boundsCenter = prepared.boundsCenter;
+              blob.boundsRadius = prepared.boundsRadius;
+              blob.lods.reserve(prepared.lods.size());
+              for (const auto& lod : prepared.lods) {
+                PreparedCpuMeshBlob::LodBlob cachedLod;
+                cachedLod.vertices = lod.vertices;
+                cachedLod.indices = lod.indices;
+                blob.lods.push_back(std::move(cachedLod));
+              }
+              StorePreparedCpuMeshCache(assetPath, policy, blob);
+            }
+            return prepared;
           })});
   std::cerr << "CAD loading started: " << assetPath << "\n";
   return nullptr;
