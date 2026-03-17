@@ -13,8 +13,6 @@
 
 #include <glm/common.hpp>
 
-#include "repulsor3d/MathUtil.hpp"
-
 namespace repulsor3d {
 
 ViewerApp::ViewerApp(const ViewerConfig& cfg, std::unique_ptr<ISnapshotSource> source)
@@ -25,8 +23,11 @@ ViewerApp::ViewerApp(const ViewerConfig& cfg, std::unique_ptr<ISnapshotSource> s
               cfg.cameraPitchDeg,
               glm::vec3{cfg.fieldLengthM * 0.5F, cfg.fieldWidthM * 0.5F, 0.0F}),
       renderer_(cfg),
-      fieldTarget_{cfg.fieldLengthM * 0.5F, cfg.fieldWidthM * 0.5F, 0.0F},
-      followTarget_(fieldTarget_) {
+      inputActions_(InputActionMap::CreateDefault()),
+      followController_(glm::vec3{cfg.fieldLengthM * 0.5F, cfg.fieldWidthM * 0.5F, 0.0F}),
+      domainAdapter_(cfg),
+      fixedTicker_(1.0 / std::max(1, cfg.fps)),
+      fieldTarget_{cfg.fieldLengthM * 0.5F, cfg.fieldWidthM * 0.5F, 0.0F} {
   renderer_.showCameraDebug = cfg.showCameraDebug;
   renderer_.showTruthFuel = cfg.showTruthFuel;
   renderer_.showAgeFilteredFuel = cfg.showAgeFilteredFuel;
@@ -99,24 +100,17 @@ int ViewerApp::Run() {
       *source_, static_cast<double>(cfg_.fps) * 2.0, truth_ != nullptr ? truth_.get() : nullptr);
   worker_->Start();
 
-  auto last = std::chrono::steady_clock::now();
-  double accumulator = 0.0;
-  const double fixedDt = 1.0 / std::max(1, cfg_.fps);
-
-  auto lastTitleUpdate = std::chrono::steady_clock::now();
+  auto last = timeSource_.Now();
+  auto lastTitleUpdate = timeSource_.Now();
 
   while (!glfwWindowShouldClose(window_)) {
     glfwPollEvents();
 
-    const auto now = std::chrono::steady_clock::now();
+    const auto now = timeSource_.Now();
     const double frameDt = std::chrono::duration_cast<std::chrono::duration<double>>(now - last).count();
     last = now;
 
-    accumulator = std::min(0.5, accumulator + frameDt);
-    while (accumulator >= fixedDt) {
-      Tick(fixedDt);
-      accumulator -= fixedDt;
-    }
+    fixedTicker_.Advance(frameDt, [this](const double dt) { Tick(dt); });
 
     int width = 0;
     int height = 0;
@@ -142,57 +136,11 @@ int ViewerApp::Run() {
 
 void ViewerApp::Tick(const double dt) {
   latest_ = worker_->Latest();
-  renderSnapshot_ = latest_.snapshot;
-
-  if (renderSnapshot_.has_value() && renderSnapshot_->pose.has_value()) {
-    const double px = renderSnapshot_->pose->x;
-    const double py = renderSnapshot_->pose->y;
-    const double ph = renderSnapshot_->pose->thetaRad;
-
-    if (!robotX_.has_value() || !robotY_.has_value() || !robotH_.has_value()) {
-      robotX_ = px;
-      robotY_ = py;
-      robotH_ = ph;
-      robotVx_ = 0.0;
-      robotVy_ = 0.0;
-      robotVh_ = 0.0;
-    } else {
-      std::tie(*robotX_, robotVx_) =
-          SmoothDamp(*robotX_, px, robotVx_, static_cast<double>(cfg_.robotSmoothTimeS), dt,
-                     static_cast<double>(cfg_.robotMaxSpeedMps));
-      std::tie(*robotY_, robotVy_) =
-          SmoothDamp(*robotY_, py, robotVy_, static_cast<double>(cfg_.robotSmoothTimeS), dt,
-                     static_cast<double>(cfg_.robotMaxSpeedMps));
-      std::tie(*robotH_, robotVh_) = SmoothDampAngle(*robotH_, ph, robotVh_, static_cast<double>(cfg_.robotSmoothTimeS),
-                                                     dt, 50.0);
-    }
-
-    Pose2D smoothed = renderSnapshot_->pose.value();
-    smoothed.x = *robotX_;
-    smoothed.y = *robotY_;
-    smoothed.thetaRad = *robotH_;
-    renderSnapshot_->pose = smoothed;
-  }
+  renderSnapshot_ = domainAdapter_.BuildRenderSnapshot(latest_, dt);
 
   if (cfg_.followRobot && renderSnapshot_.has_value() && renderSnapshot_->pose.has_value()) {
-    const glm::vec3 desired{static_cast<float>(renderSnapshot_->pose->x),
-                            static_cast<float>(renderSnapshot_->pose->y), 0.0F};
-
-    const auto [nx, vx] =
-        SmoothDamp(followTarget_.x, desired.x, followVel_.x, cfg_.followSmoothTimeS, dt, cfg_.followMaxSpeedMps);
-    const auto [ny, vy] =
-        SmoothDamp(followTarget_.y, desired.y, followVel_.y, cfg_.followSmoothTimeS, dt, cfg_.followMaxSpeedMps);
-    const auto [nz, vz] =
-        SmoothDamp(followTarget_.z, desired.z, followVel_.z, cfg_.followSmoothTimeS, dt, cfg_.followMaxSpeedMps);
-
-    followTarget_.x = static_cast<float>(nx);
-    followTarget_.y = static_cast<float>(ny);
-    followTarget_.z = static_cast<float>(nz);
-    followVel_.x = static_cast<float>(vx);
-    followVel_.y = static_cast<float>(vy);
-    followVel_.z = static_cast<float>(vz);
-
-    camera_.target = followTarget_;
+    const glm::vec3 desired = domainAdapter_.ComputeDesiredFollowTarget(*renderSnapshot_, fieldTarget_);
+    followController_.Update(camera_, desired, dt, cfg_.followSmoothTimeS, cfg_.followMaxSpeedMps);
   }
 }
 
@@ -205,28 +153,15 @@ void ViewerApp::Draw() {
 }
 
 void ViewerApp::OnMouseButton(const int button, const int action) {
-  if (button == GLFW_MOUSE_BUTTON_LEFT) {
-    dragging_ = (action == GLFW_PRESS);
-  }
+  orbitController_.OnMouseButton(button, action);
 }
 
 void ViewerApp::OnMouseMove(const double x, const double y) {
-  if (dragging_) {
-    const double dx = x - lastMouseX_;
-    const double dy = y - lastMouseY_;
-
-    camera_.yawDeg = std::fmod(camera_.yawDeg + static_cast<float>(dx) * 0.35F, 360.0F);
-    camera_.pitchDeg = glm::clamp(camera_.pitchDeg + static_cast<float>(dy) * 0.35F, -89.0F, 89.0F);
-  }
-
-  lastMouseX_ = x;
-  lastMouseY_ = y;
+  orbitController_.OnMouseMove(x, y, camera_);
 }
 
 void ViewerApp::OnScroll(const double yOffset) {
-  const float s = 1.0F - static_cast<float>(yOffset) * 0.08F;
-  const float d = camera_.distance * s;
-  camera_.distance = glm::clamp(d, 1.5F, 80.0F);
+  orbitController_.OnScroll(yOffset, camera_);
 }
 
 void ViewerApp::OnKey(const int key, const int action) {
@@ -234,36 +169,30 @@ void ViewerApp::OnKey(const int key, const int action) {
     return;
   }
 
-  switch (key) {
-    case GLFW_KEY_ESCAPE:
+  switch (inputActions_.ResolveKey(key)) {
+    case InputAction::kQuit:
       glfwSetWindowShouldClose(window_, GLFW_TRUE);
       break;
-    case GLFW_KEY_R:
+    case InputAction::kResetCamera:
       camera_.target = fieldTarget_;
-      followTarget_ = fieldTarget_;
-      followVel_ = glm::vec3{0.0F, 0.0F, 0.0F};
-
-      robotX_.reset();
-      robotY_.reset();
-      robotH_.reset();
-      robotVx_ = 0.0;
-      robotVy_ = 0.0;
-      robotVh_ = 0.0;
+      followController_.Reset(fieldTarget_);
+      domainAdapter_.Reset();
+      orbitController_.Reset();
 
       camera_.distance = cfg_.cameraDistanceM;
       camera_.pitchDeg = cfg_.cameraPitchDeg;
       camera_.yawDeg = cfg_.cameraYawDeg;
       break;
-    case GLFW_KEY_C:
+    case InputAction::kToggleCameraDebug:
       renderer_.showCameraDebug = !renderer_.showCameraDebug;
       break;
-    case GLFW_KEY_T:
+    case InputAction::kToggleTruthFuel:
       renderer_.showTruthFuel = !renderer_.showTruthFuel;
       break;
-    case GLFW_KEY_A:
+    case InputAction::kToggleAgeFilter:
       renderer_.showAgeFilteredFuel = !renderer_.showAgeFilteredFuel;
       break;
-    case GLFW_KEY_F:
+    case InputAction::kToggleFieldImage:
       renderer_.showFieldImage = !renderer_.showFieldImage;
       break;
     default:

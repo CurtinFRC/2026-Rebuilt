@@ -117,6 +117,7 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.followRobot = GetEnvBool("FOLLOW_ROBOT", cfg.followRobot);
   cfg.showCameraDebug = GetEnvBool("SHOW_CAMERA_DEBUG", cfg.showCameraDebug);
   cfg.showTruthFuel = GetEnvBool("SHOW_TRUTH_FUEL", cfg.showTruthFuel);
+  cfg.showDiagnostics = GetEnvBool("SHOW_DIAGNOSTICS", cfg.showDiagnostics);
 
   cfg.followSmoothTimeS = GetEnvFloat("FOLLOW_SMOOTH_TIME_S", cfg.followSmoothTimeS);
   cfg.followMaxSpeedMps = GetEnvFloat("FOLLOW_MAX_SPEED_MPS", cfg.followMaxSpeedMps);

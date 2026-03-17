@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "repulsor3d/render/RenderFeature.hpp"
 
 namespace repulsor3d {
@@ -7,6 +9,8 @@ namespace repulsor3d {
 // Copy this template to quickly create a new render module/pipeline stage.
 class GenericRenderFeatureTemplate final : public IRenderFeature {
  public:
+  std::string Name() const override { return "generic_template_feature"; }
+
   bool Initialize(Renderer& /*renderer*/) override {
     // Allocate GPU resources here (meshes, shaders, textures).
     return true;

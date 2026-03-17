@@ -1,6 +1,9 @@
 #include "repulsor3d/render/RenderFeature.hpp"
 
 #include <memory>
+#include <string>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 #include "repulsor3d/Renderer.hpp"
@@ -11,38 +14,85 @@ namespace {
 
 class WorldRenderFeature final : public IRenderFeature {
  public:
+  std::string Name() const override { return "world"; }
+
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
-    if (context.frame.drawGrid) {
-      drawApi.DrawGrid(context.viewProjection);
-    }
-    if (context.frame.drawFieldImage) {
-      drawApi.DrawFieldImage(context.viewProjection);
-    }
-    if (context.frame.drawAxes) {
-      drawApi.DrawAxes(context.viewProjection);
+    for (const auto& command : context.commandBuffer) {
+      std::visit(
+          [&](const auto& typed) {
+            using T = std::decay_t<decltype(typed)>;
+            if constexpr (std::is_same_v<T, DrawGridCommand>) {
+              if (typed.enabled) {
+                drawApi.DrawGrid(context.viewProjection);
+              }
+            } else if constexpr (std::is_same_v<T, DrawFieldImageCommand>) {
+              if (typed.enabled) {
+                drawApi.DrawFieldImage(context.viewProjection);
+              }
+            } else if constexpr (std::is_same_v<T, DrawAxesCommand>) {
+              if (typed.enabled) {
+                drawApi.DrawAxes(context.viewProjection);
+              }
+            }
+          },
+          command);
     }
   }
 };
 
 class PrimitiveRenderFeature final : public IRenderFeature {
  public:
+  std::string Name() const override { return "primitives"; }
+  std::vector<std::string> Dependencies() const override { return {"world"}; }
+
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
-    for (const auto& sphere : context.frame.spheres) {
-      drawApi.DrawSphere(context.viewProjection, sphere);
+    std::vector<LinePrimitive> lines;
+    for (const auto& command : context.commandBuffer) {
+      std::visit(
+          [&](const auto& typed) {
+            using T = std::decay_t<decltype(typed)>;
+            if constexpr (std::is_same_v<T, DrawSphereCommand>) {
+              drawApi.DrawSphere(context.viewProjection, typed.primitive);
+            } else if constexpr (std::is_same_v<T, DrawBoxCommand>) {
+              drawApi.DrawBox(context.viewProjection, typed.primitive);
+            } else if constexpr (std::is_same_v<T, DrawLineCommand>) {
+              lines.push_back(typed.primitive);
+            }
+          },
+          command);
     }
-
-    for (const auto& box : context.frame.boxes) {
-      drawApi.DrawBox(context.viewProjection, box);
-    }
-
-    drawApi.DrawLines(context.viewProjection, context.frame.lines);
+    drawApi.DrawLines(context.viewProjection, lines);
   }
 };
 
 class OverlayRenderFeature final : public IRenderFeature {
  public:
+  std::string Name() const override { return "overlay"; }
+  std::vector<std::string> Dependencies() const override { return {"primitives", "cad_models"}; }
+
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
-    drawApi.DrawOverlay(context.viewportWidth, context.viewportHeight, context.frame.overlayLines);
+    std::vector<OverlayLine> lines;
+    lines.reserve(context.frame.overlayLines.size() + 8);
+
+    for (const auto& command : context.commandBuffer) {
+      std::visit(
+          [&](const auto& typed) {
+            using T = std::decay_t<decltype(typed)>;
+            if constexpr (std::is_same_v<T, DrawOverlayCommand>) {
+              lines.push_back(typed.line);
+            }
+          },
+          command);
+    }
+
+    if (context.diagnostics != nullptr) {
+      lines.push_back({"Frame ms: " + std::to_string(context.diagnostics->frameMilliseconds)});
+      for (const auto& feature : context.diagnostics->featureTimings) {
+        lines.push_back({"[" + feature.name + "] " + std::to_string(feature.milliseconds) + " ms"});
+      }
+    }
+
+    drawApi.DrawOverlay(context.viewportWidth, context.viewportHeight, lines);
   }
 };
 

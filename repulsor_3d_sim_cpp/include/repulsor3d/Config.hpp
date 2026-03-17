@@ -60,6 +60,7 @@ struct ViewerConfig {
   bool followRobot = true;
   bool showCameraDebug = true;
   bool showTruthFuel = true;
+  bool showDiagnostics = true;
 
   float followSmoothTimeS = 0.18F;
   float followMaxSpeedMps = 12.0F;

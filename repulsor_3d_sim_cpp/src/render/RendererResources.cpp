@@ -5,16 +5,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <array>
-#include <cmath>
 #include <cstddef>
-#include <filesystem>
 #include <iostream>
 
 namespace repulsor3d {
 namespace {
-
-constexpr float kPi = 3.14159265358979323846F;
 
 template <typename TVertex>
 bool UploadMesh(
@@ -173,60 +168,35 @@ void main() {
 
 bool Renderer::CreateMeshes() {
   {
-    const std::vector<VertexP> cubeVerts = {
-        {{-0.5F, -0.5F, -0.5F}}, {{0.5F, -0.5F, -0.5F}}, {{0.5F, 0.5F, -0.5F}}, {{-0.5F, 0.5F, -0.5F}},
-        {{-0.5F, -0.5F, 0.5F}},  {{0.5F, -0.5F, 0.5F}},  {{0.5F, 0.5F, 0.5F}},  {{-0.5F, 0.5F, 0.5F}},
-    };
-    const std::vector<uint32_t> cubeIdx = {
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4,
-        0, 4, 7, 7, 3, 0,
-        1, 5, 6, 6, 2, 1,
-        3, 2, 6, 6, 7, 3,
-        0, 1, 5, 5, 4, 0,
-    };
-    if (!UploadMesh(cubeVerts, cubeIdx, cubeMesh_.vao, cubeMesh_.vbo, cubeMesh_.ebo, cubeMesh_.indexCount)) {
+    const auto& cubeMeshData = geometryProvider_->GetUnitCubeMesh();
+    std::vector<VertexP> cubeVerts;
+    cubeVerts.reserve(cubeMeshData.positions.size());
+    for (const auto& p : cubeMeshData.positions) {
+      cubeVerts.push_back({p});
+    }
+
+    if (!UploadMesh(
+            cubeVerts,
+            cubeMeshData.indices,
+            cubeMesh_.vao,
+            cubeMesh_.vbo,
+            cubeMesh_.ebo,
+            cubeMesh_.indexCount)) {
       return false;
     }
   }
 
   {
+    const auto& sphereMeshData = geometryProvider_->GetUnitSphereMesh();
     std::vector<VertexP> sphereVerts;
-    std::vector<uint32_t> sphereIdx;
-
-    constexpr int segments = 24;
-    constexpr int rings = 16;
-
-    for (int r = 0; r <= rings; ++r) {
-      const float v = static_cast<float>(r) / static_cast<float>(rings);
-      const float phi = v * kPi;
-      const float sp = std::sin(phi);
-      const float cp = std::cos(phi);
-      for (int s = 0; s <= segments; ++s) {
-        const float u = static_cast<float>(s) / static_cast<float>(segments);
-        const float theta = u * (2.0F * kPi);
-        const float ct = std::cos(theta);
-        const float st = std::sin(theta);
-        sphereVerts.push_back({{sp * ct, sp * st, cp}});
-      }
-    }
-
-    const int stride = segments + 1;
-    for (int r = 0; r < rings; ++r) {
-      const int base0 = r * stride;
-      const int base1 = (r + 1) * stride;
-      for (int s = 0; s < segments; ++s) {
-        const uint32_t a = static_cast<uint32_t>(base0 + s);
-        const uint32_t b = static_cast<uint32_t>(base1 + s);
-        const uint32_t c = static_cast<uint32_t>(base1 + s + 1);
-        const uint32_t d = static_cast<uint32_t>(base0 + s + 1);
-        sphereIdx.insert(sphereIdx.end(), {a, b, c, a, c, d});
-      }
+    sphereVerts.reserve(sphereMeshData.positions.size());
+    for (const auto& p : sphereMeshData.positions) {
+      sphereVerts.push_back({p});
     }
 
     if (!UploadMesh(
             sphereVerts,
-            sphereIdx,
+            sphereMeshData.indices,
             sphereMesh_.vao,
             sphereMesh_.vbo,
             sphereMesh_.ebo,
@@ -236,16 +206,16 @@ bool Renderer::CreateMeshes() {
   }
 
   {
-    const std::vector<VertexPT> quadVerts = {
-        {{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F}},
-        {{1.0F, 0.0F, 0.0F}, {1.0F, 0.0F}},
-        {{1.0F, 1.0F, 0.0F}, {1.0F, 1.0F}},
-        {{0.0F, 1.0F, 0.0F}, {0.0F, 1.0F}},
-    };
-    const std::vector<uint32_t> quadIdx = {0, 1, 2, 2, 3, 0};
+    const auto& quadMeshData = geometryProvider_->GetUnitQuadUvMesh();
+    std::vector<VertexPT> quadVerts;
+    quadVerts.reserve(quadMeshData.positions.size());
+    for (size_t i = 0; i < quadMeshData.positions.size(); ++i) {
+      quadVerts.push_back({quadMeshData.positions[i], quadMeshData.uvs[i]});
+    }
+
     if (!UploadMesh(
             quadVerts,
-            quadIdx,
+            quadMeshData.indices,
             quadMesh_.vao,
             quadMesh_.vbo,
             quadMesh_.ebo,
@@ -264,23 +234,7 @@ bool Renderer::CreateFieldTexture() {
     return false;
   }
 
-  namespace fs = std::filesystem;
-  std::vector<fs::path> candidates;
-  candidates.emplace_back(cfg_.fieldImagePath);
-
-  const fs::path cwd = fs::current_path();
-  candidates.emplace_back(cwd / cfg_.fieldImagePath);
-  candidates.emplace_back(cwd / "repulsor_3d_sim" / cfg_.fieldImagePath);
-  candidates.emplace_back(cwd / "repulsor_3d_sim_cpp" / cfg_.fieldImagePath);
-
-  fs::path resolved;
-  for (const auto& candidate : candidates) {
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      resolved = candidate;
-      break;
-    }
-  }
-
+  const std::string resolved = assetResolver_->ResolveFilePath(cfg_.fieldImagePath);
   if (resolved.empty()) {
     return false;
   }
@@ -289,8 +243,7 @@ bool Renderer::CreateFieldTexture() {
   int width = 0;
   int height = 0;
   int channels = 0;
-  const std::string texturePath = resolved.string();
-  unsigned char* pixels = stbi_load(texturePath.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+  unsigned char* pixels = stbi_load(resolved.c_str(), &width, &height, &channels, STBI_rgb_alpha);
   if (pixels == nullptr) {
     return false;
   }

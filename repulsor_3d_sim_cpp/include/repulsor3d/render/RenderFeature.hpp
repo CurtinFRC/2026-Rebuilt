@@ -1,10 +1,13 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
 
+#include "repulsor3d/Diagnostics.hpp"
+#include "repulsor3d/render/RenderCommandBuffer.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
 
 namespace repulsor3d {
@@ -16,6 +19,8 @@ struct RenderFeatureContext {
   int viewportWidth = 1;
   int viewportHeight = 1;
   const RenderSceneFrame& frame;
+  const RenderCommandBuffer& commandBuffer;
+  const DiagnosticsSnapshot* diagnostics = nullptr;
 };
 
 struct RendererDrawApi {
@@ -38,6 +43,9 @@ struct RendererDrawApi {
 class IRenderFeature {
  public:
   virtual ~IRenderFeature() = default;
+
+  virtual std::string Name() const = 0;
+  virtual std::vector<std::string> Dependencies() const { return {}; }
 
   virtual bool Initialize(Renderer& /*renderer*/) { return true; }
   virtual void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) = 0;

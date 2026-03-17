@@ -12,8 +12,12 @@
 
 #include "repulsor3d/Camera.hpp"
 #include "repulsor3d/Config.hpp"
+#include "repulsor3d/Diagnostics.hpp"
 #include "repulsor3d/Model.hpp"
 #include "repulsor3d/render/RenderFeature.hpp"
+#include "repulsor3d/render/assets/SceneAssetResolver.hpp"
+#include "repulsor3d/render/backend/RenderBackend.hpp"
+#include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
 #include "repulsor3d/render/SceneModelBuilder.hpp"
 
@@ -35,6 +39,10 @@ class Renderer {
 
   void SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder);
   void SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures);
+  IRenderBackend& GetRenderBackend();
+  IGeometryProvider& GetGeometryProvider();
+  ISceneAssetResolver& GetAssetResolver();
+  const DiagnosticsSnapshot& LatestDiagnostics() const;
 
   bool showCameraDebug = true;
   bool showTruthFuel = true;
@@ -100,6 +108,10 @@ class Renderer {
 
   std::unique_ptr<ISceneModelBuilder> sceneBuilder_;
   std::vector<std::unique_ptr<IRenderFeature>> renderFeatures_;
+  std::unique_ptr<IRenderBackend> backend_;
+  std::unique_ptr<ISceneAssetResolver> assetResolver_;
+  std::unique_ptr<IGeometryProvider> geometryProvider_;
+  DiagnosticsService diagnostics_;
 
   Shader solidShader_;
   Shader lineShader_;

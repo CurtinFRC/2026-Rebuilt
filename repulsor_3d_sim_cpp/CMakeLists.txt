@@ -69,15 +69,28 @@ find_package(OpenGL REQUIRED)
 set(REPULSOR_SIM_SOURCES
   src/main.cpp
   src/Config.cpp
+  src/ConfigValidation.cpp
+  src/Diagnostics.cpp
   src/TruthSocketReceiver.cpp
   src/SnapshotWorker.cpp
   src/NullDataSource.cpp
   src/Camera.cpp
   src/Renderer.cpp
+  src/app/InputActionMap.cpp
+  src/app/CameraControllers.cpp
+  src/domain/SnapshotDomainAdapter.cpp
+  src/sim/PoseSmoothing.cpp
+  src/time/TimeSource.cpp
+  src/time/FixedStepTicker.cpp
+  src/render/RenderGraph.cpp
+  src/render/RenderCommandBuffer.cpp
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
   src/render/CadModelRenderFeature.cpp
+  src/render/backend/RenderBackend.cpp
+  src/render/assets/SceneAssetResolver.cpp
+  src/render/geometry/GeometryProvider.cpp
   src/render/Season2026RebuiltModelBuilder.cpp
   src/render/SceneModelBuilderFactory.cpp
   src/App.cpp

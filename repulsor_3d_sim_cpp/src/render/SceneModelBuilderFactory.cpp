@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <unordered_map>
 
 #include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
 
@@ -14,12 +15,46 @@ std::string ToLower(const std::string& s) {
   return out;
 }
 
+std::unordered_map<std::string, SceneModelBuilderFactoryFn>& Registry() {
+  static std::unordered_map<std::string, SceneModelBuilderFactoryFn> registry;
+  return registry;
+}
+
+void RegisterBuiltinsOnce() {
+  static bool registered = false;
+  if (registered) {
+    return;
+  }
+
+  RegisterSceneModelBuilder("2026rebuilt", [](const ViewerConfig& cfg) {
+    return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
+  });
+  RegisterSceneModelBuilder("rebuilt2026", [](const ViewerConfig& cfg) {
+    return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
+  });
+  RegisterSceneModelBuilder("default", [](const ViewerConfig& cfg) {
+    return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
+  });
+
+  registered = true;
+}
+
 }  // namespace
 
+void RegisterSceneModelBuilder(const std::string& sceneProfile, SceneModelBuilderFactoryFn fn) {
+  if (sceneProfile.empty() || !fn) {
+    return;
+  }
+  Registry()[ToLower(sceneProfile)] = std::move(fn);
+}
+
 std::unique_ptr<ISceneModelBuilder> CreateSceneModelBuilder(const std::string& sceneProfile, const ViewerConfig& cfg) {
+  RegisterBuiltinsOnce();
+
   const std::string key = ToLower(sceneProfile);
-  if (key == "2026rebuilt" || key == "rebuilt2026" || key == "default") {
-    return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
+  const auto it = Registry().find(key);
+  if (it != Registry().end()) {
+    return it->second(cfg);
   }
 
   // Fallback to current season so renderer always has a concrete model builder.

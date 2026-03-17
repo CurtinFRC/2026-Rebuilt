@@ -3,18 +3,26 @@
 #include <GL/glew.h>
 
 #include <algorithm>
+#include <chrono>
 #include <map>
+#include <memory>
 
 #include <glm/common.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
 
+#include "repulsor3d/render/RenderCommandBuffer.hpp"
+#include "repulsor3d/render/RenderGraph.hpp"
 #include "repulsor3d/render/SceneModelBuilderFactory.hpp"
 
 namespace repulsor3d {
 
 Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<ISceneModelBuilder> sceneBuilder)
-    : cfg_(cfg), sceneBuilder_(std::move(sceneBuilder)) {
+    : cfg_(cfg),
+      sceneBuilder_(std::move(sceneBuilder)),
+      backend_(std::make_unique<OpenGLRenderBackend>()),
+      assetResolver_(std::make_unique<DefaultSceneAssetResolver>()),
+      geometryProvider_(std::make_unique<DefaultGeometryProvider>(*assetResolver_)) {
   showCameraDebug = cfg.showCameraDebug;
   showTruthFuel = cfg.showTruthFuel;
   showAgeFilteredFuel = cfg.showAgeFilteredFuel;
@@ -79,15 +87,24 @@ void Renderer::SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> re
   }
 }
 
-bool Renderer::Initialize() {
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable(GL_CULL_FACE);
-  glCullFace(GL_BACK);
+IRenderBackend& Renderer::GetRenderBackend() {
+  return *backend_;
+}
 
-  glClearColor(0.06F, 0.06F, 0.07F, 1.0F);
+IGeometryProvider& Renderer::GetGeometryProvider() {
+  return *geometryProvider_;
+}
+
+ISceneAssetResolver& Renderer::GetAssetResolver() {
+  return *assetResolver_;
+}
+
+const DiagnosticsSnapshot& Renderer::LatestDiagnostics() const {
+  return diagnostics_.Latest();
+}
+
+bool Renderer::Initialize() {
+  backend_->ConfigureDefaultState();
 
   if (!CreateShaders()) {
     return false;
@@ -135,11 +152,11 @@ bool Renderer::Initialize() {
 void Renderer::Resize(const int w, const int h) {
   width_ = std::max(1, w);
   height_ = std::max(1, h);
-  glViewport(0, 0, width_, height_);
+  backend_->ResizeViewport(width_, height_);
 }
 
 void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const SnapshotBundle& bundle) {
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  backend_->ClearFrame(glm::vec4{0.06F, 0.06F, 0.07F, 1.0F});
 
   SceneToggleState toggles;
   toggles.showCameraDebug = showCameraDebug;
@@ -148,22 +165,51 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const Sna
   toggles.showFieldImage = showFieldImage;
 
   RenderSceneFrame sceneFrame = sceneBuilder_->BuildFrame(bundle, toggles);
+  RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
   const glm::mat4 vp = camera.ProjectionMatrix(aspect) * camera.ViewMatrix();
+  const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
   const RenderFeatureContext context{
       .viewProjection = vp,
       .viewportWidth = width_,
       .viewportHeight = height_,
       .frame = sceneFrame,
+      .commandBuffer = commandBuffer,
+      .diagnostics = diag,
   };
   const RendererDrawApi drawApi(*this);
 
+  diagnostics_.BeginFrame();
+  const auto frameStart = std::chrono::steady_clock::now();
+
+  RenderGraph graph;
   for (const auto& feature : renderFeatures_) {
-    if (feature != nullptr) {
-      feature->Render(context, drawApi);
+    if (feature == nullptr) {
+      continue;
     }
+
+    IRenderFeature* rawFeature = feature.get();
+    graph.AddPass({
+        .name = rawFeature->Name(),
+        .dependencies = rawFeature->Dependencies(),
+        .execute =
+            [this, rawFeature, &context, &drawApi]() {
+              const auto start = std::chrono::steady_clock::now();
+              rawFeature->Render(context, drawApi);
+              const auto end = std::chrono::steady_clock::now();
+              const double ms =
+                  std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
+              diagnostics_.RecordFeatureTime(rawFeature->Name(), ms);
+            },
+    });
   }
+
+  graph.Execute();
+  const auto frameEnd = std::chrono::steady_clock::now();
+  const double frameMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count();
+  diagnostics_.EndFrame(frameMs);
 }
 
 void Renderer::DrawGrid(const glm::mat4& vp) {
@@ -295,7 +341,7 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
 }
 
 void Renderer::DrawOverlay(const int /*width*/, const int height, const std::vector<OverlayLine>& lines) {
-  glDisable(GL_DEPTH_TEST);
+  backend_->SetDepthTestEnabled(false);
 
   float y = static_cast<float>(height) - 12.0F;
   constexpr float scale = 2.0F;
@@ -304,7 +350,7 @@ void Renderer::DrawOverlay(const int /*width*/, const int height, const std::vec
     y -= 8.0F * scale;
   }
 
-  glEnable(GL_DEPTH_TEST);
+  backend_->SetDepthTestEnabled(true);
 }
 
 }  // namespace repulsor3d

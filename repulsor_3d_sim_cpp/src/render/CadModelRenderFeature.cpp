@@ -2,30 +2,28 @@
 
 #include <GL/glew.h>
 
-#include <array>
 #include <algorithm>
-#include <cstdint>
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
-#include <limits>
-#include <sstream>
 #include <string>
-#include <utility>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
-#include <glm/common.hpp>
 #include <glm/ext/matrix_transform.hpp>
-#include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 
+#include "repulsor3d/Renderer.hpp"
+
 namespace repulsor3d {
-namespace {
 
-constexpr float kEpsilon = 1e-6F;
-
-}  // namespace
+void CadModelRenderFeature::FlatLitMaterialPass::Apply(const MaterialInstance& material) {
+  if (colorUniformLocation_ >= 0) {
+    const auto& c = material.definition.baseColor;
+    glUniform4f(colorUniformLocation_, c.r, c.g, c.b, c.a);
+  }
+  glPolygonMode(GL_FRONT_AND_BACK, material.definition.wireframe ? GL_LINE : GL_FILL);
+}
 
 CadModelRenderFeature::~CadModelRenderFeature() {
   for (auto& [_, mesh] : meshCache_) {
@@ -39,7 +37,10 @@ CadModelRenderFeature::~CadModelRenderFeature() {
   }
 }
 
-bool CadModelRenderFeature::Initialize(Renderer& /*renderer*/) {
+bool CadModelRenderFeature::Initialize(Renderer& renderer) {
+  renderer_ = &renderer;
+  geometryProvider_ = &renderer.GetGeometryProvider();
+
   if (initialized_) {
     return true;
   }
@@ -49,45 +50,51 @@ bool CadModelRenderFeature::Initialize(Renderer& /*renderer*/) {
 }
 
 void CadModelRenderFeature::Render(const RenderFeatureContext& context, const RendererDrawApi& /*drawApi*/) {
-  if (!initialized_ || shader_ == 0 || context.frame.meshInstances.empty()) {
+  if (!initialized_ || shader_ == 0 || geometryProvider_ == nullptr) {
     return;
   }
 
   glUseProgram(shader_);
   glUniform3f(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
 
-  bool anyWireframe = false;
-  for (const auto& instance : context.frame.meshInstances) {
-    const GpuMesh* mesh = GetOrLoadMesh(instance.assetPath);
-    if (mesh == nullptr || mesh->vertexCount <= 0) {
-      continue;
-    }
+  bool drewWireframe = false;
+  for (const auto& command : context.commandBuffer) {
+    std::visit(
+        [&](const auto& typed) {
+          using T = std::decay_t<decltype(typed)>;
+          if constexpr (std::is_same_v<T, DrawMeshInstanceCommand>) {
+            const auto& instance = typed.primitive;
+            const GpuMesh* mesh = GetOrLoadMesh(instance.assetPath);
+            if (mesh == nullptr || mesh->vertexCount <= 0) {
+              return;
+            }
 
-    glm::mat4 model(1.0F);
-    model = glm::translate(model, instance.position);
-    model = glm::rotate(model, glm::radians(instance.rotationDeg.x), glm::vec3{1.0F, 0.0F, 0.0F});
-    model = glm::rotate(model, glm::radians(instance.rotationDeg.y), glm::vec3{0.0F, 1.0F, 0.0F});
-    model = glm::rotate(model, glm::radians(instance.rotationDeg.z), glm::vec3{0.0F, 0.0F, 1.0F});
-    model = glm::scale(model, instance.scale);
+            glm::mat4 model(1.0F);
+            model = glm::translate(model, instance.position);
+            model = glm::rotate(model, glm::radians(instance.rotationDeg.x), glm::vec3{1.0F, 0.0F, 0.0F});
+            model = glm::rotate(model, glm::radians(instance.rotationDeg.y), glm::vec3{0.0F, 1.0F, 0.0F});
+            model = glm::rotate(model, glm::radians(instance.rotationDeg.z), glm::vec3{0.0F, 0.0F, 1.0F});
+            model = glm::scale(model, instance.scale);
 
-    const glm::mat4 mvp = context.viewProjection * model;
-    glUniformMatrix4fv(uMvpLoc_, 1, GL_FALSE, &mvp[0][0]);
-    glUniformMatrix4fv(uModelLoc_, 1, GL_FALSE, &model[0][0]);
-    glUniform4f(uColorLoc_, instance.color.r, instance.color.g, instance.color.b, instance.color.a);
+            const glm::mat4 mvp = context.viewProjection * model;
+            glUniformMatrix4fv(uMvpLoc_, 1, GL_FALSE, &mvp[0][0]);
+            glUniformMatrix4fv(uModelLoc_, 1, GL_FALSE, &model[0][0]);
 
-    if (instance.wireframe) {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      anyWireframe = true;
-    } else {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
+            MaterialInstance material;
+            material.definition.baseColor = instance.color;
+            material.definition.wireframe = instance.wireframe;
+            materialPass_.Apply(material);
+            drewWireframe = drewWireframe || instance.wireframe;
 
-    glBindVertexArray(mesh->vao);
-    glDrawArrays(GL_TRIANGLES, 0, mesh->vertexCount);
-    glBindVertexArray(0);
+            glBindVertexArray(mesh->vao);
+            glDrawArrays(GL_TRIANGLES, 0, mesh->vertexCount);
+            glBindVertexArray(0);
+          }
+        },
+        command);
   }
 
-  if (anyWireframe) {
+  if (drewWireframe) {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   }
 }
@@ -145,6 +152,7 @@ void main() {
   uModelLoc_ = glGetUniformLocation(shader_, "uModel");
   uColorLoc_ = glGetUniformLocation(shader_, "uColor");
   uLightDirLoc_ = glGetUniformLocation(shader_, "uLightDir");
+  materialPass_ = FlatLitMaterialPass(uColorLoc_);
   return uMvpLoc_ >= 0 && uModelLoc_ >= 0 && uColorLoc_ >= 0 && uLightDirLoc_ >= 0;
 }
 
@@ -166,7 +174,6 @@ unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const
     glGetShaderInfoLog(shader, len, nullptr, log.data());
   }
   std::cerr << "CAD shader compile error: " << log << "\n";
-
   glDeleteShader(shader);
   return 0;
 }
@@ -191,27 +198,19 @@ bool CadModelRenderFeature::LinkShader(unsigned int& program, const unsigned int
     glGetProgramInfoLog(p, len, nullptr, log.data());
   }
   std::cerr << "CAD shader link error: " << log << "\n";
-
   glDeleteProgram(p);
   return false;
 }
 
-glm::vec3 CadModelRenderFeature::NormalizeSafe(const glm::vec3& v) {
-  const float len = glm::length(v);
-  if (len <= kEpsilon) {
-    return glm::vec3{0.0F, 0.0F, 1.0F};
-  }
-  return v / len;
-}
-
-glm::vec3 CadModelRenderFeature::ComputeFallbackNormal(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
-  const glm::vec3 n = glm::cross(b - a, c - a);
-  return NormalizeSafe(n);
-}
-
-bool CadModelRenderFeature::UploadMesh(const CpuMesh& cpu, GpuMesh& gpu) {
+bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu) {
   if (cpu.vertices.empty()) {
     return false;
+  }
+
+  std::vector<VertexPN> packed;
+  packed.reserve(cpu.vertices.size());
+  for (const auto& v : cpu.vertices) {
+    packed.push_back({v.position, v.normal});
   }
 
   glGenVertexArrays(1, &gpu.vao);
@@ -225,8 +224,8 @@ bool CadModelRenderFeature::UploadMesh(const CpuMesh& cpu, GpuMesh& gpu) {
   glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo);
   glBufferData(
       GL_ARRAY_BUFFER,
-      static_cast<GLsizeiptr>(cpu.vertices.size() * sizeof(VertexPN)),
-      cpu.vertices.data(),
+      static_cast<GLsizeiptr>(packed.size() * sizeof(VertexPN)),
+      packed.data(),
       GL_STATIC_DRAW);
 
   glEnableVertexAttribArray(0);
@@ -241,7 +240,7 @@ bool CadModelRenderFeature::UploadMesh(const CpuMesh& cpu, GpuMesh& gpu) {
       reinterpret_cast<void*>(offsetof(VertexPN, normal)));
   glBindVertexArray(0);
 
-  gpu.vertexCount = static_cast<int>(cpu.vertices.size());
+  gpu.vertexCount = static_cast<int>(packed.size());
   return true;
 }
 
@@ -257,202 +256,29 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
   gpu.vertexCount = 0;
 }
 
-bool CadModelRenderFeature::ParseBinaryStl(const std::string& filePath, CpuMesh& outMesh) {
-  std::ifstream in(filePath, std::ios::binary);
-  if (!in) {
-    return false;
-  }
-
-  in.seekg(0, std::ios::end);
-  const std::streamoff fileSize = in.tellg();
-  if (fileSize < 84) {
-    return false;
-  }
-  in.seekg(0, std::ios::beg);
-
-  std::array<char, 80> header{};
-  in.read(header.data(), static_cast<std::streamsize>(header.size()));
-
-  uint32_t triCount = 0;
-  in.read(reinterpret_cast<char*>(&triCount), sizeof(uint32_t));
-  if (!in) {
-    return false;
-  }
-
-  const std::uint64_t expected = 84ULL + static_cast<std::uint64_t>(triCount) * 50ULL;
-  if (expected != static_cast<std::uint64_t>(fileSize)) {
-    return false;
-  }
-
-  outMesh.vertices.clear();
-  outMesh.vertices.reserve(static_cast<size_t>(triCount) * 3);
-
-  for (uint32_t i = 0; i < triCount; ++i) {
-    float nx = 0.0F;
-    float ny = 0.0F;
-    float nz = 1.0F;
-    glm::vec3 p[3];
-    in.read(reinterpret_cast<char*>(&nx), sizeof(float));
-    in.read(reinterpret_cast<char*>(&ny), sizeof(float));
-    in.read(reinterpret_cast<char*>(&nz), sizeof(float));
-
-    for (int j = 0; j < 3; ++j) {
-      in.read(reinterpret_cast<char*>(&p[j].x), sizeof(float));
-      in.read(reinterpret_cast<char*>(&p[j].y), sizeof(float));
-      in.read(reinterpret_cast<char*>(&p[j].z), sizeof(float));
-    }
-
-    std::uint16_t attr = 0;
-    in.read(reinterpret_cast<char*>(&attr), sizeof(std::uint16_t));
-    (void)attr;
-
-    if (!in) {
-      return false;
-    }
-
-    const glm::vec3 rawNormal{nx, ny, nz};
-    glm::vec3 normal = NormalizeSafe(rawNormal);
-    if (glm::length(rawNormal) <= kEpsilon) {
-      normal = ComputeFallbackNormal(p[0], p[1], p[2]);
-    }
-
-    outMesh.vertices.push_back({p[0], normal});
-    outMesh.vertices.push_back({p[1], normal});
-    outMesh.vertices.push_back({p[2], normal});
-  }
-
-  return !outMesh.vertices.empty();
-}
-
-bool CadModelRenderFeature::ParseAsciiStl(const std::string& filePath, CpuMesh& outMesh) {
-  std::ifstream in(filePath);
-  if (!in) {
-    return false;
-  }
-
-  outMesh.vertices.clear();
-
-  std::string token;
-  while (in >> token) {
-    if (token != "facet") {
-      continue;
-    }
-
-    if (!(in >> token) || token != "normal") {
-      return false;
-    }
-
-    float nx = 0.0F;
-    float ny = 0.0F;
-    float nz = 1.0F;
-    if (!(in >> nx >> ny >> nz)) {
-      return false;
-    }
-
-    if (!(in >> token) || token != "outer") {
-      return false;
-    }
-    if (!(in >> token) || token != "loop") {
-      return false;
-    }
-
-    glm::vec3 p[3];
-    for (auto& v : p) {
-      if (!(in >> token) || token != "vertex") {
-        return false;
-      }
-      if (!(in >> v.x >> v.y >> v.z)) {
-        return false;
-      }
-    }
-
-    if (!(in >> token) || token != "endloop") {
-      return false;
-    }
-    if (!(in >> token) || token != "endfacet") {
-      return false;
-    }
-
-    const glm::vec3 rawNormal{nx, ny, nz};
-    glm::vec3 normal = NormalizeSafe(rawNormal);
-    if (glm::length(rawNormal) <= kEpsilon) {
-      normal = ComputeFallbackNormal(p[0], p[1], p[2]);
-    }
-
-    outMesh.vertices.push_back({p[0], normal});
-    outMesh.vertices.push_back({p[1], normal});
-    outMesh.vertices.push_back({p[2], normal});
-  }
-
-  return !outMesh.vertices.empty();
-}
-
-bool CadModelRenderFeature::LoadStl(const std::string& filePath, CpuMesh& outMesh) {
-  if (ParseBinaryStl(filePath, outMesh)) {
-    return true;
-  }
-  return ParseAsciiStl(filePath, outMesh);
-}
-
-std::string CadModelRenderFeature::ResolveAssetPath(const std::string& assetPath) {
-  namespace fs = std::filesystem;
-  if (assetPath.empty()) {
-    return "";
-  }
-
-  const fs::path raw(assetPath);
-  if (raw.is_absolute() && fs::exists(raw) && fs::is_regular_file(raw)) {
-    return fs::absolute(raw).string();
-  }
-
-  const fs::path cwd = fs::current_path();
-  const std::vector<fs::path> candidates = {
-      raw,
-      cwd / raw,
-      cwd / "assets" / raw,
-      cwd / "repulsor_3d_sim_cpp" / raw,
-      cwd / "repulsor_3d_sim_cpp" / "assets" / raw,
-      cwd / ".." / raw,
-      cwd / ".." / "repulsor_3d_sim_cpp" / raw,
-      cwd / ".." / "repulsor_3d_sim_cpp" / "assets" / raw,
-  };
-
-  for (const auto& candidate : candidates) {
-    if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
-      return fs::absolute(candidate).string();
-    }
-  }
-
-  return "";
-}
-
 const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const std::string& assetPath) {
-  const std::string resolved = ResolveAssetPath(assetPath);
-  if (resolved.empty()) {
-    return nullptr;
-  }
-
-  const auto cached = meshCache_.find(resolved);
+  const auto cached = meshCache_.find(assetPath);
   if (cached != meshCache_.end()) {
     return &cached->second;
   }
 
-  CpuMesh cpu;
-  if (!LoadStl(resolved, cpu)) {
-    std::cerr << "CAD feature: failed to load STL '" << resolved << "'\n";
+  if (geometryProvider_ == nullptr) {
+    return nullptr;
+  }
+
+  PositionNormalMesh cpu;
+  if (!geometryProvider_->GetCadMesh(assetPath, cpu)) {
     return nullptr;
   }
 
   GpuMesh gpu;
   if (!UploadMesh(cpu, gpu)) {
-    std::cerr << "CAD feature: failed to upload mesh '" << resolved << "'\n";
     return nullptr;
   }
 
-  auto [it, inserted] = meshCache_.emplace(resolved, gpu);
+  auto [it, inserted] = meshCache_.emplace(assetPath, gpu);
   if (!inserted) {
     DestroyMesh(gpu);
-    return &it->second;
   }
   return &it->second;
 }

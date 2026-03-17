@@ -5,12 +5,17 @@
 
 #include <glm/vec3.hpp>
 
+#include "repulsor3d/app/CameraControllers.hpp"
+#include "repulsor3d/app/InputActionMap.hpp"
 #include "repulsor3d/Camera.hpp"
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/DataSource.hpp"
+#include "repulsor3d/domain/SnapshotDomainAdapter.hpp"
 #include "repulsor3d/Model.hpp"
 #include "repulsor3d/Renderer.hpp"
 #include "repulsor3d/SnapshotWorker.hpp"
+#include "repulsor3d/time/FixedStepTicker.hpp"
+#include "repulsor3d/time/TimeSource.hpp"
 #include "repulsor3d/TruthSocketReceiver.hpp"
 
 struct GLFWwindow;
@@ -53,20 +58,14 @@ class ViewerApp {
   SnapshotBundle latest_;
   std::optional<WorldSnapshot> renderSnapshot_;
 
-  bool dragging_ = false;
-  double lastMouseX_ = 0.0;
-  double lastMouseY_ = 0.0;
+  InputActionMap inputActions_;
+  OrbitMouseCameraController orbitController_;
+  FollowTargetCameraController followController_;
+  SnapshotDomainAdapter domainAdapter_;
+  SteadyTimeSource timeSource_;
+  FixedStepTicker fixedTicker_;
 
   glm::vec3 fieldTarget_;
-  glm::vec3 followTarget_;
-  glm::vec3 followVel_{0.0F, 0.0F, 0.0F};
-
-  std::optional<double> robotX_;
-  std::optional<double> robotY_;
-  std::optional<double> robotH_;
-  double robotVx_ = 0.0;
-  double robotVy_ = 0.0;
-  double robotVh_ = 0.0;
 };
 
 }  // namespace repulsor3d
