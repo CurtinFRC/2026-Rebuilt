@@ -85,15 +85,15 @@ bool GetEnvBool(const char* name, const bool fallback) {
 }
 
 struct CadLodPolicy {
-  std::size_t maxLodCount = 1;
-  float reductionRatio = 0.88F;
-  std::size_t minVertexCount = 260000;
+  std::size_t maxLodCount = 2;
+  float reductionRatio = 0.62F;
+  std::size_t minVertexCount = 700000;
   std::size_t lod0VertexCap = 4500000;
   bool keepOriginalLod0 = true;
-  std::size_t maxPreferredDrawIndices = 30000000;
+  std::size_t maxPreferredDrawIndices = 8500000;
   int normalBins = 20;
   bool preserveFlatShading = true;
-  float lod0ScreenRadiusPx = 860.0F;
+  float lod0ScreenRadiusPx = 1200.0F;
   float screenRadiusDecay = 0.5F;
 };
 

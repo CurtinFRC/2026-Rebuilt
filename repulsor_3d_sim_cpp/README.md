@@ -146,15 +146,15 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
-- `CAD_LOD_COUNT` (default `1`)
-- `CAD_LOD_RATIO` (default `0.88`)
-- `CAD_LOD_MIN_VERTICES` (default `260000`)
+- `CAD_LOD_COUNT` (default `2`)
+- `CAD_LOD_RATIO` (default `0.62`)
+- `CAD_LOD_MIN_VERTICES` (default `700000`)
 - `CAD_LOD0_MAX_VERTICES` (default `4500000`)
 - `CAD_LOD_KEEP_FULL` (default `true`)
-- `CAD_LOD_MAX_DRAW_INDICES` (default `30000000`)
+- `CAD_LOD_MAX_DRAW_INDICES` (default `8500000`)
 - `CAD_LOD_NORMAL_BINS` (default `20`)
 - `CAD_LOD_PRESERVE_FLAT` (default `true`)
-- `CAD_LOD0_SCREEN_RADIUS_PX` (default `860`)
+- `CAD_LOD0_SCREEN_RADIUS_PX` (default `1200`)
 - `CAD_LOD_SCREEN_RADIUS_DECAY` (default `0.5`)
 - `CAD_PREPARED_CACHE_DIR` (optional override for cached prepared CAD LOD data; default is under `%LOCALAPPDATA%/repulsor_3d_sim_cpp/cad_prepared_cache` on Windows)
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
