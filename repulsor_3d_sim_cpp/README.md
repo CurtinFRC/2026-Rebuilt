@@ -45,8 +45,11 @@ The renderer is now split into a backend + season-model pipeline:
   - draws generic primitives (`SpherePrimitive`, `BoxPrimitive`, `LinePrimitive`)
   - does not encode game-specific object logic
 - `IRenderFeature` pipeline (`include/repulsor3d/render/RenderFeature.hpp`, `src/render/RenderFeature.cpp`):
-  - pluggable render passes (default: world, primitives, overlay)
+  - pluggable render passes (default: world, primitives, CAD meshes, overlay)
   - allows adding new visuals (3D fields, custom post-processing, extra UI overlays) by adding feature modules instead of editing `Renderer::Draw`
+- `CadModelRenderFeature` (`include/repulsor3d/render/CadModelRenderFeature.hpp`, `src/render/CadModelRenderFeature.cpp`):
+  - renders generic STL CAD instances from `RenderSceneFrame::meshInstances`
+  - supports both static field CAD and dynamic robot/goal CAD supplied by scene builders
 - `ISceneModelBuilder` (`include/repulsor3d/render/SceneModelBuilder.hpp`):
   - converts runtime snapshot data into a `RenderSceneFrame`
 - `Season2026RebuiltModelBuilder` (`src/render/Season2026RebuiltModelBuilder.cpp`):
@@ -77,6 +80,8 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `WINDOW_W`, `WINDOW_H`, `FPS`
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
+- `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
+- `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 
 ## Clangd / LSP

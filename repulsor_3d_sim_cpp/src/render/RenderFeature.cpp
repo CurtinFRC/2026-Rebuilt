@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "repulsor3d/Renderer.hpp"
+#include "repulsor3d/render/CadModelRenderFeature.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -81,6 +82,7 @@ std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures() {
   std::vector<std::unique_ptr<IRenderFeature>> features;
   features.push_back(std::make_unique<WorldRenderFeature>());
   features.push_back(std::make_unique<PrimitiveRenderFeature>());
+  features.push_back(std::make_unique<CadModelRenderFeature>());
   features.push_back(std::make_unique<OverlayRenderFeature>());
   return features;
 }

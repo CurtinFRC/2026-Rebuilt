@@ -100,6 +100,16 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.robotBoxWM = GetEnvFloat("ROBOT_BOX_W_M", cfg.robotBoxWM);
   cfg.robotBoxHM = GetEnvFloat("ROBOT_BOX_H_M", cfg.robotBoxHM);
 
+  cfg.showRobotCadModel = GetEnvBool("SHOW_ROBOT_CAD_MODEL", cfg.showRobotCadModel);
+  cfg.robotCadModelPath = GetEnvString("ROBOT_CAD_MODEL_PATH", cfg.robotCadModelPath);
+  cfg.robotCadScaleM = GetEnvFloat("ROBOT_CAD_SCALE_M", cfg.robotCadScaleM);
+  cfg.robotCadZOffsetM = GetEnvFloat("ROBOT_CAD_Z_OFFSET_M", cfg.robotCadZOffsetM);
+
+  cfg.showFieldCadModel = GetEnvBool("SHOW_FIELD_CAD_MODEL", cfg.showFieldCadModel);
+  cfg.fieldCadModelPath = GetEnvString("FIELD_CAD_MODEL_PATH", cfg.fieldCadModelPath);
+  cfg.fieldCadScaleM = GetEnvFloat("FIELD_CAD_SCALE_M", cfg.fieldCadScaleM);
+  cfg.fieldCadZOffsetM = GetEnvFloat("FIELD_CAD_Z_OFFSET_M", cfg.fieldCadZOffsetM);
+
   cfg.cameraDistanceM = GetEnvFloat("CAMERA_DISTANCE_M", cfg.cameraDistanceM);
   cfg.cameraPitchDeg = GetEnvFloat("CAMERA_PITCH_DEG", cfg.cameraPitchDeg);
   cfg.cameraYawDeg = GetEnvFloat("CAMERA_YAW_DEG", cfg.cameraYawDeg);

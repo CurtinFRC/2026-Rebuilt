@@ -17,6 +17,16 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
   robotL_ = cfg.robotBoxLM;
   robotW_ = cfg.robotBoxWM;
   robotH_ = cfg.robotBoxHM;
+
+  showRobotCadModel_ = cfg.showRobotCadModel;
+  robotCadModelPath_ = cfg.robotCadModelPath;
+  robotCadScaleM_ = cfg.robotCadScaleM;
+  robotCadZOffsetM_ = cfg.robotCadZOffsetM;
+
+  showFieldCadModel_ = cfg.showFieldCadModel;
+  fieldCadModelPath_ = cfg.fieldCadModelPath;
+  fieldCadScaleM_ = cfg.fieldCadScaleM;
+  fieldCadZOffsetM_ = cfg.fieldCadZOffsetM;
 }
 
 RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
@@ -27,6 +37,10 @@ RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle&
   frame.overlayLines.push_back({std::string("[T] Truth fuel: ") + (toggles.showTruthFuel ? "ON" : "OFF")});
   frame.overlayLines.push_back({std::string("[A] Age filter: ") + (toggles.showAgeFilteredFuel ? "ON" : "OFF")});
   frame.overlayLines.push_back({std::string("Field image: ") + (toggles.showFieldImage ? "ON" : "OFF")});
+  frame.overlayLines.push_back(
+      {std::string("CAD robot: ") + (showRobotCadModel_ && !robotCadModelPath_.empty() ? "ON" : "OFF")});
+  frame.overlayLines.push_back(
+      {std::string("CAD field: ") + (showFieldCadModel_ && !fieldCadModelPath_.empty() ? "ON" : "OFF")});
   frame.overlayLines.push_back({"Pieces: " + std::to_string(bundle.pieces)});
   frame.overlayLines.push_back({"Method: " + bundle.method});
 
@@ -38,6 +52,7 @@ RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle&
   AppendFuelPrimitives(frame, snap, toggles.showAgeFilteredFuel);
   AppendObstaclePrimitives(frame, snap);
   AppendRobotPrimitives(frame, snap);
+  AppendCadModelPrimitives(frame, snap);
   if (toggles.showCameraDebug) {
     AppendCameraPrimitives(frame, snap);
   }
@@ -292,6 +307,44 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
       });
     }
   }
+}
+
+void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+  if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
+    frame.meshInstances.push_back({
+        .assetPath = fieldCadModelPath_,
+        .position = glm::vec3{cfg_.fieldLengthM * 0.5F, cfg_.fieldWidthM * 0.5F, fieldZ_ + fieldCadZOffsetM_},
+        .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
+        .scale = glm::vec3{fieldCadScaleM_, fieldCadScaleM_, fieldCadScaleM_},
+        .color = glm::vec4{0.72F, 0.74F, 0.79F, 0.45F},
+        .wireframe = false,
+    });
+  }
+
+  if (!showRobotCadModel_ || robotCadModelPath_.empty()) {
+    return;
+  }
+
+  auto appendPoseCad = [&](const std::optional<Pose2D>& pose, const glm::vec4& color) {
+    if (!pose.has_value()) {
+      return;
+    }
+
+    const Pose2D& p = pose.value();
+    frame.meshInstances.push_back({
+        .assetPath = robotCadModelPath_,
+        .position = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotCadZOffsetM_},
+        .rotationDeg = glm::vec3{0.0F, 0.0F, glm::degrees(static_cast<float>(p.thetaRad))},
+        .scale = glm::vec3{robotCadScaleM_, robotCadScaleM_, robotCadScaleM_},
+        .color = color,
+        .wireframe = false,
+    });
+  };
+
+  appendPoseCad(snap.pose, glm::vec4{0.95F, 0.45F, 0.15F, 0.90F});
+  appendPoseCad(snap.activeGoal, glm::vec4{0.20F, 0.88F, 0.35F, 0.50F});
+  appendPoseCad(snap.chosenCollect, glm::vec4{0.20F, 0.40F, 0.95F, 0.50F});
+  appendPoseCad(snap.finalCollect, glm::vec4{0.95F, 0.35F, 0.15F, 0.55F});
 }
 
 std::string Season2026RebuiltModelBuilder::NormalizeType(const std::string& type) {

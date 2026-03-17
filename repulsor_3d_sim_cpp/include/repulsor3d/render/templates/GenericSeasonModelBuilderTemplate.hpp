@@ -24,6 +24,7 @@ class GenericSeasonModelBuilderTemplate final : public ISceneModelBuilder {
     // frame.spheres.push_back(...)
     // frame.boxes.push_back(...)
     // frame.lines.push_back(...)
+    // frame.meshInstances.push_back(...)
 
     frame.overlayLines.push_back({"[Template] scene profile active"});
     frame.overlayLines.push_back({"Pieces: " + std::to_string(bundle.pieces)});

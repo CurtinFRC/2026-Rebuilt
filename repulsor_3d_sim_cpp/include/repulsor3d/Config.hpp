@@ -43,6 +43,16 @@ struct ViewerConfig {
   float robotBoxWM = 0.85F;
   float robotBoxHM = 0.35F;
 
+  bool showRobotCadModel = false;
+  std::string robotCadModelPath = "";
+  float robotCadScaleM = 1.0F;
+  float robotCadZOffsetM = 0.0F;
+
+  bool showFieldCadModel = false;
+  std::string fieldCadModelPath = "";
+  float fieldCadScaleM = 1.0F;
+  float fieldCadZOffsetM = 0.0F;
+
   float cameraDistanceM = 12.0F;
   float cameraPitchDeg = 35.0F;
   float cameraYawDeg = 135.0F;

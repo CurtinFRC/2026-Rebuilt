@@ -19,6 +19,7 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   void AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
   void AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
   void AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
+  void AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
 
   static std::string NormalizeType(const std::string& type);
 
@@ -30,6 +31,16 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   float robotL_ = 0.0F;
   float robotW_ = 0.0F;
   float robotH_ = 0.0F;
+
+  bool showRobotCadModel_ = false;
+  std::string robotCadModelPath_;
+  float robotCadScaleM_ = 1.0F;
+  float robotCadZOffsetM_ = 0.0F;
+
+  bool showFieldCadModel_ = false;
+  std::string fieldCadModelPath_;
+  float fieldCadScaleM_ = 1.0F;
+  float fieldCadZOffsetM_ = 0.0F;
 
   glm::vec4 colFuel_{1.0F, 0.95F, 0.15F, 0.95F};
   glm::vec4 colTruthFuel_{0.15F, 0.95F, 0.35F, 0.70F};
