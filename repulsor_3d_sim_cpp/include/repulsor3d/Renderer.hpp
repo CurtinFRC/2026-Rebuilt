@@ -100,6 +100,7 @@ class Renderer {
   void DrawOverlay(int width, int height, const std::vector<OverlayLine>& lines);
   void DrawText2D(float x, float y, float scale, const std::string& text, const glm::vec4& color);
 
+  static float TextWidthPixels(const std::string& text, float scale);
   static std::string ToUpperAscii(const std::string& s);
   static std::array<std::string, 7> Glyph(char c);
 
@@ -133,6 +134,9 @@ class Renderer {
   float fieldLength_ = 0.0F;
   float fieldWidth_ = 0.0F;
   float fieldZ_ = 0.0F;
+
+  bool smoothedFrameMsInitialized_ = false;
+  double smoothedFrameMs_ = 0.0;
 };
 
 }  // namespace repulsor3d

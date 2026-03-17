@@ -10,6 +10,10 @@
 
 namespace repulsor3d {
 
+float Renderer::TextWidthPixels(const std::string& text, const float scale) {
+  return static_cast<float>(text.size()) * 6.0F * scale;
+}
+
 void Renderer::DrawText2D(const float x, const float y, const float scale, const std::string& text, const glm::vec4& color) {
   std::vector<glm::vec3> triangles;
   triangles.reserve(text.size() * 5 * 7 * 6);

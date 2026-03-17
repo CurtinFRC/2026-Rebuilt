@@ -4,8 +4,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <map>
 #include <memory>
+#include <sstream>
 
 #include <glm/common.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -196,6 +198,15 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const Sna
   const auto frameEnd = std::chrono::steady_clock::now();
   const double frameMs =
       std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count();
+  if (frameMs > 0.0) {
+    constexpr double alpha = 0.10;
+    if (!smoothedFrameMsInitialized_) {
+      smoothedFrameMs_ = frameMs;
+      smoothedFrameMsInitialized_ = true;
+    } else {
+      smoothedFrameMs_ = (1.0 - alpha) * smoothedFrameMs_ + alpha * frameMs;
+    }
+  }
   diagnostics_.EndFrame(frameMs);
 }
 
@@ -330,7 +341,7 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
   backend_->BindVertexArray(0);
 }
 
-void Renderer::DrawOverlay(const int /*width*/, const int height, const std::vector<OverlayLine>& lines) {
+void Renderer::DrawOverlay(const int width, const int height, const std::vector<OverlayLine>& lines) {
   backend_->SetDepthTestEnabled(false);
 
   float y = static_cast<float>(height) - 12.0F;
@@ -338,6 +349,14 @@ void Renderer::DrawOverlay(const int /*width*/, const int height, const std::vec
   for (const auto& line : lines) {
     DrawText2D(10.0F, y, scale, line.text, line.color);
     y -= 8.0F * scale;
+  }
+
+  if (smoothedFrameMsInitialized_ && smoothedFrameMs_ > 1e-6) {
+    std::ostringstream fpsText;
+    fpsText << std::fixed << std::setprecision(1) << "FPS: " << (1000.0 / smoothedFrameMs_);
+    const std::string value = fpsText.str();
+    const float x = static_cast<float>(width) - 10.0F - TextWidthPixels(value, scale);
+    DrawText2D(std::max(10.0F, x), static_cast<float>(height) - 12.0F, scale, value, glm::vec4{0.92F, 0.92F, 0.92F, 0.90F});
   }
 
   backend_->SetDepthTestEnabled(true);
