@@ -100,6 +100,9 @@ set(REPULSOR_SIM_SOURCES
 )
 
 add_executable(repulsor_3d_sim_cpp ${REPULSOR_SIM_SOURCES})
+if(MSVC)
+  target_compile_options(repulsor_3d_sim_cpp PRIVATE /utf-8)
+endif()
 
 target_include_directories(repulsor_3d_sim_cpp
   PRIVATE
@@ -141,8 +144,109 @@ if(REPULSOR_SIM_USE_NTCORE)
     target_sources(repulsor_3d_sim_cpp PRIVATE src/NtDataSource.cpp)
     target_link_libraries(repulsor_3d_sim_cpp PRIVATE ntcore)
   else()
-    message(STATUS "NTCore not found under REPULSOR_SIM_NTCORE_ROOT='${REPULSOR_SIM_NTCORE_ROOT}'; building without NT4 datasource")
-    message(STATUS "Set REPULSOR_SIM_NTCORE_ROOT or REPULSOR_SIM_NTCORE_HINTS to your local allwpilib build/install path")
+    set(_repulsor_ntcore_include_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/src/main/native/include"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    set(_repulsor_ntcore_generated_include_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/src/generated/main/native/include"
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/src/generate/main/native/include"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    set(_repulsor_wpinet_include_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpinet/src/main/native/include"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    set(_repulsor_wpiutil_include_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpiutil/src/main/native/include"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    file(GLOB _repulsor_wpiutil_thirdparty_include_dirs LIST_DIRECTORIES true
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpiutil/src/main/native/thirdparty/*/include"
+    )
+    file(GLOB _repulsor_wpinet_thirdparty_include_dirs LIST_DIRECTORIES true
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpinet/src/main/native/thirdparty/*/include"
+    )
+
+    set(_repulsor_ntcore_lib_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/build/libs/ntcore/shared/windowsx86-64/release"
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/build/install/ntcoreDev/windowsx86-64/lib"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    set(_repulsor_wpinet_lib_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpinet/build/libs/wpinet/shared/windowsx86-64/release"
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/build/install/ntcoreDev/windowsx86-64/lib"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+    set(_repulsor_wpiutil_lib_candidates
+      "${REPULSOR_SIM_NTCORE_ROOT}/wpiutil/build/libs/wpiutil/shared/windowsx86-64/release"
+      "${REPULSOR_SIM_NTCORE_ROOT}/ntcore/build/install/ntcoreDev/windowsx86-64/lib"
+      ${REPULSOR_SIM_NTCORE_HINTS}
+    )
+
+    find_path(REPULSOR_RAW_NTCORE_INCLUDE_DIR ntcore.h PATHS ${_repulsor_ntcore_include_candidates})
+    find_path(
+      REPULSOR_RAW_NTCORE_GENERATED_INCLUDE_DIR
+      networktables/BooleanTopic.h
+      PATHS ${_repulsor_ntcore_generated_include_candidates}
+    )
+    find_path(REPULSOR_RAW_WPINET_INCLUDE_DIR wpinet/WebServer.h PATHS ${_repulsor_wpinet_include_candidates})
+    find_path(REPULSOR_RAW_WPIUTIL_INCLUDE_DIR wpi/DataLog.h PATHS ${_repulsor_wpiutil_include_candidates})
+
+    find_library(REPULSOR_RAW_NTCORE_LIB ntcore PATHS ${_repulsor_ntcore_lib_candidates})
+    find_library(REPULSOR_RAW_WPINET_LIB wpinet PATHS ${_repulsor_wpinet_lib_candidates})
+    find_library(REPULSOR_RAW_WPIUTIL_LIB wpiutil PATHS ${_repulsor_wpiutil_lib_candidates})
+
+    if(
+      REPULSOR_RAW_NTCORE_INCLUDE_DIR
+      AND REPULSOR_RAW_NTCORE_GENERATED_INCLUDE_DIR
+      AND REPULSOR_RAW_WPINET_INCLUDE_DIR
+      AND REPULSOR_RAW_WPIUTIL_INCLUDE_DIR
+      AND REPULSOR_RAW_NTCORE_LIB
+      AND REPULSOR_RAW_WPINET_LIB
+      AND REPULSOR_RAW_WPIUTIL_LIB
+    )
+      message(STATUS "NTCore found via raw allwpilib layout under '${REPULSOR_SIM_NTCORE_ROOT}'")
+      target_compile_definitions(repulsor_3d_sim_cpp PRIVATE REPULSOR_HAS_NTCORE=1)
+      target_sources(repulsor_3d_sim_cpp PRIVATE src/NtDataSource.cpp)
+      target_include_directories(
+        repulsor_3d_sim_cpp PRIVATE
+          ${REPULSOR_RAW_NTCORE_INCLUDE_DIR}
+          ${REPULSOR_RAW_NTCORE_GENERATED_INCLUDE_DIR}
+          ${REPULSOR_RAW_WPINET_INCLUDE_DIR}
+          ${REPULSOR_RAW_WPIUTIL_INCLUDE_DIR}
+          ${_repulsor_wpiutil_thirdparty_include_dirs}
+          ${_repulsor_wpinet_thirdparty_include_dirs}
+      )
+      target_link_libraries(
+        repulsor_3d_sim_cpp PRIVATE
+          ${REPULSOR_RAW_NTCORE_LIB}
+          ${REPULSOR_RAW_WPINET_LIB}
+          ${REPULSOR_RAW_WPIUTIL_LIB}
+      )
+
+      get_filename_component(_repulsor_ntcore_lib_dir "${REPULSOR_RAW_NTCORE_LIB}" DIRECTORY)
+      get_filename_component(_repulsor_wpinet_lib_dir "${REPULSOR_RAW_WPINET_LIB}" DIRECTORY)
+      get_filename_component(_repulsor_wpiutil_lib_dir "${REPULSOR_RAW_WPIUTIL_LIB}" DIRECTORY)
+
+      set(_repulsor_runtime_dlls
+        "${_repulsor_ntcore_lib_dir}/ntcore.dll"
+        "${_repulsor_wpinet_lib_dir}/wpinet.dll"
+        "${_repulsor_wpiutil_lib_dir}/wpiutil.dll"
+      )
+      foreach(_repulsor_runtime_dll IN LISTS _repulsor_runtime_dlls)
+        if(EXISTS "${_repulsor_runtime_dll}")
+          add_custom_command(TARGET repulsor_3d_sim_cpp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${_repulsor_runtime_dll}"
+              "$<TARGET_FILE_DIR:repulsor_3d_sim_cpp>"
+          )
+        endif()
+      endforeach()
+    else()
+      message(STATUS "NTCore not found under REPULSOR_SIM_NTCORE_ROOT='${REPULSOR_SIM_NTCORE_ROOT}'; building without NT4 datasource")
+      message(STATUS "Set REPULSOR_SIM_NTCORE_ROOT or REPULSOR_SIM_NTCORE_HINTS to your local allwpilib build/install path")
+    endif()
   endif()
 endif()
 

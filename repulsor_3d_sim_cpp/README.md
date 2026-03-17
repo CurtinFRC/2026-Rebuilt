@@ -10,9 +10,31 @@ This is a full C++ rewrite of `repulsor_3d_sim` with:
 
 ## Build
 
+If you want NT4 datasource support, first build native NTCore dependencies from a local `allwpilib` checkout.
+
+### Build NTCore from allwpilib (required for NT4 datasource)
+
+```powershell
+git clone https://github.com/wpilibsuite/allwpilib.git C:\Users\paulh\allwpilib
+cd C:\Users\paulh\allwpilib
+.\gradlew.bat :wpiutil:build :wpinet:build :ntcore:build
+```
+
+The sim expects these outputs (or equivalent) under your `allwpilib` tree:
+- `ntcore\build\libs\ntcore\shared\windowsx86-64\release\ntcore.lib` + `ntcore.dll`
+- `wpinet\build\libs\wpinet\shared\windowsx86-64\release\wpinet.lib` + `wpinet.dll`
+- `wpiutil\build\libs\wpiutil\shared\windowsx86-64\release\wpiutil.lib` + `wpiutil.dll`
+- headers under:
+  - `ntcore\src\main\native\include`
+  - `ntcore\src\generated\main\native\include`
+  - `wpinet\src\main\native\include`
+  - `wpiutil\src\main\native\include`
+
+Then build this project:
+
 ```powershell
 cd repulsor_3d_sim_cpp
-cmake -S . -B build -DREPULSOR_SIM_FETCH_DEPS=ON -DREPULSOR_SIM_USE_NTCORE=ON
+cmake -S . -B build -DREPULSOR_SIM_FETCH_DEPS=ON -DREPULSOR_SIM_USE_NTCORE=ON -DREPULSOR_SIM_NTCORE_ROOT=C:/Users/paulh/allwpilib
 cmake --build build --config Release
 ```
 
@@ -66,7 +88,11 @@ To add new graphics systems, implement `IRenderFeature` and install via `Rendere
 
 ## NT4 Backend
 
-If `ntcore` is found at configure time, the app builds with NT4 input support.
+NTCore discovery order:
+- first: CMake package (`find_package(ntcore CONFIG)`) under `REPULSOR_SIM_NTCORE_ROOT`
+- fallback: raw allwpilib layout (headers + `.lib`/`.dll` from `ntcore/wpinet/wpiutil` build outputs)
+
+If NTCore is found at configure time, the app builds with NT4 input support.
 If not found, it falls back to `NullDataSource` (renderer still runs).
 
 ## Environment Variables
