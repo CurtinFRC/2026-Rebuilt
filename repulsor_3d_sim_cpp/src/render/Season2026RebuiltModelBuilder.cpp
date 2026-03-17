@@ -1,4 +1,4 @@
-#include "repulsor3d/render/RepulsorSeasonModelBuilder.hpp"
+#include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -10,7 +10,7 @@
 
 namespace repulsor3d {
 
-RepulsorSeasonModelBuilder::RepulsorSeasonModelBuilder(const ViewerConfig& cfg) : cfg_(cfg) {
+Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig& cfg) : cfg_(cfg) {
   fieldZ_ = cfg.fieldZM;
   fuelRadius_ = cfg.ballRadiusM;
   obsSide_ = cfg.obsBoxSideM;
@@ -19,7 +19,7 @@ RepulsorSeasonModelBuilder::RepulsorSeasonModelBuilder(const ViewerConfig& cfg) 
   robotH_ = cfg.robotBoxHM;
 }
 
-RenderSceneFrame RepulsorSeasonModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
+RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
   RenderSceneFrame frame;
   frame.drawFieldImage = toggles.showFieldImage;
 
@@ -45,7 +45,7 @@ RenderSceneFrame RepulsorSeasonModelBuilder::BuildFrame(const SnapshotBundle& bu
   return frame;
 }
 
-void RepulsorSeasonModelBuilder::AppendFuelPrimitives(
+void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
     RenderSceneFrame& frame,
     const WorldSnapshot& snap,
     const bool showAgeFilteredFuel) {
@@ -108,7 +108,7 @@ void RepulsorSeasonModelBuilder::AppendFuelPrimitives(
   }
 }
 
-void RepulsorSeasonModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) {
+void Season2026RebuiltModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) {
   for (const auto& o : snap.truth) {
     frame.spheres.push_back({
         .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), fieldZ_ + static_cast<float>(o.z)},
@@ -118,7 +118,7 @@ void RepulsorSeasonModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& fra
   }
 }
 
-void RepulsorSeasonModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   const float hz = fieldZ_ + obsSide_ * 0.5F;
   for (const auto& o : snap.repulsorVision) {
     frame.boxes.push_back({
@@ -130,7 +130,7 @@ void RepulsorSeasonModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& fram
   }
 }
 
-void RepulsorSeasonModelBuilder::AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   if (snap.pose.has_value()) {
     const Pose2D& p = snap.pose.value();
     frame.boxes.push_back({
@@ -185,7 +185,7 @@ void RepulsorSeasonModelBuilder::AppendRobotPrimitives(RenderSceneFrame& frame, 
   }
 }
 
-void RepulsorSeasonModelBuilder::AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   if (!snap.pose.has_value() || snap.cameras.empty()) {
     return;
   }
@@ -294,7 +294,7 @@ void RepulsorSeasonModelBuilder::AppendCameraPrimitives(RenderSceneFrame& frame,
   }
 }
 
-std::string RepulsorSeasonModelBuilder::NormalizeType(const std::string& type) {
+std::string Season2026RebuiltModelBuilder::NormalizeType(const std::string& type) {
   std::string out = type;
   std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return out;

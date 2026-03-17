@@ -73,8 +73,10 @@ set(REPULSOR_SIM_SOURCES
   src/NullDataSource.cpp
   src/Camera.cpp
   src/Renderer.cpp
+  src/render/RendererResources.cpp
   src/render/RendererText.cpp
-  src/render/RepulsorSeasonModelBuilder.cpp
+  src/render/Season2026RebuiltModelBuilder.cpp
+  src/render/SceneModelBuilderFactory.cpp
   src/App.cpp
 )
 

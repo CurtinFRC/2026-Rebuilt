@@ -40,14 +40,18 @@ cd repulsor_3d_sim_cpp
 
 The renderer is now split into a backend + season-model pipeline:
 
-- `Renderer` (`src/Renderer.cpp`, `src/render/RendererText.cpp`):
+- `Renderer` (`src/Renderer.cpp`, `src/render/RendererResources.cpp`, `src/render/RendererText.cpp`):
   - owns OpenGL resources/shaders/meshes
   - draws generic primitives (`SpherePrimitive`, `BoxPrimitive`, `LinePrimitive`)
   - does not encode game-specific object logic
 - `ISceneModelBuilder` (`include/repulsor3d/render/SceneModelBuilder.hpp`):
   - converts runtime snapshot data into a `RenderSceneFrame`
-- `RepulsorSeasonModelBuilder` (`src/render/RepulsorSeasonModelBuilder.cpp`):
-  - current 2026 game-specific mapping for fuel/robots/cameras/overlay
+- `Season2026RebuiltModelBuilder` (`src/render/Season2026RebuiltModelBuilder.cpp`):
+  - current `2026Rebuilt` game-specific mapping for fuel/robots/cameras/overlay
+- `SceneModelBuilderFactory` (`src/render/SceneModelBuilderFactory.cpp`):
+  - resolves `SIM_SCENE_PROFILE` to a concrete scene model builder
+- Generic scaffold:
+  - `include/repulsor3d/render/templates/GenericSeasonModelBuilderTemplate.hpp`
 
 To support next season, add a new `ISceneModelBuilder` implementation and provide it to `Renderer` via `SetSceneModelBuilder(...)` (or constructor injection), without touching OpenGL draw code.
 
@@ -67,3 +71,4 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `WINDOW_W`, `WINDOW_H`, `FPS`
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
+- `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)

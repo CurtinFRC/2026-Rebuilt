@@ -7,9 +7,9 @@
 
 namespace repulsor3d {
 
-class RepulsorSeasonModelBuilder final : public ISceneModelBuilder {
+class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
  public:
-  explicit RepulsorSeasonModelBuilder(const ViewerConfig& cfg);
+  explicit Season2026RebuiltModelBuilder(const ViewerConfig& cfg);
 
   RenderSceneFrame BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) override;
 

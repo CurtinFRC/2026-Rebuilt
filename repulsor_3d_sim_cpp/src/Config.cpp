@@ -62,6 +62,8 @@ bool GetEnvBool(const char* name, const bool fallback) {
 ViewerConfig LoadConfigFromEnv() {
   ViewerConfig cfg;
 
+  cfg.sceneProfile = GetEnvString("SIM_SCENE_PROFILE", cfg.sceneProfile);
+
   cfg.ntServer = GetEnvString("NT_SERVER", cfg.ntServer);
   cfg.ntClientName = GetEnvString("NT_CLIENT_NAME", cfg.ntClientName);
   cfg.fieldVisionPath = GetEnvString("NT_FIELDVISION_PATH", cfg.fieldVisionPath);
