@@ -41,6 +41,8 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   std::string fieldCadModelPath_;
   float fieldCadScaleM_ = 1.0F;
   float fieldCadZOffsetM_ = 0.0F;
+  float fieldCadOffsetXM_ = 0.0F;
+  float fieldCadOffsetYM_ = 0.0F;
 
   glm::vec4 colFuel_{1.0F, 0.95F, 0.15F, 0.95F};
   glm::vec4 colTruthFuel_{0.15F, 0.95F, 0.35F, 0.70F};

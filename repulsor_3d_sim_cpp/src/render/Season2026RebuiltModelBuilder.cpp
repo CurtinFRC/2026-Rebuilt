@@ -27,6 +27,8 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
   fieldCadModelPath_ = cfg.fieldCadModelPath;
   fieldCadScaleM_ = cfg.fieldCadScaleM;
   fieldCadZOffsetM_ = cfg.fieldCadZOffsetM;
+  fieldCadOffsetXM_ = cfg.fieldCadOffsetXM;
+  fieldCadOffsetYM_ = cfg.fieldCadOffsetYM;
 }
 
 RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
@@ -333,7 +335,7 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
   if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
     MeshInstancePrimitive mesh{
         .assetPath = fieldCadModelPath_,
-        .position = glm::vec3{0.0F, 0.0F, fieldZ_ + fieldCadZOffsetM_},
+        .position = glm::vec3{fieldCadOffsetXM_, fieldCadOffsetYM_, fieldZ_ + fieldCadZOffsetM_},
         .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
         .scale = glm::vec3{fieldCadScaleM_, fieldCadScaleM_, fieldCadScaleM_},
         .color = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F},

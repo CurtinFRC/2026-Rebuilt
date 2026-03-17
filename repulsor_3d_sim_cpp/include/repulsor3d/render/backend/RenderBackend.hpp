@@ -14,10 +14,12 @@ class IRenderBackend {
   virtual void ClearFrame(const glm::vec4& clearColor) = 0;
   virtual void ResizeViewport(int width, int height) = 0;
   virtual void SetDepthTestEnabled(bool enabled) = 0;
+  virtual void SetBlendEnabled(bool enabled) = 0;
   virtual void SetWireframeMode(bool enabled) = 0;
   virtual void UseProgram(unsigned int programId) = 0;
   virtual int GetUniformLocation(unsigned int programId, const char* uniformName) = 0;
   virtual void SetUniformMat4(int location, const float* matrix4x4) = 0;
+  virtual void SetUniformMat3(int location, const float* matrix3x3) = 0;
   virtual void SetUniformVec4(int location, float x, float y, float z, float w) = 0;
   virtual void SetUniformVec3(int location, float x, float y, float z) = 0;
   virtual void SetUniform1f(int location, float value) = 0;
@@ -32,6 +34,11 @@ class IRenderBackend {
   virtual void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) = 0;
   virtual void EnableVertexAttrib(unsigned int index) = 0;
   virtual void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) = 0;
+  virtual void DefineVertexAttribNormalizedU8(
+      unsigned int index,
+      int componentCount,
+      int strideBytes,
+      std::size_t offsetBytes) = 0;
   virtual void BindTexture2D(unsigned int textureId) = 0;
   virtual void SetTexture2DLinearMipmapClamp() = 0;
   virtual void UploadTexture2DRgba8(int width, int height, const void* pixels) = 0;
@@ -54,10 +61,12 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void ClearFrame(const glm::vec4& clearColor) override;
   void ResizeViewport(int width, int height) override;
   void SetDepthTestEnabled(bool enabled) override;
+  void SetBlendEnabled(bool enabled) override;
   void SetWireframeMode(bool enabled) override;
   void UseProgram(unsigned int programId) override;
   int GetUniformLocation(unsigned int programId, const char* uniformName) override;
   void SetUniformMat4(int location, const float* matrix4x4) override;
+  void SetUniformMat3(int location, const float* matrix3x3) override;
   void SetUniformVec4(int location, float x, float y, float z, float w) override;
   void SetUniformVec3(int location, float x, float y, float z) override;
   void SetUniform1f(int location, float value) override;
@@ -72,6 +81,11 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) override;
   void EnableVertexAttrib(unsigned int index) override;
   void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) override;
+  void DefineVertexAttribNormalizedU8(
+      unsigned int index,
+      int componentCount,
+      int strideBytes,
+      std::size_t offsetBytes) override;
   void BindTexture2D(unsigned int textureId) override;
   void SetTexture2DLinearMipmapClamp() override;
   void UploadTexture2DRgba8(int width, int height, const void* pixels) override;

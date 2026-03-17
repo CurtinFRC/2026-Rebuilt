@@ -1,6 +1,7 @@
 #include "repulsor3d/render/assets/CadMeshAssetPipeline.hpp"
 
 #include <array>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -144,9 +145,15 @@ void CompositeCadMeshCache::Store(const std::string& key, const PositionNormalMe
 }
 
 std::unique_ptr<ICadMeshCache> CreateDefaultCadMeshCache() {
+  std::filesystem::path root = ".repulsor_cache/cad_mesh";
+  if (const char* explicitRoot = std::getenv("CAD_CACHE_DIR"); explicitRoot != nullptr && *explicitRoot != '\0') {
+    root = explicitRoot;
+  } else if (const char* localAppData = std::getenv("LOCALAPPDATA"); localAppData != nullptr && *localAppData != '\0') {
+    root = std::filesystem::path(localAppData) / "repulsor_3d_sim_cpp" / "cad_mesh_cache";
+  }
   return std::make_unique<CompositeCadMeshCache>(
       std::make_unique<InMemoryCadMeshCache>(),
-      std::make_unique<FileCadMeshCache>(".repulsor_cache/cad_mesh"));
+      std::make_unique<FileCadMeshCache>(root.string()));
 }
 
 }  // namespace repulsor3d

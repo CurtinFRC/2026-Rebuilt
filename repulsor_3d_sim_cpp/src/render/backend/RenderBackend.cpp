@@ -30,6 +30,14 @@ void OpenGLRenderBackend::SetDepthTestEnabled(const bool enabled) {
   }
 }
 
+void OpenGLRenderBackend::SetBlendEnabled(const bool enabled) {
+  if (enabled) {
+    glEnable(GL_BLEND);
+  } else {
+    glDisable(GL_BLEND);
+  }
+}
+
 void OpenGLRenderBackend::SetWireframeMode(const bool enabled) {
   glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
 }
@@ -44,6 +52,10 @@ int OpenGLRenderBackend::GetUniformLocation(const unsigned int programId, const 
 
 void OpenGLRenderBackend::SetUniformMat4(const int location, const float* matrix4x4) {
   glUniformMatrix4fv(location, 1, GL_FALSE, matrix4x4);
+}
+
+void OpenGLRenderBackend::SetUniformMat3(const int location, const float* matrix3x3) {
+  glUniformMatrix3fv(location, 1, GL_FALSE, matrix3x3);
 }
 
 void OpenGLRenderBackend::SetUniformVec4(const int location, const float x, const float y, const float z, const float w) {
@@ -114,6 +126,20 @@ void OpenGLRenderBackend::DefineVertexAttribFloat(
       componentCount,
       GL_FLOAT,
       GL_FALSE,
+      strideBytes,
+      reinterpret_cast<void*>(offsetBytes));
+}
+
+void OpenGLRenderBackend::DefineVertexAttribNormalizedU8(
+    const unsigned int index,
+    const int componentCount,
+    const int strideBytes,
+    const std::size_t offsetBytes) {
+  glVertexAttribPointer(
+      index,
+      componentCount,
+      GL_UNSIGNED_BYTE,
+      GL_TRUE,
       strideBytes,
       reinterpret_cast<void*>(offsetBytes));
 }

@@ -56,6 +56,8 @@ struct ViewerConfig {
   std::string fieldCadModelPath = "field_2026rebuilt.gltf";
   float fieldCadScaleM = 1.0F;
   float fieldCadZOffsetM = 0.0F;
+  float fieldCadOffsetXM = 0.0F;
+  float fieldCadOffsetYM = 0.0F;
 
   float cameraDistanceM = 12.0F;
   float cameraPitchDeg = 35.0F;

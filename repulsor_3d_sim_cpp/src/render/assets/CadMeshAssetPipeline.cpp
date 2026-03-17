@@ -1,10 +1,16 @@
 #include "repulsor3d/render/assets/CadMeshAssetPipeline.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,6 +18,72 @@
 #include "repulsor3d/render/assets/SceneAssetResolver.hpp"
 
 namespace repulsor3d {
+namespace {
+
+constexpr std::uint64_t kFnv64OffsetBasis = 1469598103934665603ULL;
+constexpr std::uint64_t kFnv64Prime = 1099511628211ULL;
+
+void FnvMixBytes(std::uint64_t& hash, const std::uint8_t* data, const std::size_t count) {
+  for (std::size_t i = 0; i < count; ++i) {
+    hash ^= static_cast<std::uint64_t>(data[i]);
+    hash *= kFnv64Prime;
+  }
+}
+
+std::string BuildStableFileFingerprint(const std::string& filePath) {
+  constexpr std::size_t kSampleBytes = 128 * 1024;
+  std::ifstream in(filePath, std::ios::binary);
+  if (!in) {
+    return "";
+  }
+
+  in.seekg(0, std::ios::end);
+  const std::streamoff streamSize = in.tellg();
+  if (streamSize <= 0) {
+    return "";
+  }
+  const std::size_t fileSize = static_cast<std::size_t>(streamSize);
+  in.seekg(0, std::ios::beg);
+
+  std::uint64_t hash = kFnv64OffsetBasis;
+  const auto mixInteger = [&](const std::uint64_t value) {
+    std::array<std::uint8_t, sizeof(std::uint64_t)> bytes{};
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+      bytes[i] = static_cast<std::uint8_t>((value >> (i * 8U)) & 0xFFU);
+    }
+    FnvMixBytes(hash, bytes.data(), bytes.size());
+  };
+
+  const std::string filename = std::filesystem::path(filePath).filename().string();
+  FnvMixBytes(hash, reinterpret_cast<const std::uint8_t*>(filename.data()), filename.size());
+  mixInteger(static_cast<std::uint64_t>(fileSize));
+
+  const std::size_t headBytes = std::min<std::size_t>(fileSize, kSampleBytes);
+  std::vector<std::uint8_t> buffer(headBytes);
+  in.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
+  if (!in) {
+    return "";
+  }
+  FnvMixBytes(hash, buffer.data(), buffer.size());
+
+  if (fileSize > kSampleBytes) {
+    const std::size_t tailBytes = std::min<std::size_t>(fileSize - headBytes, kSampleBytes);
+    std::vector<std::uint8_t> tail(tailBytes);
+    in.clear();
+    in.seekg(static_cast<std::streamoff>(fileSize - tailBytes), std::ios::beg);
+    in.read(reinterpret_cast<char*>(tail.data()), static_cast<std::streamsize>(tail.size()));
+    if (!in) {
+      return "";
+    }
+    FnvMixBytes(hash, tail.data(), tail.size());
+  }
+
+  std::ostringstream out;
+  out << std::hex << hash;
+  return out.str();
+}
+
+}  // namespace
 
 void PassThroughCadMeshCooker::Cook(PositionNormalMesh& /*mesh*/) {}
 
@@ -77,19 +149,20 @@ bool CadMeshAssetPipeline::Load(const std::string& assetPath, PositionNormalMesh
     return false;
   }
 
-  std::string cacheKey = resolved;
+  std::string cacheKey = "cadmesh";
   {
-    std::error_code ec;
-    const auto writeTime = std::filesystem::last_write_time(resolved, ec);
-    if (!ec) {
-      cacheKey += "|wt=" + std::to_string(writeTime.time_since_epoch().count());
+    const std::string fingerprint = BuildStableFileFingerprint(resolved);
+    if (!fingerprint.empty()) {
+      cacheKey += "|fp=" + fingerprint;
+    } else {
+      cacheKey += "|path=" + std::filesystem::path(resolved).filename().string();
     }
-    ec.clear();
+    std::error_code ec;
     const auto fileSize = std::filesystem::file_size(resolved, ec);
     if (!ec) {
       cacheKey += "|sz=" + std::to_string(static_cast<unsigned long long>(fileSize));
     }
-    cacheKey += "|fmt_v=4";
+    cacheKey += "|fmt_v=5";
   }
 
   auto emitTiming = [&](const std::string& eventName, const std::chrono::steady_clock::duration elapsed) {
@@ -105,6 +178,7 @@ bool CadMeshAssetPipeline::Load(const std::string& assetPath, PositionNormalMesh
   emitTiming(
       cacheHit ? "cache_lookup_hit" : "cache_lookup_miss",
       std::chrono::steady_clock::now() - cacheLookupStart);
+  std::cerr << "CAD cache " << (cacheHit ? "hit" : "miss") << ": " << resolved << "\n";
   if (cacheHit) {
     emitTiming("load_total", std::chrono::steady_clock::now() - totalStart);
     return true;

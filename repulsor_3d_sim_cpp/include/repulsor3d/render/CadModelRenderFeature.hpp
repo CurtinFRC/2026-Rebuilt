@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <future>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <glm/vec3.hpp>
 
@@ -60,19 +62,28 @@ class CadModelRenderFeature final : public IRenderFeature {
   struct GpuMesh {
     GlVertexArrayHandle vao;
     GlBufferHandle vbo;
+    GlBufferHandle ebo;
     int vertexCount = 0;
+    int indexCount = 0;
+    glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+  };
+
+  struct PreparedCpuMesh {
+    std::vector<PositionNormalMesh::Vertex> vertices;
+    std::vector<std::uint32_t> indices;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
   };
 
   struct PendingLoad {
-    std::future<PositionNormalMesh> future;
+    std::future<PreparedCpuMesh> future;
   };
 
   bool CreateShader();
   static unsigned int CompileShader(unsigned int type, const char* source);
   static bool LinkShader(GlProgramHandle& program, unsigned int vs, unsigned int fs);
 
-  static bool UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
+  static PreparedCpuMesh PrepareCpuMesh(const PositionNormalMesh& cpu);
+  static bool UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);
@@ -84,6 +95,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   GlProgramHandle shader_;
   int uMvpLoc_ = -1;
   int uModelLoc_ = -1;
+  int uNormalMatrixLoc_ = -1;
   int uColorLoc_ = -1;
   int uLightDirLoc_ = -1;
   int uUseAssetColorLoc_ = -1;
