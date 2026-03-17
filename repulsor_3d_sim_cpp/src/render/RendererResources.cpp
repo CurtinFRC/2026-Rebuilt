@@ -20,26 +20,30 @@ template <typename TVertex>
 bool UploadMesh(
     const std::vector<TVertex>& vertices,
     const std::vector<uint32_t>& indices,
-    Renderer::Mesh& mesh,
+    unsigned int& vao,
+    unsigned int& vbo,
+    unsigned int& ebo,
+    int& indexCount,
+    const std::size_t uvOffset = 0,
     const bool withUv = false) {
-  glGenVertexArrays(1, &mesh.vao);
-  glGenBuffers(1, &mesh.vbo);
-  glGenBuffers(1, &mesh.ebo);
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(1, &vbo);
+  glGenBuffers(1, &ebo);
 
-  if (mesh.vao == 0 || mesh.vbo == 0 || mesh.ebo == 0) {
+  if (vao == 0 || vbo == 0 || ebo == 0) {
     return false;
   }
 
-  glBindVertexArray(mesh.vao);
+  glBindVertexArray(vao);
 
-  glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(
       GL_ARRAY_BUFFER,
       static_cast<GLsizeiptr>(vertices.size() * sizeof(TVertex)),
       vertices.data(),
       GL_STATIC_DRAW);
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
   glBufferData(
       GL_ELEMENT_ARRAY_BUFFER,
       static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
@@ -57,11 +61,11 @@ bool UploadMesh(
         GL_FLOAT,
         GL_FALSE,
         sizeof(TVertex),
-        reinterpret_cast<void*>(offsetof(Renderer::VertexPT, uv)));
+        reinterpret_cast<void*>(uvOffset));
   }
 
   glBindVertexArray(0);
-  mesh.indexCount = static_cast<int>(indices.size());
+  indexCount = static_cast<int>(indices.size());
   return true;
 }
 
@@ -181,7 +185,7 @@ bool Renderer::CreateMeshes() {
         3, 2, 6, 6, 7, 3,
         0, 1, 5, 5, 4, 0,
     };
-    if (!UploadMesh(cubeVerts, cubeIdx, cubeMesh_)) {
+    if (!UploadMesh(cubeVerts, cubeIdx, cubeMesh_.vao, cubeMesh_.vbo, cubeMesh_.ebo, cubeMesh_.indexCount)) {
       return false;
     }
   }
@@ -220,7 +224,13 @@ bool Renderer::CreateMeshes() {
       }
     }
 
-    if (!UploadMesh(sphereVerts, sphereIdx, sphereMesh_)) {
+    if (!UploadMesh(
+            sphereVerts,
+            sphereIdx,
+            sphereMesh_.vao,
+            sphereMesh_.vbo,
+            sphereMesh_.ebo,
+            sphereMesh_.indexCount)) {
       return false;
     }
   }
@@ -233,7 +243,15 @@ bool Renderer::CreateMeshes() {
         {{0.0F, 1.0F, 0.0F}, {0.0F, 1.0F}},
     };
     const std::vector<uint32_t> quadIdx = {0, 1, 2, 2, 3, 0};
-    if (!UploadMesh(quadVerts, quadIdx, quadMesh_, true)) {
+    if (!UploadMesh(
+            quadVerts,
+            quadIdx,
+            quadMesh_.vao,
+            quadMesh_.vbo,
+            quadMesh_.ebo,
+            quadMesh_.indexCount,
+            offsetof(VertexPT, uv),
+            true)) {
       return false;
     }
   }
