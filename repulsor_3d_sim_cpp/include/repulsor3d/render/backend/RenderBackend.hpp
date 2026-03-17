@@ -40,6 +40,12 @@ class IRenderBackend {
   virtual void DrawTriangles(int vertexCount) = 0;
   virtual void DrawIndexedTriangles(int indexCount) = 0;
   virtual void DrawLines(int vertexCount, float lineWidth) = 0;
+
+  virtual unsigned int CreateGpuTimerQuery() = 0;
+  virtual void DestroyGpuTimerQuery(unsigned int queryId) = 0;
+  virtual void BeginGpuTimerQuery(unsigned int queryId) = 0;
+  virtual void EndGpuTimerQuery() = 0;
+  virtual bool TryReadGpuTimerMilliseconds(unsigned int queryId, double& outMilliseconds) = 0;
 };
 
 class OpenGLRenderBackend final : public IRenderBackend {
@@ -74,6 +80,12 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void DrawTriangles(int vertexCount) override;
   void DrawIndexedTriangles(int indexCount) override;
   void DrawLines(int vertexCount, float lineWidth) override;
+
+  unsigned int CreateGpuTimerQuery() override;
+  void DestroyGpuTimerQuery(unsigned int queryId) override;
+  void BeginGpuTimerQuery(unsigned int queryId) override;
+  void EndGpuTimerQuery() override;
+  bool TryReadGpuTimerMilliseconds(unsigned int queryId, double& outMilliseconds) override;
 };
 
 }  // namespace repulsor3d

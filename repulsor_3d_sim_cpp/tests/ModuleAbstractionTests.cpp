@@ -20,7 +20,16 @@ int RunSceneDescriptorParseTests() {
     out << R"({
       "drawGrid": false,
       "overlay": [{"text":"Hello","anchor":"top_right"}],
-      "entities": [{"id":"marker","type":"sphere","pass":"transparent","center":[1,2,3],"radius":0.1}]
+      "entities": [{
+        "id":"marker",
+        "type":"sphere",
+        "pass":"transparent",
+        "center":[1,2,3],
+        "radius":0.1,
+        "parentId":"root",
+        "transform":{"position":[0.1,0.2,0.3],"rotationDeg":[0,0,45],"scale":[1,2,1]},
+        "culling":{"enabled":true,"boundsRadius":0.8}
+      }]
     })";
   }
 
@@ -41,6 +50,11 @@ int RunSceneDescriptorParseTests() {
   if (descriptor->staticEntities.empty()) {
     std::cerr << "SceneDescriptor entities parse missing\n";
     return 13;
+  }
+  const auto& marker = descriptor->staticEntities.front();
+  if (marker.parentId != "root" || !marker.hasTransform) {
+    std::cerr << "SceneDescriptor transform hierarchy parse missing\n";
+    return 14;
   }
   return 0;
 }

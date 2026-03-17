@@ -9,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
 option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
+option(REPULSOR_SIM_BUILD_PLUGIN_SDK "Build sample season plugin SDK target + ABI checks" ON)
 set(REPULSOR_SIM_NTCORE_ROOT "C:/Users/paulh/allwpilib" CACHE PATH "Root directory of a local allwpilib checkout/build for ntcore")
 set(REPULSOR_SIM_NTCORE_HINTS "" CACHE STRING "Optional semicolon-separated extra hint paths for ntcore package discovery")
 
@@ -91,6 +92,7 @@ set(REPULSOR_SIM_SOURCES
   src/render/RenderWorldAdapter.cpp
   src/render/SceneDescriptor.cpp
   src/render/ecs/EntityRegistry.cpp
+  src/render/ecs/Systems.cpp
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
@@ -127,6 +129,21 @@ target_link_libraries(repulsor_3d_sim_cpp
     ${REPULSOR_GLEW_TARGET}
     nlohmann_json::nlohmann_json
 )
+
+if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
+  add_library(repulsor3d_generic_season_plugin SHARED
+    plugin_sdk/GenericSeasonPluginTemplate.cpp
+  )
+  target_include_directories(repulsor3d_generic_season_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor3d_generic_season_plugin PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor3d_generic_season_plugin PRIVATE glm::glm)
+  endif()
+  if(MSVC)
+    target_compile_options(repulsor3d_generic_season_plugin PRIVATE /utf-8)
+  endif()
+endif()
 
 if(REPULSOR_SIM_USE_NTCORE)
   set(_repulsor_ntcore_search_paths
@@ -276,6 +293,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/scenes")
   )
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/field_2026rebuilt.gltf")
+  add_custom_command(TARGET repulsor_3d_sim_cpp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets/field_2026rebuilt.gltf"
+      "$<TARGET_FILE_DIR:repulsor_3d_sim_cpp>/field_2026rebuilt.gltf"
+  )
+endif()
+
 if(REPULSOR_SIM_BUILD_TESTS)
   include(CTest)
   add_executable(repulsor_3d_sim_cpp_tests
@@ -312,4 +337,42 @@ if(REPULSOR_SIM_BUILD_TESTS)
   endif()
 
   add_test(NAME repulsor_3d_sim_cpp_module_tests COMMAND repulsor_3d_sim_cpp_module_tests)
+
+  if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
+    add_executable(repulsor_3d_sim_cpp_plugin_abi_tests
+      tests/PluginAbiSmokeTests.cpp
+      src/sim/SimWorld.cpp
+      src/render/SceneDescriptor.cpp
+      src/render/RenderWorldAdapter.cpp
+      src/render/Season2026RebuiltModelBuilder.cpp
+      src/render/SceneModelBuilderFactory.cpp
+      src/modules/SeasonModule.cpp
+    )
+
+    target_include_directories(repulsor_3d_sim_cpp_plugin_abi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(repulsor_3d_sim_cpp_plugin_abi_tests PRIVATE nlohmann_json::nlohmann_json)
+    if(REPULSOR_SIM_FETCH_DEPS)
+      target_include_directories(repulsor_3d_sim_cpp_plugin_abi_tests PRIVATE ${glm_SOURCE_DIR})
+    else()
+      target_link_libraries(repulsor_3d_sim_cpp_plugin_abi_tests PRIVATE glm::glm)
+    endif()
+
+    if(MSVC)
+      target_compile_options(repulsor_3d_sim_cpp_plugin_abi_tests PRIVATE /utf-8)
+    endif()
+
+    add_dependencies(repulsor_3d_sim_cpp_plugin_abi_tests repulsor3d_generic_season_plugin)
+    add_test(
+      NAME repulsor_3d_sim_cpp_plugin_abi_tests
+      COMMAND
+        ${CMAKE_COMMAND} -E env
+        REPULSOR_TEST_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_generic_season_plugin>
+        $<TARGET_FILE:repulsor_3d_sim_cpp_plugin_abi_tests>
+    )
+
+    add_custom_target(repulsor_plugin_abi_check
+      COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_plugin_abi_tests
+      DEPENDS repulsor_3d_sim_cpp_plugin_abi_tests repulsor3d_generic_season_plugin
+    )
+  endif()
 endif()

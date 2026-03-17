@@ -8,6 +8,8 @@ struct ViewerConfig {
   std::string sceneProfile = "2026Rebuilt";
   std::string sceneDescriptorPath = "";
   std::string seasonModulePluginPath = "";
+  bool hotReloadSceneDescriptor = true;
+  bool hotReloadSeasonModule = true;
 
   std::string ntServer = "127.0.0.1";
   std::string ntClientName = "repulsor_3d_sim_cpp";
@@ -50,8 +52,8 @@ struct ViewerConfig {
   float robotCadScaleM = 1.0F;
   float robotCadZOffsetM = 0.0F;
 
-  bool showFieldCadModel = false;
-  std::string fieldCadModelPath = "";
+  bool showFieldCadModel = true;
+  std::string fieldCadModelPath = "field_2026rebuilt.gltf";
   float fieldCadScaleM = 1.0F;
   float fieldCadZOffsetM = 0.0F;
 

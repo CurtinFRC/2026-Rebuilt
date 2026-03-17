@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include "repulsor3d/render/SceneDescriptor.hpp"
 #include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
 
 #if defined(_WIN32)
@@ -112,11 +111,7 @@ class Season2026RebuiltModule final : public ISeasonModule {
   std::string Id() const override { return "2026rebuilt"; }
 
   std::unique_ptr<IRenderWorldAdapter> CreateWorldAdapter(const ViewerConfig& cfg) const override {
-    auto base = CreateRenderWorldAdapterFromSceneBuilder(std::make_unique<Season2026RebuiltModelBuilder>(cfg));
-    if (auto descriptor = LoadSceneDescriptorForProfile(cfg); descriptor.has_value()) {
-      return std::make_unique<DescriptorDecoratingRenderWorldAdapter>(std::move(base), std::move(*descriptor));
-    }
-    return base;
+    return CreateRenderWorldAdapterFromSceneBuilder(std::make_unique<Season2026RebuiltModelBuilder>(cfg));
   }
 };
 
@@ -170,13 +165,20 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
 
   auto* createFnRaw = ResolveSymbol(handle, "repulsor3d_create_season_module");
   auto* destroyFnRaw = ResolveSymbol(handle, "repulsor3d_destroy_season_module");
-  if (createFnRaw == nullptr || destroyFnRaw == nullptr) {
+  auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_season_module_abi_version");
+  if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
   }
 
   const auto createFn = reinterpret_cast<CreateSeasonModuleAbiFn>(createFnRaw);
   const auto destroyFn = reinterpret_cast<DestroySeasonModuleAbiFn>(destroyFnRaw);
+  const auto queryAbiVersionFn = reinterpret_cast<QuerySeasonModuleAbiVersionFn>(queryAbiVersionRaw);
+  if (queryAbiVersionFn == nullptr || queryAbiVersionFn() != kSeasonModuleAbiVersion) {
+    CloseLibrary(handle);
+    return nullptr;
+  }
+
   ISeasonModule* module = createFn();
   if (module == nullptr) {
     CloseLibrary(handle);

@@ -66,10 +66,25 @@ struct OverlayLine {
 
 using RenderEntityPayload = std::variant<SpherePrimitive, BoxPrimitive, LinePrimitive, MeshInstancePrimitive, OverlayLine>;
 
+struct Transform3D {
+  glm::vec3 position{0.0F, 0.0F, 0.0F};
+  glm::vec3 rotationDeg{0.0F, 0.0F, 0.0F};
+  glm::vec3 scale{1.0F, 1.0F, 1.0F};
+};
+
+struct EntityCulling {
+  bool enabled = true;
+  float boundsRadius = 0.5F;
+};
+
 struct RenderEntity {
   std::string id;
   RenderPass pass = RenderPass::Opaque;
   RenderEntityPayload payload = SpherePrimitive{};
+  std::string parentId;
+  Transform3D transform;
+  bool hasTransform = false;
+  EntityCulling culling;
 };
 
 struct RenderSceneFrame {

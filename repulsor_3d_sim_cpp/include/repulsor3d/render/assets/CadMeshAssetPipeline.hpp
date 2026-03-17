@@ -1,8 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 
@@ -101,6 +103,12 @@ std::unique_ptr<ICadMeshCache> CreateDefaultCadMeshCache();
 
 class CadMeshAssetPipeline {
  public:
+  struct TelemetryEvent {
+    std::string eventName;
+    std::string assetPath;
+    double milliseconds = 0.0;
+  };
+
   explicit CadMeshAssetPipeline(
       const ISceneAssetResolver& resolver,
       std::unique_ptr<ICadMeshImporter> importer = CreateDefaultCadMeshImporter(),
@@ -108,12 +116,15 @@ class CadMeshAssetPipeline {
       std::unique_ptr<ICadMeshCache> cache = CreateDefaultCadMeshCache());
 
   bool Load(const std::string& assetPath, PositionNormalMesh& outMesh);
+  std::vector<TelemetryEvent> ConsumeTelemetryEvents();
 
  private:
   const ISceneAssetResolver& resolver_;
   std::unique_ptr<ICadMeshImporter> importer_;
   std::unique_ptr<ICadMeshCooker> cooker_;
   std::unique_ptr<ICadMeshCache> cache_;
+  mutable std::mutex telemetryMutex_;
+  std::vector<TelemetryEvent> telemetryEvents_;
 };
 
 }  // namespace repulsor3d

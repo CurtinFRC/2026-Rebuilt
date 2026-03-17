@@ -154,4 +154,47 @@ void OpenGLRenderBackend::DrawLines(const int vertexCount, const float lineWidth
   glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
 }
 
+unsigned int OpenGLRenderBackend::CreateGpuTimerQuery() {
+  GLuint query = 0;
+  glGenQueries(1, &query);
+  return query;
+}
+
+void OpenGLRenderBackend::DestroyGpuTimerQuery(const unsigned int queryId) {
+  if (queryId == 0) {
+    return;
+  }
+  GLuint q = queryId;
+  glDeleteQueries(1, &q);
+}
+
+void OpenGLRenderBackend::BeginGpuTimerQuery(const unsigned int queryId) {
+  if (queryId == 0) {
+    return;
+  }
+  glBeginQuery(GL_TIME_ELAPSED, queryId);
+}
+
+void OpenGLRenderBackend::EndGpuTimerQuery() {
+  glEndQuery(GL_TIME_ELAPSED);
+}
+
+bool OpenGLRenderBackend::TryReadGpuTimerMilliseconds(const unsigned int queryId, double& outMilliseconds) {
+  outMilliseconds = 0.0;
+  if (queryId == 0) {
+    return false;
+  }
+
+  GLint available = 0;
+  glGetQueryObjectiv(queryId, GL_QUERY_RESULT_AVAILABLE, &available);
+  if (available == 0) {
+    return false;
+  }
+
+  GLuint64 elapsedNanoseconds = 0;
+  glGetQueryObjectui64v(queryId, GL_QUERY_RESULT, &elapsedNanoseconds);
+  outMilliseconds = static_cast<double>(elapsedNanoseconds) * 1e-6;
+  return true;
+}
+
 }  // namespace repulsor3d

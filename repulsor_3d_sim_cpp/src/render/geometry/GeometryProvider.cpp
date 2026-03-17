@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "repulsor3d/render/assets/CadMeshAssetPipeline.hpp"
 #include "repulsor3d/render/assets/SceneAssetResolver.hpp"
@@ -47,6 +48,20 @@ bool DefaultGeometryProvider::GetCadMesh(const std::string& assetPath, PositionN
     return false;
   }
   return cadAssetPipeline_->Load(assetPath, outMesh);
+}
+
+std::vector<CadAssetTelemetryEvent> DefaultGeometryProvider::ConsumeCadAssetTelemetry() {
+  std::vector<CadAssetTelemetryEvent> out;
+  if (cadAssetPipeline_ == nullptr) {
+    return out;
+  }
+
+  auto raw = cadAssetPipeline_->ConsumeTelemetryEvents();
+  out.reserve(raw.size());
+  for (auto& event : raw) {
+    out.push_back({std::move(event.eventName), std::move(event.assetPath), event.milliseconds});
+  }
+  return out;
 }
 
 PositionIndexedMesh DefaultGeometryProvider::BuildCubeMesh() {

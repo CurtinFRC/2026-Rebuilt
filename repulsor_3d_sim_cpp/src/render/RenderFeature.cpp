@@ -101,9 +101,23 @@ class OverlayRenderFeature final : public IRenderFeature {
     }
 
     if (context.diagnostics != nullptr) {
-      lines.push_back({"Frame ms: " + std::to_string(context.diagnostics->frameMilliseconds)});
-      for (const auto& feature : context.diagnostics->featureTimings) {
-        lines.push_back({"[" + feature.name + "] " + std::to_string(feature.milliseconds) + " ms"});
+      lines.push_back(
+          {"Frame ms: " + std::to_string(context.diagnostics->frameMilliseconds) +
+           " (avg " + std::to_string(context.diagnostics->frameAverageMilliseconds) + ")"});
+      for (const auto& pass : context.diagnostics->passTimings) {
+        lines.push_back(
+            {"[CPU " + pass.name + "] " + std::to_string(pass.milliseconds) +
+             " ms (avg " + std::to_string(pass.averageMilliseconds) + ")"});
+      }
+      for (const auto& gpu : context.diagnostics->gpuTimings) {
+        lines.push_back(
+            {"[GPU " + gpu.name + "] " + std::to_string(gpu.milliseconds) +
+             " ms (avg " + std::to_string(gpu.averageMilliseconds) + ")"});
+      }
+      for (const auto& asset : context.diagnostics->assetTimings) {
+        lines.push_back(
+            {"[Asset " + asset.name + "] " + std::to_string(asset.milliseconds) +
+             " ms (avg " + std::to_string(asset.averageMilliseconds) + ")"});
       }
     }
 

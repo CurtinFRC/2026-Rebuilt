@@ -31,12 +31,13 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
 
 RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
   RenderSceneFrame frame;
-  frame.drawFieldImage = toggles.showFieldImage;
+  // frame.drawFieldImage = toggles.showFieldImage;
+  frame.drawFieldImage = false;
 
   frame.overlayLines.push_back({std::string("[C] Camera debug: ") + (toggles.showCameraDebug ? "ON" : "OFF")});
   frame.overlayLines.push_back({std::string("[T] Truth fuel: ") + (toggles.showTruthFuel ? "ON" : "OFF")});
   frame.overlayLines.push_back({std::string("[A] Age filter: ") + (toggles.showAgeFilteredFuel ? "ON" : "OFF")});
-  frame.overlayLines.push_back({std::string("Field image: ") + (toggles.showFieldImage ? "ON" : "OFF")});
+  frame.overlayLines.push_back({"Field image: DISABLED (CAD field model in use)"});
   frame.overlayLines.push_back(
       {std::string("CAD robot: ") + (showRobotCadModel_ && !robotCadModelPath_.empty() ? "ON" : "OFF")});
   frame.overlayLines.push_back(
@@ -148,12 +149,31 @@ void Season2026RebuiltModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& f
 void Season2026RebuiltModelBuilder::AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   if (snap.pose.has_value()) {
     const Pose2D& p = snap.pose.value();
-    frame.boxes.push_back({
-        .center = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ * 0.5F},
+    BoxPrimitive robotBody{
+        .center = glm::vec3{0.0F, 0.0F, fieldZ_ + robotH_ * 0.5F},
         .size = glm::vec3{robotL_, robotW_, robotH_},
-        .yawDeg = glm::degrees(static_cast<float>(p.thetaRad)),
+        .yawDeg = 0.0F,
         .color = colUs_,
-    });
+    };
+    RenderEntity robotEntity{
+        .id = "robot_pose_live",
+        .pass = RenderPass::Opaque,
+        .payload = robotBody,
+        .parentId = "",
+        .transform =
+            Transform3D{
+                .position = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), 0.0F},
+                .rotationDeg = glm::vec3{0.0F, 0.0F, glm::degrees(static_cast<float>(p.thetaRad))},
+                .scale = glm::vec3{1.0F, 1.0F, 1.0F},
+            },
+        .hasTransform = true,
+        .culling =
+            EntityCulling{
+                .enabled = true,
+                .boundsRadius = std::max(robotL_, robotW_),
+            },
+    };
+    frame.entities.push_back(std::move(robotEntity));
 
     const float headingLen = std::max(robotL_, robotW_) * 0.95F;
     const glm::vec3 start{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ + 0.02F};
@@ -320,35 +340,68 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
         .wireframe = false,
         .pass = RenderPass::Opaque,
     };
-    frame.entities.push_back({.id = "field_cad", .pass = RenderPass::Opaque, .payload = mesh});
+    frame.entities.push_back(
+        {.id = "field_cad",
+         .pass = RenderPass::Opaque,
+         .payload = mesh,
+         .parentId = "",
+         .transform = {},
+         .hasTransform = false,
+         .culling = {.enabled = false, .boundsRadius = 1.0F}});
   }
 
   if (!showRobotCadModel_ || robotCadModelPath_.empty()) {
     return;
   }
 
-  auto appendPoseCad = [&](const std::optional<Pose2D>& pose, const glm::vec4& color) {
+  auto appendPoseCad = [&](
+                           const std::optional<Pose2D>& pose,
+                           const glm::vec4& color,
+                           const std::string& id,
+                           const std::string& parentId,
+                           const bool worldTransformFromPose) {
     if (!pose.has_value()) {
       return;
     }
 
     const Pose2D& p = pose.value();
+    const bool useLocalPose = worldTransformFromPose || !parentId.empty();
     MeshInstancePrimitive mesh{
         .assetPath = robotCadModelPath_,
-        .position = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotCadZOffsetM_},
-        .rotationDeg = glm::vec3{0.0F, 0.0F, glm::degrees(static_cast<float>(p.thetaRad))},
+        .position = useLocalPose
+                        ? glm::vec3{0.0F, 0.0F, fieldZ_ + robotCadZOffsetM_}
+                        : glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotCadZOffsetM_},
+        .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
         .scale = glm::vec3{robotCadScaleM_, robotCadScaleM_, robotCadScaleM_},
         .color = color,
         .wireframe = false,
         .pass = RenderPass::Opaque,
     };
-    frame.entities.push_back({.id = "robot_cad", .pass = RenderPass::Opaque, .payload = mesh});
+    RenderEntity entity{
+        .id = id,
+        .pass = RenderPass::Opaque,
+        .payload = mesh,
+        .parentId = parentId,
+        .transform =
+            Transform3D{
+                .position = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), 0.0F},
+                .rotationDeg = glm::vec3{0.0F, 0.0F, glm::degrees(static_cast<float>(p.thetaRad))},
+                .scale = glm::vec3{1.0F, 1.0F, 1.0F},
+            },
+        .hasTransform = worldTransformFromPose,
+        .culling =
+            EntityCulling{
+                .enabled = true,
+                .boundsRadius = std::max(robotL_, robotW_),
+            },
+    };
+    frame.entities.push_back(std::move(entity));
   };
 
-  appendPoseCad(snap.pose, glm::vec4{0.95F, 0.45F, 0.15F, 0.90F});
-  appendPoseCad(snap.activeGoal, glm::vec4{0.20F, 0.88F, 0.35F, 0.50F});
-  appendPoseCad(snap.chosenCollect, glm::vec4{0.20F, 0.40F, 0.95F, 0.50F});
-  appendPoseCad(snap.finalCollect, glm::vec4{0.95F, 0.35F, 0.15F, 0.55F});
+  appendPoseCad(snap.pose, glm::vec4{0.95F, 0.45F, 0.15F, 0.90F}, "robot_cad_live", "robot_pose_live", false);
+  appendPoseCad(snap.activeGoal, glm::vec4{0.20F, 0.88F, 0.35F, 0.50F}, "robot_cad_active", "", true);
+  appendPoseCad(snap.chosenCollect, glm::vec4{0.20F, 0.40F, 0.95F, 0.50F}, "robot_cad_chosen", "", true);
+  appendPoseCad(snap.finalCollect, glm::vec4{0.95F, 0.35F, 0.15F, 0.55F}, "robot_cad_final", "", true);
 }
 
 std::string Season2026RebuiltModelBuilder::NormalizeType(const std::string& type) {

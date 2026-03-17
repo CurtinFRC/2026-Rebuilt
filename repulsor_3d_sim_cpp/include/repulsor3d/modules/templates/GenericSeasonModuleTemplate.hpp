@@ -15,15 +15,14 @@ class GenericSeasonModuleTemplate final : public ISeasonModule {
   std::string Id() const override { return "genericseason"; }
 
   std::unique_ptr<IRenderWorldAdapter> CreateWorldAdapter(const ViewerConfig& cfg) const override {
-    auto base = CreateRenderWorldAdapterFromSceneBuilder(std::make_unique<GenericSeasonModelBuilderTemplate>(cfg));
-    if (auto descriptor = LoadSceneDescriptorForProfile(cfg); descriptor.has_value()) {
-      return std::make_unique<DescriptorDecoratingRenderWorldAdapter>(std::move(base), std::move(*descriptor));
-    }
-    return base;
+    return CreateRenderWorldAdapterFromSceneBuilder(std::make_unique<GenericSeasonModelBuilderTemplate>(cfg));
   }
 };
 
 // Plugin ABI exports (for dynamic module .dll/.so):
+// extern "C" __declspec(dllexport) int repulsor3d_query_season_module_abi_version() {
+//   return repulsor3d::kSeasonModuleAbiVersion;
+// }
 // extern "C" __declspec(dllexport) repulsor3d::ISeasonModule* repulsor3d_create_season_module() {
 //   return new GenericSeasonModuleTemplate();
 // }
@@ -32,4 +31,3 @@ class GenericSeasonModuleTemplate final : public ISeasonModule {
 // }
 
 }  // namespace repulsor3d
-

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -20,6 +21,9 @@ namespace {
 
 constexpr float kEpsilon = 1e-6F;
 constexpr char kMeshCacheMagic[] = "R3DMESH1";
+constexpr std::uint32_t kGlbMagic = 0x46546C67U;
+constexpr std::uint32_t kGlbJsonChunkType = 0x4E4F534AU;
+constexpr std::uint32_t kGlbBinChunkType = 0x004E4942U;
 
 glm::vec3 NormalizeSafe(const glm::vec3& v) {
   const float len = glm::length(v);
@@ -136,6 +140,112 @@ bool LoadBufferUri(const std::filesystem::path& modelPath, const std::string& ur
   out.resize(static_cast<size_t>(size));
   in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
   return in.good();
+}
+
+bool ReadEntireFileBinary(const std::string& path, std::vector<std::uint8_t>& out) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) {
+    return false;
+  }
+
+  in.seekg(0, std::ios::end);
+  const std::streamoff size = in.tellg();
+  if (size <= 0) {
+    return false;
+  }
+  in.seekg(0, std::ios::beg);
+
+  out.resize(static_cast<size_t>(size));
+  in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
+  return in.good();
+}
+
+bool ParseGlb(const std::string& path, nlohmann::json& outRoot, std::vector<std::uint8_t>& outBinChunk) {
+  std::vector<std::uint8_t> bytes;
+  if (!ReadEntireFileBinary(path, bytes)) {
+    return false;
+  }
+  if (bytes.size() < 12) {
+    return false;
+  }
+
+  auto readU32 = [&](const size_t offset) -> std::uint32_t {
+    std::uint32_t value = 0;
+    std::memcpy(&value, bytes.data() + offset, sizeof(std::uint32_t));
+    return value;
+  };
+
+  if (readU32(0) != kGlbMagic) {
+    return false;
+  }
+  if (readU32(4) != 2U) {
+    return false;
+  }
+
+  const std::uint32_t declaredLength = readU32(8);
+  if (declaredLength < 12U || declaredLength > bytes.size()) {
+    return false;
+  }
+
+  std::vector<std::uint8_t> jsonChunk;
+  outBinChunk.clear();
+
+  size_t cursor = 12;
+  while (cursor + 8 <= declaredLength) {
+    const std::uint32_t chunkLength = readU32(cursor);
+    const std::uint32_t chunkType = readU32(cursor + 4);
+    cursor += 8;
+    if (cursor + chunkLength > declaredLength) {
+      return false;
+    }
+
+    if (chunkType == kGlbJsonChunkType) {
+      jsonChunk.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
+                       bytes.begin() + static_cast<std::ptrdiff_t>(cursor + chunkLength));
+    } else if (chunkType == kGlbBinChunkType) {
+      outBinChunk.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
+                         bytes.begin() + static_cast<std::ptrdiff_t>(cursor + chunkLength));
+    }
+
+    cursor += chunkLength;
+  }
+
+  if (jsonChunk.empty()) {
+    return false;
+  }
+
+  std::string jsonText(reinterpret_cast<const char*>(jsonChunk.data()), jsonChunk.size());
+  while (!jsonText.empty() && jsonText.back() == '\0') {
+    jsonText.pop_back();
+  }
+  try {
+    outRoot = nlohmann::json::parse(jsonText);
+  } catch (...) {
+    return false;
+  }
+  return true;
+}
+
+bool LoadGltfRoot(const std::string& resolvedAssetPath, nlohmann::json& outRoot, std::vector<std::uint8_t>& outGlbBinChunk) {
+  std::filesystem::path path(resolvedAssetPath);
+  std::string ext = path.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+  outGlbBinChunk.clear();
+  if (ext == ".glb") {
+    return ParseGlb(resolvedAssetPath, outRoot, outGlbBinChunk);
+  }
+
+  std::ifstream in(resolvedAssetPath);
+  if (!in) {
+    return false;
+  }
+  try {
+    in >> outRoot;
+  } catch (...) {
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -364,15 +474,9 @@ bool ObjCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionNo
 }
 
 bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) {
-  std::ifstream in(resolvedAssetPath);
-  if (!in) {
-    return false;
-  }
-
   nlohmann::json root;
-  try {
-    in >> root;
-  } catch (...) {
+  std::vector<std::uint8_t> embeddedGlbBinChunk;
+  if (!LoadGltfRoot(resolvedAssetPath, root, embeddedGlbBinChunk)) {
     return false;
   }
 
@@ -390,11 +494,20 @@ bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionN
   const std::filesystem::path modelPath(resolvedAssetPath);
   for (size_t i = 0; i < root["buffers"].size(); ++i) {
     const auto& bufferNode = root["buffers"][i];
-    if (!bufferNode.contains("uri") || !bufferNode["uri"].is_string()) {
+    if (bufferNode.contains("uri") && bufferNode["uri"].is_string()) {
+      if (!LoadBufferUri(modelPath, bufferNode["uri"].get<std::string>(), buffers[i])) {
+        return false;
+      }
+    } else if (i == 0 && !embeddedGlbBinChunk.empty()) {
+      buffers[i] = embeddedGlbBinChunk;
+    } else {
       return false;
     }
-    if (!LoadBufferUri(modelPath, bufferNode["uri"].get<std::string>(), buffers[i])) {
-      return false;
+    if (bufferNode.contains("byteLength") && bufferNode["byteLength"].is_number_integer()) {
+      const size_t expectedLength = static_cast<size_t>(bufferNode["byteLength"].get<int>());
+      if (buffers[i].size() < expectedLength) {
+        return false;
+      }
     }
   }
 
@@ -462,6 +575,9 @@ bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionN
     const size_t stride =
         view.contains("byteStride") && view["byteStride"].is_number_integer() ? static_cast<size_t>(view["byteStride"].get<int>()) : 12U;
     const size_t base = viewOffset + accessorOffset;
+    if (stride < 12U) {
+      return false;
+    }
 
     const auto& bufferData = buffers[static_cast<size_t>(bufferIndex)];
     if (base + count * stride > bufferData.size()) {
@@ -532,6 +648,9 @@ bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionN
             ? static_cast<size_t>(view["byteStride"].get<int>())
             : componentSize;
     const size_t base = viewOffset + accessorOffset;
+    if (stride < componentSize) {
+      return false;
+    }
 
     const auto& bufferData = buffers[static_cast<size_t>(bufferIndex)];
     if (base + count * stride > bufferData.size()) {
@@ -627,6 +746,9 @@ bool MultiFormatCadMeshImporter::Import(const std::string& resolvedAssetPath, Po
     return objImporter_.Import(resolvedAssetPath, outMesh);
   }
   if (ext == ".gltf") {
+    return gltfImporter_.Import(resolvedAssetPath, outMesh);
+  }
+  if (ext == ".glb") {
     return gltfImporter_.Import(resolvedAssetPath, outMesh);
   }
 
@@ -767,25 +889,57 @@ bool CadMeshAssetPipeline::Load(const std::string& assetPath, PositionNormalMesh
     return false;
   }
 
+  const auto totalStart = std::chrono::steady_clock::now();
   const std::string resolved = resolver_.ResolveFilePath(assetPath);
   if (resolved.empty()) {
     return false;
   }
 
-  if (cache_->TryLoad(resolved, outMesh)) {
+  auto emitTiming = [&](const std::string& eventName, const std::chrono::steady_clock::duration elapsed) {
+    std::lock_guard<std::mutex> lock(telemetryMutex_);
+    telemetryEvents_.push_back(
+        {eventName,
+         resolved,
+         std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(elapsed).count()});
+  };
+
+  const auto cacheLookupStart = std::chrono::steady_clock::now();
+  const bool cacheHit = cache_->TryLoad(resolved, outMesh);
+  emitTiming(
+      cacheHit ? "cache_lookup_hit" : "cache_lookup_miss",
+      std::chrono::steady_clock::now() - cacheLookupStart);
+  if (cacheHit) {
+    emitTiming("load_total", std::chrono::steady_clock::now() - totalStart);
     return true;
   }
 
   PositionNormalMesh mesh;
+  const auto importStart = std::chrono::steady_clock::now();
   if (!importer_->Import(resolved, mesh)) {
+    emitTiming("import_failed", std::chrono::steady_clock::now() - importStart);
+    emitTiming("load_total", std::chrono::steady_clock::now() - totalStart);
     return false;
   }
+  emitTiming("import", std::chrono::steady_clock::now() - importStart);
 
+  const auto cookStart = std::chrono::steady_clock::now();
   cooker_->Cook(mesh);
+  emitTiming("cook", std::chrono::steady_clock::now() - cookStart);
+
+  const auto storeStart = std::chrono::steady_clock::now();
   cache_->Store(resolved, mesh);
+  emitTiming("cache_store", std::chrono::steady_clock::now() - storeStart);
+
+  emitTiming("load_total", std::chrono::steady_clock::now() - totalStart);
   outMesh = std::move(mesh);
   return true;
 }
 
-}  // namespace repulsor3d
+std::vector<CadMeshAssetPipeline::TelemetryEvent> CadMeshAssetPipeline::ConsumeTelemetryEvents() {
+  std::lock_guard<std::mutex> lock(telemetryMutex_);
+  std::vector<TelemetryEvent> out;
+  out.swap(telemetryEvents_);
+  return out;
+}
 
+}  // namespace repulsor3d

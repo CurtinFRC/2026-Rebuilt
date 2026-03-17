@@ -7,6 +7,7 @@ This is a full C++ rewrite of `repulsor_3d_sim` with:
 - truth socket receiver
 - optional NT4 datasource (when `ntcore` is available)
 - scene-model abstraction for season-specific game rendering
+- hot-reload support for season module plugins + scene descriptors
 
 ## Build
 
@@ -87,13 +88,21 @@ The renderer is now split into a backend + season-model pipeline:
 - ECS-style entity registry:
   - `include/repulsor3d/render/ecs/EntityRegistry.hpp`
   - entity payloads can be converted into render commands without direct primitive vectors
+- ECS systems for transform hierarchy + frustum culling:
+  - `include/repulsor3d/render/ecs/Systems.hpp`
+  - entities support optional parent linkage and local transforms
+  - culling bounds are per-entity and run before render command generation
 - Overlay layout engine:
   - overlay widgets support `TopLeft`, `TopRight`, `BottomLeft`, `BottomRight` anchors
   - smoothed FPS widget is rendered via the same overlay widget path (top-right)
 - Asset pipeline abstraction for CAD:
   - `ICadMeshImporter`, `ICadMeshCooker`, `ICadMeshCache`, `CadMeshAssetPipeline`
-  - default multi-format importer supports STL / OBJ / glTF (`.gltf`)
+  - default multi-format importer supports STL / OBJ / glTF (`.gltf`) / binary glTF (`.glb`)
   - default cache is in-memory + disk-backed (`.repulsor_cache/cad_mesh`)
+- Telemetry and diagnostics:
+  - per-pass CPU timings
+  - GPU timing abstraction via backend timer queries
+  - CAD asset telemetry (cache lookup/import/cook/store/total timings)
 - Backend abstraction expansion:
   - `IRenderBackend` now abstracts uniforms plus common buffer/texture/vertex-attrib upload paths
   - renderer setup/upload code migrated off direct OpenGL calls where practical
@@ -104,6 +113,7 @@ The renderer is now split into a backend + season-model pipeline:
   - converts runtime snapshot data into a `RenderSceneFrame`
 - `Season2026RebuiltModelBuilder` (`src/render/Season2026RebuiltModelBuilder.cpp`):
   - current `2026Rebuilt` game-specific mapping for fuel/robots/cameras/overlay
+  - default field CAD model path: `field_2026rebuilt.gltf` (field image rendering currently disabled in this season builder)
 - `SceneModelBuilderFactory` (`src/render/SceneModelBuilderFactory.cpp`):
   - resolves `SIM_SCENE_PROFILE` to a concrete scene model builder
 - Generic scaffold:
@@ -139,6 +149,25 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 - `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
 - `SEASON_MODULE_PLUGIN_PATH` (optional path to season module plugin `.dll`/`.so`)
+- `HOT_RELOAD_SCENE_DESCRIPTOR` (default `true`)
+- `HOT_RELOAD_SEASON_MODULE` (default `true`)
+
+## Plugin SDK + ABI Checks
+
+- Sample plugin SDK template source:
+  - `plugin_sdk/GenericSeasonPluginTemplate.cpp`
+  - `plugin_sdk/CMakeLists.txt`
+- ABI contract now requires plugin export:
+  - `repulsor3d_query_season_module_abi_version`
+  - `repulsor3d_create_season_module`
+  - `repulsor3d_destroy_season_module`
+- CTest includes plugin ABI smoke test:
+  - `repulsor_3d_sim_cpp_plugin_abi_tests`
+- CMake target for CI-style ABI check:
+
+```powershell
+cmake --build build --config Release --target repulsor_plugin_abi_check
+```
 
 ## Clangd / LSP
 

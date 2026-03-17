@@ -21,6 +21,7 @@ struct SceneDescriptor {
 };
 
 std::string CanonicalSceneProfileKey(const std::string& sceneProfile);
+std::string ResolveSceneDescriptorPathForProfile(const ViewerConfig& cfg);
 std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& path);
 std::optional<SceneDescriptor> LoadSceneDescriptorForProfile(const ViewerConfig& cfg);
 

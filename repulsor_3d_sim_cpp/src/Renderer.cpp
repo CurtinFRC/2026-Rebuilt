@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <iomanip>
 #include <map>
 #include <memory>
@@ -15,6 +16,7 @@
 
 #include "repulsor3d/render/RenderCommandBuffer.hpp"
 #include "repulsor3d/render/RenderGraph.hpp"
+#include "repulsor3d/render/ecs/Systems.hpp"
 
 namespace repulsor3d {
 
@@ -51,6 +53,15 @@ Renderer::~Renderer() {
   DestroyMesh(cubeMesh_);
   DestroyMesh(sphereMesh_);
   DestroyMesh(quadMesh_);
+
+  for (auto& [_, timer] : gpuPassTimers_) {
+    for (unsigned int& queryId : timer.queryIds) {
+      if (queryId != 0) {
+        backend_->DestroyGpuTimerQuery(queryId);
+        queryId = 0;
+      }
+    }
+  }
 }
 
 void Renderer::SetRenderWorldAdapter(std::unique_ptr<IRenderWorldAdapter> worldAdapter) {
@@ -163,10 +174,12 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   if (worldAdapter_ != nullptr) {
     sceneFrame = worldAdapter_->BuildFrame(world, toggles);
   }
-  RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
   const glm::mat4 vp = camera.ProjectionMatrix(aspect) * camera.ViewMatrix();
+  ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
+  RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
+
   const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
   const RenderFeatureContext context{
       .viewProjection = vp,
@@ -193,17 +206,47 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
         .dependencies = rawFeature->Dependencies(),
         .execute =
             [this, rawFeature, &context, &drawApi]() {
+              auto& gpuTimer = gpuPassTimers_[rawFeature->Name()];
+              if (gpuTimer.queryIds[0] == 0) {
+                gpuTimer.queryIds[0] = backend_->CreateGpuTimerQuery();
+              }
+              if (gpuTimer.queryIds[1] == 0) {
+                gpuTimer.queryIds[1] = backend_->CreateGpuTimerQuery();
+              }
+
+              const unsigned int readQuery = gpuTimer.queryIds[gpuTimer.readIndex];
+              if (readQuery != 0) {
+                double gpuMs = 0.0;
+                if (backend_->TryReadGpuTimerMilliseconds(readQuery, gpuMs)) {
+                  diagnostics_.RecordGpuTime(rawFeature->Name(), gpuMs);
+                }
+              }
+
+              const unsigned int writeQuery = gpuTimer.queryIds[gpuTimer.writeIndex];
+              const bool gpuQueryActive = writeQuery != 0;
+              if (gpuQueryActive) {
+                backend_->BeginGpuTimerQuery(writeQuery);
+              }
+
               const auto start = std::chrono::steady_clock::now();
               rawFeature->Render(context, drawApi);
               const auto end = std::chrono::steady_clock::now();
+              if (gpuQueryActive) {
+                backend_->EndGpuTimerQuery();
+              }
+
               const double ms =
                   std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
-              diagnostics_.RecordFeatureTime(rawFeature->Name(), ms);
+              diagnostics_.RecordPassTime(rawFeature->Name(), ms);
+
+              std::swap(gpuTimer.readIndex, gpuTimer.writeIndex);
             },
     });
   }
 
   graph.Execute();
+  DrainAssetTelemetry();
+
   const auto frameEnd = std::chrono::steady_clock::now();
   const double frameMs =
       std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count();
@@ -217,6 +260,21 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
     }
   }
   diagnostics_.EndFrame(frameMs);
+}
+
+void Renderer::DrainAssetTelemetry() {
+  if (geometryProvider_ == nullptr) {
+    return;
+  }
+
+  for (const auto& event : geometryProvider_->ConsumeCadAssetTelemetry()) {
+    std::filesystem::path p(event.assetPath);
+    std::string label = event.eventName;
+    if (!p.empty()) {
+      label += " [" + p.filename().string() + "]";
+    }
+    diagnostics_.RecordAssetTime(label, event.milliseconds);
+  }
 }
 
 void Renderer::DrawGrid(const glm::mat4& vp) {

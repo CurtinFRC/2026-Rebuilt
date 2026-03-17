@@ -19,6 +19,40 @@ void RenderEntityRegistry::SetPass(const RenderEntityId id, const RenderPass pas
   entities_[static_cast<size_t>(idx)].pass = pass;
 }
 
+void RenderEntityRegistry::SetParent(const RenderEntityId id, const std::string& parentDebugId) {
+  const int idx = IndexOf(id);
+  if (idx < 0) {
+    return;
+  }
+  entities_[static_cast<size_t>(idx)].parentId = parentDebugId;
+}
+
+void RenderEntityRegistry::SetTransform(const RenderEntityId id, const Transform3D& transform) {
+  const int idx = IndexOf(id);
+  if (idx < 0) {
+    return;
+  }
+  entities_[static_cast<size_t>(idx)].transform = transform;
+  entities_[static_cast<size_t>(idx)].hasTransform = true;
+}
+
+void RenderEntityRegistry::ClearTransform(const RenderEntityId id) {
+  const int idx = IndexOf(id);
+  if (idx < 0) {
+    return;
+  }
+  entities_[static_cast<size_t>(idx)].transform = Transform3D{};
+  entities_[static_cast<size_t>(idx)].hasTransform = false;
+}
+
+void RenderEntityRegistry::SetCulling(const RenderEntityId id, const EntityCulling& culling) {
+  const int idx = IndexOf(id);
+  if (idx < 0) {
+    return;
+  }
+  entities_[static_cast<size_t>(idx)].culling = culling;
+}
+
 void RenderEntityRegistry::SetSphere(const RenderEntityId id, const SpherePrimitive& sphere) {
   const int idx = IndexOf(id);
   if (idx < 0) {
@@ -87,4 +121,3 @@ int RenderEntityRegistry::IndexOf(const RenderEntityId id) const {
 }
 
 }  // namespace repulsor3d
-

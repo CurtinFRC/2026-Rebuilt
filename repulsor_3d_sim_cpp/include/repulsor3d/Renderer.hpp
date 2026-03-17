@@ -3,6 +3,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
@@ -82,6 +83,12 @@ class Renderer {
     glm::vec2 uv;
   };
 
+  struct GpuPassTimerState {
+    std::array<unsigned int, 2> queryIds{0, 0};
+    int readIndex = 0;
+    int writeIndex = 1;
+  };
+
   bool CreateShaders();
   bool CreateMeshes();
   bool CreateFieldTexture();
@@ -103,6 +110,7 @@ class Renderer {
 
   void DrawOverlay(int width, int height, const std::vector<OverlayLine>& lines);
   void DrawText2D(float x, float y, float scale, const std::string& text, const glm::vec4& color);
+  void DrainAssetTelemetry();
 
   static float TextWidthPixels(const std::string& text, float scale);
   static std::string ToUpperAscii(const std::string& s);
@@ -141,6 +149,7 @@ class Renderer {
 
   bool smoothedFrameMsInitialized_ = false;
   double smoothedFrameMs_ = 0.0;
+  std::unordered_map<std::string, GpuPassTimerState> gpuPassTimers_;
 };
 
 }  // namespace repulsor3d

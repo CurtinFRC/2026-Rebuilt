@@ -14,6 +14,10 @@ class RenderEntityRegistry {
  public:
   RenderEntityId CreateEntity(const std::string& debugId = "");
   void SetPass(RenderEntityId id, RenderPass pass);
+  void SetParent(RenderEntityId id, const std::string& parentDebugId);
+  void SetTransform(RenderEntityId id, const Transform3D& transform);
+  void ClearTransform(RenderEntityId id);
+  void SetCulling(RenderEntityId id, const EntityCulling& culling);
 
   void SetSphere(RenderEntityId id, const SpherePrimitive& sphere);
   void SetBox(RenderEntityId id, const BoxPrimitive& box);
@@ -33,4 +37,3 @@ class RenderEntityRegistry {
 };
 
 }  // namespace repulsor3d
-

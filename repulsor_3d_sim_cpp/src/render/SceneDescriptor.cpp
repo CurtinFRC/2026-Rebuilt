@@ -90,6 +90,24 @@ RenderPass ParseRenderPass(const nlohmann::json& passNode, const RenderPass fall
   return fallback;
 }
 
+Transform3D ParseTransformNode(const nlohmann::json& transformNode, const Transform3D& fallback) {
+  if (!transformNode.is_object()) {
+    return fallback;
+  }
+
+  Transform3D out = fallback;
+  if (transformNode.contains("position")) {
+    out.position = ParseVec3(transformNode["position"], out.position);
+  }
+  if (transformNode.contains("rotationDeg")) {
+    out.rotationDeg = ParseVec3(transformNode["rotationDeg"], out.rotationDeg);
+  }
+  if (transformNode.contains("scale")) {
+    out.scale = ParseVec3(transformNode["scale"], out.scale);
+  }
+  return out;
+}
+
 }  // namespace
 
 std::string CanonicalSceneProfileKey(const std::string& sceneProfile) {
@@ -276,6 +294,22 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
       if (item.contains("pass")) {
         entity.pass = ParseRenderPass(item["pass"], entity.pass);
       }
+      if (item.contains("parentId") && item["parentId"].is_string()) {
+        entity.parentId = item["parentId"].get<std::string>();
+      }
+      if (item.contains("transform")) {
+        entity.transform = ParseTransformNode(item["transform"], entity.transform);
+        entity.hasTransform = true;
+      }
+      if (item.contains("culling") && item["culling"].is_object()) {
+        const auto& culling = item["culling"];
+        if (culling.contains("enabled") && culling["enabled"].is_boolean()) {
+          entity.culling.enabled = culling["enabled"].get<bool>();
+        }
+        if (culling.contains("boundsRadius") && culling["boundsRadius"].is_number()) {
+          entity.culling.boundsRadius = culling["boundsRadius"].get<float>();
+        }
+      }
 
       if (type == "sphere") {
         SpherePrimitive sphere;
@@ -377,6 +411,14 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
 }
 
 std::optional<SceneDescriptor> LoadSceneDescriptorForProfile(const ViewerConfig& cfg) {
+  const std::string descriptorPath = ResolveSceneDescriptorPathForProfile(cfg);
+  if (descriptorPath.empty()) {
+    return std::nullopt;
+  }
+  return LoadSceneDescriptorFromFile(descriptorPath);
+}
+
+std::string ResolveSceneDescriptorPathForProfile(const ViewerConfig& cfg) {
   std::vector<std::string> candidates;
   candidates.reserve(3);
 
@@ -394,12 +436,10 @@ std::optional<SceneDescriptor> LoadSceneDescriptorForProfile(const ViewerConfig&
       continue;
     }
 
-    if (auto descriptor = LoadSceneDescriptorFromFile(candidate); descriptor.has_value()) {
-      return descriptor;
-    }
+    return candidate;
   }
 
-  return std::nullopt;
+  return "";
 }
 
 }  // namespace repulsor3d

@@ -32,6 +32,12 @@ struct PositionNormalMesh {
   std::vector<Vertex> vertices;
 };
 
+struct CadAssetTelemetryEvent {
+  std::string eventName;
+  std::string assetPath;
+  double milliseconds = 0.0;
+};
+
 class IGeometryProvider {
  public:
   virtual ~IGeometryProvider() = default;
@@ -40,6 +46,7 @@ class IGeometryProvider {
   virtual const PositionIndexedMesh& GetUnitSphereMesh() = 0;
   virtual const PositionUvIndexedMesh& GetUnitQuadUvMesh() = 0;
   virtual bool GetCadMesh(const std::string& assetPath, PositionNormalMesh& outMesh) = 0;
+  virtual std::vector<CadAssetTelemetryEvent> ConsumeCadAssetTelemetry() = 0;
 };
 
 class DefaultGeometryProvider final : public IGeometryProvider {
@@ -51,6 +58,7 @@ class DefaultGeometryProvider final : public IGeometryProvider {
   const PositionIndexedMesh& GetUnitSphereMesh() override;
   const PositionUvIndexedMesh& GetUnitQuadUvMesh() override;
   bool GetCadMesh(const std::string& assetPath, PositionNormalMesh& outMesh) override;
+  std::vector<CadAssetTelemetryEvent> ConsumeCadAssetTelemetry() override;
 
  private:
   static PositionIndexedMesh BuildCubeMesh();

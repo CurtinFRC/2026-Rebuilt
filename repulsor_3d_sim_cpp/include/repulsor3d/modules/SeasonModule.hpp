@@ -9,6 +9,8 @@
 
 namespace repulsor3d {
 
+inline constexpr int kSeasonModuleAbiVersion = 1;
+
 class ISeasonModule {
  public:
   virtual ~ISeasonModule() = default;
@@ -20,6 +22,7 @@ class ISeasonModule {
 using SeasonModuleFactoryFn = std::function<std::unique_ptr<ISeasonModule>()>;
 using CreateSeasonModuleAbiFn = ISeasonModule* (*)();
 using DestroySeasonModuleAbiFn = void (*)(ISeasonModule*);
+using QuerySeasonModuleAbiVersionFn = int (*)();
 
 void RegisterSeasonModule(const std::string& moduleId, SeasonModuleFactoryFn factoryFn);
 std::unique_ptr<ISeasonModule> CreateSeasonModule(const std::string& moduleId);
