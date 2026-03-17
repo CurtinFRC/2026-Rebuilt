@@ -21,7 +21,7 @@ namespace repulsor3d {
 void CadModelRenderFeature::FlatLitMaterialPass::Apply(const MaterialInstance& material) {
   if (colorUniformLocation_ >= 0) {
     const auto& c = material.definition.baseColor;
-    glUniform4f(colorUniformLocation_, c.r, c.g, c.b, c.a);
+    backend_.SetUniformVec4(colorUniformLocation_, c.r, c.g, c.b, c.a);
   }
 }
 
@@ -57,7 +57,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   backend_->UseProgram(shader_.Get());
-  glUniform3f(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
+  backend_->SetUniformVec3(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
 
   for (const auto& command : context.commandBuffer) {
     std::visit(
@@ -78,8 +78,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             model = glm::scale(model, instance.scale);
 
             const glm::mat4 mvp = context.viewProjection * model;
-            glUniformMatrix4fv(uMvpLoc_, 1, GL_FALSE, &mvp[0][0]);
-            glUniformMatrix4fv(uModelLoc_, 1, GL_FALSE, &model[0][0]);
+            backend_->SetUniformMat4(uMvpLoc_, &mvp[0][0]);
+            backend_->SetUniformMat4(uModelLoc_, &model[0][0]);
 
             MaterialInstance material;
             material.definition.baseColor = instance.color;
@@ -146,11 +146,11 @@ void main() {
   glDeleteShader(vs);
   glDeleteShader(fs);
 
-  uMvpLoc_ = glGetUniformLocation(shader_.Get(), "uMvp");
-  uModelLoc_ = glGetUniformLocation(shader_.Get(), "uModel");
-  uColorLoc_ = glGetUniformLocation(shader_.Get(), "uColor");
-  uLightDirLoc_ = glGetUniformLocation(shader_.Get(), "uLightDir");
-  materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(uColorLoc_));
+  uMvpLoc_ = backend_->GetUniformLocation(shader_.Get(), "uMvp");
+  uModelLoc_ = backend_->GetUniformLocation(shader_.Get(), "uModel");
+  uColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uColor");
+  uLightDirLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightDir");
+  materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(*backend_, uColorLoc_));
   if (backend_ != nullptr) {
     materialPipeline_.AddPass(std::make_unique<WireframeMaterialPass>(*backend_));
   }

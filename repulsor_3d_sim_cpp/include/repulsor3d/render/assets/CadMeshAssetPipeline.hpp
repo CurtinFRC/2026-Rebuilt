@@ -1,0 +1,73 @@
+#pragma once
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+
+#include "repulsor3d/render/geometry/GeometryProvider.hpp"
+
+namespace repulsor3d {
+
+class ISceneAssetResolver;
+
+class ICadMeshImporter {
+ public:
+  virtual ~ICadMeshImporter() = default;
+  virtual bool Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) = 0;
+};
+
+class StlCadMeshImporter final : public ICadMeshImporter {
+ public:
+  bool Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) override;
+
+ private:
+  static bool ParseBinaryStl(const std::string& filePath, PositionNormalMesh& outMesh);
+  static bool ParseAsciiStl(const std::string& filePath, PositionNormalMesh& outMesh);
+};
+
+class ICadMeshCooker {
+ public:
+  virtual ~ICadMeshCooker() = default;
+  virtual void Cook(PositionNormalMesh& mesh) = 0;
+};
+
+class PassThroughCadMeshCooker final : public ICadMeshCooker {
+ public:
+  void Cook(PositionNormalMesh& mesh) override;
+};
+
+class ICadMeshCache {
+ public:
+  virtual ~ICadMeshCache() = default;
+  virtual bool TryLoad(const std::string& key, PositionNormalMesh& outMesh) const = 0;
+  virtual void Store(const std::string& key, const PositionNormalMesh& mesh) = 0;
+};
+
+class InMemoryCadMeshCache final : public ICadMeshCache {
+ public:
+  bool TryLoad(const std::string& key, PositionNormalMesh& outMesh) const override;
+  void Store(const std::string& key, const PositionNormalMesh& mesh) override;
+
+ private:
+  std::unordered_map<std::string, PositionNormalMesh> cache_;
+};
+
+class CadMeshAssetPipeline {
+ public:
+  explicit CadMeshAssetPipeline(
+      const ISceneAssetResolver& resolver,
+      std::unique_ptr<ICadMeshImporter> importer = std::make_unique<StlCadMeshImporter>(),
+      std::unique_ptr<ICadMeshCooker> cooker = std::make_unique<PassThroughCadMeshCooker>(),
+      std::unique_ptr<ICadMeshCache> cache = std::make_unique<InMemoryCadMeshCache>());
+
+  bool Load(const std::string& assetPath, PositionNormalMesh& outMesh);
+
+ private:
+  const ISceneAssetResolver& resolver_;
+  std::unique_ptr<ICadMeshImporter> importer_;
+  std::unique_ptr<ICadMeshCooker> cooker_;
+  std::unique_ptr<ICadMeshCache> cache_;
+};
+
+}  // namespace repulsor3d
+

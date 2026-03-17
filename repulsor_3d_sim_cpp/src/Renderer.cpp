@@ -15,13 +15,12 @@
 
 #include "repulsor3d/render/RenderCommandBuffer.hpp"
 #include "repulsor3d/render/RenderGraph.hpp"
-#include "repulsor3d/render/SceneModelBuilderFactory.hpp"
 
 namespace repulsor3d {
 
-Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<ISceneModelBuilder> sceneBuilder)
+Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter> worldAdapter)
     : cfg_(cfg),
-      sceneBuilder_(std::move(sceneBuilder)),
+      worldAdapter_(std::move(worldAdapter)),
       backend_(std::make_unique<OpenGLRenderBackend>()),
       assetResolver_(std::make_unique<DefaultSceneAssetResolver>()),
       geometryProvider_(std::make_unique<DefaultGeometryProvider>(*assetResolver_)) {
@@ -37,8 +36,8 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<ISceneModelBuilder> 
   fieldWidth_ = cfg.fieldWidthM;
   fieldZ_ = cfg.fieldZM;
 
-  if (sceneBuilder_ == nullptr) {
-    sceneBuilder_ = CreateDefaultSceneModelBuilder(cfg_);
+  if (worldAdapter_ == nullptr) {
+    worldAdapter_ = CreateDefaultRenderWorldAdapter(cfg_);
   }
 
   renderFeatures_ = CreateDefaultRenderFeatures();
@@ -54,9 +53,15 @@ Renderer::~Renderer() {
   DestroyMesh(quadMesh_);
 }
 
+void Renderer::SetRenderWorldAdapter(std::unique_ptr<IRenderWorldAdapter> worldAdapter) {
+  if (worldAdapter != nullptr) {
+    worldAdapter_ = std::move(worldAdapter);
+  }
+}
+
 void Renderer::SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder) {
   if (sceneBuilder != nullptr) {
-    sceneBuilder_ = std::move(sceneBuilder);
+    worldAdapter_ = CreateRenderWorldAdapterFromSceneBuilder(std::move(sceneBuilder));
   }
 }
 
@@ -144,7 +149,12 @@ void Renderer::Resize(const int w, const int h) {
   backend_->ResizeViewport(width_, height_);
 }
 
-void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const SnapshotBundle& bundle) {
+void Renderer::Draw(GLFWwindow* window, const OrbitCamera& camera, const SnapshotBundle& bundle) {
+  SnapshotBundleSimWorld world(bundle);
+  Draw(window, camera, world);
+}
+
+void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISimWorld& world) {
   backend_->ClearFrame(glm::vec4{0.06F, 0.06F, 0.07F, 1.0F});
 
   SceneToggleState toggles;
@@ -153,7 +163,10 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const Sna
   toggles.showAgeFilteredFuel = showAgeFilteredFuel;
   toggles.showFieldImage = showFieldImage;
 
-  RenderSceneFrame sceneFrame = sceneBuilder_->BuildFrame(bundle, toggles);
+  RenderSceneFrame sceneFrame;
+  if (worldAdapter_ != nullptr) {
+    sceneFrame = worldAdapter_->BuildFrame(world, toggles);
+  }
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
@@ -257,14 +270,19 @@ void Renderer::DrawFieldImage(const glm::mat4& vp) {
 
   const glm::mat4 mvp = vp * model;
   const unsigned int texProgram = texturedShader_.program.Get();
-  glUniformMatrix4fv(glGetUniformLocation(texProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform1f(glGetUniformLocation(texProgram, "uAlpha"), glm::clamp(cfg_.fieldImageAlpha, 0.0F, 1.0F));
-  glUniform1i(glGetUniformLocation(texProgram, "uFlipX"), cfg_.fieldImageFlipX ? 1 : 0);
-  glUniform1i(glGetUniformLocation(texProgram, "uFlipY"), cfg_.fieldImageFlipY ? 1 : 0);
+  const int mvpLoc = backend_->GetUniformLocation(texProgram, "uMvp");
+  const int alphaLoc = backend_->GetUniformLocation(texProgram, "uAlpha");
+  const int flipXLoc = backend_->GetUniformLocation(texProgram, "uFlipX");
+  const int flipYLoc = backend_->GetUniformLocation(texProgram, "uFlipY");
+  const int texLoc = backend_->GetUniformLocation(texProgram, "uTex");
+  backend_->SetUniformMat4(mvpLoc, &mvp[0][0]);
+  backend_->SetUniform1f(alphaLoc, glm::clamp(cfg_.fieldImageAlpha, 0.0F, 1.0F));
+  backend_->SetUniform1i(flipXLoc, cfg_.fieldImageFlipX ? 1 : 0);
+  backend_->SetUniform1i(flipYLoc, cfg_.fieldImageFlipY ? 1 : 0);
 
   glActiveTexture(GL_TEXTURE0);
   backend_->BindTexture2D(fieldTexture_.Get());
-  glUniform1i(glGetUniformLocation(texProgram, "uTex"), 0);
+  backend_->SetUniform1i(texLoc, 0);
 
   backend_->BindVertexArray(quadMesh_.vao.Get());
   backend_->DrawIndexedTriangles(quadMesh_.indexCount);
@@ -282,8 +300,10 @@ void Renderer::DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive) {
 
   const unsigned int solidProgram = solidShader_.program.Get();
   backend_->UseProgram(solidProgram);
-  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
+  const int mvpLoc = backend_->GetUniformLocation(solidProgram, "uMvp");
+  const int colorLoc = backend_->GetUniformLocation(solidProgram, "uColor");
+  backend_->SetUniformMat4(mvpLoc, &mvp[0][0]);
+  backend_->SetUniformVec4(colorLoc, primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
 
   backend_->BindVertexArray(cubeMesh_.vao.Get());
   backend_->DrawIndexedTriangles(cubeMesh_.indexCount);
@@ -299,8 +319,10 @@ void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive)
 
   const unsigned int solidProgram = solidShader_.program.Get();
   backend_->UseProgram(solidProgram);
-  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
+  const int mvpLoc = backend_->GetUniformLocation(solidProgram, "uMvp");
+  const int colorLoc = backend_->GetUniformLocation(solidProgram, "uColor");
+  backend_->SetUniformMat4(mvpLoc, &mvp[0][0]);
+  backend_->SetUniformVec4(colorLoc, primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
 
   backend_->BindVertexArray(sphereMesh_.vao.Get());
   backend_->DrawIndexedTriangles(sphereMesh_.indexCount);
@@ -331,7 +353,8 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
 
   const unsigned int lineProgram = lineShader_.program.Get();
   backend_->UseProgram(lineProgram);
-  glUniformMatrix4fv(glGetUniformLocation(lineProgram, "uMvp"), 1, GL_FALSE, &vp[0][0]);
+  const int mvpLoc = backend_->GetUniformLocation(lineProgram, "uMvp");
+  backend_->SetUniformMat4(mvpLoc, &vp[0][0]);
 
   backend_->BindVertexArray(dynamicLineVao_.Get());
   backend_->BindArrayBuffer(dynamicLineVbo_.Get());
@@ -344,19 +367,79 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
 void Renderer::DrawOverlay(const int width, const int height, const std::vector<OverlayLine>& lines) {
   backend_->SetDepthTestEnabled(false);
 
-  float y = static_cast<float>(height) - 12.0F;
   constexpr float scale = 2.0F;
-  for (const auto& line : lines) {
-    DrawText2D(10.0F, y, scale, line.text, line.color);
-    y -= 8.0F * scale;
-  }
+  constexpr float lineStep = 8.0F * scale;
+  constexpr float glyphHeight = 7.0F * scale;
+  std::vector<OverlayLine> widgets = lines;
 
   if (smoothedFrameMsInitialized_ && smoothedFrameMs_ > 1e-6) {
     std::ostringstream fpsText;
     fpsText << std::fixed << std::setprecision(1) << "FPS: " << (1000.0 / smoothedFrameMs_);
-    const std::string value = fpsText.str();
-    const float x = static_cast<float>(width) - 10.0F - TextWidthPixels(value, scale);
-    DrawText2D(std::max(10.0F, x), static_cast<float>(height) - 12.0F, scale, value, glm::vec4{0.92F, 0.92F, 0.92F, 0.90F});
+    widgets.push_back(
+        {.text = fpsText.str(),
+         .color = glm::vec4{0.92F, 0.92F, 0.92F, 0.90F},
+         .anchor = OverlayAnchor::TopRight,
+         .marginX = 10.0F,
+         .marginY = 12.0F});
+  }
+
+  bool hasTopLeft = false;
+  bool hasTopRight = false;
+  bool hasBottomLeft = false;
+  bool hasBottomRight = false;
+  float topLeftY = 0.0F;
+  float topRightY = 0.0F;
+  float bottomLeftY = 0.0F;
+  float bottomRightY = 0.0F;
+
+  for (const auto& line : widgets) {
+    const float marginX = std::max(0.0F, line.marginX);
+    const float marginY = std::max(0.0F, line.marginY);
+    const float textWidth = TextWidthPixels(line.text, scale);
+
+    float x = marginX;
+    float y = static_cast<float>(height) - marginY;
+
+    switch (line.anchor) {
+      case OverlayAnchor::TopLeft:
+        if (!hasTopLeft) {
+          topLeftY = static_cast<float>(height) - marginY;
+          hasTopLeft = true;
+        }
+        x = marginX;
+        y = topLeftY;
+        topLeftY -= lineStep;
+        break;
+      case OverlayAnchor::TopRight:
+        if (!hasTopRight) {
+          topRightY = static_cast<float>(height) - marginY;
+          hasTopRight = true;
+        }
+        x = static_cast<float>(width) - marginX - textWidth;
+        y = topRightY;
+        topRightY -= lineStep;
+        break;
+      case OverlayAnchor::BottomLeft:
+        if (!hasBottomLeft) {
+          bottomLeftY = marginY + glyphHeight;
+          hasBottomLeft = true;
+        }
+        x = marginX;
+        y = bottomLeftY;
+        bottomLeftY += lineStep;
+        break;
+      case OverlayAnchor::BottomRight:
+        if (!hasBottomRight) {
+          bottomRightY = marginY + glyphHeight;
+          hasBottomRight = true;
+        }
+        x = static_cast<float>(width) - marginX - textWidth;
+        y = bottomRightY;
+        bottomRightY += lineStep;
+        break;
+    }
+
+    DrawText2D(std::max(0.0F, x), y, scale, line.text, line.color);
   }
 
   backend_->SetDepthTestEnabled(true);

@@ -34,10 +34,12 @@ class CadModelRenderFeature final : public IRenderFeature {
  private:
   class FlatLitMaterialPass final : public IMaterialPass {
    public:
-    explicit FlatLitMaterialPass(int colorUniformLocation) : colorUniformLocation_(colorUniformLocation) {}
+    FlatLitMaterialPass(IRenderBackend& backend, int colorUniformLocation)
+        : backend_(backend), colorUniformLocation_(colorUniformLocation) {}
     void Apply(const MaterialInstance& material) override;
 
    private:
+    IRenderBackend& backend_;
     int colorUniformLocation_ = -1;
   };
 

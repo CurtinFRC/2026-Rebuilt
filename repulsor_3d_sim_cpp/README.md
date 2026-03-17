@@ -63,12 +63,28 @@ cd repulsor_3d_sim_cpp
 The renderer is now split into a backend + season-model pipeline:
 
 - `Renderer` (`src/Renderer.cpp`, `src/render/RendererResources.cpp`, `src/render/RendererText.cpp`):
-  - owns OpenGL resources/shaders/meshes
+  - owns GPU resources/shaders/meshes
   - draws generic primitives (`SpherePrimitive`, `BoxPrimitive`, `LinePrimitive`)
   - does not encode game-specific object logic
+- `ISimWorld` + `IRenderWorldAdapter`:
+  - world state boundary (`include/repulsor3d/sim/SimWorld.hpp`)
+  - adapter boundary from world -> render frame (`include/repulsor3d/render/RenderWorldAdapter.hpp`)
+  - renderer now consumes adapters, not season-specific builders directly
 - `IRenderFeature` pipeline (`include/repulsor3d/render/RenderFeature.hpp`, `src/render/RenderFeature.cpp`):
   - pluggable render passes (default: world, primitives, CAD meshes, overlay)
   - allows adding new visuals (3D fields, custom post-processing, extra UI overlays) by adding feature modules instead of editing `Renderer::Draw`
+- `ISeasonModule` plugin boundary (`include/repulsor3d/modules/SeasonModule.hpp`):
+  - season profile resolves to a module
+  - module provides the world adapter for that season (`2026Rebuilt` built-in)
+- Data-driven `SceneDescriptor` (`include/repulsor3d/render/SceneDescriptor.hpp`):
+  - optional JSON overrides for draw flags and static overlay widgets
+  - loaded from `SCENE_DESCRIPTOR_PATH` or `assets/scenes/<sceneProfile>.json`
+- Overlay layout engine:
+  - overlay widgets support `TopLeft`, `TopRight`, `BottomLeft`, `BottomRight` anchors
+  - smoothed FPS widget is rendered via the same overlay widget path (top-right)
+- Asset pipeline abstraction for CAD:
+  - `ICadMeshImporter`, `ICadMeshCooker`, `ICadMeshCache`, `CadMeshAssetPipeline`
+  - current default importer is STL; new formats can be added without touching renderer code
 - `CadModelRenderFeature` (`include/repulsor3d/render/CadModelRenderFeature.hpp`, `src/render/CadModelRenderFeature.cpp`):
   - renders generic STL CAD instances from `RenderSceneFrame::meshInstances`
   - supports both static field CAD and dynamic robot/goal CAD supplied by scene builders
@@ -109,6 +125,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
+- `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
 
 ## Clangd / LSP
 

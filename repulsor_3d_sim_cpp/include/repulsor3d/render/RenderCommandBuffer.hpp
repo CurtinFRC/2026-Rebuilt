@@ -21,22 +21,27 @@ struct DrawAxesCommand {
 
 struct DrawSphereCommand {
   SpherePrimitive primitive;
+  RenderPass pass = RenderPass::Opaque;
 };
 
 struct DrawBoxCommand {
   BoxPrimitive primitive;
+  RenderPass pass = RenderPass::Opaque;
 };
 
 struct DrawLineCommand {
   LinePrimitive primitive;
+  RenderPass pass = RenderPass::Transparent;
 };
 
 struct DrawMeshInstanceCommand {
   MeshInstancePrimitive primitive;
+  RenderPass pass = RenderPass::Opaque;
 };
 
 struct DrawOverlayCommand {
   OverlayLine line;
+  RenderPass pass = RenderPass::Overlay;
 };
 
 using RenderCommand = std::variant<

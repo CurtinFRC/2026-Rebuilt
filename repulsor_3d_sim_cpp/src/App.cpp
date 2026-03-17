@@ -149,7 +149,8 @@ void ViewerApp::Draw() {
   if (renderSnapshot_.has_value()) {
     bundle.snapshot = *renderSnapshot_;
   }
-  renderer_.Draw(window_, camera_, bundle);
+  SnapshotBundleSimWorld world(std::move(bundle));
+  renderer_.Draw(window_, camera_, world);
 }
 
 void ViewerApp::OnMouseButton(const int button, const int action) {

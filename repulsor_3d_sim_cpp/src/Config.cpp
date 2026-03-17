@@ -63,6 +63,7 @@ ViewerConfig LoadConfigFromEnv() {
   ViewerConfig cfg;
 
   cfg.sceneProfile = GetEnvString("SIM_SCENE_PROFILE", cfg.sceneProfile);
+  cfg.sceneDescriptorPath = GetEnvString("SCENE_DESCRIPTOR_PATH", cfg.sceneDescriptorPath);
 
   cfg.ntServer = GetEnvString("NT_SERVER", cfg.ntServer);
   cfg.ntClientName = GetEnvString("NT_CLIENT_NAME", cfg.ntClientName);

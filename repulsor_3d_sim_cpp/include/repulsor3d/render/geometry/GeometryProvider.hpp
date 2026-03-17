@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <glm/vec2.hpp>
@@ -10,6 +10,7 @@
 
 namespace repulsor3d {
 
+class CadMeshAssetPipeline;
 class ISceneAssetResolver;
 
 struct PositionIndexedMesh {
@@ -44,6 +45,7 @@ class IGeometryProvider {
 class DefaultGeometryProvider final : public IGeometryProvider {
  public:
   explicit DefaultGeometryProvider(const ISceneAssetResolver& assetResolver);
+  ~DefaultGeometryProvider() override;
 
   const PositionIndexedMesh& GetUnitCubeMesh() override;
   const PositionIndexedMesh& GetUnitSphereMesh() override;
@@ -55,14 +57,8 @@ class DefaultGeometryProvider final : public IGeometryProvider {
   static PositionIndexedMesh BuildSphereMesh();
   static PositionUvIndexedMesh BuildQuadUvMesh();
 
-  static bool ParseBinaryStl(const std::string& filePath, PositionNormalMesh& outMesh);
-  static bool ParseAsciiStl(const std::string& filePath, PositionNormalMesh& outMesh);
-  static bool LoadStl(const std::string& filePath, PositionNormalMesh& outMesh);
-
-  static glm::vec3 NormalizeSafe(const glm::vec3& v);
-  static glm::vec3 ComputeFallbackNormal(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c);
-
   const ISceneAssetResolver& assetResolver_;
+  std::unique_ptr<CadMeshAssetPipeline> cadAssetPipeline_;
 
   bool cubeInitialized_ = false;
   bool sphereInitialized_ = false;
@@ -70,7 +66,6 @@ class DefaultGeometryProvider final : public IGeometryProvider {
   PositionIndexedMesh cubeMesh_;
   PositionIndexedMesh sphereMesh_;
   PositionUvIndexedMesh quadMesh_;
-  std::unordered_map<std::string, PositionNormalMesh> cadMeshCache_;
 };
 
 }  // namespace repulsor3d

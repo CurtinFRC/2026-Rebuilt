@@ -50,8 +50,10 @@ void Renderer::DrawText2D(const float x, const float y, const float scale, const
 
   const unsigned int solidProgram = solidShader_.program.Get();
   backend_->UseProgram(solidProgram);
-  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &ortho[0][0]);
-  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), color.r, color.g, color.b, color.a);
+  const int mvpLoc = backend_->GetUniformLocation(solidProgram, "uMvp");
+  const int colorLoc = backend_->GetUniformLocation(solidProgram, "uColor");
+  backend_->SetUniformMat4(mvpLoc, &ortho[0][0]);
+  backend_->SetUniformVec4(colorLoc, color.r, color.g, color.b, color.a);
 
   backend_->BindVertexArray(textVao_.Get());
   backend_->BindArrayBuffer(textVbo_.Get());

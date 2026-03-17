@@ -38,6 +38,30 @@ void OpenGLRenderBackend::UseProgram(const unsigned int programId) {
   glUseProgram(programId);
 }
 
+int OpenGLRenderBackend::GetUniformLocation(const unsigned int programId, const char* uniformName) {
+  return glGetUniformLocation(programId, uniformName);
+}
+
+void OpenGLRenderBackend::SetUniformMat4(const int location, const float* matrix4x4) {
+  glUniformMatrix4fv(location, 1, GL_FALSE, matrix4x4);
+}
+
+void OpenGLRenderBackend::SetUniformVec4(const int location, const float x, const float y, const float z, const float w) {
+  glUniform4f(location, x, y, z, w);
+}
+
+void OpenGLRenderBackend::SetUniformVec3(const int location, const float x, const float y, const float z) {
+  glUniform3f(location, x, y, z);
+}
+
+void OpenGLRenderBackend::SetUniform1f(const int location, const float value) {
+  glUniform1f(location, value);
+}
+
+void OpenGLRenderBackend::SetUniform1i(const int location, const int value) {
+  glUniform1i(location, value);
+}
+
 void OpenGLRenderBackend::BindVertexArray(const unsigned int vaoId) {
   glBindVertexArray(vaoId);
 }

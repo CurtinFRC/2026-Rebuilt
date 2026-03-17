@@ -21,6 +21,8 @@
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
 #include "repulsor3d/render/SceneModelBuilder.hpp"
+#include "repulsor3d/render/RenderWorldAdapter.hpp"
+#include "repulsor3d/sim/SimWorld.hpp"
 
 struct GLFWwindow;
 
@@ -28,7 +30,7 @@ namespace repulsor3d {
 
 class Renderer {
  public:
-  explicit Renderer(const ViewerConfig& cfg, std::unique_ptr<ISceneModelBuilder> sceneBuilder = nullptr);
+  explicit Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter> worldAdapter = nullptr);
   ~Renderer();
 
   Renderer(const Renderer&) = delete;
@@ -36,8 +38,10 @@ class Renderer {
 
   bool Initialize();
   void Resize(int w, int h);
+  void Draw(GLFWwindow* window, const OrbitCamera& camera, const ISimWorld& world);
   void Draw(GLFWwindow* window, const OrbitCamera& camera, const SnapshotBundle& bundle);
 
+  void SetRenderWorldAdapter(std::unique_ptr<IRenderWorldAdapter> worldAdapter);
   void SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder);
   void SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures);
   IRenderBackend& GetRenderBackend();
@@ -108,7 +112,7 @@ class Renderer {
   int width_ = 1;
   int height_ = 1;
 
-  std::unique_ptr<ISceneModelBuilder> sceneBuilder_;
+  std::unique_ptr<IRenderWorldAdapter> worldAdapter_;
   std::vector<std::unique_ptr<IRenderFeature>> renderFeatures_;
   std::unique_ptr<IRenderBackend> backend_;
   std::unique_ptr<ISceneAssetResolver> assetResolver_;
