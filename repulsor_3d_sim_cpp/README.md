@@ -6,6 +6,7 @@ This is a full C++ rewrite of `repulsor_3d_sim` with:
 - background snapshot worker
 - truth socket receiver
 - optional NT4 datasource (when `ntcore` is available)
+- scene-model abstraction for season-specific game rendering
 
 ## Build
 
@@ -34,6 +35,21 @@ cd repulsor_3d_sim_cpp
 - `A`: toggle age-filtered fuel rendering
 - `F`: toggle field texture image
 - `Esc`: quit
+
+## Renderer Architecture (Refactored)
+
+The renderer is now split into a backend + season-model pipeline:
+
+- `Renderer` (`src/Renderer.cpp`, `src/render/RendererText.cpp`):
+  - owns OpenGL resources/shaders/meshes
+  - draws generic primitives (`SpherePrimitive`, `BoxPrimitive`, `LinePrimitive`)
+  - does not encode game-specific object logic
+- `ISceneModelBuilder` (`include/repulsor3d/render/SceneModelBuilder.hpp`):
+  - converts runtime snapshot data into a `RenderSceneFrame`
+- `RepulsorSeasonModelBuilder` (`src/render/RepulsorSeasonModelBuilder.cpp`):
+  - current 2026 game-specific mapping for fuel/robots/cameras/overlay
+
+To support next season, add a new `ISceneModelBuilder` implementation and provide it to `Renderer` via `SetSceneModelBuilder(...)` (or constructor injection), without touching OpenGL draw code.
 
 ## NT4 Backend
 
