@@ -1,7 +1,9 @@
 #pragma once
 
+#include <future>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <glm/vec3.hpp>
 
@@ -59,6 +61,11 @@ class CadModelRenderFeature final : public IRenderFeature {
     GlVertexArrayHandle vao;
     GlBufferHandle vbo;
     int vertexCount = 0;
+    glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+  };
+
+  struct PendingLoad {
+    std::future<PositionNormalMesh> future;
   };
 
   bool CreateShader();
@@ -79,9 +86,12 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uModelLoc_ = -1;
   int uColorLoc_ = -1;
   int uLightDirLoc_ = -1;
+  int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
+  std::unordered_map<std::string, PendingLoad> pendingLoads_;
+  std::unordered_set<std::string> failedLoads_;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

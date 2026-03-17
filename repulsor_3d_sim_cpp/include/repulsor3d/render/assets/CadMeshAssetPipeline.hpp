@@ -58,6 +58,15 @@ class PassThroughCadMeshCooker final : public ICadMeshCooker {
   void Cook(PositionNormalMesh& mesh) override;
 };
 
+class AdaptiveCadMeshCooker final : public ICadMeshCooker {
+ public:
+  explicit AdaptiveCadMeshCooker(std::size_t maxVertices);
+  void Cook(PositionNormalMesh& mesh) override;
+
+ private:
+  std::size_t maxVertices_ = 0;
+};
+
 class ICadMeshCache {
  public:
   virtual ~ICadMeshCache() = default;
@@ -99,6 +108,7 @@ class CompositeCadMeshCache final : public ICadMeshCache {
 };
 
 std::unique_ptr<ICadMeshImporter> CreateDefaultCadMeshImporter();
+std::unique_ptr<ICadMeshCooker> CreateDefaultCadMeshCooker();
 std::unique_ptr<ICadMeshCache> CreateDefaultCadMeshCache();
 
 class CadMeshAssetPipeline {
@@ -112,7 +122,7 @@ class CadMeshAssetPipeline {
   explicit CadMeshAssetPipeline(
       const ISceneAssetResolver& resolver,
       std::unique_ptr<ICadMeshImporter> importer = CreateDefaultCadMeshImporter(),
-      std::unique_ptr<ICadMeshCooker> cooker = std::make_unique<PassThroughCadMeshCooker>(),
+      std::unique_ptr<ICadMeshCooker> cooker = CreateDefaultCadMeshCooker(),
       std::unique_ptr<ICadMeshCache> cache = CreateDefaultCadMeshCache());
 
   bool Load(const std::string& assetPath, PositionNormalMesh& outMesh);

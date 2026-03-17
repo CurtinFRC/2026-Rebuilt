@@ -7,6 +7,7 @@
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 namespace repulsor3d {
 
@@ -28,6 +29,7 @@ struct PositionNormalMesh {
   struct Vertex {
     glm::vec3 position{0.0F, 0.0F, 0.0F};
     glm::vec3 normal{0.0F, 0.0F, 1.0F};
+    glm::vec4 color{1.0F, 1.0F, 1.0F, 1.0F};
   };
   std::vector<Vertex> vertices;
 };

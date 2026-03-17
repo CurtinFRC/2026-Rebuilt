@@ -45,6 +45,8 @@ struct MeshInstancePrimitive {
   glm::vec3 rotationDeg{0.0F, 0.0F, 0.0F};
   glm::vec3 scale{1.0F, 1.0F, 1.0F};
   glm::vec4 color{1.0F, 1.0F, 1.0F, 1.0F};
+  bool useAssetColor = false;
+  bool centerOnMeshBounds = false;
   bool wireframe = false;
   RenderPass pass = RenderPass::Opaque;
 };

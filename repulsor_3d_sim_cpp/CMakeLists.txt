@@ -98,6 +98,12 @@ set(REPULSOR_SIM_SOURCES
   src/render/RenderFeature.cpp
   src/render/CadModelRenderFeature.cpp
   src/render/backend/RenderBackend.cpp
+  src/render/assets/CadMeshImportHelpers.cpp
+  src/render/assets/CadMeshStlImporter.cpp
+  src/render/assets/CadMeshObjImporter.cpp
+  src/render/assets/CadMeshGltfImporter.cpp
+  src/render/assets/CadMeshImporterFactory.cpp
+  src/render/assets/CadMeshCache.cpp
   src/render/assets/CadMeshAssetPipeline.cpp
   src/render/assets/SceneAssetResolver.cpp
   src/render/geometry/GeometryProvider.cpp

@@ -333,10 +333,12 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
   if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
     MeshInstancePrimitive mesh{
         .assetPath = fieldCadModelPath_,
-        .position = glm::vec3{cfg_.fieldLengthM * 0.5F, cfg_.fieldWidthM * 0.5F, fieldZ_ + fieldCadZOffsetM_},
+        .position = glm::vec3{0.0F, 0.0F, fieldZ_ + fieldCadZOffsetM_},
         .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
         .scale = glm::vec3{fieldCadScaleM_, fieldCadScaleM_, fieldCadScaleM_},
-        .color = glm::vec4{0.72F, 0.74F, 0.79F, 0.45F},
+        .color = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F},
+        .useAssetColor = true,
+        .centerOnMeshBounds = true,
         .wireframe = false,
         .pass = RenderPass::Opaque,
     };
