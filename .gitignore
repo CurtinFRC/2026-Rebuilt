@@ -217,3 +217,4 @@ README_2.md
 .pytest_cache/
 
 repulsor_3d_sim_cpp/build-clangd
+*.gltf
