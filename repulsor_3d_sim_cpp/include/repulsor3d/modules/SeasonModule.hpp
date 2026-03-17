@@ -18,10 +18,12 @@ class ISeasonModule {
 };
 
 using SeasonModuleFactoryFn = std::function<std::unique_ptr<ISeasonModule>()>;
+using CreateSeasonModuleAbiFn = ISeasonModule* (*)();
+using DestroySeasonModuleAbiFn = void (*)(ISeasonModule*);
 
 void RegisterSeasonModule(const std::string& moduleId, SeasonModuleFactoryFn factoryFn);
 std::unique_ptr<ISeasonModule> CreateSeasonModule(const std::string& moduleId);
+std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& pluginPath);
 std::unique_ptr<ISeasonModule> CreateDefaultSeasonModule(const ViewerConfig& cfg);
 
 }  // namespace repulsor3d
-

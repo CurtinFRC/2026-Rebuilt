@@ -13,6 +13,11 @@ struct SceneDescriptor {
   std::optional<bool> drawGrid;
   std::optional<bool> drawAxes;
   std::vector<OverlayLine> staticOverlayLines;
+  std::vector<SpherePrimitive> staticSpheres;
+  std::vector<BoxPrimitive> staticBoxes;
+  std::vector<LinePrimitive> staticLines;
+  std::vector<MeshInstancePrimitive> staticMeshes;
+  std::vector<RenderEntity> staticEntities;
 };
 
 std::string CanonicalSceneProfileKey(const std::string& sceneProfile);
@@ -20,4 +25,3 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
 std::optional<SceneDescriptor> LoadSceneDescriptorForProfile(const ViewerConfig& cfg);
 
 }  // namespace repulsor3d
-

@@ -100,35 +100,31 @@ bool Renderer::Initialize() {
     // Texture is optional.
   }
 
-  unsigned int dynamicLineVao = 0;
-  unsigned int dynamicLineVbo = 0;
-  glGenVertexArrays(1, &dynamicLineVao);
-  glGenBuffers(1, &dynamicLineVbo);
+  const unsigned int dynamicLineVao = backend_->CreateVertexArray();
+  const unsigned int dynamicLineVbo = backend_->CreateBuffer();
   dynamicLineVao_.Set(dynamicLineVao);
   dynamicLineVbo_.Set(dynamicLineVbo);
 
   backend_->BindVertexArray(dynamicLineVao_.Get());
   backend_->BindArrayBuffer(dynamicLineVbo_.Get());
-  glBufferData(GL_ARRAY_BUFFER, 1024 * sizeof(VertexPC), nullptr, GL_DYNAMIC_DRAW);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexPC), reinterpret_cast<void*>(offsetof(VertexPC, pos)));
-  glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(VertexPC), reinterpret_cast<void*>(offsetof(VertexPC, color)));
-  glBindVertexArray(0);
+  backend_->UploadArrayBufferData(1024 * sizeof(VertexPC), nullptr, true);
+  backend_->EnableVertexAttrib(0);
+  backend_->DefineVertexAttribFloat(0, 3, sizeof(VertexPC), offsetof(VertexPC, pos));
+  backend_->EnableVertexAttrib(1);
+  backend_->DefineVertexAttribFloat(1, 4, sizeof(VertexPC), offsetof(VertexPC, color));
+  backend_->BindVertexArray(0);
 
-  unsigned int textVao = 0;
-  unsigned int textVbo = 0;
-  glGenVertexArrays(1, &textVao);
-  glGenBuffers(1, &textVbo);
+  const unsigned int textVao = backend_->CreateVertexArray();
+  const unsigned int textVbo = backend_->CreateBuffer();
   textVao_.Set(textVao);
   textVbo_.Set(textVbo);
 
   backend_->BindVertexArray(textVao_.Get());
   backend_->BindArrayBuffer(textVbo_.Get());
-  glBufferData(GL_ARRAY_BUFFER, 4096 * sizeof(glm::vec3), nullptr, GL_DYNAMIC_DRAW);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), reinterpret_cast<void*>(0));
-  glBindVertexArray(0);
+  backend_->UploadArrayBufferData(4096 * sizeof(glm::vec3), nullptr, true);
+  backend_->EnableVertexAttrib(0);
+  backend_->DefineVertexAttribFloat(0, 3, sizeof(glm::vec3), 0);
+  backend_->BindVertexArray(0);
 
   for (auto& feature : renderFeatures_) {
     if (feature == nullptr) {
@@ -280,7 +276,7 @@ void Renderer::DrawFieldImage(const glm::mat4& vp) {
   backend_->SetUniform1i(flipXLoc, cfg_.fieldImageFlipX ? 1 : 0);
   backend_->SetUniform1i(flipYLoc, cfg_.fieldImageFlipY ? 1 : 0);
 
-  glActiveTexture(GL_TEXTURE0);
+  backend_->SetActiveTextureUnit(0);
   backend_->BindTexture2D(fieldTexture_.Get());
   backend_->SetUniform1i(texLoc, 0);
 
@@ -358,7 +354,7 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
 
   backend_->BindVertexArray(dynamicLineVao_.Get());
   backend_->BindArrayBuffer(dynamicLineVbo_.Get());
-  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(VertexPC)), vertices.data(), GL_DYNAMIC_DRAW);
+  backend_->UploadArrayBufferData(vertices.size() * sizeof(VertexPC), vertices.data(), true);
 
   backend_->DrawLines(static_cast<int>(vertices.size()), width);
   backend_->BindVertexArray(0);

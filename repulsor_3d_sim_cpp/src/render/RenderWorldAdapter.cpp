@@ -38,6 +38,13 @@ RenderSceneFrame DescriptorDecoratingRenderWorldAdapter::BuildFrame(const ISimWo
   if (descriptor_.drawAxes.has_value()) {
     frame.drawAxes = *descriptor_.drawAxes;
   }
+
+  frame.spheres.insert(frame.spheres.end(), descriptor_.staticSpheres.begin(), descriptor_.staticSpheres.end());
+  frame.boxes.insert(frame.boxes.end(), descriptor_.staticBoxes.begin(), descriptor_.staticBoxes.end());
+  frame.lines.insert(frame.lines.end(), descriptor_.staticLines.begin(), descriptor_.staticLines.end());
+  frame.meshInstances.insert(frame.meshInstances.end(), descriptor_.staticMeshes.begin(), descriptor_.staticMeshes.end());
+  frame.entities.insert(frame.entities.end(), descriptor_.staticEntities.begin(), descriptor_.staticEntities.end());
+
   frame.overlayLines.insert(
       frame.overlayLines.end(),
       descriptor_.staticOverlayLines.begin(),

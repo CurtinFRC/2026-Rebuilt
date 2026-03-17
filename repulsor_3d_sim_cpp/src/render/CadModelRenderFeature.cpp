@@ -18,6 +18,12 @@
 
 namespace repulsor3d {
 
+CadModelRenderFeature::CadModelRenderFeature(
+    const RenderPass renderPass,
+    std::string featureName,
+    std::vector<std::string> dependencies)
+    : renderPass_(renderPass), featureName_(std::move(featureName)), dependencies_(std::move(dependencies)) {}
+
 void CadModelRenderFeature::FlatLitMaterialPass::Apply(const MaterialInstance& material) {
   if (colorUniformLocation_ >= 0) {
     const auto& c = material.definition.baseColor;
@@ -64,6 +70,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         [&](const auto& typed) {
           using T = std::decay_t<decltype(typed)>;
           if constexpr (std::is_same_v<T, DrawMeshInstanceCommand>) {
+            if (typed.pass != renderPass_) {
+              return;
+            }
             const auto& instance = typed.primitive;
             const GpuMesh* mesh = GetOrLoadMesh(instance.assetPath);
             if (mesh == nullptr || mesh->vertexCount <= 0) {
@@ -203,7 +212,7 @@ bool CadModelRenderFeature::LinkShader(GlProgramHandle& program, const unsigned 
   return false;
 }
 
-bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu) {
+bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu, IRenderBackend& backend) {
   if (cpu.vertices.empty()) {
     return false;
   }
@@ -211,10 +220,8 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
   using Vertex = PositionNormalMesh::Vertex;
   const auto& vertices = cpu.vertices;
 
-  unsigned int vaoId = 0;
-  unsigned int vboId = 0;
-  glGenVertexArrays(1, &vaoId);
-  glGenBuffers(1, &vboId);
+  const unsigned int vaoId = backend.CreateVertexArray();
+  const unsigned int vboId = backend.CreateBuffer();
   if (vaoId == 0 || vboId == 0) {
     DestroyMesh(gpu);
     return false;
@@ -223,31 +230,15 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
   gpu.vao.Set(vaoId);
   gpu.vbo.Set(vboId);
 
-  glBindVertexArray(gpu.vao.Get());
-  glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo.Get());
-  glBufferData(
-      GL_ARRAY_BUFFER,
-      static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
-      vertices.data(),
-      GL_STATIC_DRAW);
+  backend.BindVertexArray(gpu.vao.Get());
+  backend.BindArrayBuffer(gpu.vbo.Get());
+  backend.UploadArrayBufferData(vertices.size() * sizeof(Vertex), vertices.data(), false);
 
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(
-      0,
-      3,
-      GL_FLOAT,
-      GL_FALSE,
-      sizeof(Vertex),
-      reinterpret_cast<void*>(offsetof(Vertex, position)));
-  glEnableVertexAttribArray(1);
-  glVertexAttribPointer(
-      1,
-      3,
-      GL_FLOAT,
-      GL_FALSE,
-      sizeof(Vertex),
-      reinterpret_cast<void*>(offsetof(Vertex, normal)));
-  glBindVertexArray(0);
+  backend.EnableVertexAttrib(0);
+  backend.DefineVertexAttribFloat(0, 3, sizeof(Vertex), offsetof(Vertex, position));
+  backend.EnableVertexAttrib(1);
+  backend.DefineVertexAttribFloat(1, 3, sizeof(Vertex), offsetof(Vertex, normal));
+  backend.BindVertexArray(0);
 
   gpu.vertexCount = static_cast<int>(vertices.size());
   return true;
@@ -275,7 +266,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   }
 
   GpuMesh gpu;
-  if (!UploadMesh(cpu, gpu)) {
+  if (backend_ == nullptr || !UploadMesh(cpu, gpu, *backend_)) {
     return nullptr;
   }
 

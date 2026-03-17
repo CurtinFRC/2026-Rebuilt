@@ -7,6 +7,7 @@ namespace repulsor3d {
 struct ViewerConfig {
   std::string sceneProfile = "2026Rebuilt";
   std::string sceneDescriptorPath = "";
+  std::string seasonModulePluginPath = "";
 
   std::string ntServer = "127.0.0.1";
   std::string ntClientName = "repulsor_3d_sim_cpp";

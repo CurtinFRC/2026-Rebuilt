@@ -25,6 +25,26 @@ class StlCadMeshImporter final : public ICadMeshImporter {
   static bool ParseAsciiStl(const std::string& filePath, PositionNormalMesh& outMesh);
 };
 
+class ObjCadMeshImporter final : public ICadMeshImporter {
+ public:
+  bool Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) override;
+};
+
+class GltfCadMeshImporter final : public ICadMeshImporter {
+ public:
+  bool Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) override;
+};
+
+class MultiFormatCadMeshImporter final : public ICadMeshImporter {
+ public:
+  bool Import(const std::string& resolvedAssetPath, PositionNormalMesh& outMesh) override;
+
+ private:
+  StlCadMeshImporter stlImporter_;
+  ObjCadMeshImporter objImporter_;
+  GltfCadMeshImporter gltfImporter_;
+};
+
 class ICadMeshCooker {
  public:
   virtual ~ICadMeshCooker() = default;
@@ -52,13 +72,40 @@ class InMemoryCadMeshCache final : public ICadMeshCache {
   std::unordered_map<std::string, PositionNormalMesh> cache_;
 };
 
+class FileCadMeshCache final : public ICadMeshCache {
+ public:
+  explicit FileCadMeshCache(std::string rootDirectory);
+
+  bool TryLoad(const std::string& key, PositionNormalMesh& outMesh) const override;
+  void Store(const std::string& key, const PositionNormalMesh& mesh) override;
+
+ private:
+  std::string KeyToPath(const std::string& key) const;
+  std::string rootDirectory_;
+};
+
+class CompositeCadMeshCache final : public ICadMeshCache {
+ public:
+  CompositeCadMeshCache(std::unique_ptr<ICadMeshCache> first, std::unique_ptr<ICadMeshCache> second);
+
+  bool TryLoad(const std::string& key, PositionNormalMesh& outMesh) const override;
+  void Store(const std::string& key, const PositionNormalMesh& mesh) override;
+
+ private:
+  std::unique_ptr<ICadMeshCache> first_;
+  std::unique_ptr<ICadMeshCache> second_;
+};
+
+std::unique_ptr<ICadMeshImporter> CreateDefaultCadMeshImporter();
+std::unique_ptr<ICadMeshCache> CreateDefaultCadMeshCache();
+
 class CadMeshAssetPipeline {
  public:
   explicit CadMeshAssetPipeline(
       const ISceneAssetResolver& resolver,
-      std::unique_ptr<ICadMeshImporter> importer = std::make_unique<StlCadMeshImporter>(),
+      std::unique_ptr<ICadMeshImporter> importer = CreateDefaultCadMeshImporter(),
       std::unique_ptr<ICadMeshCooker> cooker = std::make_unique<PassThroughCadMeshCooker>(),
-      std::unique_ptr<ICadMeshCache> cache = std::make_unique<InMemoryCadMeshCache>());
+      std::unique_ptr<ICadMeshCache> cache = CreateDefaultCadMeshCache());
 
   bool Load(const std::string& assetPath, PositionNormalMesh& outMesh);
 
@@ -70,4 +117,3 @@ class CadMeshAssetPipeline {
 };
 
 }  // namespace repulsor3d
-

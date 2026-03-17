@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -40,10 +41,13 @@ class WorldRenderFeature final : public IRenderFeature {
   }
 };
 
-class PrimitiveRenderFeature final : public IRenderFeature {
+class GeometryPassRenderFeature final : public IRenderFeature {
  public:
-  std::string Name() const override { return "primitives"; }
-  std::vector<std::string> Dependencies() const override { return {"world"}; }
+  GeometryPassRenderFeature(RenderPass renderPass, std::string featureName, std::vector<std::string> dependencies)
+      : renderPass_(renderPass), featureName_(std::move(featureName)), dependencies_(std::move(dependencies)) {}
+
+  std::string Name() const override { return featureName_; }
+  std::vector<std::string> Dependencies() const override { return dependencies_; }
 
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
     std::vector<LinePrimitive> lines;
@@ -52,23 +56,34 @@ class PrimitiveRenderFeature final : public IRenderFeature {
           [&](const auto& typed) {
             using T = std::decay_t<decltype(typed)>;
             if constexpr (std::is_same_v<T, DrawSphereCommand>) {
-              drawApi.DrawSphere(context.viewProjection, typed.primitive);
+              if (typed.pass == renderPass_) {
+                drawApi.DrawSphere(context.viewProjection, typed.primitive);
+              }
             } else if constexpr (std::is_same_v<T, DrawBoxCommand>) {
-              drawApi.DrawBox(context.viewProjection, typed.primitive);
+              if (typed.pass == renderPass_) {
+                drawApi.DrawBox(context.viewProjection, typed.primitive);
+              }
             } else if constexpr (std::is_same_v<T, DrawLineCommand>) {
-              lines.push_back(typed.primitive);
+              if (typed.pass == renderPass_) {
+                lines.push_back(typed.primitive);
+              }
             }
           },
           command);
     }
     drawApi.DrawLines(context.viewProjection, lines);
   }
+
+ private:
+  RenderPass renderPass_ = RenderPass::Opaque;
+  std::string featureName_;
+  std::vector<std::string> dependencies_;
 };
 
 class OverlayRenderFeature final : public IRenderFeature {
  public:
   std::string Name() const override { return "overlay"; }
-  std::vector<std::string> Dependencies() const override { return {"primitives", "cad_models"}; }
+  std::vector<std::string> Dependencies() const override { return {"cad_transparent"}; }
 
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
     std::vector<OverlayLine> lines;
@@ -131,8 +146,14 @@ void RendererDrawApi::DrawOverlay(const int width, const int height, const std::
 std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures() {
   std::vector<std::unique_ptr<IRenderFeature>> features;
   features.push_back(std::make_unique<WorldRenderFeature>());
-  features.push_back(std::make_unique<PrimitiveRenderFeature>());
-  features.push_back(std::make_unique<CadModelRenderFeature>());
+  features.push_back(
+      std::make_unique<GeometryPassRenderFeature>(RenderPass::Opaque, "geometry_opaque", std::vector<std::string>{"world"}));
+  features.push_back(std::make_unique<CadModelRenderFeature>(
+      RenderPass::Opaque, "cad_opaque", std::vector<std::string>{"geometry_opaque"}));
+  features.push_back(std::make_unique<GeometryPassRenderFeature>(
+      RenderPass::Transparent, "geometry_transparent", std::vector<std::string>{"cad_opaque"}));
+  features.push_back(std::make_unique<CadModelRenderFeature>(
+      RenderPass::Transparent, "cad_transparent", std::vector<std::string>{"geometry_transparent"}));
   features.push_back(std::make_unique<OverlayRenderFeature>());
   return features;
 }

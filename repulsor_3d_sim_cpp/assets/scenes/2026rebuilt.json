@@ -1,0 +1,24 @@
+{
+  "drawGrid": true,
+  "drawAxes": true,
+  "overlay": [
+    {
+      "text": "[Descriptor] 2026Rebuilt",
+      "anchor": "top_right",
+      "marginX": 10,
+      "marginY": 28,
+      "color": [0.75, 0.85, 1.0, 0.9]
+    }
+  ],
+  "entities": [
+    {
+      "id": "origin_marker",
+      "type": "sphere",
+      "pass": "transparent",
+      "center": [0.0, 0.0, 0.05],
+      "radius": 0.05,
+      "color": [0.9, 0.2, 0.2, 0.55]
+    }
+  ]
+}
+

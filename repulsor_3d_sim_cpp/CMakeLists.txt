@@ -90,6 +90,7 @@ set(REPULSOR_SIM_SOURCES
   src/render/RenderCommandBuffer.cpp
   src/render/RenderWorldAdapter.cpp
   src/render/SceneDescriptor.cpp
+  src/render/ecs/EntityRegistry.cpp
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
@@ -267,6 +268,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../repulsor_3d_sim/field.png")
   )
 endif()
 
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/scenes")
+  add_custom_command(TARGET repulsor_3d_sim_cpp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets/scenes"
+      "$<TARGET_FILE_DIR:repulsor_3d_sim_cpp>/assets/scenes"
+  )
+endif()
+
 if(REPULSOR_SIM_BUILD_TESTS)
   include(CTest)
   add_executable(repulsor_3d_sim_cpp_tests
@@ -283,4 +292,24 @@ if(REPULSOR_SIM_BUILD_TESTS)
   endif()
 
   add_test(NAME repulsor_3d_sim_cpp_tests COMMAND repulsor_3d_sim_cpp_tests)
+
+  add_executable(repulsor_3d_sim_cpp_module_tests
+    tests/ModuleAbstractionTests.cpp
+    src/sim/SimWorld.cpp
+    src/render/SceneDescriptor.cpp
+    src/render/RenderWorldAdapter.cpp
+    src/render/Season2026RebuiltModelBuilder.cpp
+    src/render/SceneModelBuilderFactory.cpp
+    src/modules/SeasonModule.cpp
+  )
+
+  target_include_directories(repulsor_3d_sim_cpp_module_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(repulsor_3d_sim_cpp_module_tests PRIVATE nlohmann_json::nlohmann_json)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_module_tests PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_module_tests PRIVATE glm::glm)
+  endif()
+
+  add_test(NAME repulsor_3d_sim_cpp_module_tests COMMAND repulsor_3d_sim_cpp_module_tests)
 endif()

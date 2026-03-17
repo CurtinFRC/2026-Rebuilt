@@ -20,6 +20,17 @@ bool TryReadBool(const nlohmann::json& node, const char* key, std::optional<bool
   return true;
 }
 
+glm::vec3 ParseVec3(const nlohmann::json& vecNode, const glm::vec3& fallback) {
+  if (!vecNode.is_array() || vecNode.size() < 3) {
+    return fallback;
+  }
+
+  const float x = vecNode[0].is_number() ? vecNode[0].get<float>() : fallback.x;
+  const float y = vecNode[1].is_number() ? vecNode[1].get<float>() : fallback.y;
+  const float z = vecNode[2].is_number() ? vecNode[2].get<float>() : fallback.z;
+  return glm::vec3{x, y, z};
+}
+
 glm::vec4 ParseColor(const nlohmann::json& colorNode, const glm::vec4& fallback) {
   if (!colorNode.is_array() || colorNode.size() < 3) {
     return fallback;
@@ -52,6 +63,29 @@ OverlayAnchor ParseAnchor(const nlohmann::json& anchorNode, const OverlayAnchor 
   }
   if (value == "bottomright" || value == "bottom_right") {
     return OverlayAnchor::BottomRight;
+  }
+  return fallback;
+}
+
+RenderPass ParseRenderPass(const nlohmann::json& passNode, const RenderPass fallback) {
+  if (!passNode.is_string()) {
+    return fallback;
+  }
+
+  std::string value = passNode.get<std::string>();
+  std::transform(
+      value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (value == "background") {
+    return RenderPass::Background;
+  }
+  if (value == "opaque") {
+    return RenderPass::Opaque;
+  }
+  if (value == "transparent") {
+    return RenderPass::Transparent;
+  }
+  if (value == "overlay") {
+    return RenderPass::Overlay;
   }
   return fallback;
 }
@@ -112,6 +146,230 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
         line.marginY = item["marginY"].get<float>();
       }
       descriptor.staticOverlayLines.push_back(std::move(line));
+    }
+  }
+
+  if (root.contains("spheres") && root["spheres"].is_array()) {
+    for (const auto& item : root["spheres"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+
+      SpherePrimitive sphere;
+      if (item.contains("center")) {
+        sphere.center = ParseVec3(item["center"], sphere.center);
+      }
+      if (item.contains("radius") && item["radius"].is_number()) {
+        sphere.radius = item["radius"].get<float>();
+      }
+      if (item.contains("color")) {
+        sphere.color = ParseColor(item["color"], sphere.color);
+      }
+      if (item.contains("pass")) {
+        sphere.pass = ParseRenderPass(item["pass"], sphere.pass);
+      }
+      descriptor.staticSpheres.push_back(std::move(sphere));
+    }
+  }
+
+  if (root.contains("boxes") && root["boxes"].is_array()) {
+    for (const auto& item : root["boxes"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+
+      BoxPrimitive box;
+      if (item.contains("center")) {
+        box.center = ParseVec3(item["center"], box.center);
+      }
+      if (item.contains("size")) {
+        box.size = ParseVec3(item["size"], box.size);
+      }
+      if (item.contains("yawDeg") && item["yawDeg"].is_number()) {
+        box.yawDeg = item["yawDeg"].get<float>();
+      }
+      if (item.contains("color")) {
+        box.color = ParseColor(item["color"], box.color);
+      }
+      if (item.contains("pass")) {
+        box.pass = ParseRenderPass(item["pass"], box.pass);
+      }
+      descriptor.staticBoxes.push_back(std::move(box));
+    }
+  }
+
+  if (root.contains("lines") && root["lines"].is_array()) {
+    for (const auto& item : root["lines"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+
+      LinePrimitive line;
+      if (item.contains("a")) {
+        line.a = ParseVec3(item["a"], line.a);
+      }
+      if (item.contains("b")) {
+        line.b = ParseVec3(item["b"], line.b);
+      }
+      if (item.contains("width") && item["width"].is_number()) {
+        line.width = item["width"].get<float>();
+      }
+      if (item.contains("color")) {
+        line.color = ParseColor(item["color"], line.color);
+      }
+      if (item.contains("pass")) {
+        line.pass = ParseRenderPass(item["pass"], line.pass);
+      }
+      descriptor.staticLines.push_back(std::move(line));
+    }
+  }
+
+  if (root.contains("meshes") && root["meshes"].is_array()) {
+    for (const auto& item : root["meshes"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+      if (!item.contains("assetPath") || !item["assetPath"].is_string()) {
+        continue;
+      }
+
+      MeshInstancePrimitive mesh;
+      mesh.assetPath = item["assetPath"].get<std::string>();
+      if (item.contains("position")) {
+        mesh.position = ParseVec3(item["position"], mesh.position);
+      }
+      if (item.contains("rotationDeg")) {
+        mesh.rotationDeg = ParseVec3(item["rotationDeg"], mesh.rotationDeg);
+      }
+      if (item.contains("scale")) {
+        mesh.scale = ParseVec3(item["scale"], mesh.scale);
+      }
+      if (item.contains("color")) {
+        mesh.color = ParseColor(item["color"], mesh.color);
+      }
+      if (item.contains("wireframe") && item["wireframe"].is_boolean()) {
+        mesh.wireframe = item["wireframe"].get<bool>();
+      }
+      if (item.contains("pass")) {
+        mesh.pass = ParseRenderPass(item["pass"], mesh.pass);
+      }
+      descriptor.staticMeshes.push_back(std::move(mesh));
+    }
+  }
+
+  if (root.contains("entities") && root["entities"].is_array()) {
+    for (const auto& item : root["entities"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+      if (!item.contains("type") || !item["type"].is_string()) {
+        continue;
+      }
+
+      std::string type = item["type"].get<std::string>();
+      std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+      RenderEntity entity;
+      if (item.contains("id") && item["id"].is_string()) {
+        entity.id = item["id"].get<std::string>();
+      }
+      if (item.contains("pass")) {
+        entity.pass = ParseRenderPass(item["pass"], entity.pass);
+      }
+
+      if (type == "sphere") {
+        SpherePrimitive sphere;
+        if (item.contains("center")) {
+          sphere.center = ParseVec3(item["center"], sphere.center);
+        }
+        if (item.contains("radius") && item["radius"].is_number()) {
+          sphere.radius = item["radius"].get<float>();
+        }
+        if (item.contains("color")) {
+          sphere.color = ParseColor(item["color"], sphere.color);
+        }
+        sphere.pass = entity.pass;
+        entity.payload = std::move(sphere);
+      } else if (type == "box") {
+        BoxPrimitive box;
+        if (item.contains("center")) {
+          box.center = ParseVec3(item["center"], box.center);
+        }
+        if (item.contains("size")) {
+          box.size = ParseVec3(item["size"], box.size);
+        }
+        if (item.contains("yawDeg") && item["yawDeg"].is_number()) {
+          box.yawDeg = item["yawDeg"].get<float>();
+        }
+        if (item.contains("color")) {
+          box.color = ParseColor(item["color"], box.color);
+        }
+        box.pass = entity.pass;
+        entity.payload = std::move(box);
+      } else if (type == "line") {
+        LinePrimitive line;
+        if (item.contains("a")) {
+          line.a = ParseVec3(item["a"], line.a);
+        }
+        if (item.contains("b")) {
+          line.b = ParseVec3(item["b"], line.b);
+        }
+        if (item.contains("width") && item["width"].is_number()) {
+          line.width = item["width"].get<float>();
+        }
+        if (item.contains("color")) {
+          line.color = ParseColor(item["color"], line.color);
+        }
+        line.pass = entity.pass;
+        entity.payload = std::move(line);
+      } else if (type == "mesh") {
+        if (!item.contains("assetPath") || !item["assetPath"].is_string()) {
+          continue;
+        }
+        MeshInstancePrimitive mesh;
+        mesh.assetPath = item["assetPath"].get<std::string>();
+        if (item.contains("position")) {
+          mesh.position = ParseVec3(item["position"], mesh.position);
+        }
+        if (item.contains("rotationDeg")) {
+          mesh.rotationDeg = ParseVec3(item["rotationDeg"], mesh.rotationDeg);
+        }
+        if (item.contains("scale")) {
+          mesh.scale = ParseVec3(item["scale"], mesh.scale);
+        }
+        if (item.contains("color")) {
+          mesh.color = ParseColor(item["color"], mesh.color);
+        }
+        if (item.contains("wireframe") && item["wireframe"].is_boolean()) {
+          mesh.wireframe = item["wireframe"].get<bool>();
+        }
+        mesh.pass = entity.pass;
+        entity.payload = std::move(mesh);
+      } else if (type == "overlay") {
+        if (!item.contains("text") || !item["text"].is_string()) {
+          continue;
+        }
+        OverlayLine overlay;
+        overlay.text = item["text"].get<std::string>();
+        if (item.contains("color")) {
+          overlay.color = ParseColor(item["color"], overlay.color);
+        }
+        if (item.contains("anchor")) {
+          overlay.anchor = ParseAnchor(item["anchor"], overlay.anchor);
+        }
+        if (item.contains("marginX") && item["marginX"].is_number()) {
+          overlay.marginX = item["marginX"].get<float>();
+        }
+        if (item.contains("marginY") && item["marginY"].is_number()) {
+          overlay.marginY = item["marginY"].get<float>();
+        }
+        entity.pass = RenderPass::Overlay;
+        entity.payload = std::move(overlay);
+      } else {
+        continue;
+      }
+
+      descriptor.staticEntities.push_back(std::move(entity));
     }
   }
 

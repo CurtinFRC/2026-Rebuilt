@@ -76,15 +76,27 @@ The renderer is now split into a backend + season-model pipeline:
 - `ISeasonModule` plugin boundary (`include/repulsor3d/modules/SeasonModule.hpp`):
   - season profile resolves to a module
   - module provides the world adapter for that season (`2026Rebuilt` built-in)
+  - supports dynamic plugin module loading via `SEASON_MODULE_PLUGIN_PATH`
 - Data-driven `SceneDescriptor` (`include/repulsor3d/render/SceneDescriptor.hpp`):
   - optional JSON overrides for draw flags and static overlay widgets
   - loaded from `SCENE_DESCRIPTOR_PATH` or `assets/scenes/<sceneProfile>.json`
+  - supports static primitives/meshes/entities for season-specific data-driven scene composition
+- Multi-pass feature pipeline:
+  - default pipeline is now staged: `world -> geometry_opaque -> cad_opaque -> geometry_transparent -> cad_transparent -> overlay`
+  - per-primitive `RenderPass` tagging controls pass placement
+- ECS-style entity registry:
+  - `include/repulsor3d/render/ecs/EntityRegistry.hpp`
+  - entity payloads can be converted into render commands without direct primitive vectors
 - Overlay layout engine:
   - overlay widgets support `TopLeft`, `TopRight`, `BottomLeft`, `BottomRight` anchors
   - smoothed FPS widget is rendered via the same overlay widget path (top-right)
 - Asset pipeline abstraction for CAD:
   - `ICadMeshImporter`, `ICadMeshCooker`, `ICadMeshCache`, `CadMeshAssetPipeline`
-  - current default importer is STL; new formats can be added without touching renderer code
+  - default multi-format importer supports STL / OBJ / glTF (`.gltf`)
+  - default cache is in-memory + disk-backed (`.repulsor_cache/cad_mesh`)
+- Backend abstraction expansion:
+  - `IRenderBackend` now abstracts uniforms plus common buffer/texture/vertex-attrib upload paths
+  - renderer setup/upload code migrated off direct OpenGL calls where practical
 - `CadModelRenderFeature` (`include/repulsor3d/render/CadModelRenderFeature.hpp`, `src/render/CadModelRenderFeature.cpp`):
   - renders generic STL CAD instances from `RenderSceneFrame::meshInstances`
   - supports both static field CAD and dynamic robot/goal CAD supplied by scene builders
@@ -126,6 +138,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 - `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
+- `SEASON_MODULE_PLUGIN_PATH` (optional path to season module plugin `.dll`/`.so`)
 
 ## Clangd / LSP
 

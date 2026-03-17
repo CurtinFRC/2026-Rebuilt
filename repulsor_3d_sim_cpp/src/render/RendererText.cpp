@@ -57,7 +57,7 @@ void Renderer::DrawText2D(const float x, const float y, const float scale, const
 
   backend_->BindVertexArray(textVao_.Get());
   backend_->BindArrayBuffer(textVbo_.Get());
-  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(triangles.size() * sizeof(glm::vec3)), triangles.data(), GL_DYNAMIC_DRAW);
+  backend_->UploadArrayBufferData(triangles.size() * sizeof(glm::vec3), triangles.data(), true);
   backend_->DrawTriangles(static_cast<int>(triangles.size()));
   backend_->BindVertexArray(0);
 }

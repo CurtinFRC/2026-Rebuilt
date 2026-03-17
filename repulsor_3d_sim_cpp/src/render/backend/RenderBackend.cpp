@@ -62,6 +62,24 @@ void OpenGLRenderBackend::SetUniform1i(const int location, const int value) {
   glUniform1i(location, value);
 }
 
+unsigned int OpenGLRenderBackend::CreateVertexArray() {
+  unsigned int vao = 0;
+  glGenVertexArrays(1, &vao);
+  return vao;
+}
+
+unsigned int OpenGLRenderBackend::CreateBuffer() {
+  unsigned int buffer = 0;
+  glGenBuffers(1, &buffer);
+  return buffer;
+}
+
+unsigned int OpenGLRenderBackend::CreateTexture2D() {
+  unsigned int texture = 0;
+  glGenTextures(1, &texture);
+  return texture;
+}
+
 void OpenGLRenderBackend::BindVertexArray(const unsigned int vaoId) {
   glBindVertexArray(vaoId);
 }
@@ -70,8 +88,57 @@ void OpenGLRenderBackend::BindArrayBuffer(const unsigned int bufferId) {
   glBindBuffer(GL_ARRAY_BUFFER, bufferId);
 }
 
+void OpenGLRenderBackend::BindElementArrayBuffer(const unsigned int bufferId) {
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferId);
+}
+
+void OpenGLRenderBackend::UploadArrayBufferData(const std::size_t sizeBytes, const void* data, const bool dynamic) {
+  glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeBytes), data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+}
+
+void OpenGLRenderBackend::UploadElementArrayBufferData(const std::size_t sizeBytes, const void* data, const bool dynamic) {
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeBytes), data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+}
+
+void OpenGLRenderBackend::EnableVertexAttrib(const unsigned int index) {
+  glEnableVertexAttribArray(index);
+}
+
+void OpenGLRenderBackend::DefineVertexAttribFloat(
+    const unsigned int index,
+    const int componentCount,
+    const int strideBytes,
+    const std::size_t offsetBytes) {
+  glVertexAttribPointer(
+      index,
+      componentCount,
+      GL_FLOAT,
+      GL_FALSE,
+      strideBytes,
+      reinterpret_cast<void*>(offsetBytes));
+}
+
 void OpenGLRenderBackend::BindTexture2D(const unsigned int textureId) {
   glBindTexture(GL_TEXTURE_2D, textureId);
+}
+
+void OpenGLRenderBackend::SetTexture2DLinearMipmapClamp() {
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+void OpenGLRenderBackend::UploadTexture2DRgba8(const int width, const int height, const void* pixels) {
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+}
+
+void OpenGLRenderBackend::GenerateTexture2DMipmaps() {
+  glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+void OpenGLRenderBackend::SetActiveTextureUnit(const int unit) {
+  glActiveTexture(GL_TEXTURE0 + unit);
 }
 
 void OpenGLRenderBackend::DrawTriangles(const int vertexCount) {

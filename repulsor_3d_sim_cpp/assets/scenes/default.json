@@ -1,0 +1,12 @@
+{
+  "overlay": [
+    {
+      "text": "[Descriptor] Default scene profile",
+      "anchor": "bottom_left",
+      "marginX": 10,
+      "marginY": 10,
+      "color": [0.9, 0.9, 0.9, 0.75]
+    }
+  ]
+}
+

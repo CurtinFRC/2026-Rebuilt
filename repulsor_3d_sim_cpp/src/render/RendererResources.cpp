@@ -13,6 +13,7 @@ namespace {
 
 template <typename TVertex>
 bool UploadMesh(
+    IRenderBackend& backend,
     const std::vector<TVertex>& vertices,
     const std::vector<uint32_t>& indices,
     GlVertexArrayHandle& vao,
@@ -21,12 +22,9 @@ bool UploadMesh(
     int& indexCount,
     const std::size_t uvOffset = 0,
     const bool withUv = false) {
-  unsigned int vaoId = 0;
-  unsigned int vboId = 0;
-  unsigned int eboId = 0;
-  glGenVertexArrays(1, &vaoId);
-  glGenBuffers(1, &vboId);
-  glGenBuffers(1, &eboId);
+  const unsigned int vaoId = backend.CreateVertexArray();
+  const unsigned int vboId = backend.CreateBuffer();
+  const unsigned int eboId = backend.CreateBuffer();
 
   if (vaoId == 0 || vboId == 0 || eboId == 0) {
     return false;
@@ -36,37 +34,23 @@ bool UploadMesh(
   vbo.Set(vboId);
   ebo.Set(eboId);
 
-  glBindVertexArray(vao.Get());
+  backend.BindVertexArray(vao.Get());
 
-  glBindBuffer(GL_ARRAY_BUFFER, vbo.Get());
-  glBufferData(
-      GL_ARRAY_BUFFER,
-      static_cast<GLsizeiptr>(vertices.size() * sizeof(TVertex)),
-      vertices.data(),
-      GL_STATIC_DRAW);
+  backend.BindArrayBuffer(vbo.Get());
+  backend.UploadArrayBufferData(vertices.size() * sizeof(TVertex), vertices.data(), false);
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.Get());
-  glBufferData(
-      GL_ELEMENT_ARRAY_BUFFER,
-      static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
-      indices.data(),
-      GL_STATIC_DRAW);
+  backend.BindElementArrayBuffer(ebo.Get());
+  backend.UploadElementArrayBufferData(indices.size() * sizeof(uint32_t), indices.data(), false);
 
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(TVertex), reinterpret_cast<void*>(0));
+  backend.EnableVertexAttrib(0);
+  backend.DefineVertexAttribFloat(0, 3, sizeof(TVertex), 0);
 
   if (withUv) {
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(
-        1,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-        sizeof(TVertex),
-        reinterpret_cast<void*>(uvOffset));
+    backend.EnableVertexAttrib(1);
+    backend.DefineVertexAttribFloat(1, 2, sizeof(TVertex), uvOffset);
   }
 
-  glBindVertexArray(0);
+  backend.BindVertexArray(0);
   indexCount = static_cast<int>(indices.size());
   return true;
 }
@@ -183,6 +167,7 @@ bool Renderer::CreateMeshes() {
     }
 
     if (!UploadMesh(
+            *backend_,
             cubeVerts,
             cubeMeshData.indices,
             cubeMesh_.vao,
@@ -202,6 +187,7 @@ bool Renderer::CreateMeshes() {
     }
 
     if (!UploadMesh(
+            *backend_,
             sphereVerts,
             sphereMeshData.indices,
             sphereMesh_.vao,
@@ -221,6 +207,7 @@ bool Renderer::CreateMeshes() {
     }
 
     if (!UploadMesh(
+            *backend_,
             quadVerts,
             quadMeshData.indices,
             quadMesh_.vao,
@@ -255,19 +242,13 @@ bool Renderer::CreateFieldTexture() {
     return false;
   }
 
-  unsigned int textureId = 0;
-  glGenTextures(1, &textureId);
+  const unsigned int textureId = backend_->CreateTexture2D();
   fieldTexture_.Set(textureId);
-  glBindTexture(GL_TEXTURE_2D, fieldTexture_.Get());
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  glGenerateMipmap(GL_TEXTURE_2D);
-
-  glBindTexture(GL_TEXTURE_2D, 0);
+  backend_->BindTexture2D(fieldTexture_.Get());
+  backend_->SetTexture2DLinearMipmapClamp();
+  backend_->UploadTexture2DRgba8(width, height, pixels);
+  backend_->GenerateTexture2DMipmaps();
+  backend_->BindTexture2D(0);
   stbi_image_free(pixels);
   return true;
 }

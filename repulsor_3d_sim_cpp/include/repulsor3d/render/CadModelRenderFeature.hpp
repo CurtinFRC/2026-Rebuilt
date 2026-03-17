@@ -19,14 +19,17 @@ class Renderer;
 
 class CadModelRenderFeature final : public IRenderFeature {
  public:
-  CadModelRenderFeature() = default;
+  explicit CadModelRenderFeature(
+      RenderPass renderPass = RenderPass::Opaque,
+      std::string featureName = "cad_opaque",
+      std::vector<std::string> dependencies = {"geometry_opaque"});
   ~CadModelRenderFeature() override;
 
   CadModelRenderFeature(const CadModelRenderFeature&) = delete;
   CadModelRenderFeature& operator=(const CadModelRenderFeature&) = delete;
 
-  std::string Name() const override { return "cad_models"; }
-  std::vector<std::string> Dependencies() const override { return {"primitives"}; }
+  std::string Name() const override { return featureName_; }
+  std::vector<std::string> Dependencies() const override { return dependencies_; }
 
   bool Initialize(Renderer& renderer) override;
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override;
@@ -62,7 +65,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   static unsigned int CompileShader(unsigned int type, const char* source);
   static bool LinkShader(GlProgramHandle& program, unsigned int vs, unsigned int fs);
 
-  static bool UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu);
+  static bool UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);
@@ -79,6 +82,9 @@ class CadModelRenderFeature final : public IRenderFeature {
   MaterialPipeline materialPipeline_;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
+  RenderPass renderPass_ = RenderPass::Opaque;
+  std::string featureName_ = "cad_opaque";
+  std::vector<std::string> dependencies_ = {"geometry_opaque"};
 };
 
 }  // namespace repulsor3d

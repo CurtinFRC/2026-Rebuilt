@@ -311,14 +311,16 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
 
 void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
-    frame.meshInstances.push_back({
+    MeshInstancePrimitive mesh{
         .assetPath = fieldCadModelPath_,
         .position = glm::vec3{cfg_.fieldLengthM * 0.5F, cfg_.fieldWidthM * 0.5F, fieldZ_ + fieldCadZOffsetM_},
         .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
         .scale = glm::vec3{fieldCadScaleM_, fieldCadScaleM_, fieldCadScaleM_},
         .color = glm::vec4{0.72F, 0.74F, 0.79F, 0.45F},
         .wireframe = false,
-    });
+        .pass = RenderPass::Opaque,
+    };
+    frame.entities.push_back({.id = "field_cad", .pass = RenderPass::Opaque, .payload = mesh});
   }
 
   if (!showRobotCadModel_ || robotCadModelPath_.empty()) {
@@ -331,14 +333,16 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
     }
 
     const Pose2D& p = pose.value();
-    frame.meshInstances.push_back({
+    MeshInstancePrimitive mesh{
         .assetPath = robotCadModelPath_,
         .position = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotCadZOffsetM_},
         .rotationDeg = glm::vec3{0.0F, 0.0F, glm::degrees(static_cast<float>(p.thetaRad))},
         .scale = glm::vec3{robotCadScaleM_, robotCadScaleM_, robotCadScaleM_},
         .color = color,
         .wireframe = false,
-    });
+        .pass = RenderPass::Opaque,
+    };
+    frame.entities.push_back({.id = "robot_cad", .pass = RenderPass::Opaque, .payload = mesh});
   };
 
   appendPoseCad(snap.pose, glm::vec4{0.95F, 0.45F, 0.15F, 0.90F});

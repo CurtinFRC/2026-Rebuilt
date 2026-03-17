@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include <glm/vec4.hpp>
 
 namespace repulsor3d {
@@ -20,9 +22,21 @@ class IRenderBackend {
   virtual void SetUniformVec3(int location, float x, float y, float z) = 0;
   virtual void SetUniform1f(int location, float value) = 0;
   virtual void SetUniform1i(int location, int value) = 0;
+  virtual unsigned int CreateVertexArray() = 0;
+  virtual unsigned int CreateBuffer() = 0;
+  virtual unsigned int CreateTexture2D() = 0;
   virtual void BindVertexArray(unsigned int vaoId) = 0;
   virtual void BindArrayBuffer(unsigned int bufferId) = 0;
+  virtual void BindElementArrayBuffer(unsigned int bufferId) = 0;
+  virtual void UploadArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) = 0;
+  virtual void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) = 0;
+  virtual void EnableVertexAttrib(unsigned int index) = 0;
+  virtual void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) = 0;
   virtual void BindTexture2D(unsigned int textureId) = 0;
+  virtual void SetTexture2DLinearMipmapClamp() = 0;
+  virtual void UploadTexture2DRgba8(int width, int height, const void* pixels) = 0;
+  virtual void GenerateTexture2DMipmaps() = 0;
+  virtual void SetActiveTextureUnit(int unit) = 0;
   virtual void DrawTriangles(int vertexCount) = 0;
   virtual void DrawIndexedTriangles(int indexCount) = 0;
   virtual void DrawLines(int vertexCount, float lineWidth) = 0;
@@ -42,9 +56,21 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void SetUniformVec3(int location, float x, float y, float z) override;
   void SetUniform1f(int location, float value) override;
   void SetUniform1i(int location, int value) override;
+  unsigned int CreateVertexArray() override;
+  unsigned int CreateBuffer() override;
+  unsigned int CreateTexture2D() override;
   void BindVertexArray(unsigned int vaoId) override;
   void BindArrayBuffer(unsigned int bufferId) override;
+  void BindElementArrayBuffer(unsigned int bufferId) override;
+  void UploadArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) override;
+  void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) override;
+  void EnableVertexAttrib(unsigned int index) override;
+  void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) override;
   void BindTexture2D(unsigned int textureId) override;
+  void SetTexture2DLinearMipmapClamp() override;
+  void UploadTexture2DRgba8(int width, int height, const void* pixels) override;
+  void GenerateTexture2DMipmaps() override;
+  void SetActiveTextureUnit(int unit) override;
   void DrawTriangles(int vertexCount) override;
   void DrawIndexedTriangles(int indexCount) override;
   void DrawLines(int vertexCount, float lineWidth) override;
