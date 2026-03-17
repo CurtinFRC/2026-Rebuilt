@@ -44,6 +44,9 @@ The renderer is now split into a backend + season-model pipeline:
   - owns OpenGL resources/shaders/meshes
   - draws generic primitives (`SpherePrimitive`, `BoxPrimitive`, `LinePrimitive`)
   - does not encode game-specific object logic
+- `IRenderFeature` pipeline (`include/repulsor3d/render/RenderFeature.hpp`, `src/render/RenderFeature.cpp`):
+  - pluggable render passes (default: world, primitives, overlay)
+  - allows adding new visuals (3D fields, custom post-processing, extra UI overlays) by adding feature modules instead of editing `Renderer::Draw`
 - `ISceneModelBuilder` (`include/repulsor3d/render/SceneModelBuilder.hpp`):
   - converts runtime snapshot data into a `RenderSceneFrame`
 - `Season2026RebuiltModelBuilder` (`src/render/Season2026RebuiltModelBuilder.cpp`):
@@ -52,8 +55,11 @@ The renderer is now split into a backend + season-model pipeline:
   - resolves `SIM_SCENE_PROFILE` to a concrete scene model builder
 - Generic scaffold:
   - `include/repulsor3d/render/templates/GenericSeasonModelBuilderTemplate.hpp`
+  - `include/repulsor3d/render/templates/GenericRenderFeatureTemplate.hpp`
 
 To support next season, add a new `ISceneModelBuilder` implementation and provide it to `Renderer` via `SetSceneModelBuilder(...)` (or constructor injection), without touching OpenGL draw code.
+
+To add new graphics systems, implement `IRenderFeature` and install via `Renderer::SetRenderFeatures(...)`; the scene model and renderer core stay unchanged.
 
 ## NT4 Backend
 

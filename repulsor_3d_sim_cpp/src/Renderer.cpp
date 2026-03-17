@@ -30,6 +30,8 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<ISceneModelBuilder> 
   if (sceneBuilder_ == nullptr) {
     sceneBuilder_ = CreateDefaultSceneModelBuilder(cfg_);
   }
+
+  renderFeatures_ = CreateDefaultRenderFeatures();
 }
 
 Renderer::~Renderer() {
@@ -68,6 +70,12 @@ Renderer::~Renderer() {
 void Renderer::SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder) {
   if (sceneBuilder != nullptr) {
     sceneBuilder_ = std::move(sceneBuilder);
+  }
+}
+
+void Renderer::SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures) {
+  if (!renderFeatures.empty()) {
+    renderFeatures_ = std::move(renderFeatures);
   }
 }
 
@@ -111,6 +119,15 @@ bool Renderer::Initialize() {
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), reinterpret_cast<void*>(0));
   glBindVertexArray(0);
 
+  for (auto& feature : renderFeatures_) {
+    if (feature == nullptr) {
+      continue;
+    }
+    if (!feature->Initialize(*this)) {
+      return false;
+    }
+  }
+
   Resize(width_, height_);
   return true;
 }
@@ -134,35 +151,19 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const Sna
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
   const glm::mat4 vp = camera.ProjectionMatrix(aspect) * camera.ViewMatrix();
+  const RenderFeatureContext context{
+      .viewProjection = vp,
+      .viewportWidth = width_,
+      .viewportHeight = height_,
+      .frame = sceneFrame,
+  };
+  const RendererDrawApi drawApi(*this);
 
-  if (sceneFrame.drawGrid) {
-    DrawGrid(vp);
+  for (const auto& feature : renderFeatures_) {
+    if (feature != nullptr) {
+      feature->Render(context, drawApi);
+    }
   }
-  if (sceneFrame.drawFieldImage && fieldTexture_ != 0) {
-    DrawFieldImage(vp);
-  }
-  if (sceneFrame.drawAxes) {
-    DrawAxes(vp);
-  }
-
-  for (const auto& sphere : sceneFrame.spheres) {
-    DrawSphere(vp, sphere);
-  }
-  for (const auto& box : sceneFrame.boxes) {
-    DrawBox(vp, box);
-  }
-
-  std::map<float, std::vector<VertexPC>> lineBatches;
-  for (const auto& line : sceneFrame.lines) {
-    auto& batch = lineBatches[line.width];
-    batch.push_back({line.a, line.color});
-    batch.push_back({line.b, line.color});
-  }
-  for (const auto& [width, verts] : lineBatches) {
-    DrawLineList(vp, verts, width);
-  }
-
-  DrawOverlay(width_, height_, sceneFrame.overlayLines);
 }
 
 void Renderer::DrawGrid(const glm::mat4& vp) {
@@ -200,6 +201,10 @@ void Renderer::DrawAxes(const glm::mat4& vp) {
 }
 
 void Renderer::DrawFieldImage(const glm::mat4& vp) {
+  if (fieldTexture_ == 0) {
+    return;
+  }
+
   glUseProgram(texturedShader_.id);
 
   glm::mat4 model(1.0F);
@@ -253,6 +258,23 @@ void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive)
   glBindVertexArray(sphereMesh_.vao);
   glDrawElements(GL_TRIANGLES, sphereMesh_.indexCount, GL_UNSIGNED_INT, nullptr);
   glBindVertexArray(0);
+}
+
+void Renderer::DrawLinePrimitives(const glm::mat4& vp, const std::vector<LinePrimitive>& lines) {
+  if (lines.empty()) {
+    return;
+  }
+
+  std::map<float, std::vector<VertexPC>> lineBatches;
+  for (const auto& line : lines) {
+    auto& batch = lineBatches[line.width];
+    batch.push_back({line.a, line.color});
+    batch.push_back({line.b, line.color});
+  }
+
+  for (const auto& [width, verts] : lineBatches) {
+    DrawLineList(vp, verts, width);
+  }
 }
 
 void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& vertices, const float width) {

@@ -13,6 +13,7 @@
 #include "repulsor3d/Camera.hpp"
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/Model.hpp"
+#include "repulsor3d/render/RenderFeature.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
 #include "repulsor3d/render/SceneModelBuilder.hpp"
 
@@ -33,6 +34,7 @@ class Renderer {
   void Draw(GLFWwindow* window, const OrbitCamera& camera, const SnapshotBundle& bundle);
 
   void SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder);
+  void SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures);
 
   bool showCameraDebug = true;
   bool showTruthFuel = true;
@@ -40,6 +42,8 @@ class Renderer {
   bool showFieldImage = true;
 
  private:
+  friend struct RendererDrawApi;
+
   struct Mesh {
     unsigned int vao = 0;
     unsigned int vbo = 0;
@@ -81,6 +85,7 @@ class Renderer {
 
   void DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive);
   void DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive);
+  void DrawLinePrimitives(const glm::mat4& vp, const std::vector<LinePrimitive>& lines);
   void DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& vertices, float width = 1.0F);
 
   void DrawOverlay(int width, int height, const std::vector<OverlayLine>& lines);
@@ -94,6 +99,7 @@ class Renderer {
   int height_ = 1;
 
   std::unique_ptr<ISceneModelBuilder> sceneBuilder_;
+  std::vector<std::unique_ptr<IRenderFeature>> renderFeatures_;
 
   Shader solidShader_;
   Shader lineShader_;

@@ -76,6 +76,7 @@ set(REPULSOR_SIM_SOURCES
   src/Renderer.cpp
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
+  src/render/RenderFeature.cpp
   src/render/Season2026RebuiltModelBuilder.cpp
   src/render/SceneModelBuilderFactory.cpp
   src/App.cpp
