@@ -16,6 +16,7 @@
 #include "repulsor3d/Model.hpp"
 #include "repulsor3d/render/RenderFeature.hpp"
 #include "repulsor3d/render/assets/SceneAssetResolver.hpp"
+#include "repulsor3d/render/backend/GlHandles.hpp"
 #include "repulsor3d/render/backend/RenderBackend.hpp"
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
@@ -53,14 +54,14 @@ class Renderer {
   friend struct RendererDrawApi;
 
   struct Mesh {
-    unsigned int vao = 0;
-    unsigned int vbo = 0;
-    unsigned int ebo = 0;
+    GlVertexArrayHandle vao;
+    GlBufferHandle vbo;
+    GlBufferHandle ebo;
     int indexCount = 0;
   };
 
   struct Shader {
-    unsigned int id = 0;
+    GlProgramHandle program;
   };
 
   struct VertexPC {
@@ -121,13 +122,13 @@ class Renderer {
   Mesh sphereMesh_;
   Mesh quadMesh_;
 
-  unsigned int dynamicLineVao_ = 0;
-  unsigned int dynamicLineVbo_ = 0;
+  GlVertexArrayHandle dynamicLineVao_;
+  GlBufferHandle dynamicLineVbo_;
 
-  unsigned int textVao_ = 0;
-  unsigned int textVbo_ = 0;
+  GlVertexArrayHandle textVao_;
+  GlBufferHandle textVbo_;
 
-  unsigned int fieldTexture_ = 0;
+  GlTextureHandle fieldTexture_;
 
   float fieldLength_ = 0.0F;
   float fieldWidth_ = 0.0F;

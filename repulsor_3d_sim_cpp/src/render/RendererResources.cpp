@@ -15,30 +15,37 @@ template <typename TVertex>
 bool UploadMesh(
     const std::vector<TVertex>& vertices,
     const std::vector<uint32_t>& indices,
-    unsigned int& vao,
-    unsigned int& vbo,
-    unsigned int& ebo,
+    GlVertexArrayHandle& vao,
+    GlBufferHandle& vbo,
+    GlBufferHandle& ebo,
     int& indexCount,
     const std::size_t uvOffset = 0,
     const bool withUv = false) {
-  glGenVertexArrays(1, &vao);
-  glGenBuffers(1, &vbo);
-  glGenBuffers(1, &ebo);
+  unsigned int vaoId = 0;
+  unsigned int vboId = 0;
+  unsigned int eboId = 0;
+  glGenVertexArrays(1, &vaoId);
+  glGenBuffers(1, &vboId);
+  glGenBuffers(1, &eboId);
 
-  if (vao == 0 || vbo == 0 || ebo == 0) {
+  if (vaoId == 0 || vboId == 0 || eboId == 0) {
     return false;
   }
 
-  glBindVertexArray(vao);
+  vao.Set(vaoId);
+  vbo.Set(vboId);
+  ebo.Set(eboId);
 
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBindVertexArray(vao.Get());
+
+  glBindBuffer(GL_ARRAY_BUFFER, vbo.Get());
   glBufferData(
       GL_ARRAY_BUFFER,
       static_cast<GLsizeiptr>(vertices.size() * sizeof(TVertex)),
       vertices.data(),
       GL_STATIC_DRAW);
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo.Get());
   glBufferData(
       GL_ELEMENT_ARRAY_BUFFER,
       static_cast<GLsizeiptr>(indices.size() * sizeof(uint32_t)),
@@ -248,8 +255,10 @@ bool Renderer::CreateFieldTexture() {
     return false;
   }
 
-  glGenTextures(1, &fieldTexture_);
-  glBindTexture(GL_TEXTURE_2D, fieldTexture_);
+  unsigned int textureId = 0;
+  glGenTextures(1, &textureId);
+  fieldTexture_.Set(textureId);
+  glBindTexture(GL_TEXTURE_2D, fieldTexture_.Get());
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -264,25 +273,13 @@ bool Renderer::CreateFieldTexture() {
 }
 
 void Renderer::DestroyShader(Shader& shader) const {
-  if (shader.id != 0) {
-    glDeleteProgram(shader.id);
-    shader.id = 0;
-  }
+  shader.program.Reset();
 }
 
 void Renderer::DestroyMesh(Mesh& mesh) const {
-  if (mesh.ebo != 0) {
-    glDeleteBuffers(1, &mesh.ebo);
-    mesh.ebo = 0;
-  }
-  if (mesh.vbo != 0) {
-    glDeleteBuffers(1, &mesh.vbo);
-    mesh.vbo = 0;
-  }
-  if (mesh.vao != 0) {
-    glDeleteVertexArrays(1, &mesh.vao);
-    mesh.vao = 0;
-  }
+  mesh.ebo.Reset();
+  mesh.vbo.Reset();
+  mesh.vao.Reset();
   mesh.indexCount = 0;
 }
 
@@ -318,7 +315,7 @@ bool Renderer::LinkShader(Shader& shader, const unsigned int vs, const unsigned 
   int ok = 0;
   glGetProgramiv(program, GL_LINK_STATUS, &ok);
   if (ok == GL_TRUE) {
-    shader.id = program;
+    shader.program.Set(program);
     return true;
   }
 

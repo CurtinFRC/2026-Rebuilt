@@ -30,4 +30,37 @@ void OpenGLRenderBackend::SetDepthTestEnabled(const bool enabled) {
   }
 }
 
+void OpenGLRenderBackend::SetWireframeMode(const bool enabled) {
+  glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
+}
+
+void OpenGLRenderBackend::UseProgram(const unsigned int programId) {
+  glUseProgram(programId);
+}
+
+void OpenGLRenderBackend::BindVertexArray(const unsigned int vaoId) {
+  glBindVertexArray(vaoId);
+}
+
+void OpenGLRenderBackend::BindArrayBuffer(const unsigned int bufferId) {
+  glBindBuffer(GL_ARRAY_BUFFER, bufferId);
+}
+
+void OpenGLRenderBackend::BindTexture2D(const unsigned int textureId) {
+  glBindTexture(GL_TEXTURE_2D, textureId);
+}
+
+void OpenGLRenderBackend::DrawTriangles(const int vertexCount) {
+  glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount));
+}
+
+void OpenGLRenderBackend::DrawIndexedTriangles(const int indexCount) {
+  glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr);
+}
+
+void OpenGLRenderBackend::DrawLines(const int vertexCount, const float lineWidth) {
+  glLineWidth(lineWidth);
+  glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertexCount));
+}
+
 }  // namespace repulsor3d

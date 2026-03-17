@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -22,7 +23,10 @@ void CadModelRenderFeature::FlatLitMaterialPass::Apply(const MaterialInstance& m
     const auto& c = material.definition.baseColor;
     glUniform4f(colorUniformLocation_, c.r, c.g, c.b, c.a);
   }
-  glPolygonMode(GL_FRONT_AND_BACK, material.definition.wireframe ? GL_LINE : GL_FILL);
+}
+
+void CadModelRenderFeature::WireframeMaterialPass::Apply(const MaterialInstance& material) {
+  backend_.SetWireframeMode(material.definition.wireframe);
 }
 
 CadModelRenderFeature::~CadModelRenderFeature() {
@@ -31,15 +35,13 @@ CadModelRenderFeature::~CadModelRenderFeature() {
   }
   meshCache_.clear();
 
-  if (shader_ != 0) {
-    glDeleteProgram(shader_);
-    shader_ = 0;
-  }
+  shader_.Reset();
 }
 
 bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   renderer_ = &renderer;
   geometryProvider_ = &renderer.GetGeometryProvider();
+  backend_ = &renderer.GetRenderBackend();
 
   if (initialized_) {
     return true;
@@ -50,14 +52,13 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
 }
 
 void CadModelRenderFeature::Render(const RenderFeatureContext& context, const RendererDrawApi& /*drawApi*/) {
-  if (!initialized_ || shader_ == 0 || geometryProvider_ == nullptr) {
+  if (!initialized_ || shader_.Get() == 0 || geometryProvider_ == nullptr || backend_ == nullptr) {
     return;
   }
 
-  glUseProgram(shader_);
+  backend_->UseProgram(shader_.Get());
   glUniform3f(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
 
-  bool drewWireframe = false;
   for (const auto& command : context.commandBuffer) {
     std::visit(
         [&](const auto& typed) {
@@ -83,20 +84,17 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             MaterialInstance material;
             material.definition.baseColor = instance.color;
             material.definition.wireframe = instance.wireframe;
-            materialPass_.Apply(material);
-            drewWireframe = drewWireframe || instance.wireframe;
+            materialPipeline_.Apply(material);
 
-            glBindVertexArray(mesh->vao);
-            glDrawArrays(GL_TRIANGLES, 0, mesh->vertexCount);
-            glBindVertexArray(0);
+            backend_->BindVertexArray(mesh->vao.Get());
+            backend_->DrawTriangles(mesh->vertexCount);
+            backend_->BindVertexArray(0);
           }
         },
         command);
   }
 
-  if (drewWireframe) {
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  }
+  backend_->SetWireframeMode(false);
 }
 
 bool CadModelRenderFeature::CreateShader() {
@@ -148,11 +146,14 @@ void main() {
   glDeleteShader(vs);
   glDeleteShader(fs);
 
-  uMvpLoc_ = glGetUniformLocation(shader_, "uMvp");
-  uModelLoc_ = glGetUniformLocation(shader_, "uModel");
-  uColorLoc_ = glGetUniformLocation(shader_, "uColor");
-  uLightDirLoc_ = glGetUniformLocation(shader_, "uLightDir");
-  materialPass_ = FlatLitMaterialPass(uColorLoc_);
+  uMvpLoc_ = glGetUniformLocation(shader_.Get(), "uMvp");
+  uModelLoc_ = glGetUniformLocation(shader_.Get(), "uModel");
+  uColorLoc_ = glGetUniformLocation(shader_.Get(), "uColor");
+  uLightDirLoc_ = glGetUniformLocation(shader_.Get(), "uLightDir");
+  materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(uColorLoc_));
+  if (backend_ != nullptr) {
+    materialPipeline_.AddPass(std::make_unique<WireframeMaterialPass>(*backend_));
+  }
   return uMvpLoc_ >= 0 && uModelLoc_ >= 0 && uColorLoc_ >= 0 && uLightDirLoc_ >= 0;
 }
 
@@ -178,7 +179,7 @@ unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const
   return 0;
 }
 
-bool CadModelRenderFeature::LinkShader(unsigned int& program, const unsigned int vs, const unsigned int fs) {
+bool CadModelRenderFeature::LinkShader(GlProgramHandle& program, const unsigned int vs, const unsigned int fs) {
   const unsigned int p = glCreateProgram();
   glAttachShader(p, vs);
   glAttachShader(p, fs);
@@ -187,7 +188,7 @@ bool CadModelRenderFeature::LinkShader(unsigned int& program, const unsigned int
   int ok = 0;
   glGetProgramiv(p, GL_LINK_STATUS, &ok);
   if (ok == GL_TRUE) {
-    program = p;
+    program.Set(p);
     return true;
   }
 
@@ -213,15 +214,20 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
     packed.push_back({v.position, v.normal});
   }
 
-  glGenVertexArrays(1, &gpu.vao);
-  glGenBuffers(1, &gpu.vbo);
-  if (gpu.vao == 0 || gpu.vbo == 0) {
+  unsigned int vaoId = 0;
+  unsigned int vboId = 0;
+  glGenVertexArrays(1, &vaoId);
+  glGenBuffers(1, &vboId);
+  if (vaoId == 0 || vboId == 0) {
     DestroyMesh(gpu);
     return false;
   }
 
-  glBindVertexArray(gpu.vao);
-  glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo);
+  gpu.vao.Set(vaoId);
+  gpu.vbo.Set(vboId);
+
+  glBindVertexArray(gpu.vao.Get());
+  glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo.Get());
   glBufferData(
       GL_ARRAY_BUFFER,
       static_cast<GLsizeiptr>(packed.size() * sizeof(VertexPN)),
@@ -245,14 +251,8 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
 }
 
 void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
-  if (gpu.vbo != 0) {
-    glDeleteBuffers(1, &gpu.vbo);
-    gpu.vbo = 0;
-  }
-  if (gpu.vao != 0) {
-    glDeleteVertexArrays(1, &gpu.vao);
-    gpu.vao = 0;
-  }
+  gpu.vbo.Reset();
+  gpu.vao.Reset();
   gpu.vertexCount = 0;
 }
 
@@ -276,7 +276,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     return nullptr;
   }
 
-  auto [it, inserted] = meshCache_.emplace(assetPath, gpu);
+  auto [it, inserted] = meshCache_.emplace(assetPath, std::move(gpu));
   if (!inserted) {
     DestroyMesh(gpu);
   }

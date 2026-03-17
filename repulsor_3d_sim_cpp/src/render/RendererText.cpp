@@ -44,15 +44,16 @@ void Renderer::DrawText2D(const float x, const float y, const float scale, const
 
   const glm::mat4 ortho = glm::ortho(0.0F, static_cast<float>(width_), 0.0F, static_cast<float>(height_), -1.0F, 1.0F);
 
-  glUseProgram(solidShader_.id);
-  glUniformMatrix4fv(glGetUniformLocation(solidShader_.id, "uMvp"), 1, GL_FALSE, &ortho[0][0]);
-  glUniform4f(glGetUniformLocation(solidShader_.id, "uColor"), color.r, color.g, color.b, color.a);
+  const unsigned int solidProgram = solidShader_.program.Get();
+  backend_->UseProgram(solidProgram);
+  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &ortho[0][0]);
+  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), color.r, color.g, color.b, color.a);
 
-  glBindVertexArray(textVao_);
-  glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+  backend_->BindVertexArray(textVao_.Get());
+  backend_->BindArrayBuffer(textVbo_.Get());
   glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(triangles.size() * sizeof(glm::vec3)), triangles.data(), GL_DYNAMIC_DRAW);
-  glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(triangles.size()));
-  glBindVertexArray(0);
+  backend_->DrawTriangles(static_cast<int>(triangles.size()));
+  backend_->BindVertexArray(0);
 }
 
 std::string Renderer::ToUpperAscii(const std::string& s) {

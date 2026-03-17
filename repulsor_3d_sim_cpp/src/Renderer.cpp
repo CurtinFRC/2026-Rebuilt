@@ -50,29 +50,6 @@ Renderer::~Renderer() {
   DestroyMesh(cubeMesh_);
   DestroyMesh(sphereMesh_);
   DestroyMesh(quadMesh_);
-
-  if (dynamicLineVbo_ != 0) {
-    glDeleteBuffers(1, &dynamicLineVbo_);
-    dynamicLineVbo_ = 0;
-  }
-  if (dynamicLineVao_ != 0) {
-    glDeleteVertexArrays(1, &dynamicLineVao_);
-    dynamicLineVao_ = 0;
-  }
-
-  if (textVbo_ != 0) {
-    glDeleteBuffers(1, &textVbo_);
-    textVbo_ = 0;
-  }
-  if (textVao_ != 0) {
-    glDeleteVertexArrays(1, &textVao_);
-    textVao_ = 0;
-  }
-
-  if (fieldTexture_ != 0) {
-    glDeleteTextures(1, &fieldTexture_);
-    fieldTexture_ = 0;
-  }
 }
 
 void Renderer::SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder) {
@@ -116,10 +93,15 @@ bool Renderer::Initialize() {
     // Texture is optional.
   }
 
-  glGenVertexArrays(1, &dynamicLineVao_);
-  glGenBuffers(1, &dynamicLineVbo_);
-  glBindVertexArray(dynamicLineVao_);
-  glBindBuffer(GL_ARRAY_BUFFER, dynamicLineVbo_);
+  unsigned int dynamicLineVao = 0;
+  unsigned int dynamicLineVbo = 0;
+  glGenVertexArrays(1, &dynamicLineVao);
+  glGenBuffers(1, &dynamicLineVbo);
+  dynamicLineVao_.Set(dynamicLineVao);
+  dynamicLineVbo_.Set(dynamicLineVbo);
+
+  backend_->BindVertexArray(dynamicLineVao_.Get());
+  backend_->BindArrayBuffer(dynamicLineVbo_.Get());
   glBufferData(GL_ARRAY_BUFFER, 1024 * sizeof(VertexPC), nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexPC), reinterpret_cast<void*>(offsetof(VertexPC, pos)));
@@ -127,10 +109,15 @@ bool Renderer::Initialize() {
   glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(VertexPC), reinterpret_cast<void*>(offsetof(VertexPC, color)));
   glBindVertexArray(0);
 
-  glGenVertexArrays(1, &textVao_);
-  glGenBuffers(1, &textVbo_);
-  glBindVertexArray(textVao_);
-  glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+  unsigned int textVao = 0;
+  unsigned int textVbo = 0;
+  glGenVertexArrays(1, &textVao);
+  glGenBuffers(1, &textVbo);
+  textVao_.Set(textVao);
+  textVbo_.Set(textVbo);
+
+  backend_->BindVertexArray(textVao_.Get());
+  backend_->BindArrayBuffer(textVbo_.Get());
   glBufferData(GL_ARRAY_BUFFER, 4096 * sizeof(glm::vec3), nullptr, GL_DYNAMIC_DRAW);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), reinterpret_cast<void*>(0));
@@ -247,30 +234,31 @@ void Renderer::DrawAxes(const glm::mat4& vp) {
 }
 
 void Renderer::DrawFieldImage(const glm::mat4& vp) {
-  if (fieldTexture_ == 0) {
+  if (fieldTexture_.Get() == 0) {
     return;
   }
 
-  glUseProgram(texturedShader_.id);
+  backend_->UseProgram(texturedShader_.program.Get());
 
   glm::mat4 model(1.0F);
   model = glm::translate(model, glm::vec3{0.0F, 0.0F, fieldZ_ + 0.001F});
   model = glm::scale(model, glm::vec3{fieldLength_, fieldWidth_, 1.0F});
 
   const glm::mat4 mvp = vp * model;
-  glUniformMatrix4fv(glGetUniformLocation(texturedShader_.id, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform1f(glGetUniformLocation(texturedShader_.id, "uAlpha"), glm::clamp(cfg_.fieldImageAlpha, 0.0F, 1.0F));
-  glUniform1i(glGetUniformLocation(texturedShader_.id, "uFlipX"), cfg_.fieldImageFlipX ? 1 : 0);
-  glUniform1i(glGetUniformLocation(texturedShader_.id, "uFlipY"), cfg_.fieldImageFlipY ? 1 : 0);
+  const unsigned int texProgram = texturedShader_.program.Get();
+  glUniformMatrix4fv(glGetUniformLocation(texProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
+  glUniform1f(glGetUniformLocation(texProgram, "uAlpha"), glm::clamp(cfg_.fieldImageAlpha, 0.0F, 1.0F));
+  glUniform1i(glGetUniformLocation(texProgram, "uFlipX"), cfg_.fieldImageFlipX ? 1 : 0);
+  glUniform1i(glGetUniformLocation(texProgram, "uFlipY"), cfg_.fieldImageFlipY ? 1 : 0);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, fieldTexture_);
-  glUniform1i(glGetUniformLocation(texturedShader_.id, "uTex"), 0);
+  backend_->BindTexture2D(fieldTexture_.Get());
+  glUniform1i(glGetUniformLocation(texProgram, "uTex"), 0);
 
-  glBindVertexArray(quadMesh_.vao);
-  glDrawElements(GL_TRIANGLES, quadMesh_.indexCount, GL_UNSIGNED_INT, nullptr);
-  glBindVertexArray(0);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  backend_->BindVertexArray(quadMesh_.vao.Get());
+  backend_->DrawIndexedTriangles(quadMesh_.indexCount);
+  backend_->BindVertexArray(0);
+  backend_->BindTexture2D(0);
 }
 
 void Renderer::DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive) {
@@ -281,13 +269,14 @@ void Renderer::DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive) {
 
   const glm::mat4 mvp = vp * model;
 
-  glUseProgram(solidShader_.id);
-  glUniformMatrix4fv(glGetUniformLocation(solidShader_.id, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform4f(glGetUniformLocation(solidShader_.id, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
+  const unsigned int solidProgram = solidShader_.program.Get();
+  backend_->UseProgram(solidProgram);
+  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
+  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
 
-  glBindVertexArray(cubeMesh_.vao);
-  glDrawElements(GL_TRIANGLES, cubeMesh_.indexCount, GL_UNSIGNED_INT, nullptr);
-  glBindVertexArray(0);
+  backend_->BindVertexArray(cubeMesh_.vao.Get());
+  backend_->DrawIndexedTriangles(cubeMesh_.indexCount);
+  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive) {
@@ -297,13 +286,14 @@ void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive)
 
   const glm::mat4 mvp = vp * model;
 
-  glUseProgram(solidShader_.id);
-  glUniformMatrix4fv(glGetUniformLocation(solidShader_.id, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
-  glUniform4f(glGetUniformLocation(solidShader_.id, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
+  const unsigned int solidProgram = solidShader_.program.Get();
+  backend_->UseProgram(solidProgram);
+  glUniformMatrix4fv(glGetUniformLocation(solidProgram, "uMvp"), 1, GL_FALSE, &mvp[0][0]);
+  glUniform4f(glGetUniformLocation(solidProgram, "uColor"), primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a);
 
-  glBindVertexArray(sphereMesh_.vao);
-  glDrawElements(GL_TRIANGLES, sphereMesh_.indexCount, GL_UNSIGNED_INT, nullptr);
-  glBindVertexArray(0);
+  backend_->BindVertexArray(sphereMesh_.vao.Get());
+  backend_->DrawIndexedTriangles(sphereMesh_.indexCount);
+  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawLinePrimitives(const glm::mat4& vp, const std::vector<LinePrimitive>& lines) {
@@ -328,16 +318,16 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
     return;
   }
 
-  glUseProgram(lineShader_.id);
-  glUniformMatrix4fv(glGetUniformLocation(lineShader_.id, "uMvp"), 1, GL_FALSE, &vp[0][0]);
+  const unsigned int lineProgram = lineShader_.program.Get();
+  backend_->UseProgram(lineProgram);
+  glUniformMatrix4fv(glGetUniformLocation(lineProgram, "uMvp"), 1, GL_FALSE, &vp[0][0]);
 
-  glBindVertexArray(dynamicLineVao_);
-  glBindBuffer(GL_ARRAY_BUFFER, dynamicLineVbo_);
+  backend_->BindVertexArray(dynamicLineVao_.Get());
+  backend_->BindArrayBuffer(dynamicLineVbo_.Get());
   glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(VertexPC)), vertices.data(), GL_DYNAMIC_DRAW);
 
-  glLineWidth(width);
-  glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices.size()));
-  glBindVertexArray(0);
+  backend_->DrawLines(static_cast<int>(vertices.size()), width);
+  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawOverlay(const int /*width*/, const int height, const std::vector<OverlayLine>& lines) {

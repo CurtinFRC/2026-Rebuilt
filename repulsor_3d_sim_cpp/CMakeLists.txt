@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
+option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
 
 include(FetchContent)
 
@@ -137,4 +138,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../repulsor_3d_sim/field.png")
       "${CMAKE_CURRENT_SOURCE_DIR}/../repulsor_3d_sim/field.png"
       "$<TARGET_FILE_DIR:repulsor_3d_sim_cpp>/field.png"
   )
+endif()
+
+if(REPULSOR_SIM_BUILD_TESTS)
+  include(CTest)
+  add_executable(repulsor_3d_sim_cpp_tests
+    tests/PoseSmoothingTests.cpp
+    src/sim/PoseSmoothing.cpp
+    src/domain/SnapshotDomainAdapter.cpp
+  )
+
+  target_include_directories(repulsor_3d_sim_cpp_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+  add_test(NAME repulsor_3d_sim_cpp_tests COMMAND repulsor_3d_sim_cpp_tests)
 endif()

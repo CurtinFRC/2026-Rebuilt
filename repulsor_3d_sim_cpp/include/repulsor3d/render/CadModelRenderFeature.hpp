@@ -6,8 +6,11 @@
 #include <glm/vec3.hpp>
 
 #include "repulsor3d/render/RenderFeature.hpp"
+#include "repulsor3d/render/backend/GlHandles.hpp"
+#include "repulsor3d/render/backend/RenderBackend.hpp"
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/material/Material.hpp"
+#include "repulsor3d/render/material/MaterialPipeline.hpp"
 
 namespace repulsor3d {
 
@@ -38,20 +41,24 @@ class CadModelRenderFeature final : public IRenderFeature {
     int colorUniformLocation_ = -1;
   };
 
-  struct VertexPN {
-    glm::vec3 pos{0.0F, 0.0F, 0.0F};
-    glm::vec3 normal{0.0F, 0.0F, 1.0F};
+  class WireframeMaterialPass final : public IMaterialPass {
+   public:
+    explicit WireframeMaterialPass(IRenderBackend& backend) : backend_(backend) {}
+    void Apply(const MaterialInstance& material) override;
+
+   private:
+    IRenderBackend& backend_;
   };
 
   struct GpuMesh {
-    unsigned int vao = 0;
-    unsigned int vbo = 0;
+    GlVertexArrayHandle vao;
+    GlBufferHandle vbo;
     int vertexCount = 0;
   };
 
   bool CreateShader();
   static unsigned int CompileShader(unsigned int type, const char* source);
-  static bool LinkShader(unsigned int& program, unsigned int vs, unsigned int fs);
+  static bool LinkShader(GlProgramHandle& program, unsigned int vs, unsigned int fs);
 
   static bool UploadMesh(const PositionNormalMesh& cpu, GpuMesh& gpu);
   static void DestroyMesh(GpuMesh& gpu);
@@ -60,13 +67,14 @@ class CadModelRenderFeature final : public IRenderFeature {
 
   Renderer* renderer_ = nullptr;
   IGeometryProvider* geometryProvider_ = nullptr;
+  IRenderBackend* backend_ = nullptr;
 
-  unsigned int shader_ = 0;
+  GlProgramHandle shader_;
   int uMvpLoc_ = -1;
   int uModelLoc_ = -1;
   int uColorLoc_ = -1;
   int uLightDirLoc_ = -1;
-  FlatLitMaterialPass materialPass_{-1};
+  MaterialPipeline materialPipeline_;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
 };

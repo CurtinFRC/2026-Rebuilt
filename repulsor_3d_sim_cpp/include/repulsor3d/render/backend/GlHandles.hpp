@@ -106,4 +106,38 @@ class GlVertexArrayHandle {
   GLuint id_ = 0;
 };
 
+class GlTextureHandle {
+ public:
+  GlTextureHandle() = default;
+  ~GlTextureHandle() { Reset(); }
+
+  GlTextureHandle(const GlTextureHandle&) = delete;
+  GlTextureHandle& operator=(const GlTextureHandle&) = delete;
+
+  GlTextureHandle(GlTextureHandle&& other) noexcept : id_(other.id_) { other.id_ = 0; }
+  GlTextureHandle& operator=(GlTextureHandle&& other) noexcept {
+    if (this != &other) {
+      Reset();
+      id_ = other.id_;
+      other.id_ = 0;
+    }
+    return *this;
+  }
+
+  void Set(GLuint id) {
+    Reset();
+    id_ = id;
+  }
+  void Reset() {
+    if (id_ != 0) {
+      glDeleteTextures(1, &id_);
+      id_ = 0;
+    }
+  }
+  GLuint Get() const { return id_; }
+
+ private:
+  GLuint id_ = 0;
+};
+
 }  // namespace repulsor3d
