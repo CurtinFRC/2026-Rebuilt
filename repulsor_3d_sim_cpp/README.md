@@ -12,12 +12,6 @@ This is a full C++ rewrite of `repulsor_3d_sim` with:
 
 ```powershell
 cd repulsor_3d_sim_cpp
-  cmake -S . -B build `
-    -DCMAKE_TOOLCHAIN_FILE=C:/Users/paulh/vcpkg/scripts/buildsystems/vcpkg.cmake `
-    -DVCPKG_TARGET_TRIPLET=x64-windows `
-    -DREPULSOR_SIM_USE_NTCORE=ON
-    -DREPULSOR_SIM_FETCH_DEPS=ON
-    
 cmake -S . -B build -DREPULSOR_SIM_FETCH_DEPS=ON -DREPULSOR_SIM_USE_NTCORE=ON
 cmake --build build --config Release
 ```

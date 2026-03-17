@@ -9,6 +9,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
 option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
+set(REPULSOR_SIM_NTCORE_ROOT "C:/Users/paulh/allwpilib" CACHE PATH "Root directory of a local allwpilib checkout/build for ntcore")
+set(REPULSOR_SIM_NTCORE_HINTS "" CACHE STRING "Optional semicolon-separated extra hint paths for ntcore package discovery")
 
 include(FetchContent)
 
@@ -118,13 +120,29 @@ target_link_libraries(repulsor_3d_sim_cpp
 )
 
 if(REPULSOR_SIM_USE_NTCORE)
-  find_package(ntcore CONFIG QUIET)
+  set(_repulsor_ntcore_search_paths
+    "${REPULSOR_SIM_NTCORE_ROOT}"
+    "${REPULSOR_SIM_NTCORE_ROOT}/build"
+    "${REPULSOR_SIM_NTCORE_ROOT}/build/ntcore"
+    "${REPULSOR_SIM_NTCORE_ROOT}/install"
+    "${REPULSOR_SIM_NTCORE_ROOT}/build/install"
+    ${REPULSOR_SIM_NTCORE_HINTS}
+  )
+
+  find_package(ntcore CONFIG QUIET
+    PATHS ${_repulsor_ntcore_search_paths}
+    PATH_SUFFIXES lib/cmake/ntcore ntcore cmake
+    NO_DEFAULT_PATH
+  )
+
   if(ntcore_FOUND)
+    message(STATUS "NTCore found locally: ${ntcore_DIR}")
     target_compile_definitions(repulsor_3d_sim_cpp PRIVATE REPULSOR_HAS_NTCORE=1)
     target_sources(repulsor_3d_sim_cpp PRIVATE src/NtDataSource.cpp)
     target_link_libraries(repulsor_3d_sim_cpp PRIVATE ntcore)
   else()
-    message(STATUS "NTCore not found; building without NT4 datasource")
+    message(STATUS "NTCore not found under REPULSOR_SIM_NTCORE_ROOT='${REPULSOR_SIM_NTCORE_ROOT}'; building without NT4 datasource")
+    message(STATUS "Set REPULSOR_SIM_NTCORE_ROOT or REPULSOR_SIM_NTCORE_HINTS to your local allwpilib build/install path")
   endif()
 endif()
 
