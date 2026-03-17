@@ -149,6 +149,11 @@ if(REPULSOR_SIM_BUILD_TESTS)
   )
 
   target_include_directories(repulsor_3d_sim_cpp_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_tests PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_tests PRIVATE glm::glm)
+  endif()
 
   add_test(NAME repulsor_3d_sim_cpp_tests COMMAND repulsor_3d_sim_cpp_tests)
 endif()

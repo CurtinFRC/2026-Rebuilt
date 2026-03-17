@@ -208,11 +208,8 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
     return false;
   }
 
-  std::vector<VertexPN> packed;
-  packed.reserve(cpu.vertices.size());
-  for (const auto& v : cpu.vertices) {
-    packed.push_back({v.position, v.normal});
-  }
+  using Vertex = PositionNormalMesh::Vertex;
+  const auto& vertices = cpu.vertices;
 
   unsigned int vaoId = 0;
   unsigned int vboId = 0;
@@ -230,23 +227,29 @@ bool CadModelRenderFeature::UploadMesh(const PositionNormalMesh& cpu, GpuMesh& g
   glBindBuffer(GL_ARRAY_BUFFER, gpu.vbo.Get());
   glBufferData(
       GL_ARRAY_BUFFER,
-      static_cast<GLsizeiptr>(packed.size() * sizeof(VertexPN)),
-      packed.data(),
+      static_cast<GLsizeiptr>(vertices.size() * sizeof(Vertex)),
+      vertices.data(),
       GL_STATIC_DRAW);
 
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexPN), reinterpret_cast<void*>(offsetof(VertexPN, pos)));
+  glVertexAttribPointer(
+      0,
+      3,
+      GL_FLOAT,
+      GL_FALSE,
+      sizeof(Vertex),
+      reinterpret_cast<void*>(offsetof(Vertex, position)));
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(
       1,
       3,
       GL_FLOAT,
       GL_FALSE,
-      sizeof(VertexPN),
-      reinterpret_cast<void*>(offsetof(VertexPN, normal)));
+      sizeof(Vertex),
+      reinterpret_cast<void*>(offsetof(Vertex, normal)));
   glBindVertexArray(0);
 
-  gpu.vertexCount = static_cast<int>(packed.size());
+  gpu.vertexCount = static_cast<int>(vertices.size());
   return true;
 }
 
