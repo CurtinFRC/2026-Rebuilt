@@ -1,3 +1,27 @@
+#include "repulsor3d/render/CadModelRenderFeature.hpp"
+
+#include <stb_image.h>
+
+#include <chrono>
+#include <future>
+#include <iostream>
+#include <sstream>
+
+#include "repulsor3d/Renderer.hpp"
+#include "repulsor3d/render/cad/CadPolicies.hpp"
+#include "cad/feature/CadModelRenderFeatureInternals.hpp"
+
+namespace repulsor3d {
+
+using cad::CadLodPolicy;
+using cad::GetEnvBool;
+using cad::LoadCadLodPolicy;
+using cadfeature::BuildShadowProxyMesh;
+using cadfeature::IndexedMesh;
+using cadfeature::PreparedCpuMeshBlob;
+using cadfeature::StorePreparedCpuMeshCache;
+using cadfeature::TryLoadPreparedCpuMeshCache;
+
 const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const std::string& assetPath) {
   const auto cached = meshCache_.find(assetPath);
   if (cached != meshCache_.end()) {
@@ -288,3 +312,5 @@ const CadModelRenderFeature::GpuTexture* CadModelRenderFeature::GetOrLoadTexture
   std::cerr << "CAD texture loaded: " << assetPath << " (" << width << "x" << height << ")\n";
   return &it->second;
 }
+
+}  // namespace repulsor3d

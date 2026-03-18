@@ -1,3 +1,16 @@
+#include "repulsor3d/render/CadModelRenderFeature.hpp"
+
+#include <GL/glew.h>
+
+#include <algorithm>
+#include <iostream>
+#include <memory>
+#include <string>
+
+#include "repulsor3d/render/cad/CadShaderSources.hpp"
+
+namespace repulsor3d {
+
 bool CadModelRenderFeature::CreateShader() {
   const char* vsSrc = cad::CadMainVertexShaderSource();
   const char* fsSrc = cad::CadMainFragmentShaderSource();
@@ -213,3 +226,5 @@ bool CadModelRenderFeature::LinkShader(GlProgramHandle& program, const unsigned 
   glDeleteProgram(p);
   return false;
 }
+
+}  // namespace repulsor3d

@@ -1,3 +1,24 @@
+#include "CadModelRenderFeatureInternals.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <glm/geometric.hpp>
+#include <glm/vec2.hpp>
+
+namespace repulsor3d::cadfeature {
 using cad::CadLodPolicy;
 using cad::CadShadowPolicy;
 using cad::CadVisualPolicy;
@@ -152,17 +173,6 @@ std::filesystem::path GetPreparedCacheRoot() {
   return std::filesystem::path(".repulsor_cache") / "cad_prepared_lod";
 }
 
-struct PreparedCpuMeshBlob {
-  struct LodBlob {
-    std::vector<PositionNormalMesh::Vertex> vertices;
-    std::vector<std::uint32_t> indices;
-  };
-  std::vector<LodBlob> lods;
-  glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
-  float boundsRadius = 1.0F;
-  float roughnessHint = -1.0F;
-  float metallicHint = -1.0F;
-};
 
 template <typename T>
 bool WriteScalar(std::ofstream& out, const T& value) {
@@ -403,10 +413,6 @@ VertexKey ToVertexKey(const PositionNormalMesh::Vertex& vertex) {
   };
 }
 
-struct IndexedMesh {
-  std::vector<PositionNormalMesh::Vertex> vertices;
-  std::vector<std::uint32_t> indices;
-};
 
 glm::vec3 ComputeTrimmedBoundsCenterXY(const std::vector<PositionNormalMesh::Vertex>& vertices) {
   if (vertices.empty()) {
@@ -863,19 +869,6 @@ float ComputeScreenSpaceRadiusPixels(
   return ndcRadius * 0.5F * static_cast<float>(std::min(viewportWidth, viewportHeight));
 }
 
-struct PackedVertex {
-  glm::vec3 position{0.0F, 0.0F, 0.0F};
-  glm::vec3 normal{0.0F, 0.0F, 1.0F};
-  std::array<std::uint8_t, 4> color{255, 255, 255, 255};
-};
-
-struct InstanceGpuData {
-  glm::vec4 modelRow0{1.0F, 0.0F, 0.0F, 0.0F};
-  glm::vec4 modelRow1{0.0F, 1.0F, 0.0F, 0.0F};
-  glm::vec4 modelRow2{0.0F, 0.0F, 1.0F, 0.0F};
-  glm::vec4 modelRow3{0.0F, 0.0F, 0.0F, 1.0F};
-};
-
 InstanceGpuData ToInstanceData(const glm::mat4& model) {
   InstanceGpuData data;
   data.modelRow0 = model[0];
@@ -907,3 +900,5 @@ std::vector<PackedVertex> PackVerticesForGpu(const std::vector<PositionNormalMes
   }
   return packed;
 }
+
+}  // namespace repulsor3d::cadfeature

@@ -1,3 +1,42 @@
+#include "repulsor3d/render/CadModelRenderFeature.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
+#include <variant>
+#include <vector>
+
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/trigonometric.hpp>
+
+#include "repulsor3d/render/cad/CadBroadphase.hpp"
+#include "repulsor3d/render/cad/CadFrustum.hpp"
+#include "repulsor3d/render/cad/CadPolicies.hpp"
+#include "cad/feature/CadModelRenderFeatureInternals.hpp"
+
+namespace repulsor3d {
+
+namespace {
+
+std::uint32_t FloatBits(const float value) {
+  std::uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+}  // namespace
+
+using cad::CadVisualPolicy;
+using cad::GetEnvBool;
+using cad::LoadCadVisualPolicy;
+using cadfeature::BuildBroadphaseFingerprint;
+using cadfeature::InstanceGpuData;
+using cadfeature::ToInstanceData;
+
 void CadModelRenderFeature::Render(const RenderFeatureContext& context, const RendererDrawApi& /*drawApi*/) {
   if (!initialized_ || shader_.Get() == 0 || geometryProvider_ == nullptr || backend_ == nullptr) {
     return;
@@ -606,3 +645,5 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetActiveTextureUnit(3);
   backend_->BindTexture2D(0);
 }
+
+}  // namespace repulsor3d

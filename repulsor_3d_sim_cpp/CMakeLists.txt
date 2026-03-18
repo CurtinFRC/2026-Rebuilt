@@ -134,6 +134,11 @@ set(REPULSOR_SIM_SOURCES
   src/render/RenderFeature.cpp
   src/render/RenderFeaturePlugin.cpp
   src/render/CadModelRenderFeature.cpp
+  src/render/CadModelRenderFeatureRender.cpp
+  src/render/CadModelRenderFeatureShader.cpp
+  src/render/CadModelRenderFeatureMesh.cpp
+  src/render/CadModelRenderFeatureAssets.cpp
+  src/render/cad/feature/CadModelRenderFeatureHelpers.cpp
   src/render/cad/CadFrustum.cpp
   src/render/cad/CadBroadphase.cpp
   src/render/cad/CadPolicies.cpp

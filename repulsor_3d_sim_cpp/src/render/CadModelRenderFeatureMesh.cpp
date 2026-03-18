@@ -1,3 +1,29 @@
+#include "repulsor3d/render/CadModelRenderFeature.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+#include "repulsor3d/render/cad/CadPolicies.hpp"
+#include "cad/feature/CadModelRenderFeatureInternals.hpp"
+
+namespace repulsor3d {
+
+using cad::CadLodPolicy;
+using cad::LoadCadLodPolicy;
+using cadfeature::BuildIndexedMesh;
+using cadfeature::BuildLodChain;
+using cadfeature::BuildShadowProxyMesh;
+using cadfeature::ComputeRadiusFromCenter;
+using cadfeature::ComputeScreenSpaceRadiusPixels;
+using cadfeature::ComputeTrimmedBoundsCenterXY;
+using cadfeature::IndexedMesh;
+using cadfeature::InstanceGpuData;
+using cadfeature::PackedVertex;
+using cadfeature::PackVerticesForGpu;
+using cadfeature::RemoveDegenerateTriangles;
+
 CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(const PositionNormalMesh& cpu) {
   PreparedCpuMesh prepared;
   if (cpu.vertices.empty()) {
@@ -185,3 +211,5 @@ std::size_t CadModelRenderFeature::SelectLodLevel(
   }
   return selected;
 }
+
+}  // namespace repulsor3d
