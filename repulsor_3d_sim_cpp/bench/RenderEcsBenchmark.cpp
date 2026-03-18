@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 
 #include "repulsor3d/render/RenderCommandBuffer.hpp"

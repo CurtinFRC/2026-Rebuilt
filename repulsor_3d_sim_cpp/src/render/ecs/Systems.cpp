@@ -93,12 +93,20 @@ bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center
   return true;
 }
 
+bool IsFiniteVec3(const glm::vec3& v) {
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+bool IsFiniteVec4(const glm::vec4& v) {
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.w);
+}
+
 bool TryExtractFrustumAabb(const glm::mat4& viewProjection, SpatialAabb& out) {
   const glm::mat4 inverseVp = glm::inverse(viewProjection);
-  if (!glm::all(glm::isfinite(inverseVp[0])) ||
-      !glm::all(glm::isfinite(inverseVp[1])) ||
-      !glm::all(glm::isfinite(inverseVp[2])) ||
-      !glm::all(glm::isfinite(inverseVp[3]))) {
+  if (!IsFiniteVec4(inverseVp[0]) ||
+      !IsFiniteVec4(inverseVp[1]) ||
+      !IsFiniteVec4(inverseVp[2]) ||
+      !IsFiniteVec4(inverseVp[3])) {
     return false;
   }
 
@@ -125,7 +133,7 @@ bool TryExtractFrustumAabb(const glm::mat4& viewProjection, SpatialAabb& out) {
     maxP = glm::max(maxP, world);
   }
 
-  if (!glm::all(glm::isfinite(minP)) || !glm::all(glm::isfinite(maxP))) {
+  if (!IsFiniteVec3(minP) || !IsFiniteVec3(maxP)) {
     return false;
   }
 
