@@ -7,6 +7,7 @@
 #include <glm/vec2.hpp>
 
 #include "repulsor3d/Model.hpp"
+#include "repulsor3d/Units.hpp"
 
 namespace repulsor3d {
 
@@ -21,25 +22,28 @@ class CoordinateFrameMapper {
   };
 
   explicit CoordinateFrameMapper(const Config& cfg) : cfg_(cfg) {
-    const double rotRad = glm::radians(cfg_.rotationDeg);
+    const units::Radians rot = units::ToRadians(units::Degrees(cfg_.rotationDeg));
+    const double rotRad = rot.Value();
     cosRot_ = std::cos(rotRad);
     sinRot_ = std::sin(rotRad);
   }
 
   glm::vec2 TransformPointXY(const double x, const double y) const {
-    const double sx = x * cfg_.scaleMPerUnit;
-    const double sy = y * cfg_.scaleMPerUnit;
-    const double rx = sx * cosRot_ - sy * sinRot_;
-    const double ry = sx * sinRot_ + sy * cosRot_;
+    const units::Meters sx(x * cfg_.scaleMPerUnit);
+    const units::Meters sy(y * cfg_.scaleMPerUnit);
+    const double rx = sx.Value() * cosRot_ - sy.Value() * sinRot_;
+    const double ry = sx.Value() * sinRot_ + sy.Value() * cosRot_;
     return glm::vec2{
         static_cast<float>(cfg_.originXM + rx),
         static_cast<float>(cfg_.originYM + ry)};
   }
 
-  double TransformZ(const double z) const { return z * cfg_.zScaleMPerUnit; }
+  double TransformZ(const double z) const { return units::Meters(z * cfg_.zScaleMPerUnit).Value(); }
 
   double TransformAngleRad(const double thetaRad) const {
-    const double wrapped = thetaRad + glm::radians(cfg_.rotationDeg);
+    const units::Radians incoming(thetaRad);
+    const units::Radians rotation = units::ToRadians(units::Degrees(cfg_.rotationDeg));
+    const double wrapped = incoming.Value() + rotation.Value();
     return std::atan2(std::sin(wrapped), std::cos(wrapped));
   }
 

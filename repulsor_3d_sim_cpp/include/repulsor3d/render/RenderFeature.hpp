@@ -24,6 +24,10 @@ struct RenderFeatureContext {
   const RenderCommandBuffer& commandBuffer;
   const DiagnosticsSnapshot* diagnostics = nullptr;
   bool showDebugPanel = true;
+  bool showDebugCounters = true;
+  bool showDebugCpu = true;
+  bool showDebugGpu = true;
+  bool showDebugAssets = true;
 };
 
 struct RendererDrawApi {

@@ -144,6 +144,10 @@ void OpenGLRenderBackend::DefineVertexAttribNormalizedU8(
       reinterpret_cast<void*>(offsetBytes));
 }
 
+void OpenGLRenderBackend::SetVertexAttribDivisor(const unsigned int index, const unsigned int divisor) {
+  glVertexAttribDivisor(index, divisor);
+}
+
 void OpenGLRenderBackend::BindTexture2D(const unsigned int textureId) {
   glBindTexture(GL_TEXTURE_2D, textureId);
 }
@@ -173,6 +177,19 @@ void OpenGLRenderBackend::DrawTriangles(const int vertexCount) {
 
 void OpenGLRenderBackend::DrawIndexedTriangles(const int indexCount) {
   glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr);
+}
+
+void OpenGLRenderBackend::DrawTrianglesInstanced(const int vertexCount, const int instanceCount) {
+  glDrawArraysInstanced(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount), static_cast<GLsizei>(instanceCount));
+}
+
+void OpenGLRenderBackend::DrawIndexedTrianglesInstanced(const int indexCount, const int instanceCount) {
+  glDrawElementsInstanced(
+      GL_TRIANGLES,
+      static_cast<GLsizei>(indexCount),
+      GL_UNSIGNED_INT,
+      nullptr,
+      static_cast<GLsizei>(instanceCount));
 }
 
 void OpenGLRenderBackend::DrawLines(const int vertexCount, const float lineWidth) {

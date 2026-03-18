@@ -1,5 +1,7 @@
 #include "repulsor3d/render/RenderWorldAdapter.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <utility>
 
@@ -10,6 +12,39 @@
 
 namespace repulsor3d {
 namespace {
+
+std::string LowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return value;
+}
+
+double DynamicDoubleOr(
+    const DynamicEntityRecord& record,
+    const std::string& key,
+    const double fallback) {
+  if (key.empty()) {
+    return fallback;
+  }
+  if (const auto it = record.doubles.find(key); it != record.doubles.end()) {
+    return it->second;
+  }
+  return fallback;
+}
+
+std::string DynamicStringOr(
+    const DynamicEntityRecord& record,
+    const std::string& key,
+    const std::string& fallback) {
+  if (key.empty()) {
+    return fallback;
+  }
+  if (const auto it = record.strings.find(key); it != record.strings.end()) {
+    return it->second;
+  }
+  return fallback;
+}
 
 class HotReloadingRenderWorldAdapter final : public IRenderWorldAdapter {
  public:
@@ -183,6 +218,101 @@ RenderSceneFrame DescriptorDecoratingRenderWorldAdapter::BuildFrame(const ISimWo
       frame.overlayLines.end(),
       descriptor_.staticOverlayLines.begin(),
       descriptor_.staticOverlayLines.end());
+
+  if (!descriptor_.dynamicEntityBindings.empty()) {
+    const SnapshotBundle snapshotBundle = world.AsSnapshotBundle();
+    for (const auto& binding : descriptor_.dynamicEntityBindings) {
+      const auto channelIt = snapshotBundle.snapshot.dynamicEntityGroups.find(binding.channel);
+      if (channelIt == snapshotBundle.snapshot.dynamicEntityGroups.end()) {
+        continue;
+      }
+
+      const std::string entityType = LowerAscii(binding.entityType);
+      for (std::size_t i = 0; i < channelIt->second.size(); ++i) {
+        const auto& record = channelIt->second[i];
+        const std::string id = binding.idPrefix + (record.id.empty() ? std::to_string(i) : record.id);
+
+        const glm::vec3 position{
+            static_cast<float>(DynamicDoubleOr(record, binding.xKey, 0.0)),
+            static_cast<float>(DynamicDoubleOr(record, binding.yKey, 0.0)),
+            static_cast<float>(DynamicDoubleOr(record, binding.zKey, 0.0)),
+        };
+        const float yawDeg = static_cast<float>(DynamicDoubleOr(record, binding.yawDegKey, 0.0));
+
+        if (entityType == "sphere") {
+          SpherePrimitive sphere;
+          sphere.center = position;
+          sphere.radius = static_cast<float>(DynamicDoubleOr(record, "radius", binding.defaultRadius));
+          sphere.color = binding.color;
+          sphere.pass = binding.pass;
+          frame.entities.push_back(
+              {.id = id,
+               .pass = binding.pass,
+               .payload = sphere,
+               .parentId = "",
+               .transform = {},
+               .hasTransform = false,
+               .culling = binding.culling});
+        } else if (entityType == "box") {
+          BoxPrimitive box;
+          box.center = position;
+          box.size = glm::vec3{
+              static_cast<float>(DynamicDoubleOr(record, "size_x", binding.defaultSize.x)),
+              static_cast<float>(DynamicDoubleOr(record, "size_y", binding.defaultSize.y)),
+              static_cast<float>(DynamicDoubleOr(record, "size_z", binding.defaultSize.z)),
+          };
+          box.yawDeg = yawDeg;
+          box.color = binding.color;
+          box.pass = binding.pass;
+          frame.entities.push_back(
+              {.id = id,
+               .pass = binding.pass,
+               .payload = box,
+               .parentId = "",
+               .transform = {},
+               .hasTransform = false,
+               .culling = binding.culling});
+        } else if (entityType == "mesh" && !binding.assetPath.empty()) {
+          MeshInstancePrimitive mesh;
+          mesh.assetPath = binding.assetPath;
+          mesh.position = position;
+          mesh.rotationDeg = glm::vec3{0.0F, 0.0F, yawDeg};
+          mesh.scale = glm::vec3{
+              static_cast<float>(DynamicDoubleOr(record, "scale_x", binding.defaultScale.x)),
+              static_cast<float>(DynamicDoubleOr(record, "scale_y", binding.defaultScale.y)),
+              static_cast<float>(DynamicDoubleOr(record, "scale_z", binding.defaultScale.z)),
+          };
+          mesh.color = binding.color;
+          mesh.useAssetColor = binding.useAssetColor;
+          mesh.wireframe = binding.wireframe;
+          mesh.pass = binding.pass;
+          frame.entities.push_back(
+              {.id = id,
+               .pass = binding.pass,
+               .payload = mesh,
+               .parentId = "",
+               .transform = {},
+               .hasTransform = false,
+               .culling = binding.culling});
+        } else if (entityType == "overlay") {
+          OverlayLine overlay;
+          overlay.text = DynamicStringOr(record, binding.textKey, id);
+          overlay.color = binding.color;
+          overlay.anchor = OverlayAnchor::BottomLeft;
+          overlay.marginX = 10.0F;
+          overlay.marginY = 14.0F;
+          frame.entities.push_back(
+              {.id = id,
+               .pass = RenderPass::Overlay,
+               .payload = overlay,
+               .parentId = "",
+               .transform = {},
+               .hasTransform = false,
+               .culling = {.enabled = false, .boundsRadius = 0.0F}});
+        }
+      }
+    }
+  }
   return frame;
 }
 

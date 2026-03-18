@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.23)
+
+# Avoid Visual Studio vcpkg app-local post-build scripts that require pwsh.exe
+# in environments where only Windows PowerShell is present.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+  set(CMAKE_VS_GLOBALS "VcpkgEnabled=false;VcpkgApplocalDeps=false")
+  set(VCPKG_APPLOCAL_DEPS OFF CACHE BOOL "Disable vcpkg app-local dependency copy" FORCE)
+endif()
+
 project(repulsor_3d_sim_cpp LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -123,7 +131,10 @@ set(REPULSOR_SIM_SOURCES
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
+  src/render/RenderFeaturePlugin.cpp
   src/render/CadModelRenderFeature.cpp
+  src/render/cad/CadFrustum.cpp
+  src/render/cad/CadShaderSources.cpp
   src/render/backend/RenderBackend.cpp
   src/render/assets/CadMeshImportHelpers.cpp
   src/render/assets/CadMeshStlImporter.cpp
@@ -188,6 +199,19 @@ if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
   target_include_directories(repulsor3d_generic_datasource_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   if(MSVC)
     target_compile_options(repulsor3d_generic_datasource_plugin PRIVATE /utf-8)
+  endif()
+
+  add_library(repulsor3d_generic_render_feature_plugin SHARED
+    plugin_sdk/GenericRenderFeaturePluginTemplate.cpp
+  )
+  target_include_directories(repulsor3d_generic_render_feature_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor3d_generic_render_feature_plugin PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor3d_generic_render_feature_plugin PRIVATE glm::glm)
+  endif()
+  if(MSVC)
+    target_compile_options(repulsor3d_generic_render_feature_plugin PRIVATE /utf-8)
   endif()
 endif()
 
@@ -451,14 +475,41 @@ if(REPULSOR_SIM_BUILD_TESTS)
         $<TARGET_FILE:repulsor_3d_sim_cpp_datasource_plugin_abi_tests>
     )
 
+    add_executable(repulsor_3d_sim_cpp_render_plugin_abi_tests
+      tests/RenderFeaturePluginAbiSmokeTests.cpp
+      src/render/RenderFeaturePlugin.cpp
+    )
+    target_include_directories(
+      repulsor_3d_sim_cpp_render_plugin_abi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    if(REPULSOR_SIM_FETCH_DEPS)
+      target_include_directories(repulsor_3d_sim_cpp_render_plugin_abi_tests PRIVATE ${glm_SOURCE_DIR})
+    else()
+      target_link_libraries(repulsor_3d_sim_cpp_render_plugin_abi_tests PRIVATE glm::glm)
+    endif()
+    if(MSVC)
+      target_compile_options(repulsor_3d_sim_cpp_render_plugin_abi_tests PRIVATE /utf-8)
+    endif()
+    add_dependencies(repulsor_3d_sim_cpp_render_plugin_abi_tests repulsor3d_generic_render_feature_plugin)
+    add_test(
+      NAME repulsor_3d_sim_cpp_render_plugin_abi_tests
+      COMMAND
+        ${CMAKE_COMMAND} -E env
+        REPULSOR_TEST_RENDER_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_generic_render_feature_plugin>
+        $<TARGET_FILE:repulsor_3d_sim_cpp_render_plugin_abi_tests>
+    )
+
     add_custom_target(repulsor_plugin_abi_check
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_plugin_abi_tests
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_datasource_plugin_abi_tests
+      COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_render_plugin_abi_tests
       DEPENDS
         repulsor_3d_sim_cpp_plugin_abi_tests
         repulsor3d_generic_season_plugin
         repulsor_3d_sim_cpp_datasource_plugin_abi_tests
         repulsor3d_generic_datasource_plugin
+        repulsor_3d_sim_cpp_render_plugin_abi_tests
+        repulsor3d_generic_render_feature_plugin
     )
   endif()
 

@@ -39,6 +39,7 @@ class IRenderBackend {
       int componentCount,
       int strideBytes,
       std::size_t offsetBytes) = 0;
+  virtual void SetVertexAttribDivisor(unsigned int index, unsigned int divisor) = 0;
   virtual void BindTexture2D(unsigned int textureId) = 0;
   virtual void SetTexture2DLinearMipmapClamp() = 0;
   virtual void UploadTexture2DRgba8(int width, int height, const void* pixels) = 0;
@@ -46,6 +47,8 @@ class IRenderBackend {
   virtual void SetActiveTextureUnit(int unit) = 0;
   virtual void DrawTriangles(int vertexCount) = 0;
   virtual void DrawIndexedTriangles(int indexCount) = 0;
+  virtual void DrawTrianglesInstanced(int vertexCount, int instanceCount) = 0;
+  virtual void DrawIndexedTrianglesInstanced(int indexCount, int instanceCount) = 0;
   virtual void DrawLines(int vertexCount, float lineWidth) = 0;
 
   virtual unsigned int CreateGpuTimerQuery() = 0;
@@ -86,6 +89,7 @@ class OpenGLRenderBackend final : public IRenderBackend {
       int componentCount,
       int strideBytes,
       std::size_t offsetBytes) override;
+  void SetVertexAttribDivisor(unsigned int index, unsigned int divisor) override;
   void BindTexture2D(unsigned int textureId) override;
   void SetTexture2DLinearMipmapClamp() override;
   void UploadTexture2DRgba8(int width, int height, const void* pixels) override;
@@ -93,6 +97,8 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void SetActiveTextureUnit(int unit) override;
   void DrawTriangles(int vertexCount) override;
   void DrawIndexedTriangles(int indexCount) override;
+  void DrawTrianglesInstanced(int vertexCount, int instanceCount) override;
+  void DrawIndexedTrianglesInstanced(int indexCount, int instanceCount) override;
   void DrawLines(int vertexCount, float lineWidth) override;
 
   unsigned int CreateGpuTimerQuery() override;

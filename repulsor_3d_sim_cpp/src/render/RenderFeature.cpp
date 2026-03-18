@@ -104,25 +104,34 @@ class OverlayRenderFeature final : public IRenderFeature {
       lines.push_back(
           {"Frame ms: " + std::to_string(context.diagnostics->frameMilliseconds) +
            " (avg " + std::to_string(context.diagnostics->frameAverageMilliseconds) + ")"});
-      for (const auto& counter : context.diagnostics->counters) {
-        lines.push_back(
-            {"[Counter " + counter.name + "] " + std::to_string(counter.value) +
-             " (avg " + std::to_string(counter.averageValue) + ")"});
+      lines.push_back({"Debug sections [1]Counters [2]CPU [3]GPU [4]Assets"});
+      if (context.showDebugCounters) {
+        for (const auto& counter : context.diagnostics->counters) {
+          lines.push_back(
+              {"[Counter " + counter.name + "] " + std::to_string(counter.value) +
+               " (avg " + std::to_string(counter.averageValue) + ")"});
+        }
       }
-      for (const auto& pass : context.diagnostics->passTimings) {
-        lines.push_back(
-            {"[CPU " + pass.name + "] " + std::to_string(pass.milliseconds) +
-             " ms (avg " + std::to_string(pass.averageMilliseconds) + ")"});
+      if (context.showDebugCpu) {
+        for (const auto& pass : context.diagnostics->passTimings) {
+          lines.push_back(
+              {"[CPU " + pass.name + "] " + std::to_string(pass.milliseconds) +
+               " ms (avg " + std::to_string(pass.averageMilliseconds) + ")"});
+        }
       }
-      for (const auto& gpu : context.diagnostics->gpuTimings) {
-        lines.push_back(
-            {"[GPU " + gpu.name + "] " + std::to_string(gpu.milliseconds) +
-             " ms (avg " + std::to_string(gpu.averageMilliseconds) + ")"});
+      if (context.showDebugGpu) {
+        for (const auto& gpu : context.diagnostics->gpuTimings) {
+          lines.push_back(
+              {"[GPU " + gpu.name + "] " + std::to_string(gpu.milliseconds) +
+               " ms (avg " + std::to_string(gpu.averageMilliseconds) + ")"});
+        }
       }
-      for (const auto& asset : context.diagnostics->assetTimings) {
-        lines.push_back(
-            {"[Asset " + asset.name + "] " + std::to_string(asset.milliseconds) +
-             " ms (avg " + std::to_string(asset.averageMilliseconds) + ")"});
+      if (context.showDebugAssets) {
+        for (const auto& asset : context.diagnostics->assetTimings) {
+          lines.push_back(
+              {"[Asset " + asset.name + "] " + std::to_string(asset.milliseconds) +
+               " ms (avg " + std::to_string(asset.averageMilliseconds) + ")"});
+        }
       }
     }
 

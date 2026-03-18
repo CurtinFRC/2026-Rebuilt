@@ -65,6 +65,7 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.sceneProfile = GetEnvString("SIM_SCENE_PROFILE", cfg.sceneProfile);
   cfg.sceneDescriptorPath = GetEnvString("SCENE_DESCRIPTOR_PATH", cfg.sceneDescriptorPath);
   cfg.seasonModulePluginPath = GetEnvString("SEASON_MODULE_PLUGIN_PATH", cfg.seasonModulePluginPath);
+  cfg.renderFeaturePluginPath = GetEnvString("RENDER_FEATURE_PLUGIN_PATH", cfg.renderFeaturePluginPath);
   cfg.hotReloadSceneDescriptor = GetEnvBool("HOT_RELOAD_SCENE_DESCRIPTOR", cfg.hotReloadSceneDescriptor);
   cfg.hotReloadSeasonModule = GetEnvBool("HOT_RELOAD_SEASON_MODULE", cfg.hotReloadSeasonModule);
 

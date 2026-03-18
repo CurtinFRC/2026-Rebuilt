@@ -12,6 +12,11 @@ enum class InputAction {
   kToggleTruthFuel,
   kToggleAgeFilter,
   kToggleFieldImage,
+  kToggleDebugPanel,
+  kToggleDebugCounters,
+  kToggleDebugCpu,
+  kToggleDebugGpu,
+  kToggleDebugAssets,
 };
 
 class InputActionMap {

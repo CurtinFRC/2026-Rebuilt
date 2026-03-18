@@ -26,12 +26,15 @@
 #include <vector>
 
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec2.hpp>
 
 #include "repulsor3d/Renderer.hpp"
+#include "repulsor3d/render/cad/CadFrustum.hpp"
+#include "repulsor3d/render/cad/CadShaderSources.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -923,50 +926,27 @@ float ComputeScreenSpaceRadiusPixels(
   return ndcRadius * 0.5F * static_cast<float>(std::min(viewportWidth, viewportHeight));
 }
 
-struct Plane {
-  glm::vec3 normal{0.0F, 0.0F, 1.0F};
-  float d = 0.0F;
-};
-
-Plane NormalizePlane(const glm::vec4& plane) {
-  const glm::vec3 n{plane.x, plane.y, plane.z};
-  const float len = glm::length(n);
-  if (len <= 1e-6F) {
-    return {};
-  }
-  return {n / len, plane.w / len};
-}
-
-std::array<Plane, 6> ExtractFrustumPlanes(const glm::mat4& viewProjection) {
-  const glm::vec4 row0{viewProjection[0][0], viewProjection[1][0], viewProjection[2][0], viewProjection[3][0]};
-  const glm::vec4 row1{viewProjection[0][1], viewProjection[1][1], viewProjection[2][1], viewProjection[3][1]};
-  const glm::vec4 row2{viewProjection[0][2], viewProjection[1][2], viewProjection[2][2], viewProjection[3][2]};
-  const glm::vec4 row3{viewProjection[0][3], viewProjection[1][3], viewProjection[2][3], viewProjection[3][3]};
-  return {
-      NormalizePlane(row3 + row0),
-      NormalizePlane(row3 - row0),
-      NormalizePlane(row3 + row1),
-      NormalizePlane(row3 - row1),
-      NormalizePlane(row3 + row2),
-      NormalizePlane(row3 - row2),
-  };
-}
-
-bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center, const float radius) {
-  for (const auto& plane : planes) {
-    const float distance = glm::dot(plane.normal, center) + plane.d;
-    if (distance < -radius) {
-      return false;
-    }
-  }
-  return true;
-}
-
 struct PackedVertex {
   glm::vec3 position{0.0F, 0.0F, 0.0F};
   glm::vec3 normal{0.0F, 0.0F, 1.0F};
   std::array<std::uint8_t, 4> color{255, 255, 255, 255};
 };
+
+struct InstanceGpuData {
+  glm::vec4 modelRow0{1.0F, 0.0F, 0.0F, 0.0F};
+  glm::vec4 modelRow1{0.0F, 1.0F, 0.0F, 0.0F};
+  glm::vec4 modelRow2{0.0F, 0.0F, 1.0F, 0.0F};
+  glm::vec4 modelRow3{0.0F, 0.0F, 0.0F, 1.0F};
+};
+
+InstanceGpuData ToInstanceData(const glm::mat4& model) {
+  InstanceGpuData data;
+  data.modelRow0 = model[0];
+  data.modelRow1 = model[1];
+  data.modelRow2 = model[2];
+  data.modelRow3 = model[3];
+  return data;
+}
 
 std::vector<PackedVertex> PackVerticesForGpu(const std::vector<PositionNormalMesh::Vertex>& vertices) {
   std::vector<PackedVertex> packed;
@@ -1020,12 +1000,22 @@ CadModelRenderFeature::~CadModelRenderFeature() {
     }
   }
   pendingLoads_.clear();
+  for (auto& [_, pendingUpload] : pendingGpuUploads_) {
+    DestroyMesh(pendingUpload.gpu);
+  }
+  pendingGpuUploads_.clear();
 
   for (auto& [_, mesh] : meshCache_) {
     DestroyMesh(mesh);
   }
   meshCache_.clear();
 
+  shadowDepthTexture_.Reset();
+  if (shadowFbo_ != 0) {
+    glDeleteFramebuffers(1, &shadowFbo_);
+    shadowFbo_ = 0;
+  }
+  shadowShader_.Reset();
   shader_.Reset();
 }
 
@@ -1034,6 +1024,9 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   geometryProvider_ = &renderer.GetGeometryProvider();
   backend_ = &renderer.GetRenderBackend();
   uploadBudgetPerFrame_ = std::max(1, GetEnvInt("CAD_UPLOADS_PER_FRAME", uploadBudgetPerFrame_));
+  shadowEnabled_ = GetEnvBool("CAD_SHADOWS_ENABLED", true);
+  shadowMapSize_ = std::clamp(GetEnvInt("CAD_SHADOW_MAP_SIZE", shadowMapSize_), 512, 8192);
+  shadowStrength_ = std::clamp(GetEnvFloat("CAD_SHADOW_STRENGTH", shadowStrength_), 0.0F, 1.0F);
   if (initialized_) {
     return true;
   }
@@ -1056,7 +1049,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   backend_->UseProgram(shader_.Get());
   const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
-  const auto frustumPlanes = ExtractFrustumPlanes(context.viewProjection);
+  const auto frustumPlanes = cad::ExtractFrustumPlanes(context.viewProjection);
   backend_->SetUniformVec3(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
   backend_->SetUniformVec3(
       uCameraPosLoc_,
@@ -1076,11 +1069,25 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uSaturationLoc_, visualPolicy.saturation);
   backend_->SetUniform1f(uGammaLoc_, visualPolicy.gamma);
 
+  struct DrawItem {
+    const GpuMesh* mesh = nullptr;
+    const GpuMesh::LodGpu* lod = nullptr;
+    glm::mat4 model{1.0F};
+    glm::vec4 color{1.0F};
+    bool useAssetColor = false;
+    bool wireframe = false;
+    bool mirroredWinding = false;
+  };
+  std::vector<DrawItem> drawItems;
+  drawItems.reserve(256);
+
   for (const auto& command : context.commandBuffer) {
     std::visit(
         [&](const auto& typed) {
           using CommandType = std::decay_t<decltype(typed)>;
-          if constexpr (std::is_same_v<CommandType, DrawMeshInstanceCommand>) {
+          if constexpr (!std::is_same_v<CommandType, DrawMeshInstanceCommand>) {
+            return;
+          } else {
             if (typed.pass != renderPass_) {
               return;
             }
@@ -1098,228 +1105,239 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             model = glm::rotate(model, glm::radians(instance.rotationDeg.z), glm::vec3{0.0F, 0.0F, 1.0F});
             model = glm::scale(model, instance.scale);
             if (instance.centerOnMeshBounds) {
-              model = model * glm::translate(glm::mat4(1.0F), glm::vec3{-mesh->boundsCenter.x, -mesh->boundsCenter.y, 0.0F});
+              model =
+                  model * glm::translate(glm::mat4(1.0F), glm::vec3{-mesh->boundsCenter.x, -mesh->boundsCenter.y, 0.0F});
             }
 
             if (visualPolicy.enableFrustumCulling) {
-              glm::vec3 localBoundsCenter = mesh->boundsCenter;
-              if (instance.centerOnMeshBounds) {
-                localBoundsCenter.x = 0.0F;
-                localBoundsCenter.y = 0.0F;
-              }
-              const glm::vec3 worldBoundsCenter = glm::vec3(model * glm::vec4(localBoundsCenter, 1.0F));
-              const float maxScale = std::max(
-                  std::abs(instance.scale.x),
-                  std::max(std::abs(instance.scale.y), std::abs(instance.scale.z)));
+              const glm::vec3 worldBoundsCenter = glm::vec3(model * glm::vec4(mesh->boundsCenter, 1.0F));
+              const glm::vec3 scaleAxisX{model[0][0], model[0][1], model[0][2]};
+              const glm::vec3 scaleAxisY{model[1][0], model[1][1], model[1][2]};
+              const glm::vec3 scaleAxisZ{model[2][0], model[2][1], model[2][2]};
+              const float maxScale =
+                  std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
               const float worldBoundsRadius = std::max(mesh->boundsRadius * std::max(maxScale, 1e-4F), 1e-4F);
-              if (!IsSphereVisible(frustumPlanes, worldBoundsCenter, worldBoundsRadius)) {
+              if (!cad::IsSphereVisible(frustumPlanes, worldBoundsCenter, worldBoundsRadius)) {
                 return;
               }
             }
 
             const glm::mat4 mvp = context.viewProjection * model;
-            const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
-            backend_->SetUniformMat4(uMvpLoc_, &mvp[0][0]);
-            backend_->SetUniformMat4(uModelLoc_, &model[0][0]);
-            backend_->SetUniformMat3(uNormalMatrixLoc_, &normalMatrix[0][0]);
-            backend_->SetUniform1f(uUseAssetColorLoc_, instance.useAssetColor ? 1.0F : 0.0F);
-
-            MaterialInstance material;
-            material.definition.baseColor = instance.color;
-            material.definition.wireframe = instance.wireframe;
-            materialPipeline_.Apply(material);
-
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
             const auto& lod = mesh->lods[std::min(lodIndex, mesh->lods.size() - 1)];
-            const bool mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F;
-            if (mirroredWinding) {
-              glFrontFace(GL_CW);
-            }
 
-            backend_->BindVertexArray(lod.vao.Get());
-            if (lod.indexCount > 0) {
-              backend_->DrawIndexedTriangles(lod.indexCount);
-            } else {
-              backend_->DrawTriangles(lod.vertexCount);
-            }
-            backend_->BindVertexArray(0);
-            if (mirroredWinding) {
-              glFrontFace(GL_CCW);
-            }
+            drawItems.push_back(
+                {.mesh = mesh,
+                 .lod = &lod,
+                 .model = model,
+                 .color = instance.color,
+                 .useAssetColor = instance.useAssetColor,
+                 .wireframe = instance.wireframe,
+                 .mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F});
           }
         },
         command);
   }
 
+  if (drawItems.empty()) {
+    backend_->SetBlendEnabled(true);
+    backend_->SetWireframeMode(false);
+    return;
+  }
+
+  glm::vec3 sceneCenter{0.0F, 0.0F, 0.0F};
+  float sceneRadius = 1.0F;
+  {
+    glm::vec3 minP{std::numeric_limits<float>::max()};
+    glm::vec3 maxP{std::numeric_limits<float>::lowest()};
+    for (const auto& item : drawItems) {
+      const glm::vec3 c = glm::vec3(item.model * glm::vec4(item.mesh->boundsCenter, 1.0F));
+      const glm::vec3 scaleAxisX{item.model[0][0], item.model[0][1], item.model[0][2]};
+      const glm::vec3 scaleAxisY{item.model[1][0], item.model[1][1], item.model[1][2]};
+      const glm::vec3 scaleAxisZ{item.model[2][0], item.model[2][1], item.model[2][2]};
+      const float maxScale =
+          std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
+      const float r = std::max(item.mesh->boundsRadius * std::max(maxScale, 1e-4F), 0.1F);
+      minP = glm::min(minP, c - glm::vec3(r, r, r));
+      maxP = glm::max(maxP, c + glm::vec3(r, r, r));
+    }
+    sceneCenter = 0.5F * (minP + maxP);
+    sceneRadius = std::max(glm::length(maxP - minP) * 0.6F, 1.0F);
+  }
+
+  const glm::vec3 lightDir = glm::normalize(glm::vec3{-0.3F, -0.5F, -1.0F});
+  const glm::vec3 lightEye = sceneCenter - lightDir * (sceneRadius * 2.3F);
+  const glm::mat4 lightView = glm::lookAt(lightEye, sceneCenter, glm::vec3{0.0F, 0.0F, 1.0F});
+  const glm::mat4 lightProj =
+      glm::ortho(-sceneRadius, sceneRadius, -sceneRadius, sceneRadius, 0.1F, sceneRadius * 5.0F + 0.1F);
+  const glm::mat4 lightViewProjection = lightProj * lightView;
+
+  if (shadowEnabled_ && shadowFbo_ != 0 && shadowShader_.Get() != 0) {
+    GLint oldViewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glViewport(0, 0, shadowMapSize_, shadowMapSize_);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glCullFace(GL_FRONT);
+    backend_->UseProgram(shadowShader_.Get());
+    backend_->SetUniformMat4(uShadowLightMvpLoc_, &lightViewProjection[0][0]);
+
+    struct ShadowBatch {
+      const GpuMesh::LodGpu* lod = nullptr;
+      bool mirroredWinding = false;
+      std::vector<InstanceGpuData> instances;
+    };
+    std::vector<ShadowBatch> shadowBatches;
+    shadowBatches.reserve(drawItems.size());
+    for (const auto& item : drawItems) {
+      auto it = std::find_if(shadowBatches.begin(), shadowBatches.end(), [&](const ShadowBatch& batch) {
+        return batch.lod == item.lod && batch.mirroredWinding == item.mirroredWinding;
+      });
+      if (it == shadowBatches.end()) {
+        ShadowBatch batch;
+        batch.lod = item.lod;
+        batch.mirroredWinding = item.mirroredWinding;
+        batch.instances.push_back(ToInstanceData(item.model));
+        shadowBatches.push_back(std::move(batch));
+      } else {
+        it->instances.push_back(ToInstanceData(item.model));
+      }
+    }
+
+    for (const auto& batch : shadowBatches) {
+      if (batch.lod == nullptr || batch.instances.empty()) {
+        continue;
+      }
+      if (batch.mirroredWinding) {
+        glFrontFace(GL_CW);
+      }
+      backend_->BindVertexArray(batch.lod->vao.Get());
+      backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
+      backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
+      if (batch.lod->indexCount > 0) {
+        backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
+      } else {
+        backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
+      }
+      backend_->BindVertexArray(0);
+      if (batch.mirroredWinding) {
+        glFrontFace(GL_CCW);
+      }
+    }
+
+    glCullFace(GL_BACK);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+  }
+
+  backend_->UseProgram(shader_.Get());
+  backend_->SetUniformMat4(uMvpLoc_, &context.viewProjection[0][0]);
+  backend_->SetUniformMat4(uLightViewProjectionLoc_, &lightViewProjection[0][0]);
+  backend_->SetUniform1i(uShadowEnabledLoc_, (shadowEnabled_ && shadowFbo_ != 0) ? 1 : 0);
+  backend_->SetUniform1f(uShadowStrengthLoc_, shadowStrength_);
+  backend_->SetActiveTextureUnit(3);
+  backend_->BindTexture2D(shadowDepthTexture_.Get());
+  backend_->SetUniform1i(uShadowMapLoc_, 3);
+
+  struct BatchKey {
+    const GpuMesh::LodGpu* lod = nullptr;
+    std::uint32_t colorR = 0;
+    std::uint32_t colorG = 0;
+    std::uint32_t colorB = 0;
+    std::uint32_t colorA = 0;
+    bool useAssetColor = false;
+    bool wireframe = false;
+    bool mirroredWinding = false;
+    bool operator==(const BatchKey& other) const {
+      return lod == other.lod &&
+             colorR == other.colorR && colorG == other.colorG && colorB == other.colorB && colorA == other.colorA &&
+             useAssetColor == other.useAssetColor && wireframe == other.wireframe &&
+             mirroredWinding == other.mirroredWinding;
+    }
+  };
+  struct BatchKeyHash {
+    std::size_t operator()(const BatchKey& key) const {
+      std::size_t h = reinterpret_cast<std::size_t>(key.lod);
+      h ^= static_cast<std::size_t>(key.colorR) * 16777619U;
+      h ^= static_cast<std::size_t>(key.colorG) * 2166136261U;
+      h ^= static_cast<std::size_t>(key.colorB) * 709607U;
+      h ^= static_cast<std::size_t>(key.colorA) * 1469598103U;
+      h ^= key.useAssetColor ? 0x1U : 0x0U;
+      h ^= key.wireframe ? 0x2U : 0x0U;
+      h ^= key.mirroredWinding ? 0x4U : 0x0U;
+      return h;
+    }
+  };
+
+  struct DrawBatch {
+    glm::vec4 color{1.0F};
+    bool useAssetColor = false;
+    bool wireframe = false;
+    bool mirroredWinding = false;
+    const GpuMesh::LodGpu* lod = nullptr;
+    std::vector<InstanceGpuData> instances;
+  };
+
+  std::unordered_map<BatchKey, DrawBatch, BatchKeyHash> batches;
+  batches.reserve(drawItems.size());
+  for (const auto& item : drawItems) {
+    BatchKey key{
+        .lod = item.lod,
+        .colorR = FloatBits(item.color.r),
+        .colorG = FloatBits(item.color.g),
+        .colorB = FloatBits(item.color.b),
+        .colorA = FloatBits(item.color.a),
+        .useAssetColor = item.useAssetColor,
+        .wireframe = item.wireframe,
+        .mirroredWinding = item.mirroredWinding,
+    };
+    auto& batch = batches[key];
+    batch.color = item.color;
+    batch.useAssetColor = item.useAssetColor;
+    batch.wireframe = item.wireframe;
+    batch.mirroredWinding = item.mirroredWinding;
+    batch.lod = item.lod;
+    batch.instances.push_back(ToInstanceData(item.model));
+  }
+
+  for (auto& [_, batch] : batches) {
+    if (batch.lod == nullptr || batch.instances.empty()) {
+      continue;
+    }
+    MaterialInstance material;
+    material.definition.baseColor = batch.color;
+    material.definition.wireframe = batch.wireframe;
+    materialPipeline_.Apply(material);
+    backend_->SetUniform1f(uUseAssetColorLoc_, batch.useAssetColor ? 1.0F : 0.0F);
+
+    if (batch.mirroredWinding) {
+      glFrontFace(GL_CW);
+    }
+    backend_->BindVertexArray(batch.lod->vao.Get());
+    backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
+    backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
+    if (batch.lod->indexCount > 0) {
+      backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
+    } else {
+      backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
+    }
+    backend_->BindVertexArray(0);
+    if (batch.mirroredWinding) {
+      glFrontFace(GL_CCW);
+    }
+  }
+
   backend_->SetBlendEnabled(true);
   backend_->SetWireframeMode(false);
+  backend_->BindTexture2D(0);
 }
 
 bool CadModelRenderFeature::CreateShader() {
-  constexpr const char* vsSrc = R"(
-#version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec4 aColor;
-uniform mat4 uMvp;
-uniform mat4 uModel;
-uniform mat3 uNormalMatrix;
-out vec4 vColor;
-out vec3 vWorldPos;
-out vec3 vWorldNormal;
-void main() {
-  vec4 worldPos = uModel * vec4(aPos, 1.0);
-  vWorldPos = worldPos.xyz;
-  vWorldNormal = normalize(uNormalMatrix * aNormal);
-  vColor = aColor;
-  gl_Position = uMvp * vec4(aPos, 1.0);
-}
-)";
-
-  constexpr const char* fsSrc = R"(
-#version 330 core
-const float PI = 3.14159265359;
-in vec4 vColor;
-in vec3 vWorldPos;
-in vec3 vWorldNormal;
-uniform vec4 uColor;
-uniform vec3 uLightDir;
-uniform vec3 uCameraPos;
-uniform float uKeyLightIntensity;
-uniform float uFillLightIntensity;
-uniform float uAmbientStrength;
-uniform float uDepthCueStrength;
-uniform float uSpecularStrength;
-uniform float uRimStrength;
-uniform float uRoughness;
-uniform float uMetallic;
-uniform float uExposure;
-uniform float uFogDensity;
-uniform float uSaturation;
-uniform float uGamma;
-uniform float uUseAssetColor;
-out vec4 FragColor;
-
-vec3 FresnelSchlick(float cosTheta, vec3 F0) {
-  return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
-}
-
-float DistributionGGX(vec3 N, vec3 H, float roughness) {
-  float a = roughness * roughness;
-  float a2 = a * a;
-  float NdotH = max(dot(N, H), 0.0);
-  float NdotH2 = NdotH * NdotH;
-  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-  return a2 / max(PI * denom * denom, 1e-6);
-}
-
-float GeometrySchlickGGX(float NdotV, float roughness) {
-  float r = roughness + 1.0;
-  float k = (r * r) / 8.0;
-  float denom = NdotV * (1.0 - k) + k;
-  return NdotV / max(denom, 1e-6);
-}
-
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
-  float NdotV = max(dot(N, V), 0.0);
-  float NdotL = max(dot(N, L), 0.0);
-  float ggx2 = GeometrySchlickGGX(NdotV, roughness);
-  float ggx1 = GeometrySchlickGGX(NdotL, roughness);
-  return ggx1 * ggx2;
-}
-
-vec3 TonemapAces(vec3 x) {
-  const float a = 2.51;
-  const float b = 0.03;
-  const float c = 2.43;
-  const float d = 0.59;
-  const float e = 0.14;
-  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
-
-vec3 ShadePbrLight(
-    vec3 N,
-    vec3 V,
-    vec3 L,
-    vec3 lightColor,
-    float lightIntensity,
-    vec3 albedo,
-    float roughness,
-    float metallic,
-    vec3 F0) {
-  float NdotL = max(dot(N, L), 0.0);
-  if (NdotL <= 1e-5) {
-    return vec3(0.0);
-  }
-
-  vec3 H = normalize(V + L);
-  float NDF = DistributionGGX(N, H, roughness);
-  float G = GeometrySmith(N, V, L, roughness);
-  vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
-
-  vec3 numerator = NDF * G * F;
-  float denominator = max(4.0 * max(dot(N, V), 0.0) * NdotL, 1e-5);
-  vec3 specular = numerator / denominator;
-
-  vec3 kS = F;
-  vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-  vec3 radiance = lightColor * lightIntensity;
-  return (kD * albedo / PI + specular) * radiance * NdotL;
-}
-
-void main() {
-  float useAssetColor = clamp(uUseAssetColor, 0.0, 1.0);
-  vec3 baseColorSrgb = mix(uColor.rgb, vColor.rgb * uColor.rgb, useAssetColor);
-  float alpha = uColor.a * mix(1.0, vColor.a, useAssetColor);
-
-  vec3 N = normalize(vWorldNormal);
-  vec3 V = normalize(uCameraPos - vWorldPos);
-  vec3 albedo = pow(clamp(baseColorSrgb, 0.0, 1.0), vec3(2.2));
-
-  float roughness = clamp(uRoughness, 0.03, 1.0);
-  float metallic = clamp(uMetallic, 0.0, 1.0);
-  vec3 F0 = mix(vec3(0.04), albedo, metallic) * max(uSpecularStrength, 0.0);
-
-  vec3 keyDir = normalize(-uLightDir);
-  vec3 fillDir = normalize(vec3(0.40, 0.55, 0.72));
-
-  vec3 direct = vec3(0.0);
-  direct += ShadePbrLight(
-      N, V, keyDir, vec3(1.00, 0.98, 0.94), max(uKeyLightIntensity, 0.0), albedo, roughness, metallic, F0);
-  direct += ShadePbrLight(
-      N, V, fillDir, vec3(0.60, 0.70, 0.85), max(uFillLightIntensity, 0.0), albedo, roughness, metallic, F0);
-
-  float up = clamp(N.z * 0.5 + 0.5, 0.0, 1.0);
-  vec3 skyAmbient = vec3(0.44, 0.52, 0.64);
-  vec3 groundAmbient = vec3(0.19, 0.18, 0.17);
-  vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
-
-  float rim = pow(1.0 - max(dot(N, V), 0.0), 2.6) * max(uRimStrength, 0.0);
-  vec3 rimColor = vec3(0.85, 0.92, 1.0) * rim;
-
-  vec3 R = reflect(-V, N);
-  float envMix = clamp(R.z * 0.5 + 0.5, 0.0, 1.0);
-  vec3 envColor = mix(vec3(0.10, 0.11, 0.12), vec3(0.30, 0.36, 0.46), envMix);
-  vec3 envFresnel = FresnelSchlick(max(dot(N, V), 0.0), F0);
-  vec3 envSpec = envColor * envFresnel * (1.0 - roughness * 0.65) * 0.32;
-
-  float viewDistance = length(uCameraPos - vWorldPos);
-  float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 120.0, 0.0, 1.0);
-  float keyShadow = max(dot(N, keyDir), 0.0);
-  float shadowContrast = mix(0.70, 1.0, keyShadow);
-  vec3 linearColor = (ambient + direct + rimColor + envSpec) * max(depthCue, 0.45) * shadowContrast;
-
-  float fog = 1.0 - exp(-max(uFogDensity, 0.0) * viewDistance);
-  vec3 fogColor = vec3(0.57, 0.62, 0.70);
-  linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
-
-  vec3 mapped = TonemapAces(linearColor * max(uExposure, 0.01));
-  float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
-  mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));
-  mapped = pow(max(mapped, vec3(0.0)), vec3(1.0 / max(uGamma, 1e-3)));
-  FragColor = vec4(mapped, alpha);
-}
-)";
+  const char* vsSrc = cad::CadMainVertexShaderSource();
+  const char* fsSrc = cad::CadMainFragmentShaderSource();
 
   const unsigned int vs = CompileShader(GL_VERTEX_SHADER, vsSrc);
   const unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fsSrc);
@@ -1342,9 +1360,9 @@ void main() {
   glDeleteShader(vs);
   glDeleteShader(fs);
 
-  uMvpLoc_ = backend_->GetUniformLocation(shader_.Get(), "uMvp");
-  uModelLoc_ = backend_->GetUniformLocation(shader_.Get(), "uModel");
-  uNormalMatrixLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalMatrix");
+  uMvpLoc_ = backend_->GetUniformLocation(shader_.Get(), "uViewProjection");
+  uModelLoc_ = -1;
+  uNormalMatrixLoc_ = -1;
   uColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uColor");
   uLightDirLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightDir");
   uCameraPosLoc_ = backend_->GetUniformLocation(shader_.Get(), "uCameraPos");
@@ -1361,17 +1379,92 @@ void main() {
   uSaturationLoc_ = backend_->GetUniformLocation(shader_.Get(), "uSaturation");
   uGammaLoc_ = backend_->GetUniformLocation(shader_.Get(), "uGamma");
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
+  uLightViewProjectionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjection");
+  uShadowMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowMap");
+  uShadowEnabledLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowEnabled");
+  uShadowStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowStrength");
+
+  constexpr const char* shadowVsSrc = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 3) in vec4 iModelRow0;
+layout(location = 4) in vec4 iModelRow1;
+layout(location = 5) in vec4 iModelRow2;
+layout(location = 6) in vec4 iModelRow3;
+uniform mat4 uLightViewProjection;
+void main() {
+  mat4 model = mat4(iModelRow0, iModelRow1, iModelRow2, iModelRow3);
+  gl_Position = uLightViewProjection * model * vec4(aPos, 1.0);
+}
+)";
+  constexpr const char* shadowFsSrc = R"(
+#version 330 core
+void main() {}
+)";
+  const unsigned int shadowVs = CompileShader(GL_VERTEX_SHADER, shadowVsSrc);
+  const unsigned int shadowFs = CompileShader(GL_FRAGMENT_SHADER, shadowFsSrc);
+  if (shadowVs == 0 || shadowFs == 0) {
+    if (shadowVs != 0) {
+      glDeleteShader(shadowVs);
+    }
+    if (shadowFs != 0) {
+      glDeleteShader(shadowFs);
+    }
+    return false;
+  }
+  if (!LinkShader(shadowShader_, shadowVs, shadowFs)) {
+    glDeleteShader(shadowVs);
+    glDeleteShader(shadowFs);
+    return false;
+  }
+  glDeleteShader(shadowVs);
+  glDeleteShader(shadowFs);
+  uShadowLightMvpLoc_ = backend_->GetUniformLocation(shadowShader_.Get(), "uLightViewProjection");
+
+  if (shadowEnabled_) {
+    const unsigned int tex = backend_->CreateTexture2D();
+    shadowDepthTexture_.Set(tex);
+    glBindTexture(GL_TEXTURE_2D, shadowDepthTexture_.Get());
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_DEPTH_COMPONENT24,
+        shadowMapSize_,
+        shadowMapSize_,
+        0,
+        GL_DEPTH_COMPONENT,
+        GL_FLOAT,
+        nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    const float border[] = {1.0F, 1.0F, 1.0F, 1.0F};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+
+    glGenFramebuffers(1, &shadowFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTexture_.Get(), 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      return false;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
 
   materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(*backend_, uColorLoc_));
   materialPipeline_.AddPass(std::make_unique<WireframeMaterialPass>(*backend_));
-  return uMvpLoc_ >= 0 && uModelLoc_ >= 0 && uNormalMatrixLoc_ >= 0 &&
+  return uMvpLoc_ >= 0 &&
          uColorLoc_ >= 0 && uLightDirLoc_ >= 0 && uCameraPosLoc_ >= 0 &&
          uKeyLightIntensityLoc_ >= 0 && uFillLightIntensityLoc_ >= 0 &&
          uAmbientStrengthLoc_ >= 0 &&
          uDepthCueStrengthLoc_ >= 0 && uSpecularStrengthLoc_ >= 0 &&
          uRimStrengthLoc_ >= 0 && uRoughnessLoc_ >= 0 && uMetallicLoc_ >= 0 &&
          uExposureLoc_ >= 0 && uFogDensityLoc_ >= 0 && uSaturationLoc_ >= 0 &&
-         uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0;
+         uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0 &&
+         uLightViewProjectionLoc_ >= 0 && uShadowMapLoc_ >= 0 &&
+         uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 && uShadowLightMvpLoc_ >= 0;
 }
 
 unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const char* source) {
@@ -1465,35 +1558,10 @@ bool CadModelRenderFeature::UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu,
     }
 
     GpuMesh::LodGpu gpuLod;
-    const unsigned int vao = backend.CreateVertexArray();
-    const unsigned int vbo = backend.CreateBuffer();
-    const unsigned int ebo = backend.CreateBuffer();
-    if (vao == 0 || vbo == 0 || ebo == 0) {
+    if (!UploadSingleLod(cpuLod, gpuLod, backend)) {
       DestroyMesh(gpu);
       return false;
     }
-
-    gpuLod.vao.Set(vao);
-    gpuLod.vbo.Set(vbo);
-    gpuLod.ebo.Set(ebo);
-
-    const std::vector<PackedVertex> packed = PackVerticesForGpu(cpuLod.vertices);
-    backend.BindVertexArray(gpuLod.vao.Get());
-    backend.BindArrayBuffer(gpuLod.vbo.Get());
-    backend.UploadArrayBufferData(packed.size() * sizeof(PackedVertex), packed.data(), false);
-    backend.BindElementArrayBuffer(gpuLod.ebo.Get());
-    backend.UploadElementArrayBufferData(cpuLod.indices.size() * sizeof(std::uint32_t), cpuLod.indices.data(), false);
-
-    backend.EnableVertexAttrib(0);
-    backend.DefineVertexAttribFloat(0, 3, sizeof(PackedVertex), offsetof(PackedVertex, position));
-    backend.EnableVertexAttrib(1);
-    backend.DefineVertexAttribFloat(1, 3, sizeof(PackedVertex), offsetof(PackedVertex, normal));
-    backend.EnableVertexAttrib(2);
-    backend.DefineVertexAttribNormalizedU8(2, 4, sizeof(PackedVertex), offsetof(PackedVertex, color));
-    backend.BindVertexArray(0);
-
-    gpuLod.vertexCount = static_cast<int>(cpuLod.vertices.size());
-    gpuLod.indexCount = static_cast<int>(cpuLod.indices.size());
     gpu.lods.push_back(std::move(gpuLod));
   }
 
@@ -1502,8 +1570,62 @@ bool CadModelRenderFeature::UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu,
   return !gpu.lods.empty();
 }
 
+bool CadModelRenderFeature::UploadSingleLod(
+    const PreparedCpuMesh::LodCpu& cpuLod,
+    GpuMesh::LodGpu& gpuLod,
+    IRenderBackend& backend) {
+  const unsigned int vao = backend.CreateVertexArray();
+  const unsigned int vbo = backend.CreateBuffer();
+  const unsigned int ebo = backend.CreateBuffer();
+  const unsigned int instanceVbo = backend.CreateBuffer();
+  if (vao == 0 || vbo == 0 || ebo == 0 || instanceVbo == 0) {
+    return false;
+  }
+
+  gpuLod.vao.Set(vao);
+  gpuLod.vbo.Set(vbo);
+  gpuLod.ebo.Set(ebo);
+  gpuLod.instanceVbo.Set(instanceVbo);
+
+  const std::vector<PackedVertex> packed = PackVerticesForGpu(cpuLod.vertices);
+  backend.BindVertexArray(gpuLod.vao.Get());
+  backend.BindArrayBuffer(gpuLod.vbo.Get());
+  backend.UploadArrayBufferData(packed.size() * sizeof(PackedVertex), packed.data(), false);
+  backend.BindElementArrayBuffer(gpuLod.ebo.Get());
+  backend.UploadElementArrayBufferData(cpuLod.indices.size() * sizeof(std::uint32_t), cpuLod.indices.data(), false);
+
+  backend.EnableVertexAttrib(0);
+  backend.DefineVertexAttribFloat(0, 3, sizeof(PackedVertex), offsetof(PackedVertex, position));
+  backend.EnableVertexAttrib(1);
+  backend.DefineVertexAttribFloat(1, 3, sizeof(PackedVertex), offsetof(PackedVertex, normal));
+  backend.EnableVertexAttrib(2);
+  backend.DefineVertexAttribNormalizedU8(2, 4, sizeof(PackedVertex), offsetof(PackedVertex, color));
+
+  backend.BindArrayBuffer(gpuLod.instanceVbo.Get());
+  backend.UploadArrayBufferData(sizeof(InstanceGpuData), nullptr, true);
+  backend.EnableVertexAttrib(3);
+  backend.DefineVertexAttribFloat(3, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow0));
+  backend.EnableVertexAttrib(4);
+  backend.DefineVertexAttribFloat(4, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow1));
+  backend.EnableVertexAttrib(5);
+  backend.DefineVertexAttribFloat(5, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow2));
+  backend.EnableVertexAttrib(6);
+  backend.DefineVertexAttribFloat(6, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow3));
+  backend.SetVertexAttribDivisor(3, 1);
+  backend.SetVertexAttribDivisor(4, 1);
+  backend.SetVertexAttribDivisor(5, 1);
+  backend.SetVertexAttribDivisor(6, 1);
+
+  backend.BindVertexArray(0);
+
+  gpuLod.vertexCount = static_cast<int>(cpuLod.vertices.size());
+  gpuLod.indexCount = static_cast<int>(cpuLod.indices.size());
+  return true;
+}
+
 void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
   for (auto& lod : gpu.lods) {
+    lod.instanceVbo.Reset();
     lod.ebo.Reset();
     lod.vbo.Reset();
     lod.vao.Reset();
@@ -1564,48 +1686,78 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   }
 
   const auto pending = pendingLoads_.find(assetPath);
-  if (pending != pendingLoads_.end()) {
-    if (pending->second.future.valid() &&
-        pending->second.future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-      if (uploadsThisFrame_ >= uploadBudgetPerFrame_) {
-        return nullptr;
-      }
-      PreparedCpuMesh prepared = pending->second.future.get();
-      pendingLoads_.erase(pending);
-      if (prepared.lods.empty()) {
-        failedLoads_.insert(assetPath);
-        std::cerr << "CAD load failed: " << assetPath << "\n";
-        return nullptr;
+  if (pending != pendingLoads_.end() &&
+      pending->second.future.valid() &&
+      pending->second.future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+    PreparedCpuMesh prepared = pending->second.future.get();
+    pendingLoads_.erase(pending);
+    if (prepared.lods.empty()) {
+      failedLoads_.insert(assetPath);
+      std::cerr << "CAD load failed: " << assetPath << "\n";
+      return nullptr;
+    }
+
+    PendingGpuUpload upload;
+    upload.prepared = std::move(prepared);
+    upload.gpu.boundsCenter = upload.prepared.boundsCenter;
+    upload.gpu.boundsRadius = upload.prepared.boundsRadius;
+    pendingGpuUploads_[assetPath] = std::move(upload);
+  }
+
+  const auto uploadIt = pendingGpuUploads_.find(assetPath);
+  if (uploadIt != pendingGpuUploads_.end()) {
+    if (backend_ == nullptr) {
+      return nullptr;
+    }
+    auto& upload = uploadIt->second;
+    while (uploadsThisFrame_ < uploadBudgetPerFrame_ && upload.nextLod < upload.prepared.lods.size()) {
+      const auto& cpuLod = upload.prepared.lods[upload.nextLod];
+      if (cpuLod.vertices.empty()) {
+        ++upload.nextLod;
+        continue;
       }
 
-      GpuMesh gpu;
-      if (backend_ == nullptr || !UploadMesh(prepared, gpu, *backend_)) {
+      GpuMesh::LodGpu gpuLod;
+      if (!UploadSingleLod(cpuLod, gpuLod, *backend_)) {
         failedLoads_.insert(assetPath);
+        DestroyMesh(upload.gpu);
+        pendingGpuUploads_.erase(assetPath);
         std::cerr << "CAD upload failed: " << assetPath << "\n";
         return nullptr;
       }
-
-      auto [it, inserted] = meshCache_.emplace(assetPath, std::move(gpu));
-      if (!inserted) {
-        return &it->second;
-      }
-
-      std::ostringstream lodSummary;
-      for (std::size_t i = 0; i < it->second.lods.size(); ++i) {
-        if (i > 0) {
-          lodSummary << ", ";
-        }
-        lodSummary << "L" << i << "(v=" << it->second.lods[i].vertexCount
-                   << ",i=" << it->second.lods[i].indexCount << ")";
-      }
-      std::cerr << "CAD loaded: " << assetPath
-                << " (lods=" << it->second.lods.size()
-                << ", " << lodSummary.str()
-                << ", centerXY=(" << it->second.boundsCenter.x << ", " << it->second.boundsCenter.y << ")"
-                << ", radius=" << it->second.boundsRadius << ")\n";
+      upload.gpu.lods.push_back(std::move(gpuLod));
+      ++upload.nextLod;
       ++uploadsThisFrame_;
+      break;  // spread heavy uploads across frames
+    }
+
+    if (upload.nextLod < upload.prepared.lods.size()) {
+      return nullptr;
+    }
+
+    auto [it, inserted] = meshCache_.emplace(assetPath, std::move(upload.gpu));
+    pendingGpuUploads_.erase(assetPath);
+    if (!inserted) {
       return &it->second;
     }
+
+    std::ostringstream lodSummary;
+    for (std::size_t i = 0; i < it->second.lods.size(); ++i) {
+      if (i > 0) {
+        lodSummary << ", ";
+      }
+      lodSummary << "L" << i << "(v=" << it->second.lods[i].vertexCount
+                 << ",i=" << it->second.lods[i].indexCount << ")";
+    }
+    std::cerr << "CAD loaded: " << assetPath
+              << " (lods=" << it->second.lods.size()
+              << ", " << lodSummary.str()
+              << ", centerXY=(" << it->second.boundsCenter.x << ", " << it->second.boundsCenter.y << ")"
+              << ", radius=" << it->second.boundsRadius << ")\n";
+    return &it->second;
+  }
+
+  if (pendingLoads_.find(assetPath) != pendingLoads_.end()) {
     return nullptr;
   }
 

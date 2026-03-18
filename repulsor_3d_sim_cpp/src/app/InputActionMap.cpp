@@ -12,6 +12,11 @@ InputActionMap InputActionMap::CreateDefault() {
   map.keyMap_[GLFW_KEY_T] = InputAction::kToggleTruthFuel;
   map.keyMap_[GLFW_KEY_A] = InputAction::kToggleAgeFilter;
   map.keyMap_[GLFW_KEY_F] = InputAction::kToggleFieldImage;
+  map.keyMap_[GLFW_KEY_D] = InputAction::kToggleDebugPanel;
+  map.keyMap_[GLFW_KEY_1] = InputAction::kToggleDebugCounters;
+  map.keyMap_[GLFW_KEY_2] = InputAction::kToggleDebugCpu;
+  map.keyMap_[GLFW_KEY_3] = InputAction::kToggleDebugGpu;
+  map.keyMap_[GLFW_KEY_4] = InputAction::kToggleDebugAssets;
   return map;
 }
 

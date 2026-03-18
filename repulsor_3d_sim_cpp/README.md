@@ -65,6 +65,11 @@ cd repulsor_3d_sim_cpp
 - `T`: toggle truth fuel rendering
 - `A`: toggle age-filtered fuel rendering
 - `F`: toggle field texture image
+- `D`: toggle debug panel
+- `1`: toggle debug counters section
+- `2`: toggle debug CPU timings section
+- `3`: toggle debug GPU timings section
+- `4`: toggle debug assets section
 - `Esc`: quit
 
 ## Renderer Architecture (Refactored)
@@ -158,6 +163,7 @@ Datasource selection is now configurable via `DATA_SOURCE_TYPE`:
 
 Optional plugin override:
 - `DATA_SOURCE_PLUGIN_PATH` (if set and valid, plugin source is used before built-ins)
+- `RENDER_FEATURE_PLUGIN_PATH` (if set and valid, plugin render features are appended to the default renderer feature stack)
 
 Replay/record env vars:
 - `REPLAY_SNAPSHOT_PATH` (NDJSON snapshot log path)

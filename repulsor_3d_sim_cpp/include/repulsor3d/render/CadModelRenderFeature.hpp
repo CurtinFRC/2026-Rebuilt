@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <future>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -66,6 +67,7 @@ class CadModelRenderFeature final : public IRenderFeature {
       GlVertexArrayHandle vao;
       GlBufferHandle vbo;
       GlBufferHandle ebo;
+      GlBufferHandle instanceVbo;
       int vertexCount = 0;
       int indexCount = 0;
     };
@@ -88,11 +90,21 @@ class CadModelRenderFeature final : public IRenderFeature {
     std::future<PreparedCpuMesh> future;
   };
 
+  struct PendingGpuUpload {
+    PreparedCpuMesh prepared;
+    GpuMesh gpu;
+    std::size_t nextLod = 0;
+  };
+
   bool CreateShader();
   static unsigned int CompileShader(unsigned int type, const char* source);
   static bool LinkShader(GlProgramHandle& program, unsigned int vs, unsigned int fs);
 
   static PreparedCpuMesh PrepareCpuMesh(const PositionNormalMesh& cpu);
+  static bool UploadSingleLod(
+      const PreparedCpuMesh::LodCpu& cpuLod,
+      GpuMesh::LodGpu& gpuLod,
+      IRenderBackend& backend);
   static bool UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
   static std::size_t SelectLodLevel(const GpuMesh& mesh, const glm::mat4& mvp, int viewportWidth, int viewportHeight);
@@ -124,9 +136,21 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uGammaLoc_ = -1;
   int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
+  GlProgramHandle shadowShader_;
+  unsigned int shadowFbo_ = 0;
+  GlTextureHandle shadowDepthTexture_;
+  int uShadowLightMvpLoc_ = -1;
+  int uLightViewProjectionLoc_ = -1;
+  int uShadowMapLoc_ = -1;
+  int uShadowEnabledLoc_ = -1;
+  int uShadowStrengthLoc_ = -1;
+  int shadowMapSize_ = 2048;
+  bool shadowEnabled_ = true;
+  float shadowStrength_ = 0.55F;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
   std::unordered_map<std::string, PendingLoad> pendingLoads_;
+  std::unordered_map<std::string, PendingGpuUpload> pendingGpuUploads_;
   std::unordered_set<std::string> failedLoads_;
   int uploadBudgetPerFrame_ = 1;
   int uploadsThisFrame_ = 0;

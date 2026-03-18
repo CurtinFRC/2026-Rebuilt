@@ -16,6 +16,7 @@
 #include "repulsor3d/Diagnostics.hpp"
 #include "repulsor3d/Model.hpp"
 #include "repulsor3d/render/RenderFeature.hpp"
+#include "repulsor3d/render/RenderFeaturePlugin.hpp"
 #include "repulsor3d/render/assets/SceneAssetResolver.hpp"
 #include "repulsor3d/render/backend/GlHandles.hpp"
 #include "repulsor3d/render/backend/RenderBackend.hpp"
@@ -54,6 +55,11 @@ class Renderer {
   bool showTruthFuel = true;
   bool showAgeFilteredFuel = false;
   bool showFieldImage = true;
+  bool showDebugPanel = true;
+  bool showDebugCounters = true;
+  bool showDebugCpu = true;
+  bool showDebugGpu = true;
+  bool showDebugAssets = true;
 
  private:
   friend struct RendererDrawApi;
@@ -122,6 +128,7 @@ class Renderer {
 
   std::unique_ptr<IRenderWorldAdapter> worldAdapter_;
   std::vector<std::unique_ptr<IRenderFeature>> renderFeatures_;
+  std::unique_ptr<IRenderFeaturePlugin> renderFeaturePlugin_;
   std::unique_ptr<IRenderBackend> backend_;
   std::unique_ptr<ISceneAssetResolver> assetResolver_;
   std::unique_ptr<IGeometryProvider> geometryProvider_;

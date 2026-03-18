@@ -32,6 +32,7 @@ ViewerApp::ViewerApp(const ViewerConfig& cfg, std::unique_ptr<ISnapshotSource> s
   renderer_.showTruthFuel = cfg.showTruthFuel;
   renderer_.showAgeFilteredFuel = cfg.showAgeFilteredFuel;
   renderer_.showFieldImage = cfg.showFieldImage;
+  renderer_.showDebugPanel = cfg.showDebugPanel;
 }
 
 ViewerApp::~ViewerApp() {
@@ -195,6 +196,21 @@ void ViewerApp::OnKey(const int key, const int action) {
       break;
     case InputAction::kToggleFieldImage:
       renderer_.showFieldImage = !renderer_.showFieldImage;
+      break;
+    case InputAction::kToggleDebugPanel:
+      renderer_.showDebugPanel = !renderer_.showDebugPanel;
+      break;
+    case InputAction::kToggleDebugCounters:
+      renderer_.showDebugCounters = !renderer_.showDebugCounters;
+      break;
+    case InputAction::kToggleDebugCpu:
+      renderer_.showDebugCpu = !renderer_.showDebugCpu;
+      break;
+    case InputAction::kToggleDebugGpu:
+      renderer_.showDebugGpu = !renderer_.showDebugGpu;
+      break;
+    case InputAction::kToggleDebugAssets:
+      renderer_.showDebugAssets = !renderer_.showDebugAssets;
       break;
     default:
       break;

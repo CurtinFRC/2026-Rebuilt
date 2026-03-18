@@ -8,6 +8,7 @@ struct ViewerConfig {
   std::string sceneProfile = "2026Rebuilt";
   std::string sceneDescriptorPath = "";
   std::string seasonModulePluginPath = "";
+  std::string renderFeaturePluginPath = "";
   bool hotReloadSceneDescriptor = true;
   bool hotReloadSeasonModule = true;
 

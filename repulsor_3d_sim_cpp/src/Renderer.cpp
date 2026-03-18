@@ -30,6 +30,10 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
   showTruthFuel = cfg.showTruthFuel;
   showAgeFilteredFuel = cfg.showAgeFilteredFuel;
   showFieldImage = cfg.showFieldImage;
+  showDebugPanel = cfg.showDebugPanel;
+  if (!cfg_.renderFeaturePluginPath.empty()) {
+    renderFeaturePlugin_ = CreateRenderFeaturePluginFromPath(cfg_.renderFeaturePluginPath);
+  }
 
   width_ = std::max(1, cfg.windowW);
   height_ = std::max(1, cfg.windowH);
@@ -43,6 +47,14 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
   }
 
   renderFeatures_ = CreateDefaultRenderFeatures();
+  if (renderFeaturePlugin_ != nullptr) {
+    auto pluginFeatures = renderFeaturePlugin_->CreateFeatures(cfg_);
+    for (auto& feature : pluginFeatures) {
+      if (feature != nullptr) {
+        renderFeatures_.push_back(std::move(feature));
+      }
+    }
+  }
 }
 
 Renderer::~Renderer() {
@@ -191,7 +203,11 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
       .frame = sceneFrame,
       .commandBuffer = commandBuffer,
       .diagnostics = diag,
-      .showDebugPanel = cfg_.showDebugPanel,
+      .showDebugPanel = showDebugPanel,
+      .showDebugCounters = showDebugCounters,
+      .showDebugCpu = showDebugCpu,
+      .showDebugGpu = showDebugGpu,
+      .showDebugAssets = showDebugAssets,
   };
   const RendererDrawApi drawApi(*this);
 

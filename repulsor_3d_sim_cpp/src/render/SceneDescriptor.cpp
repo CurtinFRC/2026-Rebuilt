@@ -90,6 +90,13 @@ RenderPass ParseRenderPass(const nlohmann::json& passNode, const RenderPass fall
   return fallback;
 }
 
+std::string ParseString(const nlohmann::json& node, const char* key, const std::string& fallback) {
+  if (!node.contains(key) || !node[key].is_string()) {
+    return fallback;
+  }
+  return node[key].get<std::string>();
+}
+
 Transform3D ParseTransformNode(const nlohmann::json& transformNode, const Transform3D& fallback) {
   if (!transformNode.is_object()) {
     return fallback;
@@ -104,6 +111,48 @@ Transform3D ParseTransformNode(const nlohmann::json& transformNode, const Transf
   }
   if (transformNode.contains("scale")) {
     out.scale = ParseVec3(transformNode["scale"], out.scale);
+  }
+  return out;
+}
+
+SceneDescriptor::DynamicEntityBinding ParseDynamicEntityBinding(const nlohmann::json& node) {
+  SceneDescriptor::DynamicEntityBinding out;
+  out.channel = ParseString(node, "channel", out.channel);
+  out.entityType = ParseString(node, "entityType", out.entityType);
+  out.idPrefix = ParseString(node, "idPrefix", out.idPrefix);
+  out.pass = ParseRenderPass(node.value("pass", nlohmann::json("opaque")), out.pass);
+  out.xKey = ParseString(node, "xKey", out.xKey);
+  out.yKey = ParseString(node, "yKey", out.yKey);
+  out.zKey = ParseString(node, "zKey", out.zKey);
+  out.yawDegKey = ParseString(node, "yawDegKey", out.yawDegKey);
+  out.textKey = ParseString(node, "textKey", out.textKey);
+  out.assetPath = ParseString(node, "assetPath", out.assetPath);
+  if (node.contains("defaultRadius") && node["defaultRadius"].is_number()) {
+    out.defaultRadius = node["defaultRadius"].get<float>();
+  }
+  if (node.contains("defaultSize")) {
+    out.defaultSize = ParseVec3(node["defaultSize"], out.defaultSize);
+  }
+  if (node.contains("defaultScale")) {
+    out.defaultScale = ParseVec3(node["defaultScale"], out.defaultScale);
+  }
+  if (node.contains("color")) {
+    out.color = ParseColor(node["color"], out.color);
+  }
+  if (node.contains("wireframe") && node["wireframe"].is_boolean()) {
+    out.wireframe = node["wireframe"].get<bool>();
+  }
+  if (node.contains("useAssetColor") && node["useAssetColor"].is_boolean()) {
+    out.useAssetColor = node["useAssetColor"].get<bool>();
+  }
+  if (node.contains("culling") && node["culling"].is_object()) {
+    const auto& culling = node["culling"];
+    if (culling.contains("enabled") && culling["enabled"].is_boolean()) {
+      out.culling.enabled = culling["enabled"].get<bool>();
+    }
+    if (culling.contains("boundsRadius") && culling["boundsRadius"].is_number()) {
+      out.culling.boundsRadius = culling["boundsRadius"].get<float>();
+    }
   }
   return out;
 }
@@ -404,6 +453,19 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
       }
 
       descriptor.staticEntities.push_back(std::move(entity));
+    }
+  }
+
+  if (root.contains("dynamicEntities") && root["dynamicEntities"].is_array()) {
+    for (const auto& item : root["dynamicEntities"]) {
+      if (!item.is_object()) {
+        continue;
+      }
+      auto binding = ParseDynamicEntityBinding(item);
+      if (binding.channel.empty()) {
+        continue;
+      }
+      descriptor.dynamicEntityBindings.push_back(std::move(binding));
     }
   }
 

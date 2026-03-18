@@ -1,6 +1,8 @@
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include <glm/ext/matrix_clip_space.hpp>
@@ -45,6 +47,18 @@ repulsor3d::RenderSceneFrame BuildSyntheticScene(const std::size_t entityCount) 
 
 }  // namespace
 
+double GetEnvThreshold(const char* name, const double fallback) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  try {
+    return std::stod(value);
+  } catch (...) {
+    return fallback;
+  }
+}
+
 int main() {
   repulsor3d::RenderSceneFrame scene = BuildSyntheticScene(12000);
   const glm::mat4 view = glm::lookAt(glm::vec3{13.0F, 8.0F, 7.0F}, glm::vec3{0.0F, 0.0F, 0.0F}, glm::vec3{0.0F, 0.0F, 1.0F});
@@ -79,5 +93,17 @@ int main() {
             << " avgCommandMs=" << avgCommandMs
             << " visibleEntities=" << lastVisible
             << " commandCount=" << lastCommands << "\n";
+
+  const double maxCullMs = GetEnvThreshold("REPULSOR_BENCH_MAX_CULL_MS", 0.0);
+  const double maxCommandMs = GetEnvThreshold("REPULSOR_BENCH_MAX_COMMAND_MS", 0.0);
+  const bool enforceCullGate = maxCullMs > 0.0;
+  const bool enforceCommandGate = maxCommandMs > 0.0;
+  if ((enforceCullGate && avgCullMs > maxCullMs) ||
+      (enforceCommandGate && avgCommandMs > maxCommandMs)) {
+    std::cerr << "Render benchmark exceeded threshold: "
+              << "avgCullMs=" << avgCullMs << " (limit " << maxCullMs << "), "
+              << "avgCommandMs=" << avgCommandMs << " (limit " << maxCommandMs << ")\n";
+    return 2;
+  }
   return 0;
 }
