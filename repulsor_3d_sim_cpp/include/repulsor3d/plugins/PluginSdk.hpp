@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 namespace repulsor3d {
 
@@ -27,6 +28,9 @@ inline bool IsPluginSdkCompatible(const PluginSdkInfoV1& sdkInfo, const int host
     return false;
   }
   if (sdkInfo.maxHostSdkVersion > 0 && hostSdkVersion > sdkInfo.maxHostSdkVersion) {
+    return false;
+  }
+  if (sdkInfo.sdkFlavor == nullptr || std::string_view(sdkInfo.sdkFlavor) != std::string_view("repulsor3d")) {
     return false;
   }
   return true;

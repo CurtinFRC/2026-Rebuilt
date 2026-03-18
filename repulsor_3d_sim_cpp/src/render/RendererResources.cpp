@@ -5,6 +5,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 
@@ -253,7 +254,10 @@ bool Renderer::CreateFieldTexture() {
 
   const unsigned int textureId = backend_->CreateTexture2D();
   fieldTexture_.Set(textureId);
-  resourceManager_.Register(ResourceClass::Texture);
+  resourceManager_.Register(
+      ResourceClass::Texture,
+      "renderer.field_texture",
+      static_cast<std::size_t>(std::max(0, width)) * static_cast<std::size_t>(std::max(0, height)) * 4U);
   backend_->BindTexture2D(fieldTexture_.Get());
   backend_->SetTexture2DLinearMipmapClamp();
   backend_->UploadTexture2DRgba8(width, height, pixels);

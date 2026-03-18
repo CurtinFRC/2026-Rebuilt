@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <optional>
+#include <chrono>
+#include <filesystem>
 
 #include <glm/vec3.hpp>
 
@@ -35,6 +37,9 @@ class ViewerApp {
  private:
   void Tick(double dt);
   void Draw();
+  void MaybeReloadRuntimeConfigProfile(const std::chrono::steady_clock::time_point& now);
+  void ApplyRuntimeConfigProfile(const ViewerConfig& updatedCfg);
+  static bool QueryFileWriteTime(const std::string& path, std::filesystem::file_time_type& outWriteTime);
 
   void OnMouseButton(int button, int action);
   void OnMouseMove(double x, double y);
@@ -66,6 +71,9 @@ class ViewerApp {
   FixedStepTicker fixedTicker_;
 
   glm::vec3 fieldTarget_;
+  std::filesystem::file_time_type runtimeConfigWriteTime_{};
+  bool runtimeConfigWriteTimeKnown_ = false;
+  std::chrono::steady_clock::time_point nextRuntimeConfigCheck_{};
 };
 
 }  // namespace repulsor3d

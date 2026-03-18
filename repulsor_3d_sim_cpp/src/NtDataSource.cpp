@@ -42,6 +42,9 @@ class NtDataSource::Impl {
     BindPoseSubscriptions();
     BindStaticSubscriptions();
     BuildEntityAppenders();
+    if (!schemaRegistry_.LastConflictReport().empty()) {
+      std::cerr << "[NtDataSource] schema conflicts: " << schemaRegistry_.LastConflictReport() << "\n";
+    }
   }
 
   SnapshotBundle Read() {
@@ -127,6 +130,9 @@ class NtDataSource::Impl {
   void MaybeHotReloadSchemas(const double nowS) {
     if (schemaRegistry_.Refresh(nowS)) {
       BuildEntityAppenders();
+      if (!schemaRegistry_.LastConflictReport().empty()) {
+        std::cerr << "[NtDataSource] schema conflicts: " << schemaRegistry_.LastConflictReport() << "\n";
+      }
     }
   }
 

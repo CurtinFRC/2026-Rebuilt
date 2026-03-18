@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -35,9 +36,6 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
   showAgeFilteredFuel = cfg.showAgeFilteredFuel;
   showFieldImage = cfg.showFieldImage;
   showDebugPanel = cfg.showDebugPanel;
-  if (!cfg_.renderFeaturePluginPath.empty()) {
-    renderFeaturePlugin_ = CreateRenderFeaturePluginFromPath(cfg_.renderFeaturePluginPath);
-  }
 
   width_ = std::max(1, cfg.windowW);
   height_ = std::max(1, cfg.windowH);
@@ -51,14 +49,8 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
   }
 
   renderFeatures_ = CreateDefaultRenderFeatures(cfg_);
-  if (renderFeaturePlugin_ != nullptr) {
-    auto pluginFeatures = renderFeaturePlugin_->CreateFeatures(cfg_);
-    for (auto& feature : pluginFeatures) {
-      if (feature != nullptr) {
-        renderFeatures_.push_back(std::move(feature));
-      }
-    }
-  }
+  renderPipelinePath_ = cfg_.renderPipelinePath;
+  renderFeaturePluginPath_ = cfg_.renderFeaturePluginPath;
 }
 
 Renderer::~Renderer() {
@@ -80,19 +72,19 @@ Renderer::~Renderer() {
   }
 
   if (dynamicLineVbo_.Get() != 0) {
-    resourceManager_.Release(ResourceClass::Buffer);
+    resourceManager_.Release(ResourceClass::Buffer, "renderer.dynamic_lines.vbo");
   }
   if (textVbo_.Get() != 0) {
-    resourceManager_.Release(ResourceClass::Buffer);
+    resourceManager_.Release(ResourceClass::Buffer, "renderer.text.vbo");
   }
   if (dynamicLineVao_.Get() != 0) {
-    resourceManager_.Release(ResourceClass::VertexArray);
+    resourceManager_.Release(ResourceClass::VertexArray, "renderer.dynamic_lines.vao");
   }
   if (textVao_.Get() != 0) {
-    resourceManager_.Release(ResourceClass::VertexArray);
+    resourceManager_.Release(ResourceClass::VertexArray, "renderer.text.vao");
   }
   if (fieldTexture_.Get() != 0) {
-    resourceManager_.Release(ResourceClass::Texture);
+    resourceManager_.Release(ResourceClass::Texture, "renderer.field_texture");
   }
 }
 
@@ -109,8 +101,36 @@ void Renderer::SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBui
 }
 
 void Renderer::SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures) {
-  if (!renderFeatures.empty()) {
-    renderFeatures_ = std::move(renderFeatures);
+  if (renderFeatures.empty()) {
+    return;
+  }
+  if (renderFeaturesInitialized_) {
+    for (auto& feature : renderFeatures) {
+      if (feature != nullptr && !feature->Initialize(*this)) {
+        return;
+      }
+    }
+  }
+  renderFeatures_ = std::move(renderFeatures);
+  renderFeaturesInitialized_ = true;
+}
+
+void Renderer::ApplyRuntimeConfig(const ViewerConfig& cfg) {
+  const bool pipelineChanged = cfg_.renderPipelinePath != cfg.renderPipelinePath;
+  const bool pluginChanged = cfg_.renderFeaturePluginPath != cfg.renderFeaturePluginPath;
+
+  cfg_ = cfg;
+  fieldLength_ = cfg_.fieldLengthM;
+  fieldWidth_ = cfg_.fieldWidthM;
+  fieldZ_ = cfg_.fieldZM;
+  showCameraDebug = cfg_.showCameraDebug;
+  showTruthFuel = cfg_.showTruthFuel;
+  showAgeFilteredFuel = cfg_.showAgeFilteredFuel;
+  showFieldImage = cfg_.showFieldImage;
+  showDebugPanel = cfg_.showDebugPanel;
+
+  if ((pipelineChanged || pluginChanged) && renderFeaturesInitialized_) {
+    RebuildRenderFeatures("runtime_config");
   }
 }
 
@@ -145,8 +165,8 @@ bool Renderer::Initialize() {
 
   const unsigned int dynamicLineVao = backend_->CreateVertexArray();
   const unsigned int dynamicLineVbo = backend_->CreateBuffer();
-  resourceManager_.Register(ResourceClass::VertexArray);
-  resourceManager_.Register(ResourceClass::Buffer);
+  resourceManager_.Register(ResourceClass::VertexArray, "renderer.dynamic_lines.vao");
+  resourceManager_.Register(ResourceClass::Buffer, "renderer.dynamic_lines.vbo", 1024 * sizeof(VertexPC));
   dynamicLineVao_.Set(dynamicLineVao);
   dynamicLineVbo_.Set(dynamicLineVbo);
 
@@ -161,8 +181,8 @@ bool Renderer::Initialize() {
 
   const unsigned int textVao = backend_->CreateVertexArray();
   const unsigned int textVbo = backend_->CreateBuffer();
-  resourceManager_.Register(ResourceClass::VertexArray);
-  resourceManager_.Register(ResourceClass::Buffer);
+  resourceManager_.Register(ResourceClass::VertexArray, "renderer.text.vao");
+  resourceManager_.Register(ResourceClass::Buffer, "renderer.text.vbo", 4096 * sizeof(glm::vec3));
   textVao_.Set(textVao);
   textVbo_.Set(textVbo);
 
@@ -172,14 +192,8 @@ bool Renderer::Initialize() {
   backend_->EnableVertexAttrib(0);
   backend_->DefineVertexAttribFloat(0, 3, sizeof(glm::vec3), 0);
   backend_->BindVertexArray(0);
-
-  for (auto& feature : renderFeatures_) {
-    if (feature == nullptr) {
-      continue;
-    }
-    if (!feature->Initialize(*this)) {
-      return false;
-    }
+  if (!RebuildRenderFeatures("startup")) {
+    return false;
   }
 
   Resize(width_, height_);
@@ -256,7 +270,25 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
        resourceManager_.IsOverBudget(ResourceClass::VertexArray))
           ? 1.0
           : 0.0);
+  diagnostics_.RecordCounter(
+      "resources.over_budget_count",
+      static_cast<double>(
+          resourceManager_.OverBudgetCount(ResourceClass::Buffer) +
+          resourceManager_.OverBudgetCount(ResourceClass::Texture) +
+          resourceManager_.OverBudgetCount(ResourceClass::VertexArray)));
+  diagnostics_.RecordCounter(
+      "resources.over_budget_bytes",
+      static_cast<double>(
+          resourceManager_.OverBudgetBytes(ResourceClass::Buffer) +
+          resourceManager_.OverBudgetBytes(ResourceClass::Texture) +
+          resourceManager_.OverBudgetBytes(ResourceClass::VertexArray)));
+  diagnostics_.RecordCounter("render_pipeline.reload_count", static_cast<double>(renderFeatureReloadCount_));
+  diagnostics_.RecordCounter("render_pipeline.reload_failed_count", static_cast<double>(renderFeatureReloadFailedCount_));
+  diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
+  diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
   const auto frameStart = std::chrono::steady_clock::now();
+
+  MaybeHotReloadRenderFeatures();
 
   RenderGraph graph;
   for (const auto& feature : renderFeatures_) {
@@ -327,6 +359,117 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
     }
   }
   diagnostics_.EndFrame(frameMs);
+}
+
+bool Renderer::QueryFileWriteTime(const std::string& path, std::filesystem::file_time_type& outWriteTime) {
+  if (path.empty()) {
+    return false;
+  }
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    return false;
+  }
+  outWriteTime = std::filesystem::last_write_time(path, ec);
+  return !ec;
+}
+
+void Renderer::CaptureRenderFeatureInputStamps() {
+  renderPipelinePath_ = cfg_.renderPipelinePath;
+  renderFeaturePluginPath_ = cfg_.renderFeaturePluginPath;
+  renderPipelineWriteTimeKnown_ = QueryFileWriteTime(renderPipelinePath_, renderPipelineWriteTime_);
+  renderFeaturePluginWriteTimeKnown_ = QueryFileWriteTime(renderFeaturePluginPath_, renderFeaturePluginWriteTime_);
+}
+
+bool Renderer::RebuildRenderFeatures(std::string reason) {
+  auto features = CreateDefaultRenderFeatures(cfg_);
+  std::unique_ptr<IRenderFeaturePlugin> plugin;
+  if (!cfg_.renderFeaturePluginPath.empty()) {
+    plugin = CreateRenderFeaturePluginFromPath(cfg_.renderFeaturePluginPath);
+    if (plugin == nullptr) {
+      renderFeatureReloadLastError_ = "failed to load render plugin '" + cfg_.renderFeaturePluginPath + "'";
+      ++renderFeatureReloadFailedCount_;
+      std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+      CaptureRenderFeatureInputStamps();
+      return false;
+    }
+    auto pluginFeatures = plugin->CreateFeatures(cfg_);
+    for (auto& feature : pluginFeatures) {
+      if (feature != nullptr) {
+        features.push_back(std::move(feature));
+      }
+    }
+  }
+
+  if (features.empty()) {
+    renderFeatureReloadLastError_ = "render feature list is empty";
+    ++renderFeatureReloadFailedCount_;
+    std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+    CaptureRenderFeatureInputStamps();
+    return false;
+  }
+
+  for (auto& feature : features) {
+    if (feature == nullptr) {
+      continue;
+    }
+    if (!feature->Initialize(*this)) {
+      renderFeatureReloadLastError_ = "feature init failed: " + feature->Name();
+      ++renderFeatureReloadFailedCount_;
+      std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+      CaptureRenderFeatureInputStamps();
+      return false;
+    }
+  }
+
+  renderFeatures_ = std::move(features);
+  renderFeaturePlugin_ = std::move(plugin);
+  renderFeaturesInitialized_ = true;
+  ++renderFeatureReloadCount_;
+  renderFeatureReloadLastError_.clear();
+  CaptureRenderFeatureInputStamps();
+  std::cerr << "[Renderer] render features rebuilt (" << reason << ")\n";
+  return true;
+}
+
+void Renderer::MaybeHotReloadRenderFeatures() {
+  if (!renderFeaturesInitialized_) {
+    return;
+  }
+
+  const auto now = std::chrono::steady_clock::now();
+  if (nextRenderFeatureReloadCheck_.time_since_epoch().count() != 0 && now < nextRenderFeatureReloadCheck_) {
+    return;
+  }
+  nextRenderFeatureReloadCheck_ = now + std::chrono::milliseconds(500);
+
+  const bool pipelinePathChanged = renderPipelinePath_ != cfg_.renderPipelinePath;
+  const bool pluginPathChanged = renderFeaturePluginPath_ != cfg_.renderFeaturePluginPath;
+  bool shouldReload = pipelinePathChanged || pluginPathChanged;
+
+  std::filesystem::file_time_type pipelineStamp{};
+  const bool pipelineStampKnown = QueryFileWriteTime(cfg_.renderPipelinePath, pipelineStamp);
+  if (!pipelinePathChanged) {
+    if (pipelineStampKnown != renderPipelineWriteTimeKnown_) {
+      shouldReload = true;
+    } else if (pipelineStampKnown && pipelineStamp != renderPipelineWriteTime_) {
+      shouldReload = true;
+    }
+  }
+
+  std::filesystem::file_time_type pluginStamp{};
+  const bool pluginStampKnown = QueryFileWriteTime(cfg_.renderFeaturePluginPath, pluginStamp);
+  if (!pluginPathChanged) {
+    if (pluginStampKnown != renderFeaturePluginWriteTimeKnown_) {
+      shouldReload = true;
+    } else if (pluginStampKnown && pluginStamp != renderFeaturePluginWriteTime_) {
+      shouldReload = true;
+    }
+  }
+
+  if (!shouldReload) {
+    return;
+  }
+  RebuildRenderFeatures("file_watch");
 }
 
 void Renderer::DrainAssetTelemetry() {

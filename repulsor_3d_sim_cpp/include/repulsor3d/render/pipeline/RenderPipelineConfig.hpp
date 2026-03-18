@@ -17,7 +17,13 @@ struct RenderPipelineConfig {
   std::vector<RenderPipelinePassSpec> passes;
 };
 
+struct RenderPipelineValidationResult {
+  bool ok = false;
+  std::vector<std::string> errors;
+};
+
 RenderPipelineConfig MakeDefaultRenderPipelineConfig();
+RenderPipelineValidationResult ValidateRenderPipelineConfig(const RenderPipelineConfig& config);
 bool LoadRenderPipelineConfigFromFile(const std::string& filePath, RenderPipelineConfig& outConfig, std::string* outError);
 
 }  // namespace repulsor3d

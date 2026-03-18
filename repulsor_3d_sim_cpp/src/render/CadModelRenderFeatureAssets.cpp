@@ -249,8 +249,9 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             return prepared;
           });
   std::future<PreparedCpuMesh> future = loadTask.get_future();
-  EnqueueLoadTask(std::move(loadTask));
-  pendingLoads_.emplace(assetPath, PendingLoad{std::move(future), status});
+  auto cancellationToken = TaskScheduler::CancellationToken::Create();
+  EnqueueLoadTask(std::move(loadTask), TaskScheduler::TaskPriority::Low, cancellationToken);
+  pendingLoads_.emplace(assetPath, PendingLoad{std::move(future), status, cancellationToken});
   std::cerr << "CAD loading started: " << assetPath << "\n";
   return nullptr;
 }

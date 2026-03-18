@@ -9,6 +9,7 @@ class FixedStepTicker {
   explicit FixedStepTicker(double fixedStepSeconds, double maxAccumulatorSeconds = 0.5);
 
   void Advance(double frameDeltaSeconds, const std::function<void(double)>& tickFn);
+  void SetFixedStepSeconds(double fixedStepSeconds);
 
  private:
   double fixedStepSeconds_ = 1.0 / 60.0;

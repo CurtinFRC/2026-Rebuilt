@@ -1,6 +1,9 @@
 #include "repulsor3d/render/pipeline/RenderPipelineConfig.hpp"
 
 #include <fstream>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <nlohmann/json.hpp>
 
@@ -17,6 +20,65 @@ RenderPipelineConfig MakeDefaultRenderPipelineConfig() {
       {.factory = "overlay", .name = "overlay", .dependencies = {"cad_transparent"}, .renderPass = "", .enabled = true},
   };
   return cfg;
+}
+
+RenderPipelineValidationResult ValidateRenderPipelineConfig(const RenderPipelineConfig& config) {
+  RenderPipelineValidationResult result;
+  if (config.passes.empty()) {
+    result.errors.push_back("pipeline contains no passes");
+    return result;
+  }
+
+  std::unordered_map<std::string, std::size_t> nameToIndex;
+  nameToIndex.reserve(config.passes.size());
+  for (std::size_t i = 0; i < config.passes.size(); ++i) {
+    const auto& pass = config.passes[i];
+    if (pass.name.empty()) {
+      result.errors.push_back("pass[" + std::to_string(i) + "] has empty name");
+      continue;
+    }
+    if (pass.factory.empty()) {
+      result.errors.push_back("pass[" + pass.name + "] has empty factory");
+    }
+    if (!nameToIndex.emplace(pass.name, i).second) {
+      result.errors.push_back("duplicate pass name '" + pass.name + "'");
+    }
+  }
+
+  for (const auto& pass : config.passes) {
+    for (const auto& dep : pass.dependencies) {
+      if (nameToIndex.find(dep) == nameToIndex.end()) {
+        result.errors.push_back("pass '" + pass.name + "' depends on unknown pass '" + dep + "'");
+      }
+    }
+  }
+
+  std::unordered_set<std::string> visiting;
+  std::unordered_set<std::string> visited;
+  std::function<void(const std::string&)> dfs = [&](const std::string& name) {
+    if (visited.contains(name) || !nameToIndex.contains(name)) {
+      return;
+    }
+    if (visiting.contains(name)) {
+      result.errors.push_back("cyclic dependency at pass '" + name + "'");
+      return;
+    }
+
+    visiting.insert(name);
+    const auto& pass = config.passes[nameToIndex.at(name)];
+    for (const auto& dep : pass.dependencies) {
+      dfs(dep);
+    }
+    visiting.erase(name);
+    visited.insert(name);
+  };
+
+  for (const auto& pass : config.passes) {
+    dfs(pass.name);
+  }
+
+  result.ok = result.errors.empty();
+  return result;
 }
 
 bool LoadRenderPipelineConfigFromFile(const std::string& filePath, RenderPipelineConfig& outConfig, std::string* outError) {
@@ -77,6 +139,21 @@ bool LoadRenderPipelineConfigFromFile(const std::string& filePath, RenderPipelin
   if (parsed.passes.empty()) {
     if (outError != nullptr) {
       *outError = "no valid passes";
+    }
+    return false;
+  }
+
+  const auto validation = ValidateRenderPipelineConfig(parsed);
+  if (!validation.ok) {
+    if (outError != nullptr) {
+      std::string message;
+      for (std::size_t i = 0; i < validation.errors.size(); ++i) {
+        if (i > 0) {
+          message += "; ";
+        }
+        message += validation.errors[i];
+      }
+      *outError = std::move(message);
     }
     return false;
   }

@@ -122,7 +122,7 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
   auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_render_feature_plugin_abi_version");
   auto* queryManifestRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1");
   auto* querySdkRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_sdk_info_v1");
-  if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
+  if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr || querySdkRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
   }
@@ -136,12 +136,10 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
     CloseLibrary(handle);
     return nullptr;
   }
-  if (querySdkFn != nullptr) {
-    const PluginSdkInfoV1* sdkInfo = querySdkFn();
-    if (sdkInfo == nullptr || !IsPluginSdkCompatible(*sdkInfo, kPluginSdkVersion)) {
-      CloseLibrary(handle);
-      return nullptr;
-    }
+  const PluginSdkInfoV1* sdkInfo = querySdkFn();
+  if (sdkInfo == nullptr || !IsPluginSdkCompatible(*sdkInfo, kPluginSdkVersion)) {
+    CloseLibrary(handle);
+    return nullptr;
   }
   if (queryManifestFn != nullptr) {
     const PluginManifestV1* manifest = queryManifestFn();

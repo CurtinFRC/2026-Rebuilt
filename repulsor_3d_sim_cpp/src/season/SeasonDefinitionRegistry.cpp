@@ -28,6 +28,23 @@ class Season2026RebuiltDefinition final : public ISeasonDefinition {
   std::unique_ptr<ISceneModelBuilder> CreateSceneModelBuilder(const ViewerConfig& cfg) const override {
     return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
   }
+
+  std::string DefaultNtSchemaPath() const override {
+    return "assets/schemas/2026rebuilt_nt_schema.json";
+  }
+
+  std::string DefaultCoordinateProfilePath() const override {
+    return "assets/profiles/2026rebuilt_coordinates.json";
+  }
+
+  void ApplyDefaults(ViewerConfig& cfg) const override {
+    if (cfg.ntSchemaPath.empty()) {
+      cfg.ntSchemaPath = DefaultNtSchemaPath();
+    }
+    if (cfg.incomingCoordCalibrationProfilePath.empty()) {
+      cfg.incomingCoordCalibrationProfilePath = DefaultCoordinateProfilePath();
+    }
+  }
 };
 
 void RegisterBuiltinsOnce() {

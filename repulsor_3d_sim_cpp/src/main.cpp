@@ -6,10 +6,14 @@
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/ConfigValidation.hpp"
 #include "repulsor3d/DataSourceFactory.hpp"
+#include "repulsor3d/season/SeasonDefinitionRegistry.hpp"
 
 int main() {
   try {
-    const repulsor3d::ViewerConfig cfg = repulsor3d::LoadConfigFromEnv();
+    repulsor3d::ViewerConfig cfg = repulsor3d::LoadConfigFromEnv();
+    if (auto season = repulsor3d::CreateDefaultSeasonDefinition(cfg); season != nullptr) {
+      season->ApplyDefaults(cfg);
+    }
     const repulsor3d::ConfigValidationResult validation = repulsor3d::ValidateConfig(cfg);
     for (const auto& warning : validation.warnings) {
       std::cerr << "[Config warning] " << warning << "\n";

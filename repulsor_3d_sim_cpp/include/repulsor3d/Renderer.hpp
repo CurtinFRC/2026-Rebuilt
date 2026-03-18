@@ -1,6 +1,9 @@
 #pragma once
 
 #include <array>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -47,6 +50,7 @@ class Renderer {
   void SetRenderWorldAdapter(std::unique_ptr<IRenderWorldAdapter> worldAdapter);
   void SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder);
   void SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures);
+  void ApplyRuntimeConfig(const ViewerConfig& cfg);
   IRenderBackend& GetRenderBackend();
   IGeometryProvider& GetGeometryProvider();
   ISceneAssetResolver& GetAssetResolver();
@@ -118,6 +122,10 @@ class Renderer {
   void DrawOverlay(int width, int height, const std::vector<OverlayLine>& lines);
   void DrawText2D(float x, float y, float scale, const std::string& text, const glm::vec4& color);
   void DrainAssetTelemetry();
+  bool RebuildRenderFeatures(std::string reason);
+  void MaybeHotReloadRenderFeatures();
+  void CaptureRenderFeatureInputStamps();
+  static bool QueryFileWriteTime(const std::string& path, std::filesystem::file_time_type& outWriteTime);
 
   static float TextWidthPixels(const std::string& text, float scale);
   static std::string ToUpperAscii(const std::string& s);
@@ -159,6 +167,18 @@ class Renderer {
   bool smoothedFrameMsInitialized_ = false;
   double smoothedFrameMs_ = 0.0;
   std::unordered_map<std::string, GpuPassTimerState> gpuPassTimers_;
+
+  bool renderFeaturesInitialized_ = false;
+  std::string renderPipelinePath_;
+  std::filesystem::file_time_type renderPipelineWriteTime_{};
+  bool renderPipelineWriteTimeKnown_ = false;
+  std::string renderFeaturePluginPath_;
+  std::filesystem::file_time_type renderFeaturePluginWriteTime_{};
+  bool renderFeaturePluginWriteTimeKnown_ = false;
+  std::chrono::steady_clock::time_point nextRenderFeatureReloadCheck_{};
+  std::uint64_t renderFeatureReloadCount_ = 0;
+  std::uint64_t renderFeatureReloadFailedCount_ = 0;
+  std::string renderFeatureReloadLastError_;
 };
 
 }  // namespace repulsor3d

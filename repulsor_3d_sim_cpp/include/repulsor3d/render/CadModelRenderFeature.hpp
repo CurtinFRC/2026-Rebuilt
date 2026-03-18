@@ -113,6 +113,7 @@ class CadModelRenderFeature final : public IRenderFeature {
 
     std::future<PreparedCpuMesh> future;
     std::shared_ptr<Status> status;
+    TaskScheduler::CancellationToken cancellationToken;
   };
 
   struct PendingGpuUpload {
@@ -142,7 +143,10 @@ class CadModelRenderFeature final : public IRenderFeature {
   static std::size_t SelectLodLevel(const GpuMesh& mesh, const glm::mat4& mvp, int viewportWidth, int viewportHeight);
   void StartLoadWorker();
   void StopLoadWorker();
-  void EnqueueLoadTask(std::packaged_task<PreparedCpuMesh()>&& task);
+  void EnqueueLoadTask(
+      std::packaged_task<PreparedCpuMesh()>&& task,
+      TaskScheduler::TaskPriority priority = TaskScheduler::TaskPriority::Normal,
+      TaskScheduler::CancellationToken token = {});
   const GpuTexture* GetOrLoadTexture(const std::string& assetPath);
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);

@@ -125,8 +125,11 @@ void CadModelRenderFeature::StopLoadWorker() {
   loadScheduler_.Stop();
 }
 
-void CadModelRenderFeature::EnqueueLoadTask(std::packaged_task<PreparedCpuMesh()>&& task) {
-  loadScheduler_.Enqueue(std::move(task));
+void CadModelRenderFeature::EnqueueLoadTask(
+    std::packaged_task<PreparedCpuMesh()>&& task,
+    const TaskScheduler::TaskPriority priority,
+    TaskScheduler::CancellationToken token) {
+  loadScheduler_.Enqueue(std::move(task), priority, std::move(token));
 }
 
 }  // namespace repulsor3d

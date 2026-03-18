@@ -6,12 +6,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <utility>
 
 #include <glm/common.hpp>
+
+#include "repulsor3d/config/RuntimeConfigProfile.hpp"
+#include "repulsor3d/render/RenderWorldAdapter.hpp"
 
 namespace repulsor3d {
 
@@ -111,6 +115,8 @@ int ViewerApp::Run() {
     const double frameDt = std::chrono::duration_cast<std::chrono::duration<double>>(now - last).count();
     last = now;
 
+    MaybeReloadRuntimeConfigProfile(now);
+
     fixedTicker_.Advance(frameDt, [this](const double dt) { Tick(dt); });
 
     int width = 0;
@@ -133,6 +139,75 @@ int ViewerApp::Run() {
   }
 
   return 0;
+}
+
+bool ViewerApp::QueryFileWriteTime(const std::string& path, std::filesystem::file_time_type& outWriteTime) {
+  if (path.empty()) {
+    return false;
+  }
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec) || ec) {
+    return false;
+  }
+  outWriteTime = std::filesystem::last_write_time(path, ec);
+  return !ec;
+}
+
+void ViewerApp::ApplyRuntimeConfigProfile(const ViewerConfig& updatedCfg) {
+  const int oldFps = std::max(1, cfg_.fps);
+  const bool worldAdapterRelevantChange =
+      cfg_.sceneProfile != updatedCfg.sceneProfile ||
+      cfg_.sceneDescriptorPath != updatedCfg.sceneDescriptorPath ||
+      cfg_.seasonModulePluginPath != updatedCfg.seasonModulePluginPath ||
+      cfg_.hotReloadSceneDescriptor != updatedCfg.hotReloadSceneDescriptor ||
+      cfg_.hotReloadSeasonModule != updatedCfg.hotReloadSeasonModule;
+
+  cfg_ = updatedCfg;
+  renderer_.ApplyRuntimeConfig(cfg_);
+  domainAdapter_.ApplyConfig(cfg_);
+  const int newFps = std::max(1, cfg_.fps);
+  if (newFps != oldFps) {
+    fixedTicker_.SetFixedStepSeconds(1.0 / static_cast<double>(newFps));
+  }
+  if (worldAdapterRelevantChange) {
+    renderer_.SetRenderWorldAdapter(CreateDefaultRenderWorldAdapter(cfg_));
+  }
+
+  fieldTarget_ = glm::vec3{cfg_.fieldLengthM * 0.5F, cfg_.fieldWidthM * 0.5F, 0.0F};
+  followController_.Reset(fieldTarget_);
+}
+
+void ViewerApp::MaybeReloadRuntimeConfigProfile(const std::chrono::steady_clock::time_point& now) {
+  if (!cfg_.hotReloadRuntimeConfigProfile || cfg_.runtimeConfigProfilePath.empty()) {
+    return;
+  }
+  if (nextRuntimeConfigCheck_.time_since_epoch().count() != 0 && now < nextRuntimeConfigCheck_) {
+    return;
+  }
+  nextRuntimeConfigCheck_ = now + std::chrono::milliseconds(500);
+
+  std::filesystem::file_time_type writeTime{};
+  const bool stampKnown = QueryFileWriteTime(cfg_.runtimeConfigProfilePath, writeTime);
+  if (!stampKnown) {
+    return;
+  }
+  if (runtimeConfigWriteTimeKnown_ && writeTime == runtimeConfigWriteTime_) {
+    return;
+  }
+
+  ViewerConfig next = cfg_;
+  std::string error;
+  if (!LoadViewerConfigProfile(cfg_.runtimeConfigProfilePath, next, &error)) {
+    std::cerr << "[RuntimeConfig] reload failed for '" << cfg_.runtimeConfigProfilePath << "': " << error << "\n";
+    runtimeConfigWriteTime_ = writeTime;
+    runtimeConfigWriteTimeKnown_ = true;
+    return;
+  }
+
+  runtimeConfigWriteTime_ = writeTime;
+  runtimeConfigWriteTimeKnown_ = true;
+  ApplyRuntimeConfigProfile(next);
+  std::cerr << "[RuntimeConfig] reloaded profile: " << cfg_.runtimeConfigProfilePath << "\n";
 }
 
 void ViewerApp::Tick(const double dt) {

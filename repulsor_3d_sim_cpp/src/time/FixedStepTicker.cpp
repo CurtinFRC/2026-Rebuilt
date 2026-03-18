@@ -15,4 +15,9 @@ void FixedStepTicker::Advance(const double frameDeltaSeconds, const std::functio
   }
 }
 
+void FixedStepTicker::SetFixedStepSeconds(const double fixedStepSeconds) {
+  fixedStepSeconds_ = std::max(1e-4, fixedStepSeconds);
+  accumulator_ = std::min(accumulator_, maxAccumulatorSeconds_);
+}
+
 }  // namespace repulsor3d

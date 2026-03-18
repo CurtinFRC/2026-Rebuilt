@@ -65,6 +65,14 @@ glm::vec3 SnapshotDomainAdapter::ComputeDesiredFollowTarget(const WorldSnapshot&
   };
 }
 
+void SnapshotDomainAdapter::ApplyConfig(const ViewerConfig& cfg) {
+  cfg_ = cfg;
+  coordinateSystem_.SetTransform(
+      CoordinateFrameId::Incoming,
+      CoordinateFrameId::Field,
+      BuildCoordinateMapperConfig(cfg_));
+}
+
 void SnapshotDomainAdapter::Reset() {
   ResetPoseSmoothing(poseState_);
 }

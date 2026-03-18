@@ -48,6 +48,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       if (pending.status != nullptr) {
         pending.status->cancelRequested = true;
       }
+      pending.cancellationToken.Cancel();
     }
   }
 

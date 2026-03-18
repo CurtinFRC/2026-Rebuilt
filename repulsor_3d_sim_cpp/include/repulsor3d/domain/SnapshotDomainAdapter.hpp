@@ -15,6 +15,7 @@ class SnapshotDomainAdapter {
 
   WorldSnapshot BuildRenderSnapshot(const SnapshotBundle& latest, double dt);
   glm::vec3 ComputeDesiredFollowTarget(const WorldSnapshot& snapshot, const glm::vec3& fallback) const;
+  void ApplyConfig(const ViewerConfig& cfg);
   void Reset();
 
  private:
