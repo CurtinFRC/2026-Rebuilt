@@ -838,6 +838,25 @@ std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const CadLod
   return lods;
 }
 
+IndexedMesh BuildShadowProxyMesh(const std::vector<IndexedMesh>& lods, const CadLodPolicy& policy) {
+  IndexedMesh out;
+  if (lods.empty()) {
+    return out;
+  }
+  const IndexedMesh& source = lods.back();
+  if (source.vertices.empty() || source.indices.empty()) {
+    return out;
+  }
+
+  const int targetVerticesRaw = GetEnvInt("CAD_SHADOW_PROXY_MAX_VERTICES", 180000);
+  const std::size_t targetVertices = static_cast<std::size_t>(std::clamp(targetVerticesRaw, 5000, 2000000));
+  if (source.vertices.size() <= targetVertices) {
+    return source;
+  }
+  const int proxyNormalBins = std::clamp(policy.normalBins / 2, 8, 20);
+  return SimplifyByVertexClustering(source, targetVertices, proxyNormalBins, policy.preserveFlatShading);
+}
+
 float ComputeScreenSpaceRadiusPixels(
     const glm::vec3& center,
     const float radius,
@@ -1214,6 +1233,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             }
             const auto& lod = mesh->lods[drawLodIndex];
             const auto& shadowLod = mesh->lods[shadowLodIndex];
+            const GpuMesh::LodGpu* selectedShadowLod =
+                mesh->shadowProxy.has_value() ? &mesh->shadowProxy.value() : &shadowLod;
             const int drawIndexCount = std::max(lod.indexCount, 0);
             const bool fastShading =
                 fastShadingMinIndices_ > 0 && drawIndexCount > fastShadingMinIndices_;
@@ -1230,7 +1251,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             drawItems.push_back(
                 {.mesh = mesh,
                  .lod = &lod,
-                 .shadowLod = &shadowLod,
+                 .shadowLod = selectedShadowLod,
                  .albedoTexture = albedoTexture,
                  .normalTexture = normalTexture,
                  .model = model,
@@ -1409,8 +1430,18 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       }
     }
     if (context.diagnosticsWriter != nullptr) {
+      double shadowIndices = 0.0;
+      for (const auto& batch : shadowBatches) {
+        if (batch.lod == nullptr) {
+          continue;
+        }
+        const int idxCount = std::max(batch.lod->indexCount, 0);
+        shadowIndices += static_cast<double>(idxCount > 0 ? idxCount : std::max(batch.lod->vertexCount, 0)) *
+                         static_cast<double>(batch.instances.size());
+      }
       context.diagnosticsWriter->RecordCounter("cad.shadow.casters_skipped", static_cast<double>(shadowCasterSkipped));
       context.diagnosticsWriter->RecordCounter("cad.shadow.caster_batches", static_cast<double>(shadowBatches.size()));
+      context.diagnosticsWriter->RecordCounter("cad.shadow.indices", shadowIndices);
     }
 
     auto renderShadowPass = [&](const unsigned int fbo, const glm::mat4& lightViewProj) {
@@ -1869,6 +1900,7 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
   const glm::vec3 center = ComputeTrimmedBoundsCenterXY(indexed.vertices);
   const float radius = ComputeRadiusFromCenter(indexed.vertices, center);
   std::vector<IndexedMesh> lodMeshes = BuildLodChain(indexed, lodPolicy);
+  IndexedMesh shadowProxy = BuildShadowProxyMesh(lodMeshes, lodPolicy);
   prepared.lods.reserve(lodMeshes.size());
   for (auto& lod : lodMeshes) {
     if (lod.vertices.empty() || lod.indices.empty()) {
@@ -1878,6 +1910,12 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
     outLod.vertices = std::move(lod.vertices);
     outLod.indices = std::move(lod.indices);
     prepared.lods.push_back(std::move(outLod));
+  }
+  if (!shadowProxy.vertices.empty() && !shadowProxy.indices.empty()) {
+    PreparedCpuMesh::LodCpu outShadow;
+    outShadow.vertices = std::move(shadowProxy.vertices);
+    outShadow.indices = std::move(shadowProxy.indices);
+    prepared.shadowProxy = std::move(outShadow);
   }
 
   prepared.boundsCenter = center;
@@ -1904,6 +1942,14 @@ bool CadModelRenderFeature::UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu,
       return false;
     }
     gpu.lods.push_back(std::move(gpuLod));
+  }
+  if (cpu.shadowProxy.has_value()) {
+    GpuMesh::LodGpu gpuShadow;
+    if (!UploadSingleLod(cpu.shadowProxy.value(), gpuShadow, backend)) {
+      DestroyMesh(gpu);
+      return false;
+    }
+    gpu.shadowProxy = std::move(gpuShadow);
   }
 
   gpu.boundsCenter = cpu.boundsCenter;
@@ -1975,6 +2021,16 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.indexCount = 0;
   }
   gpu.lods.clear();
+  if (gpu.shadowProxy.has_value()) {
+    auto& lod = gpu.shadowProxy.value();
+    lod.instanceVbo.Reset();
+    lod.ebo.Reset();
+    lod.vbo.Reset();
+    lod.vao.Reset();
+    lod.vertexCount = 0;
+    lod.indexCount = 0;
+    gpu.shadowProxy.reset();
+  }
   gpu.boundsCenter = glm::vec3{0.0F, 0.0F, 0.0F};
   gpu.boundsRadius = 1.0F;
   gpu.materialHints = PositionNormalMesh::MaterialHints{};
@@ -2065,28 +2121,49 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
       return nullptr;
     }
     auto& upload = uploadIt->second;
-    while (uploadsThisFrame_ < uploadBudgetPerFrame_ && upload.nextLod < upload.prepared.lods.size()) {
-      const auto& cpuLod = upload.prepared.lods[upload.nextLod];
-      if (cpuLod.vertices.empty()) {
+    while (uploadsThisFrame_ < uploadBudgetPerFrame_) {
+      if (upload.nextLod < upload.prepared.lods.size()) {
+        const auto& cpuLod = upload.prepared.lods[upload.nextLod];
+        if (cpuLod.vertices.empty()) {
+          ++upload.nextLod;
+          continue;
+        }
+
+        GpuMesh::LodGpu gpuLod;
+        if (!UploadSingleLod(cpuLod, gpuLod, *backend_)) {
+          failedLoads_.insert(assetPath);
+          DestroyMesh(upload.gpu);
+          pendingGpuUploads_.erase(assetPath);
+          std::cerr << "CAD upload failed: " << assetPath << "\n";
+          return nullptr;
+        }
+        upload.gpu.lods.push_back(std::move(gpuLod));
         ++upload.nextLod;
-        continue;
+        ++uploadsThisFrame_;
+        break;  // spread heavy uploads across frames
       }
 
-      GpuMesh::LodGpu gpuLod;
-      if (!UploadSingleLod(cpuLod, gpuLod, *backend_)) {
-        failedLoads_.insert(assetPath);
-        DestroyMesh(upload.gpu);
-        pendingGpuUploads_.erase(assetPath);
-        std::cerr << "CAD upload failed: " << assetPath << "\n";
-        return nullptr;
+      if (!upload.shadowProxyUploaded && upload.prepared.shadowProxy.has_value()) {
+        GpuMesh::LodGpu gpuShadow;
+        if (!UploadSingleLod(upload.prepared.shadowProxy.value(), gpuShadow, *backend_)) {
+          failedLoads_.insert(assetPath);
+          DestroyMesh(upload.gpu);
+          pendingGpuUploads_.erase(assetPath);
+          std::cerr << "CAD shadow-proxy upload failed: " << assetPath << "\n";
+          return nullptr;
+        }
+        upload.gpu.shadowProxy = std::move(gpuShadow);
+        upload.shadowProxyUploaded = true;
+        ++uploadsThisFrame_;
+        break;
       }
-      upload.gpu.lods.push_back(std::move(gpuLod));
-      ++upload.nextLod;
-      ++uploadsThisFrame_;
-      break;  // spread heavy uploads across frames
+      break;
     }
 
-    if (upload.nextLod < upload.prepared.lods.size()) {
+    const bool hasPendingLodUploads = upload.nextLod < upload.prepared.lods.size();
+    const bool hasPendingShadowProxy =
+        !upload.shadowProxyUploaded && upload.prepared.shadowProxy.has_value();
+    if (hasPendingLodUploads || hasPendingShadowProxy) {
       return nullptr;
     }
 
@@ -2107,6 +2184,11 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     std::cerr << "CAD loaded: " << assetPath
               << " (lods=" << it->second.lods.size()
               << ", " << lodSummary.str()
+              << (it->second.shadowProxy.has_value()
+                      ? std::string(", Shadow(v=") +
+                            std::to_string(it->second.shadowProxy->vertexCount) +
+                            ",i=" + std::to_string(it->second.shadowProxy->indexCount) + ")"
+                      : "")
               << ", centerXY=(" << it->second.boundsCenter.x << ", " << it->second.boundsCenter.y << ")"
               << ", radius=" << it->second.boundsRadius << ")\n";
     return &it->second;
@@ -2152,6 +2234,21 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 lod.vertices = std::move(cachedLod.vertices);
                 lod.indices = std::move(cachedLod.indices);
                 prepared.lods.push_back(std::move(lod));
+              }
+              if (!prepared.lods.empty()) {
+                const CadLodPolicy& lodPolicyLocal = LoadCadLodPolicy();
+                IndexedMesh source;
+                source.vertices = prepared.lods.back().vertices;
+                source.indices = prepared.lods.back().indices;
+                std::vector<IndexedMesh> tempLods;
+                tempLods.push_back(std::move(source));
+                IndexedMesh shadowProxy = BuildShadowProxyMesh(tempLods, lodPolicyLocal);
+                if (!shadowProxy.vertices.empty() && !shadowProxy.indices.empty()) {
+                  PreparedCpuMesh::LodCpu shadowLod;
+                  shadowLod.vertices = std::move(shadowProxy.vertices);
+                  shadowLod.indices = std::move(shadowProxy.indices);
+                  prepared.shadowProxy = std::move(shadowLod);
+                }
               }
               std::cerr << "CAD prepared cache hit: " << assetPath << "\n";
               setStage("completed", 1.00F);

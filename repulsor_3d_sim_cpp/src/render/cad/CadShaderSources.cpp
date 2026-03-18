@@ -327,11 +327,13 @@ void main() {
     vec3 envSpec = envColor * envFresnel * (1.0 - roughness * 0.65) * 0.32;
 
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 120.0, 0.0, 1.0);
-    linearColor = (ambient + direct + rimColor + envSpec) * max(depthCue, 0.45) * shadowContrast;
+    vec3 directLit = (direct + rimColor) * max(depthCue, 0.45) * shadowContrast;
+    vec3 indirectLit = (ambient + envSpec) * max(depthCue, 0.45);
     float shadow = useFarCascade
                        ? ComputeShadowFactor(vLightClipPosFar, N, keyDir, uShadowPcfRadius, true)
                        : ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, false);
-    linearColor *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    linearColor = indirectLit + directLit;
   } else {
     float ndotl = max(dot(N, keyDir), 0.0);
     float ndotf = max(dot(N, fillDir), 0.0);
@@ -339,11 +341,13 @@ void main() {
     vec3 H = normalize(V + keyDir);
     float spec = pow(max(dot(N, H), 0.0), mix(24.0, 6.0, roughness)) * max(uSpecularStrength, 0.0) * 0.18;
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 140.0, 0.0, 1.0);
-    linearColor = (ambient + direct + vec3(spec)) * max(depthCue, 0.55) * shadowContrast;
+    vec3 directLit = (direct + vec3(spec)) * max(depthCue, 0.55) * shadowContrast;
+    vec3 indirectLit = ambient * max(depthCue, 0.55);
     float shadow = useFarCascade
                        ? ComputeShadowFactorSingle(vLightClipPosFar, N, keyDir, true)
                        : ComputeShadowFactorSingle(vLightClipPos, N, keyDir, false);
-    linearColor *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    linearColor = indirectLit + directLit;
   }
 
   float fog = 1.0 - exp(-max(uFogDensity, 0.0) * viewDistance);

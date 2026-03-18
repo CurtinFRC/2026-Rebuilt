@@ -86,13 +86,13 @@ struct ViewerConfig {
   float cameraYawDeg = 135.0F;
 
   bool followRobot = true;
-  bool showCameraDebug = true;
-  bool showTruthFuel = true;
+  bool showCameraDebug = false;
+  bool showTruthFuel = false;
   bool showDiagnostics = true;
   bool showDebugPanel = true;
-  int maxRenderFuel = 400;
-  int maxRenderTruthFuel = 400;
-  int maxCameraDebugRaysPerCamera = 600;
+  int maxRenderFuel = 250;
+  int maxRenderTruthFuel = 150;
+  int maxCameraDebugRaysPerCamera = 200;
   bool vsync = true;
 
   float followSmoothTimeS = 0.18F;

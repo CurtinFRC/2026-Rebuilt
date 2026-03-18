@@ -235,6 +235,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `CAD_SHADOW_CAST_MAX_INDICES` (default `0`; when >0, meshes above this index count do not cast dynamic shadows)
 - `CAD_FAST_SHADING_MIN_INDICES` (default `0`; optional large-mesh cheaper shading path, disabled by default)
 - `CAD_RUNTIME_MAX_DRAW_INDICES` (default `3500000`; hard runtime cap for selected CAD LOD draw index count)
+- `CAD_SHADOW_PROXY_MAX_VERTICES` (default `180000`; max vertices for dedicated shadow-only proxy mesh)
 - `SHOW_DEBUG_PANEL` (default `true`; enables diagnostics counters/panel)
 - `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
 - `INCOMING_COORD_CALIBRATION_PROFILE_PATH` (optional JSON calibration profile file path)

@@ -81,6 +81,7 @@ class CadModelRenderFeature final : public IRenderFeature {
       int indexCount = 0;
     };
     std::vector<LodGpu> lods;
+    std::optional<LodGpu> shadowProxy;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
     float boundsRadius = 1.0F;
     PositionNormalMesh::MaterialHints materialHints;
@@ -92,6 +93,7 @@ class CadModelRenderFeature final : public IRenderFeature {
       std::vector<std::uint32_t> indices;
     };
     std::vector<LodCpu> lods;
+    std::optional<LodCpu> shadowProxy;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
     float boundsRadius = 1.0F;
     PositionNormalMesh::MaterialHints materialHints;
@@ -116,6 +118,7 @@ class CadModelRenderFeature final : public IRenderFeature {
     PreparedCpuMesh prepared;
     GpuMesh gpu;
     std::size_t nextLod = 0;
+    bool shadowProxyUploaded = false;
   };
 
   struct GpuTexture {
