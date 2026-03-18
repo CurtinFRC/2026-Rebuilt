@@ -150,8 +150,9 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
-- `INCOMING_COORD_ORIGIN_X_M` (default `3.0`)
-- `INCOMING_COORD_ORIGIN_Y_M` (default `0.5`)
+- `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
+- `INCOMING_COORD_ORIGIN_X_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
+- `INCOMING_COORD_ORIGIN_Y_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
 - `INCOMING_COORD_ROTATION_DEG` (default `0.0`)
 - `INCOMING_COORD_SCALE_M_PER_UNIT` (default `1.0`)
 - `INCOMING_COORD_Z_SCALE_M_PER_UNIT` (default `1.0`)
@@ -179,6 +180,10 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `CAD_FOG_DENSITY` (default `0.003`)
 - `CAD_SATURATION` (default `1.00`)
 - `CAD_GAMMA` (default `2.2`)
+
+For `INCOMING_COORD_FRAME=top_right_negative`, incoming coordinates map like:
+- `(0, 0)` -> field top-right in centered grid coordinates
+- `(-FIELD_LENGTH_M, -FIELD_WIDTH_M)` -> field bottom-left
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 - `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
 - `SEASON_MODULE_PLUGIN_PATH` (optional path to season module plugin `.dll`/`.so`)

@@ -1,15 +1,41 @@
 #include "repulsor3d/domain/SnapshotDomainAdapter.hpp"
 
+#include <algorithm>
+#include <cctype>
+
 namespace repulsor3d {
+namespace {
+
+std::string NormalizeLower(std::string text) {
+  std::transform(text.begin(), text.end(), text.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return text;
+}
+
+CoordinateFrameMapper::Config BuildCoordinateMapperConfig(const ViewerConfig& cfg) {
+  const std::string mode = NormalizeLower(cfg.incomingCoordFrame);
+  if (mode == "top_right_negative") {
+    return CoordinateFrameMapper::Config{
+        .originXM = static_cast<double>(cfg.fieldLengthM) * 0.5,
+        .originYM = static_cast<double>(cfg.fieldWidthM) * 0.5,
+        .rotationDeg = 0.0,
+        .scaleMPerUnit = 1.0,
+        .zScaleMPerUnit = std::max(1e-6, static_cast<double>(cfg.incomingCoordZScaleMPerUnit))};
+  }
+
+  return CoordinateFrameMapper::Config{
+      .originXM = static_cast<double>(cfg.incomingCoordOriginXM),
+      .originYM = static_cast<double>(cfg.incomingCoordOriginYM),
+      .rotationDeg = static_cast<double>(cfg.incomingCoordRotationDeg),
+      .scaleMPerUnit = std::max(1e-6, static_cast<double>(cfg.incomingCoordScaleMPerUnit)),
+      .zScaleMPerUnit = std::max(1e-6, static_cast<double>(cfg.incomingCoordZScaleMPerUnit))};
+}
+
+}  // namespace
 
 SnapshotDomainAdapter::SnapshotDomainAdapter(const ViewerConfig& cfg)
-    : cfg_(cfg),
-      coordinateMapper_(CoordinateFrameMapper::Config{
-          .originXM = static_cast<double>(cfg.incomingCoordOriginXM),
-          .originYM = static_cast<double>(cfg.incomingCoordOriginYM),
-          .rotationDeg = static_cast<double>(cfg.incomingCoordRotationDeg),
-          .scaleMPerUnit = static_cast<double>(cfg.incomingCoordScaleMPerUnit),
-          .zScaleMPerUnit = static_cast<double>(cfg.incomingCoordZScaleMPerUnit)}) {}
+    : cfg_(cfg), coordinateMapper_(BuildCoordinateMapperConfig(cfg)) {}
 
 WorldSnapshot SnapshotDomainAdapter::BuildRenderSnapshot(const SnapshotBundle& latest, const double dt) {
   WorldSnapshot out = latest.snapshot;

@@ -61,9 +61,12 @@ struct ViewerConfig {
   float fieldCadOffsetYM = 0.0F;
 
   // Incoming world-coordinate frame mapping into render-space meters.
-  // Example: INCOMING (0,0) -> RENDER (3.0, 0.5) with default settings.
-  float incomingCoordOriginXM = 3.0F;
-  float incomingCoordOriginYM = 0.5F;
+  // Preset values:
+  // - "top_right_negative": incoming (0,0)=top-right; (-fieldLength,-fieldWidth)=bottom-left
+  // - "custom": use the affine parameters below
+  std::string incomingCoordFrame = "top_right_negative";
+  float incomingCoordOriginXM = 0.0F;
+  float incomingCoordOriginYM = 0.0F;
   float incomingCoordRotationDeg = 0.0F;
   float incomingCoordScaleMPerUnit = 1.0F;
   float incomingCoordZScaleMPerUnit = 1.0F;

@@ -36,6 +36,9 @@ ConfigValidationResult ValidateConfig(const ViewerConfig& cfg) {
   if (cfg.incomingCoordZScaleMPerUnit <= 0.0F) {
     result.errors.push_back("INCOMING_COORD_Z_SCALE_M_PER_UNIT must be > 0");
   }
+  if (!(cfg.incomingCoordFrame == "top_right_negative" || cfg.incomingCoordFrame == "custom")) {
+    result.warnings.push_back("INCOMING_COORD_FRAME should be 'top_right_negative' or 'custom'");
+  }
 
   return result;
 }

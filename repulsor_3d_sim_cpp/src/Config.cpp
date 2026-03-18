@@ -119,6 +119,7 @@ ViewerConfig LoadConfigFromEnv() {
 
   cfg.incomingCoordOriginXM = GetEnvFloat("INCOMING_COORD_ORIGIN_X_M", cfg.incomingCoordOriginXM);
   cfg.incomingCoordOriginYM = GetEnvFloat("INCOMING_COORD_ORIGIN_Y_M", cfg.incomingCoordOriginYM);
+  cfg.incomingCoordFrame = GetEnvString("INCOMING_COORD_FRAME", cfg.incomingCoordFrame);
   cfg.incomingCoordRotationDeg = GetEnvFloat("INCOMING_COORD_ROTATION_DEG", cfg.incomingCoordRotationDeg);
   cfg.incomingCoordScaleMPerUnit = GetEnvFloat("INCOMING_COORD_SCALE_M_PER_UNIT", cfg.incomingCoordScaleMPerUnit);
   cfg.incomingCoordZScaleMPerUnit = GetEnvFloat("INCOMING_COORD_Z_SCALE_M_PER_UNIT", cfg.incomingCoordZScaleMPerUnit);
