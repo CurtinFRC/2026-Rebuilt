@@ -100,12 +100,13 @@ int RunCoordinateFrameMapperTests() {
     return 8;
   }
 
+  repulsor3d::SnapshotDomainAdapter bottomLeftAdapter(cfg);
   repulsor3d::SnapshotBundle bundleBottomLeft;
   bundleBottomLeft.snapshot.pose = repulsor3d::Pose2D{
       .x = -static_cast<double>(cfg.fieldLengthM),
       .y = -static_cast<double>(cfg.fieldWidthM),
       .thetaRad = 0.0};
-  const auto renderBottomLeft = adapter.BuildRenderSnapshot(bundleBottomLeft, 0.02);
+  const auto renderBottomLeft = bottomLeftAdapter.BuildRenderSnapshot(bundleBottomLeft, 0.02);
   if (!renderBottomLeft.pose.has_value()) {
     std::cerr << "Coordinate mapper bottom-left expected pose output\n";
     return 9;
