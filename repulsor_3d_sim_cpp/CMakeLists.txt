@@ -12,6 +12,14 @@ option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
 option(REPULSOR_SIM_BUILD_PLUGIN_SDK "Build sample season plugin SDK target + ABI checks" ON)
 set(REPULSOR_SIM_NTCORE_ROOT "C:/Users/paulh/allwpilib" CACHE PATH "Root directory of a local allwpilib checkout/build for ntcore")
 set(REPULSOR_SIM_NTCORE_HINTS "" CACHE STRING "Optional semicolon-separated extra hint paths for ntcore package discovery")
+set(REPULSOR_SIM_NTCORE_SOURCES
+  src/NtDataSource.cpp
+  src/nt/DefaultSchemas.cpp
+  src/nt/DomainMappers.cpp
+  src/nt/TopicPath.cpp
+  src/nt/SubscriberCollection.cpp
+  src/nt/DynamicEntityRegistry.cpp
+)
 
 include(FetchContent)
 
@@ -170,7 +178,7 @@ if(REPULSOR_SIM_USE_NTCORE)
   if(ntcore_FOUND)
     message(STATUS "NTCore found locally: ${ntcore_DIR}")
     target_compile_definitions(repulsor_3d_sim_cpp PRIVATE REPULSOR_HAS_NTCORE=1)
-    target_sources(repulsor_3d_sim_cpp PRIVATE src/NtDataSource.cpp)
+    target_sources(repulsor_3d_sim_cpp PRIVATE ${REPULSOR_SIM_NTCORE_SOURCES})
     target_link_libraries(repulsor_3d_sim_cpp PRIVATE ntcore)
   else()
     set(_repulsor_ntcore_include_candidates
@@ -237,7 +245,7 @@ if(REPULSOR_SIM_USE_NTCORE)
     )
       message(STATUS "NTCore found via raw allwpilib layout under '${REPULSOR_SIM_NTCORE_ROOT}'")
       target_compile_definitions(repulsor_3d_sim_cpp PRIVATE REPULSOR_HAS_NTCORE=1)
-      target_sources(repulsor_3d_sim_cpp PRIVATE src/NtDataSource.cpp)
+      target_sources(repulsor_3d_sim_cpp PRIVATE ${REPULSOR_SIM_NTCORE_SOURCES})
       target_include_directories(
         repulsor_3d_sim_cpp PRIVATE
           ${REPULSOR_RAW_NTCORE_INCLUDE_DIR}

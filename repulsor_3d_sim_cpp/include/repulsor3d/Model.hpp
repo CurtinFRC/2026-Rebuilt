@@ -3,6 +3,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace repulsor3d {
@@ -16,6 +17,9 @@ struct FieldVisionObject {
   double roll = 0.0;
   double pitch = 0.0;
   double yaw = 0.0;
+  std::unordered_map<std::string, double> extraDoubles;
+  std::unordered_map<std::string, std::string> extraStrings;
+  std::unordered_map<std::string, bool> extraBooleans;
 };
 
 struct RepulsorVisionObstacle {
@@ -25,6 +29,9 @@ struct RepulsorVisionObstacle {
   double y = 0.0;
   double sizeX = 0.0;
   double sizeY = 0.0;
+  std::unordered_map<std::string, double> extraDoubles;
+  std::unordered_map<std::string, std::string> extraStrings;
+  std::unordered_map<std::string, bool> extraBooleans;
 };
 
 struct CameraInfo {
@@ -38,6 +45,9 @@ struct CameraInfo {
   double hfovDeg = 0.0;
   double vfovDeg = 0.0;
   double maxRange = 0.0;
+  std::unordered_map<std::string, double> extraDoubles;
+  std::unordered_map<std::string, std::string> extraStrings;
+  std::unordered_map<std::string, bool> extraBooleans;
 };
 
 struct Pose2D {
