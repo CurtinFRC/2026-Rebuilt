@@ -735,4 +735,67 @@ void TraverseGltfNode(
   visitState[static_cast<size_t>(nodeIndex)] = 2;
 }
 
+void PopulateGltfMaterialHints(
+    const nlohmann::json& root,
+    const std::filesystem::path& modelPath,
+    PositionNormalMesh::MaterialHints& outHints) {
+  if (!root.contains("materials") || !root["materials"].is_array() || root["materials"].empty()) {
+    return;
+  }
+  const auto& material = root["materials"][0];
+  if (!material.is_object()) {
+    return;
+  }
+  if (material.contains("pbrMetallicRoughness") && material["pbrMetallicRoughness"].is_object()) {
+    const auto& pbr = material["pbrMetallicRoughness"];
+    if (pbr.contains("roughnessFactor") && pbr["roughnessFactor"].is_number()) {
+      outHints.roughness = pbr["roughnessFactor"].get<float>();
+    }
+    if (pbr.contains("metallicFactor") && pbr["metallicFactor"].is_number()) {
+      outHints.metallic = pbr["metallicFactor"].get<float>();
+    }
+    if (pbr.contains("baseColorTexture") && pbr["baseColorTexture"].is_object()) {
+      const auto& tex = pbr["baseColorTexture"];
+      if (tex.contains("index") && tex["index"].is_number_integer() &&
+          root.contains("textures") && root["textures"].is_array()) {
+        const int textureIndex = tex["index"].get<int>();
+        if (textureIndex >= 0 && textureIndex < static_cast<int>(root["textures"].size())) {
+          const auto& texture = root["textures"][static_cast<size_t>(textureIndex)];
+          if (texture.contains("source") && texture["source"].is_number_integer() &&
+              root.contains("images") && root["images"].is_array()) {
+            const int imageIndex = texture["source"].get<int>();
+            if (imageIndex >= 0 && imageIndex < static_cast<int>(root["images"].size())) {
+              const auto& image = root["images"][static_cast<size_t>(imageIndex)];
+              if (image.contains("uri") && image["uri"].is_string()) {
+                outHints.baseColorTexturePath = (modelPath.parent_path() / image["uri"].get<std::string>()).string();
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (material.contains("normalTexture") && material["normalTexture"].is_object()) {
+    const auto& tex = material["normalTexture"];
+    if (tex.contains("index") && tex["index"].is_number_integer() &&
+        root.contains("textures") && root["textures"].is_array()) {
+      const int textureIndex = tex["index"].get<int>();
+      if (textureIndex >= 0 && textureIndex < static_cast<int>(root["textures"].size())) {
+        const auto& texture = root["textures"][static_cast<size_t>(textureIndex)];
+        if (texture.contains("source") && texture["source"].is_number_integer() &&
+            root.contains("images") && root["images"].is_array()) {
+          const int imageIndex = texture["source"].get<int>();
+          if (imageIndex >= 0 && imageIndex < static_cast<int>(root["images"].size())) {
+            const auto& image = root["images"][static_cast<size_t>(imageIndex)];
+            if (image.contains("uri") && image["uri"].is_string()) {
+              outHints.normalTexturePath = (modelPath.parent_path() / image["uri"].get<std::string>()).string();
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 }  // namespace repulsor3d::cad_import

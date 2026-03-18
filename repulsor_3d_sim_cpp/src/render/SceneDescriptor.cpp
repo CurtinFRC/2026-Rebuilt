@@ -12,6 +12,28 @@
 namespace repulsor3d {
 namespace {
 
+bool ValidateTopLevelType(const nlohmann::json& root, const char* key, const nlohmann::json::value_t expectedType) {
+  if (!root.contains(key)) {
+    return true;
+  }
+  return root[key].type() == expectedType;
+}
+
+bool ValidateItemObjectArray(const nlohmann::json& root, const char* key) {
+  if (!root.contains(key)) {
+    return true;
+  }
+  if (!root[key].is_array()) {
+    return false;
+  }
+  for (const auto& item : root[key]) {
+    if (!item.is_object()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool TryReadBool(const nlohmann::json& node, const char* key, std::optional<bool>& out) {
   if (!node.contains(key) || !node[key].is_boolean()) {
     return false;
@@ -145,6 +167,17 @@ SceneDescriptor::DynamicEntityBinding ParseDynamicEntityBinding(const nlohmann::
   if (node.contains("useAssetColor") && node["useAssetColor"].is_boolean()) {
     out.useAssetColor = node["useAssetColor"].get<bool>();
   }
+  if (node.contains("roughnessOverride") && node["roughnessOverride"].is_number()) {
+    out.roughnessOverride = node["roughnessOverride"].get<float>();
+  }
+  if (node.contains("metallicOverride") && node["metallicOverride"].is_number()) {
+    out.metallicOverride = node["metallicOverride"].get<float>();
+  }
+  if (node.contains("normalStrength") && node["normalStrength"].is_number()) {
+    out.normalStrength = node["normalStrength"].get<float>();
+  }
+  out.albedoTexturePath = ParseString(node, "albedoTexturePath", out.albedoTexturePath);
+  out.normalTexturePath = ParseString(node, "normalTexturePath", out.normalTexturePath);
   if (node.contains("culling") && node["culling"].is_object()) {
     const auto& culling = node["culling"];
     if (culling.contains("enabled") && culling["enabled"].is_boolean()) {
@@ -158,6 +191,48 @@ SceneDescriptor::DynamicEntityBinding ParseDynamicEntityBinding(const nlohmann::
 }
 
 }  // namespace
+
+bool ValidateSceneDescriptorJson(const std::string& path, std::string* error) {
+  std::ifstream in(path);
+  if (!in.is_open()) {
+    if (error != nullptr) {
+      *error = "failed to open scene descriptor: " + path;
+    }
+    return false;
+  }
+
+  nlohmann::json root;
+  try {
+    in >> root;
+  } catch (...) {
+    if (error != nullptr) {
+      *error = "failed to parse scene descriptor JSON";
+    }
+    return false;
+  }
+  if (!root.is_object()) {
+    if (error != nullptr) {
+      *error = "scene descriptor root must be an object";
+    }
+    return false;
+  }
+
+  const bool ok =
+      ValidateTopLevelType(root, "drawFieldImage", nlohmann::json::value_t::boolean) &&
+      ValidateTopLevelType(root, "drawGrid", nlohmann::json::value_t::boolean) &&
+      ValidateTopLevelType(root, "drawAxes", nlohmann::json::value_t::boolean) &&
+      ValidateItemObjectArray(root, "overlay") &&
+      ValidateItemObjectArray(root, "spheres") &&
+      ValidateItemObjectArray(root, "boxes") &&
+      ValidateItemObjectArray(root, "lines") &&
+      ValidateItemObjectArray(root, "meshes") &&
+      ValidateItemObjectArray(root, "entities") &&
+      ValidateItemObjectArray(root, "dynamicEntities");
+  if (!ok && error != nullptr) {
+    *error = "scene descriptor contains invalid top-level key types";
+  }
+  return ok;
+}
 
 std::string CanonicalSceneProfileKey(const std::string& sceneProfile) {
   std::string out;
@@ -173,11 +248,15 @@ std::string CanonicalSceneProfileKey(const std::string& sceneProfile) {
 }
 
 std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& path) {
+  std::string validationError;
+  if (!ValidateSceneDescriptorJson(path, &validationError)) {
+    return std::nullopt;
+  }
+
   std::ifstream in(path);
   if (!in.is_open()) {
     return std::nullopt;
   }
-
   nlohmann::json root;
   try {
     in >> root;
@@ -317,6 +396,21 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
       if (item.contains("wireframe") && item["wireframe"].is_boolean()) {
         mesh.wireframe = item["wireframe"].get<bool>();
       }
+      if (item.contains("roughnessOverride") && item["roughnessOverride"].is_number()) {
+        mesh.roughnessOverride = item["roughnessOverride"].get<float>();
+      }
+      if (item.contains("metallicOverride") && item["metallicOverride"].is_number()) {
+        mesh.metallicOverride = item["metallicOverride"].get<float>();
+      }
+      if (item.contains("normalStrength") && item["normalStrength"].is_number()) {
+        mesh.normalStrength = item["normalStrength"].get<float>();
+      }
+      if (item.contains("albedoTexturePath") && item["albedoTexturePath"].is_string()) {
+        mesh.albedoTexturePath = item["albedoTexturePath"].get<std::string>();
+      }
+      if (item.contains("normalTexturePath") && item["normalTexturePath"].is_string()) {
+        mesh.normalTexturePath = item["normalTexturePath"].get<std::string>();
+      }
       if (item.contains("pass")) {
         mesh.pass = ParseRenderPass(item["pass"], mesh.pass);
       }
@@ -425,6 +519,21 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
         }
         if (item.contains("wireframe") && item["wireframe"].is_boolean()) {
           mesh.wireframe = item["wireframe"].get<bool>();
+        }
+        if (item.contains("roughnessOverride") && item["roughnessOverride"].is_number()) {
+          mesh.roughnessOverride = item["roughnessOverride"].get<float>();
+        }
+        if (item.contains("metallicOverride") && item["metallicOverride"].is_number()) {
+          mesh.metallicOverride = item["metallicOverride"].get<float>();
+        }
+        if (item.contains("normalStrength") && item["normalStrength"].is_number()) {
+          mesh.normalStrength = item["normalStrength"].get<float>();
+        }
+        if (item.contains("albedoTexturePath") && item["albedoTexturePath"].is_string()) {
+          mesh.albedoTexturePath = item["albedoTexturePath"].get<std::string>();
+        }
+        if (item.contains("normalTexturePath") && item["normalTexturePath"].is_string()) {
+          mesh.normalTexturePath = item["normalTexturePath"].get<std::string>();
         }
         mesh.pass = entity.pass;
         entity.payload = std::move(mesh);

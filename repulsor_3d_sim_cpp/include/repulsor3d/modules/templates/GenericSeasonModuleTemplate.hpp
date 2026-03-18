@@ -23,6 +23,7 @@ class GenericSeasonModuleTemplate final : public ISeasonModule {
 // extern "C" __declspec(dllexport) int repulsor3d_query_season_module_abi_version() {
 //   return repulsor3d::kSeasonModuleAbiVersion;
 // }
+// extern "C" __declspec(dllexport) const repulsor3d::PluginManifestV1* repulsor3d_query_plugin_manifest_v1() { ... }
 // extern "C" __declspec(dllexport) repulsor3d::ISeasonModule* repulsor3d_create_season_module() {
 //   return new GenericSeasonModuleTemplate();
 // }

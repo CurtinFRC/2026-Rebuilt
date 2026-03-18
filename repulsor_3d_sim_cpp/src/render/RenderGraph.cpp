@@ -13,7 +13,8 @@ void RenderGraph::AddPass(RenderGraphPass pass) {
   passes_[pass.name] = std::move(pass);
 }
 
-void RenderGraph::Execute() const {
+void RenderGraph::Execute() {
+  context_.ClearResources();
   enum class VisitState { kUnvisited, kVisiting, kVisited };
   std::unordered_map<std::string, VisitState> visited;
   visited.reserve(passes_.size());
@@ -54,10 +55,27 @@ void RenderGraph::Execute() const {
       continue;
     }
     const auto passIt = passes_.find(name);
-    if (passIt != passes_.end() && passIt->second.execute) {
-      passIt->second.execute();
-      executed.insert(name);
+    if (passIt == passes_.end() || !passIt->second.execute) {
+      continue;
     }
+
+    bool resourcesReady = true;
+    for (const auto& resource : passIt->second.consumesResources) {
+      if (!context_.IsResourceAvailable(resource)) {
+        resourcesReady = false;
+        break;
+      }
+    }
+    if (!resourcesReady) {
+      std::cerr << "RenderGraph skipped pass due to unmet resources: " << name << "\n";
+      continue;
+    }
+
+    passIt->second.execute(context_);
+    for (const auto& produced : passIt->second.producesResources) {
+      context_.MarkResourceAvailable(produced);
+    }
+    executed.insert(name);
   }
 }
 

@@ -1,8 +1,11 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -74,6 +77,7 @@ class CadModelRenderFeature final : public IRenderFeature {
     std::vector<LodGpu> lods;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
     float boundsRadius = 1.0F;
+    PositionNormalMesh::MaterialHints materialHints;
   };
 
   struct PreparedCpuMesh {
@@ -84,10 +88,22 @@ class CadModelRenderFeature final : public IRenderFeature {
     std::vector<LodCpu> lods;
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
     float boundsRadius = 1.0F;
+    PositionNormalMesh::MaterialHints materialHints;
   };
 
   struct PendingLoad {
+    struct Status {
+      std::atomic<float> progress{0.0F};
+      std::atomic<bool> cancelRequested{false};
+      std::atomic<bool> completed{false};
+      std::atomic<bool> failed{false};
+      std::atomic<int> retryCount{0};
+      std::string stage = "queued";
+      mutable std::mutex stageMutex;
+    };
+
     std::future<PreparedCpuMesh> future;
+    std::shared_ptr<Status> status;
   };
 
   struct PendingGpuUpload {
@@ -142,11 +158,18 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uShadowLightMvpLoc_ = -1;
   int uLightViewProjectionLoc_ = -1;
   int uShadowMapLoc_ = -1;
+  int uShadowMapFarLoc_ = -1;
   int uShadowEnabledLoc_ = -1;
   int uShadowStrengthLoc_ = -1;
+  int uShadowPcfRadiusLoc_ = -1;
+  int uShadowCascadeCountLoc_ = -1;
+  int uShadowCascadeSplitMLoc_ = -1;
   int shadowMapSize_ = 2048;
   bool shadowEnabled_ = true;
   float shadowStrength_ = 0.55F;
+  int shadowPcfRadius_ = 2;
+  int shadowCascadeCount_ = 1;
+  float shadowCascadeSplitM_ = 12.0F;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
   std::unordered_map<std::string, PendingLoad> pendingLoads_;

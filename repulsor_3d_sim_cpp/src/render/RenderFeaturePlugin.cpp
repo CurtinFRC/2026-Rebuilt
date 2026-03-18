@@ -2,6 +2,8 @@
 
 #include <filesystem>
 
+#include "repulsor3d/plugins/PluginManifest.hpp"
+
 #if defined(_WIN32)
 #include <Windows.h>
 #else
@@ -103,6 +105,7 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
   auto* createFnRaw = ResolveSymbol(handle, "repulsor3d_create_render_feature_plugin");
   auto* destroyFnRaw = ResolveSymbol(handle, "repulsor3d_destroy_render_feature_plugin");
   auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_render_feature_plugin_abi_version");
+  auto* queryManifestRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1");
   if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
@@ -111,9 +114,18 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
   const auto createFn = reinterpret_cast<CreateRenderFeaturePluginAbiFn>(createFnRaw);
   const auto destroyFn = reinterpret_cast<DestroyRenderFeaturePluginAbiFn>(destroyFnRaw);
   const auto queryAbiVersionFn = reinterpret_cast<QueryRenderFeaturePluginAbiVersionFn>(queryAbiVersionRaw);
+  const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(queryManifestRaw);
   if (queryAbiVersionFn == nullptr || queryAbiVersionFn() != kRenderFeaturePluginAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (queryManifestFn != nullptr) {
+    const PluginManifestV1* manifest = queryManifestFn();
+    if (manifest == nullptr ||
+        !IsPluginManifestCompatible(*manifest, PluginKind::RenderFeature, kRenderFeaturePluginAbiVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
 
   IRenderFeaturePlugin* plugin = createFn();
@@ -126,4 +138,3 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
 }
 
 }  // namespace repulsor3d
-

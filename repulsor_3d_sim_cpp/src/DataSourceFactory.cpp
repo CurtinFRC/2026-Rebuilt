@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "repulsor3d/datasource/DataSourcePluginAbi.hpp"
+#include "repulsor3d/plugins/PluginManifest.hpp"
 #include "repulsor3d/NullDataSource.hpp"
 #include "repulsor3d/ReplayDataSource.hpp"
 
@@ -116,14 +117,25 @@ std::unique_ptr<ISnapshotSource> CreateDataSourceFromPlugin(const std::string& p
       ResolveSymbol(handle, "repulsor3d_destroy_data_source_plugin"));
   const auto queryAbiFn = reinterpret_cast<QueryDataSourcePluginAbiVersionFn>(
       ResolveSymbol(handle, "repulsor3d_query_data_source_plugin_abi_version"));
+  const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(
+      ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1"));
   if (createFn == nullptr || destroyFn == nullptr || queryAbiFn == nullptr) {
     CloseLibrary(handle);
     return nullptr;
   }
 
-  if (queryAbiFn() != kDataSourcePluginAbiVersion) {
+  const int abiVersion = queryAbiFn();
+  if (abiVersion != kDataSourcePluginAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (queryManifestFn != nullptr) {
+    const PluginManifestV1* manifest = queryManifestFn();
+    if (manifest == nullptr ||
+        !IsPluginManifestCompatible(*manifest, PluginKind::DataSource, abiVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
 
   ISnapshotSource* source = createFn(cfg);

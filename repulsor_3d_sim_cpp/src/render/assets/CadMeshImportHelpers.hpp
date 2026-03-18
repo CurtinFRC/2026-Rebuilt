@@ -47,5 +47,9 @@ void TraverseGltfNode(
     const glm::mat4& parentTransform,
     std::vector<int>& visitState,
     PositionNormalMesh& outMesh);
+void PopulateGltfMaterialHints(
+    const nlohmann::json& root,
+    const std::filesystem::path& modelPath,
+    PositionNormalMesh::MaterialHints& outHints);
 
 }  // namespace repulsor3d::cad_import

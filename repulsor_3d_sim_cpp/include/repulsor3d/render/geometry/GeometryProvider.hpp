@@ -26,12 +26,19 @@ struct PositionUvIndexedMesh {
 };
 
 struct PositionNormalMesh {
+  struct MaterialHints {
+    float roughness = -1.0F;
+    float metallic = -1.0F;
+    std::string baseColorTexturePath;
+    std::string normalTexturePath;
+  };
   struct Vertex {
     glm::vec3 position{0.0F, 0.0F, 0.0F};
     glm::vec3 normal{0.0F, 0.0F, 1.0F};
     glm::vec4 color{1.0F, 1.0F, 1.0F, 1.0F};
   };
   std::vector<Vertex> vertices;
+  MaterialHints materialHints;
 };
 
 struct CadAssetTelemetryEvent {

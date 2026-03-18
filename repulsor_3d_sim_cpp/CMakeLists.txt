@@ -116,6 +116,7 @@ set(REPULSOR_SIM_SOURCES
   src/app/InputActionMap.cpp
   src/app/CameraControllers.cpp
   src/domain/SnapshotDomainAdapter.cpp
+  src/domain/CoordinateCalibrationProfile.cpp
   src/sim/PoseSmoothing.cpp
   src/sim/SimWorld.cpp
   src/time/TimeSource.cpp
@@ -134,6 +135,8 @@ set(REPULSOR_SIM_SOURCES
   src/render/RenderFeaturePlugin.cpp
   src/render/CadModelRenderFeature.cpp
   src/render/cad/CadFrustum.cpp
+  src/render/cad/CadBroadphase.cpp
+  src/render/cad/CadPolicies.cpp
   src/render/cad/CadShaderSources.cpp
   src/render/backend/RenderBackend.cpp
   src/render/assets/CadMeshImportHelpers.cpp
@@ -377,9 +380,11 @@ if(REPULSOR_SIM_BUILD_TESTS)
     tests/PoseSmoothingTests.cpp
     src/sim/PoseSmoothing.cpp
     src/domain/SnapshotDomainAdapter.cpp
+    src/domain/CoordinateCalibrationProfile.cpp
   )
 
   target_include_directories(repulsor_3d_sim_cpp_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(repulsor_3d_sim_cpp_tests PRIVATE nlohmann_json::nlohmann_json)
   if(REPULSOR_SIM_FETCH_DEPS)
     target_include_directories(repulsor_3d_sim_cpp_tests PRIVATE ${glm_SOURCE_DIR})
   else()
@@ -415,6 +420,25 @@ if(REPULSOR_SIM_BUILD_TESTS)
   endif()
 
   add_test(NAME repulsor_3d_sim_cpp_module_tests COMMAND repulsor_3d_sim_cpp_module_tests)
+
+  add_executable(repulsor_3d_sim_cpp_render_regression_tests
+    tests/RenderRegressionTests.cpp
+    src/render/Season2026RebuiltModelBuilder.cpp
+    src/render/scenegraph/SceneGraphBuilder.cpp
+  )
+  target_include_directories(
+    repulsor_3d_sim_cpp_render_regression_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_compile_definitions(
+    repulsor_3d_sim_cpp_render_regression_tests PRIVATE
+    REPULSOR_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_render_regression_tests PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_render_regression_tests PRIVATE glm::glm)
+  endif()
+  add_test(NAME repulsor_3d_sim_cpp_render_regression_tests COMMAND repulsor_3d_sim_cpp_render_regression_tests)
 
   if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
     add_executable(repulsor_3d_sim_cpp_plugin_abi_tests

@@ -28,6 +28,11 @@ struct SceneDescriptor {
     std::string assetPath;
     bool wireframe = false;
     bool useAssetColor = false;
+    float roughnessOverride = -1.0F;
+    float metallicOverride = -1.0F;
+    float normalStrength = 1.0F;
+    std::string albedoTexturePath;
+    std::string normalTexturePath;
     EntityCulling culling;
   };
 
@@ -45,6 +50,7 @@ struct SceneDescriptor {
 
 std::string CanonicalSceneProfileKey(const std::string& sceneProfile);
 std::string ResolveSceneDescriptorPathForProfile(const ViewerConfig& cfg);
+bool ValidateSceneDescriptorJson(const std::string& path, std::string* error = nullptr);
 std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& path);
 std::optional<SceneDescriptor> LoadSceneDescriptorForProfile(const ViewerConfig& cfg);
 

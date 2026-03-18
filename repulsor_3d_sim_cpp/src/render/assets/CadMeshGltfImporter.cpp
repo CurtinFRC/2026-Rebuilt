@@ -136,7 +136,15 @@ bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionN
     return false;
   }
   const GltfSceneAssembler assembler(std::move(root), std::move(embeddedGlbBinChunk), std::filesystem::path(resolvedAssetPath));
-  return assembler.Build(outMesh);
+  if (!assembler.Build(outMesh)) {
+    return false;
+  }
+  nlohmann::json hintsRoot;
+  std::vector<std::uint8_t> hintsGlb;
+  if (cad_import::LoadGltfRoot(resolvedAssetPath, hintsRoot, hintsGlb)) {
+    cad_import::PopulateGltfMaterialHints(hintsRoot, std::filesystem::path(resolvedAssetPath), outMesh.materialHints);
+  }
+  return true;
 }
 
 }  // namespace repulsor3d

@@ -203,6 +203,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
       .frame = sceneFrame,
       .commandBuffer = commandBuffer,
       .diagnostics = diag,
+      .diagnosticsWriter = &diagnostics_,
       .showDebugPanel = showDebugPanel,
       .showDebugCounters = showDebugCounters,
       .showDebugCpu = showDebugCpu,
@@ -229,8 +230,10 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
     graph.AddPass({
         .name = rawFeature->Name(),
         .dependencies = rawFeature->Dependencies(),
+        .consumesResources = rawFeature->Dependencies(),
+        .producesResources = {rawFeature->Name()},
         .execute =
-            [this, rawFeature, &context, &drawApi]() {
+            [this, rawFeature, &context, &drawApi](RenderGraphContext& graphContext) {
               auto& gpuTimer = gpuPassTimers_[rawFeature->Name()];
               if (gpuTimer.queryIds[0] == 0) {
                 gpuTimer.queryIds[0] = backend_->CreateGpuTimerQuery();
@@ -265,6 +268,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
               diagnostics_.RecordPassTime(rawFeature->Name(), ms);
 
               std::swap(gpuTimer.readIndex, gpuTimer.writeIndex);
+              graphContext.MarkResourceAvailable(rawFeature->Name());
             },
     });
   }

@@ -56,6 +56,19 @@ int RunSceneDescriptorParseTests() {
     std::cerr << "SceneDescriptor transform hierarchy parse missing\n";
     return 14;
   }
+
+  const std::string badPath = "test_scene_descriptor_bad.json";
+  {
+    std::ofstream out(badPath);
+    out << R"({"overlay": { "not": "an array" }})";
+  }
+  std::string validationError;
+  const bool valid = repulsor3d::ValidateSceneDescriptorJson(badPath, &validationError);
+  std::remove(badPath.c_str());
+  if (valid) {
+    std::cerr << "SceneDescriptor validator accepted invalid document\n";
+    return 15;
+  }
   return 0;
 }
 

@@ -56,8 +56,12 @@ uniform float uSaturation;
 uniform float uGamma;
 uniform float uUseAssetColor;
 uniform sampler2D uShadowMap;
+uniform sampler2D uShadowMapFar;
 uniform int uShadowEnabled;
 uniform float uShadowStrength;
+uniform int uShadowPcfRadius;
+uniform int uShadowCascadeCount;
+uniform float uShadowCascadeSplitM;
 out vec4 FragColor;
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
@@ -97,7 +101,7 @@ vec3 TonemapAces(vec3 x) {
   return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
 }
 
-float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir) {
+float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir, int radius, bool useFarCascade) {
   if (uShadowEnabled == 0) {
     return 0.0;
   }
@@ -110,14 +114,17 @@ float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir) {
 
   float ndotl = max(dot(normalize(normal), normalize(lightDir)), 0.0);
   float bias = mix(0.0018, 0.0005, ndotl);
-  vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
+  vec2 texelSize = useFarCascade
+                       ? (1.0 / vec2(textureSize(uShadowMapFar, 0)))
+                       : (1.0 / vec2(textureSize(uShadowMap, 0)));
 
   float shadowHits = 0.0;
   float taps = 0.0;
-  for (int x = -1; x <= 1; ++x) {
-    for (int y = -1; y <= 1; ++y) {
+  int pcfRadius = clamp(radius, 0, 4);
+  for (int x = -pcfRadius; x <= pcfRadius; ++x) {
+    for (int y = -pcfRadius; y <= pcfRadius; ++y) {
       vec2 uv = proj.xy + vec2(float(x), float(y)) * texelSize;
-      float closest = texture(uShadowMap, uv).r;
+      float closest = useFarCascade ? texture(uShadowMapFar, uv).r : texture(uShadowMap, uv).r;
       shadowHits += (proj.z - bias > closest) ? 1.0 : 0.0;
       taps += 1.0;
     }
@@ -196,7 +203,11 @@ void main() {
   float keyShadow = max(dot(N, keyDir), 0.0);
   float shadowContrast = mix(0.70, 1.0, keyShadow);
   vec3 linearColor = (ambient + direct + rimColor + envSpec) * max(depthCue, 0.45) * shadowContrast;
-  float shadow = ComputeShadowFactor(vLightClipPos, N, keyDir);
+  float splitDistance = max(uShadowCascadeSplitM, 1.0);
+  bool useFarCascade = (uShadowCascadeCount > 1) && (viewDistance > splitDistance);
+  float shadow = useFarCascade
+                     ? ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, true)
+                     : ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, false);
   linearColor *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
 
   float fog = 1.0 - exp(-max(uFogDensity, 0.0) * viewDistance);

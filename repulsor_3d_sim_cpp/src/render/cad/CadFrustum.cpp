@@ -1,5 +1,10 @@
 #include "repulsor3d/render/cad/CadFrustum.hpp"
 
+#include <array>
+#include <cmath>
+#include <limits>
+
+#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
 namespace repulsor3d::cad {
@@ -12,6 +17,14 @@ Plane NormalizePlane(const glm::vec4& plane) {
     return {};
   }
   return {n / len, plane.w / len};
+}
+
+bool IsFiniteVec3(const glm::vec3& v) {
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+bool IsFiniteVec4(const glm::vec4& v) {
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.w);
 }
 
 }  // namespace
@@ -41,5 +54,44 @@ bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center
   return true;
 }
 
-}  // namespace repulsor3d::cad
+bool TryExtractFrustumAabb(const glm::mat4& viewProjection, Aabb& out) {
+  const glm::mat4 inverseVp = glm::inverse(viewProjection);
+  if (!IsFiniteVec4(inverseVp[0]) ||
+      !IsFiniteVec4(inverseVp[1]) ||
+      !IsFiniteVec4(inverseVp[2]) ||
+      !IsFiniteVec4(inverseVp[3])) {
+    return false;
+  }
 
+  constexpr std::array<glm::vec3, 8> clipCorners{
+      glm::vec3{-1.0F, -1.0F, -1.0F},
+      glm::vec3{1.0F, -1.0F, -1.0F},
+      glm::vec3{-1.0F, 1.0F, -1.0F},
+      glm::vec3{1.0F, 1.0F, -1.0F},
+      glm::vec3{-1.0F, -1.0F, 1.0F},
+      glm::vec3{1.0F, -1.0F, 1.0F},
+      glm::vec3{-1.0F, 1.0F, 1.0F},
+      glm::vec3{1.0F, 1.0F, 1.0F},
+  };
+
+  glm::vec3 minP{std::numeric_limits<float>::max()};
+  glm::vec3 maxP{std::numeric_limits<float>::lowest()};
+  for (const glm::vec3& clip : clipCorners) {
+    const glm::vec4 worldH = inverseVp * glm::vec4{clip, 1.0F};
+    if (std::abs(worldH.w) <= 1e-6F) {
+      continue;
+    }
+    const glm::vec3 world = glm::vec3{worldH} / worldH.w;
+    minP = glm::min(minP, world);
+    maxP = glm::max(maxP, world);
+  }
+
+  if (!IsFiniteVec3(minP) || !IsFiniteVec3(maxP)) {
+    return false;
+  }
+  out.min = minP;
+  out.max = maxP;
+  return true;
+}
+
+}  // namespace repulsor3d::cad

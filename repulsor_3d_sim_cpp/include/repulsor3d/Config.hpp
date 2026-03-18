@@ -73,6 +73,8 @@ struct ViewerConfig {
   // - "top_right_negative": incoming (0,0)=top-right; (-fieldLength,-fieldWidth)=bottom-left
   // - "custom": use the affine parameters below
   std::string incomingCoordFrame = "top_right_negative";
+  std::string incomingCoordCalibrationProfilePath = "";
+  std::string incomingCoordCalibrationProfileName = "default";
   float incomingCoordOriginXM = 0.0F;
   float incomingCoordOriginYM = 0.0F;
   float incomingCoordRotationDeg = 0.0F;

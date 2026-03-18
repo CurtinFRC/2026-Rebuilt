@@ -285,6 +285,11 @@ RenderSceneFrame DescriptorDecoratingRenderWorldAdapter::BuildFrame(const ISimWo
           mesh.color = binding.color;
           mesh.useAssetColor = binding.useAssetColor;
           mesh.wireframe = binding.wireframe;
+          mesh.roughnessOverride = static_cast<float>(DynamicDoubleOr(record, "roughness", binding.roughnessOverride));
+          mesh.metallicOverride = static_cast<float>(DynamicDoubleOr(record, "metallic", binding.metallicOverride));
+          mesh.normalStrength = static_cast<float>(DynamicDoubleOr(record, "normal_strength", binding.normalStrength));
+          mesh.albedoTexturePath = DynamicStringOr(record, "albedo_texture_path", binding.albedoTexturePath);
+          mesh.normalTexturePath = DynamicStringOr(record, "normal_texture_path", binding.normalTexturePath);
           mesh.pass = binding.pass;
           frame.entities.push_back(
               {.id = id,

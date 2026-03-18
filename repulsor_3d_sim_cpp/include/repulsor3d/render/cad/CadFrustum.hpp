@@ -13,8 +13,13 @@ struct Plane {
   float d = 0.0F;
 };
 
+struct Aabb {
+  glm::vec3 min{0.0F, 0.0F, 0.0F};
+  glm::vec3 max{0.0F, 0.0F, 0.0F};
+};
+
 std::array<Plane, 6> ExtractFrustumPlanes(const glm::mat4& viewProjection);
 bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center, float radius);
+bool TryExtractFrustumAabb(const glm::mat4& viewProjection, Aabb& out);
 
 }  // namespace repulsor3d::cad
-

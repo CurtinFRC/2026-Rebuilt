@@ -33,127 +33,28 @@
 #include <glm/vec2.hpp>
 
 #include "repulsor3d/Renderer.hpp"
+#include "repulsor3d/render/cad/CadBroadphase.hpp"
 #include "repulsor3d/render/cad/CadFrustum.hpp"
+#include "repulsor3d/render/cad/CadPolicies.hpp"
 #include "repulsor3d/render/cad/CadShaderSources.hpp"
 
 namespace repulsor3d {
 namespace {
 
+using cad::CadLodPolicy;
+using cad::CadShadowPolicy;
+using cad::CadVisualPolicy;
+using cad::GetEnvBool;
+using cad::GetEnvFloat;
+using cad::GetEnvInt;
+using cad::LoadCadLodPolicy;
+using cad::LoadCadShadowPolicy;
+using cad::LoadCadVisualPolicy;
+
 std::uint32_t FloatBits(const float value) {
   std::uint32_t bits = 0;
   std::memcpy(&bits, &value, sizeof(bits));
   return bits;
-}
-
-int GetEnvInt(const char* name, const int fallback) {
-  const char* value = std::getenv(name);
-  if (value == nullptr || *value == '\0') {
-    return fallback;
-  }
-  try {
-    return std::stoi(value);
-  } catch (...) {
-    return fallback;
-  }
-}
-
-float GetEnvFloat(const char* name, const float fallback) {
-  const char* value = std::getenv(name);
-  if (value == nullptr || *value == '\0') {
-    return fallback;
-  }
-  try {
-    return std::stof(value);
-  } catch (...) {
-    return fallback;
-  }
-}
-
-bool GetEnvBool(const char* name, const bool fallback) {
-  const char* value = std::getenv(name);
-  if (value == nullptr || *value == '\0') {
-    return fallback;
-  }
-  std::string text(value);
-  std::transform(text.begin(), text.end(), text.begin(), [](const unsigned char c) {
-    return static_cast<char>(std::tolower(c));
-  });
-  if (text == "1" || text == "true" || text == "yes" || text == "on") {
-    return true;
-  }
-  if (text == "0" || text == "false" || text == "no" || text == "off") {
-    return false;
-  }
-  return fallback;
-}
-
-struct CadLodPolicy {
-  std::size_t maxLodCount = 2;
-  float reductionRatio = 0.62F;
-  std::size_t minVertexCount = 700000;
-  std::size_t lod0VertexCap = 4500000;
-  bool keepOriginalLod0 = true;
-  std::size_t maxPreferredDrawIndices = 8500000;
-  int normalBins = 20;
-  bool preserveFlatShading = true;
-  float lod0ScreenRadiusPx = 1200.0F;
-  float screenRadiusDecay = 0.5F;
-};
-
-const CadLodPolicy& LoadCadLodPolicy() {
-  static const CadLodPolicy policy = []() {
-    CadLodPolicy out;
-    out.maxLodCount = static_cast<std::size_t>(std::max(1, GetEnvInt("CAD_LOD_COUNT", static_cast<int>(out.maxLodCount))));
-    out.reductionRatio = std::clamp(GetEnvFloat("CAD_LOD_RATIO", out.reductionRatio), 0.15F, 0.95F);
-    out.minVertexCount = static_cast<std::size_t>(std::max(300, GetEnvInt("CAD_LOD_MIN_VERTICES", static_cast<int>(out.minVertexCount))));
-    out.lod0VertexCap = static_cast<std::size_t>(std::max(1000, GetEnvInt("CAD_LOD0_MAX_VERTICES", static_cast<int>(out.lod0VertexCap))));
-    out.keepOriginalLod0 = GetEnvBool("CAD_LOD_KEEP_FULL", out.keepOriginalLod0);
-    out.maxPreferredDrawIndices = static_cast<std::size_t>(
-        std::max(0, GetEnvInt("CAD_LOD_MAX_DRAW_INDICES", static_cast<int>(out.maxPreferredDrawIndices))));
-    out.normalBins = std::clamp(GetEnvInt("CAD_LOD_NORMAL_BINS", out.normalBins), 4, 28);
-    out.preserveFlatShading = GetEnvBool("CAD_LOD_PRESERVE_FLAT", out.preserveFlatShading);
-    out.lod0ScreenRadiusPx = std::max(32.0F, GetEnvFloat("CAD_LOD0_SCREEN_RADIUS_PX", out.lod0ScreenRadiusPx));
-    out.screenRadiusDecay = std::clamp(GetEnvFloat("CAD_LOD_SCREEN_RADIUS_DECAY", out.screenRadiusDecay), 0.2F, 0.95F);
-    return out;
-  }();
-  return policy;
-}
-
-struct CadVisualPolicy {
-  bool enableFrustumCulling = true;
-  float keyLightIntensity = 1.35F;
-  float fillLightIntensity = 0.20F;
-  float ambientStrength = 0.12F;
-  float depthCueStrength = 0.08F;
-  float specularStrength = 0.42F;
-  float rimStrength = 0.03F;
-  float roughness = 0.72F;
-  float metallic = 0.00F;
-  float exposure = 0.86F;
-  float fogDensity = 0.003F;
-  float saturation = 1.00F;
-  float gamma = 2.2F;
-};
-
-const CadVisualPolicy& LoadCadVisualPolicy() {
-  static const CadVisualPolicy policy = []() {
-    CadVisualPolicy out;
-    out.enableFrustumCulling = GetEnvBool("CAD_FRUSTUM_CULLING", out.enableFrustumCulling);
-    out.keyLightIntensity = std::clamp(GetEnvFloat("CAD_KEY_LIGHT_INTENSITY", out.keyLightIntensity), 0.0F, 8.0F);
-    out.fillLightIntensity = std::clamp(GetEnvFloat("CAD_FILL_LIGHT_INTENSITY", out.fillLightIntensity), 0.0F, 6.0F);
-    out.ambientStrength = std::clamp(GetEnvFloat("CAD_AMBIENT_STRENGTH", out.ambientStrength), 0.0F, 2.0F);
-    out.depthCueStrength = std::clamp(GetEnvFloat("CAD_DEPTH_CUE_STRENGTH", out.depthCueStrength), 0.0F, 1.5F);
-    out.specularStrength = std::clamp(GetEnvFloat("CAD_SPECULAR_STRENGTH", out.specularStrength), 0.0F, 2.0F);
-    out.rimStrength = std::clamp(GetEnvFloat("CAD_RIM_STRENGTH", out.rimStrength), 0.0F, 2.0F);
-    out.roughness = std::clamp(GetEnvFloat("CAD_ROUGHNESS", out.roughness), 0.03F, 1.0F);
-    out.metallic = std::clamp(GetEnvFloat("CAD_METALLIC", out.metallic), 0.0F, 1.0F);
-    out.exposure = std::clamp(GetEnvFloat("CAD_EXPOSURE", out.exposure), 0.1F, 4.0F);
-    out.fogDensity = std::clamp(GetEnvFloat("CAD_FOG_DENSITY", out.fogDensity), 0.0F, 0.25F);
-    out.saturation = std::clamp(GetEnvFloat("CAD_SATURATION", out.saturation), 0.0F, 2.0F);
-    out.gamma = std::clamp(GetEnvFloat("CAD_GAMMA", out.gamma), 1.0F, 3.2F);
-    return out;
-  }();
-  return policy;
 }
 
 constexpr std::uint64_t kFnv64OffsetBasis = 1469598103934665603ULL;
@@ -281,6 +182,8 @@ struct PreparedCpuMeshBlob {
   std::vector<LodBlob> lods;
   glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
   float boundsRadius = 1.0F;
+  float roughnessHint = -1.0F;
+  float metallicHint = -1.0F;
 };
 
 template <typename T>
@@ -350,6 +253,11 @@ bool TryLoadPreparedCpuMeshCache(
   if (!in || !ReadScalar(in, radius)) {
     return false;
   }
+  float roughnessHint = -1.0F;
+  float metallicHint = -1.0F;
+  if (!ReadScalar(in, roughnessHint) || !ReadScalar(in, metallicHint)) {
+    return false;
+  }
 
   PreparedCpuMeshBlob prepared;
   prepared.lods.reserve(lodCount);
@@ -384,6 +292,8 @@ bool TryLoadPreparedCpuMeshCache(
 
   prepared.boundsCenter = glm::vec3{center[0], center[1], center[2]};
   prepared.boundsRadius = radius;
+  prepared.roughnessHint = roughnessHint;
+  prepared.metallicHint = metallicHint;
   outPrepared = std::move(prepared);
   return true;
 }
@@ -423,7 +333,9 @@ void StorePreparedCpuMeshCache(
     return;
   }
   out.write(reinterpret_cast<const char*>(center.data()), static_cast<std::streamsize>(center.size() * sizeof(float)));
-  if (!out || !WriteScalar(out, prepared.boundsRadius)) {
+  if (!out || !WriteScalar(out, prepared.boundsRadius) ||
+      !WriteScalar(out, prepared.roughnessHint) ||
+      !WriteScalar(out, prepared.metallicHint)) {
     return;
   }
 
@@ -992,6 +904,9 @@ void CadModelRenderFeature::WireframeMaterialPass::Apply(const MaterialInstance&
 
 CadModelRenderFeature::~CadModelRenderFeature() {
   for (auto& [_, pending] : pendingLoads_) {
+    if (pending.status != nullptr) {
+      pending.status->cancelRequested = true;
+    }
     if (pending.future.valid()) {
       try {
         pending.future.wait();
@@ -1024,9 +939,13 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   geometryProvider_ = &renderer.GetGeometryProvider();
   backend_ = &renderer.GetRenderBackend();
   uploadBudgetPerFrame_ = std::max(1, GetEnvInt("CAD_UPLOADS_PER_FRAME", uploadBudgetPerFrame_));
-  shadowEnabled_ = GetEnvBool("CAD_SHADOWS_ENABLED", true);
-  shadowMapSize_ = std::clamp(GetEnvInt("CAD_SHADOW_MAP_SIZE", shadowMapSize_), 512, 8192);
-  shadowStrength_ = std::clamp(GetEnvFloat("CAD_SHADOW_STRENGTH", shadowStrength_), 0.0F, 1.0F);
+  const CadShadowPolicy& shadowPolicy = LoadCadShadowPolicy();
+  shadowEnabled_ = shadowPolicy.enabled;
+  shadowMapSize_ = shadowPolicy.mapSize;
+  shadowStrength_ = shadowPolicy.strength;
+  shadowPcfRadius_ = shadowPolicy.pcfRadius;
+  shadowCascadeCount_ = shadowPolicy.cascadeCount;
+  shadowCascadeSplitM_ = shadowPolicy.cascadeSplitDistanceM;
   if (initialized_) {
     return true;
   }
@@ -1040,6 +959,34 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     return;
   }
   uploadsThisFrame_ = 0;
+
+  if (GetEnvBool("CAD_CANCEL_PENDING_LOADS", false)) {
+    for (auto& [_, pending] : pendingLoads_) {
+      if (pending.status != nullptr) {
+        pending.status->cancelRequested = true;
+      }
+    }
+  }
+
+  if (context.diagnosticsWriter != nullptr) {
+    float progressSum = 0.0F;
+    int progressCount = 0;
+    int failedCount = static_cast<int>(failedLoads_.size());
+    for (const auto& [_, pending] : pendingLoads_) {
+      if (pending.status != nullptr) {
+        progressSum += pending.status->progress.load();
+        ++progressCount;
+        if (pending.status->failed.load()) {
+          ++failedCount;
+        }
+      }
+    }
+    const float avgProgress = progressCount > 0 ? (progressSum / static_cast<float>(progressCount)) : 0.0F;
+    context.diagnosticsWriter->RecordCounter("cad.loads.active", static_cast<double>(pendingLoads_.size()));
+    context.diagnosticsWriter->RecordCounter("cad.loads.failed", static_cast<double>(failedCount));
+    context.diagnosticsWriter->RecordCounter("cad.loads.progress_pct", static_cast<double>(avgProgress * 100.0F));
+    context.diagnosticsWriter->RecordCounter("cad.uploads.pending", static_cast<double>(pendingGpuUploads_.size()));
+  }
 
   if (renderPass_ == RenderPass::Opaque) {
     backend_->SetBlendEnabled(false);
@@ -1074,12 +1021,18 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     const GpuMesh::LodGpu* lod = nullptr;
     glm::mat4 model{1.0F};
     glm::vec4 color{1.0F};
+    float roughness = 0.72F;
+    float metallic = 0.0F;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
   };
   std::vector<DrawItem> drawItems;
   drawItems.reserve(256);
+  std::vector<glm::vec3> drawCenters;
+  std::vector<float> drawRadii;
+  drawCenters.reserve(256);
+  drawRadii.reserve(256);
 
   for (const auto& command : context.commandBuffer) {
     std::visit(
@@ -1117,9 +1070,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
               const float maxScale =
                   std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
               const float worldBoundsRadius = std::max(mesh->boundsRadius * std::max(maxScale, 1e-4F), 1e-4F);
-              if (!cad::IsSphereVisible(frustumPlanes, worldBoundsCenter, worldBoundsRadius)) {
-                return;
-              }
+              drawCenters.push_back(worldBoundsCenter);
+              drawRadii.push_back(worldBoundsRadius);
             }
 
             const glm::mat4 mvp = context.viewProjection * model;
@@ -1131,12 +1083,57 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
                  .lod = &lod,
                  .model = model,
                  .color = instance.color,
+                 .roughness =
+                     (instance.roughnessOverride >= 0.0F
+                          ? instance.roughnessOverride
+                          : (mesh->materialHints.roughness >= 0.0F ? mesh->materialHints.roughness : visualPolicy.roughness)),
+                 .metallic =
+                     (instance.metallicOverride >= 0.0F
+                          ? instance.metallicOverride
+                          : (mesh->materialHints.metallic >= 0.0F ? mesh->materialHints.metallic : visualPolicy.metallic)),
                  .useAssetColor = instance.useAssetColor,
                  .wireframe = instance.wireframe,
                  .mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F});
           }
         },
         command);
+  }
+
+  if (visualPolicy.enableFrustumCulling && !drawItems.empty()) {
+    std::vector<DrawItem> filtered;
+    filtered.reserve(drawItems.size());
+    if (visualPolicy.enableBroadphase) {
+      cad::Aabb frustumAabb;
+      if (cad::TryExtractFrustumAabb(context.viewProjection, frustumAabb)) {
+        cad::UniformGridBroadphase broadphase(visualPolicy.broadphaseCellSizeM);
+        for (std::size_t i = 0; i < drawItems.size(); ++i) {
+          broadphase.Insert(cad::BoundingSphereRef{drawCenters[i], drawRadii[i], i});
+        }
+        std::vector<std::size_t> candidates;
+        broadphase.QueryAabb(frustumAabb, candidates);
+        for (const std::size_t index : candidates) {
+          if (index >= drawItems.size()) {
+            continue;
+          }
+          if (cad::IsSphereVisible(frustumPlanes, drawCenters[index], drawRadii[index])) {
+            filtered.push_back(drawItems[index]);
+          }
+        }
+      } else {
+        for (std::size_t i = 0; i < drawItems.size(); ++i) {
+          if (cad::IsSphereVisible(frustumPlanes, drawCenters[i], drawRadii[i])) {
+            filtered.push_back(drawItems[i]);
+          }
+        }
+      }
+    } else {
+      for (std::size_t i = 0; i < drawItems.size(); ++i) {
+        if (cad::IsSphereVisible(frustumPlanes, drawCenters[i], drawRadii[i])) {
+          filtered.push_back(drawItems[i]);
+        }
+      }
+    }
+    drawItems.swap(filtered);
   }
 
   if (drawItems.empty()) {
@@ -1238,9 +1235,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniformMat4(uLightViewProjectionLoc_, &lightViewProjection[0][0]);
   backend_->SetUniform1i(uShadowEnabledLoc_, (shadowEnabled_ && shadowFbo_ != 0) ? 1 : 0);
   backend_->SetUniform1f(uShadowStrengthLoc_, shadowStrength_);
+  backend_->SetUniform1i(uShadowPcfRadiusLoc_, shadowPcfRadius_);
+  backend_->SetUniform1i(uShadowCascadeCountLoc_, shadowCascadeCount_);
+  backend_->SetUniform1f(uShadowCascadeSplitMLoc_, shadowCascadeSplitM_);
   backend_->SetActiveTextureUnit(3);
   backend_->BindTexture2D(shadowDepthTexture_.Get());
   backend_->SetUniform1i(uShadowMapLoc_, 3);
+  backend_->SetActiveTextureUnit(4);
+  backend_->BindTexture2D(shadowDepthTexture_.Get());
+  backend_->SetUniform1i(uShadowMapFarLoc_, 4);
 
   struct BatchKey {
     const GpuMesh::LodGpu* lod = nullptr;
@@ -1248,12 +1251,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     std::uint32_t colorG = 0;
     std::uint32_t colorB = 0;
     std::uint32_t colorA = 0;
+    std::uint32_t roughness = 0;
+    std::uint32_t metallic = 0;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
     bool operator==(const BatchKey& other) const {
       return lod == other.lod &&
              colorR == other.colorR && colorG == other.colorG && colorB == other.colorB && colorA == other.colorA &&
+             roughness == other.roughness && metallic == other.metallic &&
              useAssetColor == other.useAssetColor && wireframe == other.wireframe &&
              mirroredWinding == other.mirroredWinding;
     }
@@ -1265,6 +1271,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       h ^= static_cast<std::size_t>(key.colorG) * 2166136261U;
       h ^= static_cast<std::size_t>(key.colorB) * 709607U;
       h ^= static_cast<std::size_t>(key.colorA) * 1469598103U;
+      h ^= static_cast<std::size_t>(key.roughness) * 1099511628211ULL;
+      h ^= static_cast<std::size_t>(key.metallic) * 1315423911U;
       h ^= key.useAssetColor ? 0x1U : 0x0U;
       h ^= key.wireframe ? 0x2U : 0x0U;
       h ^= key.mirroredWinding ? 0x4U : 0x0U;
@@ -1274,6 +1282,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   struct DrawBatch {
     glm::vec4 color{1.0F};
+    float roughness = 0.72F;
+    float metallic = 0.0F;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
@@ -1290,12 +1300,16 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         .colorG = FloatBits(item.color.g),
         .colorB = FloatBits(item.color.b),
         .colorA = FloatBits(item.color.a),
+        .roughness = FloatBits(item.roughness),
+        .metallic = FloatBits(item.metallic),
         .useAssetColor = item.useAssetColor,
         .wireframe = item.wireframe,
         .mirroredWinding = item.mirroredWinding,
     };
     auto& batch = batches[key];
     batch.color = item.color;
+    batch.roughness = item.roughness;
+    batch.metallic = item.metallic;
     batch.useAssetColor = item.useAssetColor;
     batch.wireframe = item.wireframe;
     batch.mirroredWinding = item.mirroredWinding;
@@ -1311,6 +1325,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     material.definition.baseColor = batch.color;
     material.definition.wireframe = batch.wireframe;
     materialPipeline_.Apply(material);
+    backend_->SetUniform1f(uRoughnessLoc_, batch.roughness);
+    backend_->SetUniform1f(uMetallicLoc_, batch.metallic);
     backend_->SetUniform1f(uUseAssetColorLoc_, batch.useAssetColor ? 1.0F : 0.0F);
 
     if (batch.mirroredWinding) {
@@ -1381,8 +1397,12 @@ bool CadModelRenderFeature::CreateShader() {
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
   uLightViewProjectionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjection");
   uShadowMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowMap");
+  uShadowMapFarLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowMapFar");
   uShadowEnabledLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowEnabled");
   uShadowStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowStrength");
+  uShadowPcfRadiusLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowPcfRadius");
+  uShadowCascadeCountLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeCount");
+  uShadowCascadeSplitMLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeSplitM");
 
   constexpr const char* shadowVsSrc = R"(
 #version 330 core
@@ -1464,7 +1484,10 @@ void main() {}
          uExposureLoc_ >= 0 && uFogDensityLoc_ >= 0 && uSaturationLoc_ >= 0 &&
          uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0 &&
          uLightViewProjectionLoc_ >= 0 && uShadowMapLoc_ >= 0 &&
-         uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 && uShadowLightMvpLoc_ >= 0;
+         uShadowMapFarLoc_ >= 0 &&
+         uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 &&
+         uShadowPcfRadiusLoc_ >= 0 && uShadowCascadeCountLoc_ >= 0 && uShadowCascadeSplitMLoc_ >= 0 &&
+         uShadowLightMvpLoc_ >= 0;
 }
 
 unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const char* source) {
@@ -1542,6 +1565,7 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
 
   prepared.boundsCenter = center;
   prepared.boundsRadius = radius;
+  prepared.materialHints = cpu.materialHints;
   return prepared;
 }
 
@@ -1567,6 +1591,7 @@ bool CadModelRenderFeature::UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu,
 
   gpu.boundsCenter = cpu.boundsCenter;
   gpu.boundsRadius = cpu.boundsRadius;
+  gpu.materialHints = cpu.materialHints;
   return !gpu.lods.empty();
 }
 
@@ -1635,6 +1660,7 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
   gpu.lods.clear();
   gpu.boundsCenter = glm::vec3{0.0F, 0.0F, 0.0F};
   gpu.boundsRadius = 1.0F;
+  gpu.materialHints = PositionNormalMesh::MaterialHints{};
 }
 
 std::size_t CadModelRenderFeature::SelectLodLevel(
@@ -1679,7 +1705,10 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     return &cached->second;
   }
   if (failedLoads_.find(assetPath) != failedLoads_.end()) {
-    return nullptr;
+    if (!GetEnvBool("CAD_AUTO_RETRY_FAILED_LOADS", false)) {
+      return nullptr;
+    }
+    failedLoads_.erase(assetPath);
   }
   if (geometryProvider_ == nullptr) {
     return nullptr;
@@ -1689,7 +1718,16 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   if (pending != pendingLoads_.end() &&
       pending->second.future.valid() &&
       pending->second.future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-    PreparedCpuMesh prepared = pending->second.future.get();
+    PreparedCpuMesh prepared;
+    try {
+      prepared = pending->second.future.get();
+    } catch (...) {
+      prepared = PreparedCpuMesh{};
+    }
+    if (pending->second.status != nullptr) {
+      pending->second.status->completed = true;
+      pending->second.status->progress = 1.0F;
+    }
     pendingLoads_.erase(pending);
     if (prepared.lods.empty()) {
       failedLoads_.insert(assetPath);
@@ -1762,16 +1800,37 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   }
 
   IGeometryProvider* provider = geometryProvider_;
+  auto status = std::make_shared<PendingLoad::Status>();
+  status->progress = 0.02F;
+  {
+    std::scoped_lock lock(status->stageMutex);
+    status->stage = "queued";
+  }
   pendingLoads_.emplace(
       assetPath,
       PendingLoad{
-          std::async(std::launch::async, [provider, assetPath]() {
+          std::async(std::launch::async, [provider, assetPath, status]() {
+            auto setStage = [&](const char* stage, const float progress) {
+              if (status != nullptr) {
+                status->progress = progress;
+                std::scoped_lock lock(status->stageMutex);
+                status->stage = stage;
+              }
+            };
+            auto wasCancelled = [&]() {
+              return status != nullptr && status->cancelRequested.load();
+            };
+
             const CadLodPolicy& policy = LoadCadLodPolicy();
+            setStage("cache_lookup", 0.10F);
             PreparedCpuMeshBlob cachedBlob;
             if (TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob)) {
+              setStage("cache_hit", 0.70F);
               PreparedCpuMesh prepared;
               prepared.boundsCenter = cachedBlob.boundsCenter;
               prepared.boundsRadius = cachedBlob.boundsRadius;
+              prepared.materialHints.roughness = cachedBlob.roughnessHint;
+              prepared.materialHints.metallic = cachedBlob.metallicHint;
               prepared.lods.reserve(cachedBlob.lods.size());
               for (auto& cachedLod : cachedBlob.lods) {
                 PreparedCpuMesh::LodCpu lod;
@@ -1780,19 +1839,38 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 prepared.lods.push_back(std::move(lod));
               }
               std::cerr << "CAD prepared cache hit: " << assetPath << "\n";
+              setStage("completed", 1.00F);
               return prepared;
             }
             std::cerr << "CAD prepared cache miss: " << assetPath << "\n";
-
-            PositionNormalMesh cpu;
-            if (provider == nullptr || !provider->GetCadMesh(assetPath, cpu)) {
+            if (wasCancelled()) {
+              setStage("cancelled", 1.0F);
               return PreparedCpuMesh{};
             }
+
+            setStage("import", 0.25F);
+            PositionNormalMesh cpu;
+            if (provider == nullptr || !provider->GetCadMesh(assetPath, cpu)) {
+              setStage("import_failed", 1.0F);
+              if (status != nullptr) {
+                status->failed = true;
+              }
+              return PreparedCpuMesh{};
+            }
+            if (wasCancelled()) {
+              setStage("cancelled", 1.0F);
+              return PreparedCpuMesh{};
+            }
+
+            setStage("prepare", 0.60F);
             PreparedCpuMesh prepared = PrepareCpuMesh(cpu);
             if (!prepared.lods.empty()) {
+              setStage("store_cache", 0.85F);
               PreparedCpuMeshBlob blob;
               blob.boundsCenter = prepared.boundsCenter;
               blob.boundsRadius = prepared.boundsRadius;
+              blob.roughnessHint = prepared.materialHints.roughness;
+              blob.metallicHint = prepared.materialHints.metallic;
               blob.lods.reserve(prepared.lods.size());
               for (const auto& lod : prepared.lods) {
                 PreparedCpuMeshBlob::LodBlob cachedLod;
@@ -1802,8 +1880,13 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
               }
               StorePreparedCpuMeshCache(assetPath, policy, blob);
             }
+            if (prepared.lods.empty() && status != nullptr) {
+              status->failed = true;
+            }
+            setStage("completed", 1.00F);
             return prepared;
-          })});
+          }),
+          status});
   std::cerr << "CAD loading started: " << assetPath << "\n";
   return nullptr;
 }

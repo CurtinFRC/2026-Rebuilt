@@ -22,7 +22,7 @@ class GenericSeasonModelBuilderTemplate final : public ISceneModelBuilder {
     frame.drawGrid = true;
     frame.drawAxes = true;
 
-    // TODO: Map bundle.snapshot to entities/primitives for your season:
+    // Map bundle.snapshot to entities/primitives for your season:
     // sceneGraph.AddNode({
     //   .id = "robot_pose",
     //   .pass = RenderPass::Opaque,
@@ -35,7 +35,11 @@ class GenericSeasonModelBuilderTemplate final : public ISceneModelBuilder {
     // sceneGraph.AddNode({
     //   .id = "robot_mesh",
     //   .pass = RenderPass::Opaque,
-    //   .payload = MeshInstancePrimitive{.assetPath = "models/robot.glb", .position = {0.0F, 0.0F, 0.0F}},
+    //   .payload = MeshInstancePrimitive{
+    //      .assetPath = "models/robot.glb",
+    //      .position = {0.0F, 0.0F, 0.0F},
+    //      .roughnessOverride = 0.55F,
+    //      .metallicOverride = 0.10F},
     //   .parentId = "robot_pose"
     // });
     // frame.entities.push_back({.id = "fov", .pass = RenderPass::Transparent, .payload = LinePrimitive{...}});

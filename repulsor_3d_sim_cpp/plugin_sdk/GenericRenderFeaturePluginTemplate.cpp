@@ -1,4 +1,5 @@
 #include "repulsor3d/render/RenderFeaturePlugin.hpp"
+#include "repulsor3d/plugins/PluginManifest.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -35,6 +36,18 @@ class GenericRenderFeaturePluginTemplate final : public IRenderFeaturePlugin {
 
 extern "C" REPULSOR_RENDER_PLUGIN_EXPORT int repulsor3d_query_render_feature_plugin_abi_version() {
   return repulsor3d::kRenderFeaturePluginAbiVersion;
+}
+
+extern "C" REPULSOR_RENDER_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* repulsor3d_query_plugin_manifest_v1() {
+  static const repulsor3d::PluginManifestV1 manifest{
+      .structSize = static_cast<std::int32_t>(sizeof(repulsor3d::PluginManifestV1)),
+      .pluginKind = static_cast<std::int32_t>(repulsor3d::PluginKind::RenderFeature),
+      .abiVersion = repulsor3d::kRenderFeaturePluginAbiVersion,
+      .minHostAbiVersion = repulsor3d::kRenderFeaturePluginAbiVersion,
+      .maxHostAbiVersion = repulsor3d::kRenderFeaturePluginAbiVersion,
+      .pluginId = "generic_render_feature_plugin",
+      .pluginVersion = "1.0.0"};
+  return &manifest;
 }
 
 extern "C" REPULSOR_RENDER_PLUGIN_EXPORT repulsor3d::IRenderFeaturePlugin* repulsor3d_create_render_feature_plugin() {

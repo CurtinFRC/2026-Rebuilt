@@ -1,6 +1,8 @@
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <cstdio>
 
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/domain/SnapshotDomainAdapter.hpp"
@@ -119,6 +121,47 @@ int RunCoordinateFrameMapperTests() {
   return 0;
 }
 
+int RunCoordinateCalibrationProfileTests() {
+  const std::string profilePath = "test_coord_profile.json";
+  {
+    std::ofstream out(profilePath);
+    out << R"({
+      "defaults": {
+        "scaleMPerUnit": 1.0,
+        "zScaleMPerUnit": 1.0
+      },
+      "profiles": {
+        "practice_field": {
+          "originXM": 3.0,
+          "originYM": 0.5,
+          "rotationDeg": 180.0,
+          "scaleMPerUnit": 1.0
+        }
+      }
+    })";
+  }
+
+  repulsor3d::ViewerConfig cfg;
+  cfg.incomingCoordFrame = "custom";
+  cfg.incomingCoordCalibrationProfilePath = profilePath;
+  cfg.incomingCoordCalibrationProfileName = "practice_field";
+  repulsor3d::SnapshotDomainAdapter adapter(cfg);
+  repulsor3d::SnapshotBundle bundle;
+  bundle.snapshot.pose = repulsor3d::Pose2D{.x = 0.0, .y = 0.0, .thetaRad = 0.0};
+  const auto renderSnap = adapter.BuildRenderSnapshot(bundle, 0.02);
+  std::remove(profilePath.c_str());
+
+  if (!renderSnap.pose.has_value()) {
+    std::cerr << "Calibration profile test expected pose output\n";
+    return 11;
+  }
+  if (!NearlyEqual(renderSnap.pose->x, 3.0) || !NearlyEqual(renderSnap.pose->y, 0.5)) {
+    std::cerr << "Calibration profile transform mismatch\n";
+    return 12;
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -129,6 +172,9 @@ int main() {
     return rc;
   }
   if (const int rc = RunCoordinateFrameMapperTests(); rc != 0) {
+    return rc;
+  }
+  if (const int rc = RunCoordinateCalibrationProfileTests(); rc != 0) {
     return rc;
   }
 

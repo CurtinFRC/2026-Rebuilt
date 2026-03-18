@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
+#include "repulsor3d/plugins/PluginManifest.hpp"
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -166,6 +167,7 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
   auto* createFnRaw = ResolveSymbol(handle, "repulsor3d_create_season_module");
   auto* destroyFnRaw = ResolveSymbol(handle, "repulsor3d_destroy_season_module");
   auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_season_module_abi_version");
+  auto* queryManifestRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1");
   if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
@@ -174,9 +176,18 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
   const auto createFn = reinterpret_cast<CreateSeasonModuleAbiFn>(createFnRaw);
   const auto destroyFn = reinterpret_cast<DestroySeasonModuleAbiFn>(destroyFnRaw);
   const auto queryAbiVersionFn = reinterpret_cast<QuerySeasonModuleAbiVersionFn>(queryAbiVersionRaw);
+  const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(queryManifestRaw);
   if (queryAbiVersionFn == nullptr || queryAbiVersionFn() != kSeasonModuleAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (queryManifestFn != nullptr) {
+    const PluginManifestV1* manifest = queryManifestFn();
+    if (manifest == nullptr ||
+        !IsPluginManifestCompatible(*manifest, PluginKind::SeasonModule, kSeasonModuleAbiVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
 
   ISeasonModule* module = createFn();

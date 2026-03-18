@@ -69,12 +69,123 @@ bool ReadDynamicChannel(const nlohmann::json& node, NtSchemaSet::DynamicChannelS
   return true;
 }
 
+bool ValidateGroupSchemaNode(const nlohmann::json& node) {
+  if (!node.is_object()) {
+    return false;
+  }
+  const auto validateFieldArray = [&](const char* key) {
+    const auto it = node.find(key);
+    if (it == node.end()) {
+      return true;
+    }
+    if (!it->is_array()) {
+      return false;
+    }
+    for (const auto& field : *it) {
+      if (!field.is_object()) {
+        return false;
+      }
+    }
+    return true;
+  };
+  return validateFieldArray("fields");
+}
+
 }  // namespace
+
+bool ValidateSchemaSetFile(const std::string& path, std::string* error) {
+  if (path.empty()) {
+    if (error != nullptr) {
+      *error = "schema file path is empty";
+    }
+    return false;
+  }
+  std::ifstream in(path);
+  if (!in.is_open()) {
+    if (error != nullptr) {
+      *error = "failed to open schema file: " + path;
+    }
+    return false;
+  }
+
+  nlohmann::json root;
+  try {
+    in >> root;
+  } catch (...) {
+    if (error != nullptr) {
+      *error = "failed to parse schema JSON";
+    }
+    return false;
+  }
+  if (!root.is_object()) {
+    if (error != nullptr) {
+      *error = "schema file root must be an object";
+    }
+    return false;
+  }
+
+  const auto validateGroupIfPresent = [&](const char* key) {
+    const auto it = root.find(key);
+    if (it == root.end()) {
+      return true;
+    }
+    return ValidateGroupSchemaNode(*it);
+  };
+
+  if (!validateGroupIfPresent("fieldVision") ||
+      !validateGroupIfPresent("repulsor") ||
+      !validateGroupIfPresent("cameras")) {
+    if (error != nullptr) {
+      *error = "one or more fixed schema groups are invalid";
+    }
+    return false;
+  }
+
+  const auto channelsIt = root.find("channels");
+  if (channelsIt != root.end()) {
+    if (!channelsIt->is_array()) {
+      if (error != nullptr) {
+        *error = "channels must be an array";
+      }
+      return false;
+    }
+    for (const auto& channelNode : *channelsIt) {
+      if (!channelNode.is_object()) {
+        if (error != nullptr) {
+          *error = "channels entries must be objects";
+        }
+        return false;
+      }
+      const std::string channelName = channelNode.value("channel", std::string{});
+      if (channelName.empty()) {
+        if (error != nullptr) {
+          *error = "channel entry missing non-empty 'channel'";
+        }
+        return false;
+      }
+      if (!ValidateGroupSchemaNode(channelNode)) {
+        if (error != nullptr) {
+          *error = "channel schema invalid for '" + channelName + "'";
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 bool LoadSchemaSetFromFile(const std::string& path, NtSchemaSet& inOutSet, std::string* error) {
   if (path.empty()) {
     if (error != nullptr) {
       *error = "schema file path is empty";
+    }
+    return false;
+  }
+
+  std::string validationError;
+  if (!ValidateSchemaSetFile(path, &validationError)) {
+    if (error != nullptr) {
+      *error = validationError;
     }
     return false;
   }

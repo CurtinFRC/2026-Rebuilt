@@ -1,0 +1,10 @@
+drawAxes=1
+drawFieldImage=0
+drawGrid=1
+entities=5
+entity id=field_cad pass=1 type=mesh asset=field_2026rebuilt.gltf
+entity id=robot_cad_active pass=1 type=mesh asset=field_2026rebuilt.gltf
+entity id=robot_cad_final pass=1 type=mesh asset=field_2026rebuilt.gltf
+entity id=robot_cad_live pass=1 type=mesh asset=field_2026rebuilt.gltf
+entity id=robot_pose_live pass=1 type=box sx=0.85 sy=0.85 sz=0.35
+overlays=8

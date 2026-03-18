@@ -353,6 +353,8 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
         .useAssetColor = true,
         .centerOnMeshBounds = true,
         .wireframe = false,
+        .roughnessOverride = 0.82F,
+        .metallicOverride = 0.03F,
         .pass = RenderPass::Opaque,
     };
     sceneGraph.AddNode(
@@ -390,6 +392,8 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
         .scale = glm::vec3{robotCadScaleM_, robotCadScaleM_, robotCadScaleM_},
         .color = color,
         .wireframe = false,
+        .roughnessOverride = 0.55F,
+        .metallicOverride = 0.08F,
         .pass = RenderPass::Opaque,
     };
     RenderEntity entity{

@@ -21,6 +21,7 @@ class GenericRenderFeatureTemplate final : public IRenderFeature {
     // Example usage:
     // for (const auto& cmd : context.commandBuffer) { ...filter by Draw*Command.pass... }
     // if (context.frame.drawGrid) { drawApi.DrawGrid(context.viewProjection); }
+    // context.diagnosticsWriter can record counters/timings for debug panel sections.
     // drawApi.DrawOverlay(context.viewportWidth, context.viewportHeight, context.frame.overlayLines);
     (void)context;
     (void)drawApi;

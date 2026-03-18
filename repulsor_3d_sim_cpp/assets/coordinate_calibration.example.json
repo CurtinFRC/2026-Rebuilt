@@ -1,0 +1,20 @@
+{
+  "defaults": {
+    "scaleMPerUnit": 1.0,
+    "zScaleMPerUnit": 1.0
+  },
+  "profiles": {
+    "default": {
+      "originXM": 0.0,
+      "originYM": 0.0,
+      "rotationDeg": 0.0
+    },
+    "practice_field": {
+      "originXM": 3.0,
+      "originYM": 0.5,
+      "rotationDeg": 180.0,
+      "scaleMPerUnit": 1.0,
+      "zScaleMPerUnit": 1.0
+    }
+  }
+}

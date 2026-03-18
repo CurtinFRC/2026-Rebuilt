@@ -99,6 +99,7 @@ The renderer is now split into a backend + season-model pipeline:
   - optional JSON overrides for draw flags and static overlay widgets
   - loaded from `SCENE_DESCRIPTOR_PATH` or `assets/scenes/<sceneProfile>.json`
   - supports static primitives/meshes/entities for season-specific data-driven scene composition
+  - includes structural JSON validation before load (invalid descriptor shapes are rejected)
 - Multi-pass feature pipeline:
   - default pipeline is now staged: `world -> geometry_opaque -> cad_opaque -> geometry_transparent -> cad_transparent -> overlay`
   - per-primitive `RenderPass` tagging controls pass placement
@@ -190,6 +191,7 @@ Each group may include:
 - `autoCaptureAdditionalScalars`, `extraKeyPrefix`
 
 When hot reload is enabled, changes to this file are picked up at runtime.
+Schema files are structurally validated before applying overrides.
 
 ## Environment Variables
 
@@ -210,6 +212,8 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
 - `SHOW_DEBUG_PANEL` (default `true`; enables diagnostics counters/panel)
 - `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
+- `INCOMING_COORD_CALIBRATION_PROFILE_PATH` (optional JSON calibration profile file path)
+- `INCOMING_COORD_CALIBRATION_PROFILE_NAME` (optional profile key inside calibration file; default `default`)
 - `INCOMING_COORD_ORIGIN_X_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
 - `INCOMING_COORD_ORIGIN_Y_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
 - `INCOMING_COORD_ROTATION_DEG` (default `0.0`)
@@ -227,7 +231,14 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `CAD_LOD_SCREEN_RADIUS_DECAY` (default `0.5`)
 - `CAD_PREPARED_CACHE_DIR` (optional override for cached prepared CAD LOD data; default is under `%LOCALAPPDATA%/repulsor_3d_sim_cpp/cad_prepared_cache` on Windows)
 - `CAD_UPLOADS_PER_FRAME` (default `1`; caps CAD GPU uploads per frame to reduce hitching on heavy assets)
+- `CAD_CANCEL_PENDING_LOADS` (default `false`; when `true`, marks pending CAD loads for cancellation)
+- `CAD_AUTO_RETRY_FAILED_LOADS` (default `false`; retries failed CAD loads when requested again)
 - `CAD_FRUSTUM_CULLING` (default `true`)
+- `CAD_BROADPHASE_ENABLED` (default `true`; enables CAD broadphase prefilter before frustum tests)
+- `CAD_BROADPHASE_CELL_SIZE_M` (default `3.0`; broadphase uniform-grid cell size)
+- `CAD_SHADOW_QUALITY` (`low|medium|high|ultra`, default `high`)
+- `CAD_SHADOW_CASCADES` (default `1`; scaffold path supports up to `2`)
+- `CAD_SHADOW_CASCADE_SPLIT_M` (default `12.0`; split distance for near/far cascade selection)
 - `CAD_KEY_LIGHT_INTENSITY` (default `1.35`)
 - `CAD_FILL_LIGHT_INTENSITY` (default `0.20`)
 - `CAD_AMBIENT_STRENGTH` (default `0.12`)
@@ -298,11 +309,14 @@ This creates:
 - Sample plugin SDK template source:
   - `plugin_sdk/GenericSeasonPluginTemplate.cpp`
   - `plugin_sdk/GenericDataSourcePluginTemplate.cpp`
+  - `plugin_sdk/GenericRenderFeaturePluginTemplate.cpp`
   - `plugin_sdk/CMakeLists.txt`
 - ABI contract now requires plugin export:
   - `repulsor3d_query_season_module_abi_version`
   - `repulsor3d_create_season_module`
   - `repulsor3d_destroy_season_module`
+- Optional but recommended ABI metadata export (used for plugin-kind/version negotiation):
+  - `repulsor3d_query_plugin_manifest_v1`
 - CTest includes plugin ABI smoke test:
   - `repulsor_3d_sim_cpp_plugin_abi_tests`
   - `repulsor_3d_sim_cpp_datasource_plugin_abi_tests`
@@ -322,6 +336,12 @@ Render benchmark target:
 
 ```powershell
 .\tools\benchmark.ps1 -Config Release
+```
+
+Headless regression target:
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure -R repulsor_3d_sim_cpp_render_regression_tests
 ```
 
 ## Clangd / LSP

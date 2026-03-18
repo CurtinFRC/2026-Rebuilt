@@ -23,6 +23,7 @@ struct RenderFeatureContext {
   const RenderSceneFrame& frame;
   const RenderCommandBuffer& commandBuffer;
   const DiagnosticsSnapshot* diagnostics = nullptr;
+  DiagnosticsService* diagnosticsWriter = nullptr;
   bool showDebugPanel = true;
   bool showDebugCounters = true;
   bool showDebugCpu = true;

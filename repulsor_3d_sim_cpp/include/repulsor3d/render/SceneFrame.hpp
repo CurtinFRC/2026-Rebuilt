@@ -48,6 +48,12 @@ struct MeshInstancePrimitive {
   bool useAssetColor = false;
   bool centerOnMeshBounds = false;
   bool wireframe = false;
+  // Optional material overrides/scaffold for advanced rendering pipelines.
+  float roughnessOverride = -1.0F;
+  float metallicOverride = -1.0F;
+  float normalStrength = 1.0F;
+  std::string albedoTexturePath;
+  std::string normalTexturePath;
   RenderPass pass = RenderPass::Opaque;
 };
 
