@@ -224,6 +224,10 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
+- `CAD_PERF_AUTO_QUALITY` (default `true`; adaptive CAD quality based on frame time)
+- `CAD_PERF_TARGET_FRAME_MS` (default `16.7`; adaptive target frame time)
+- `CAD_AUTO_MAX_LOD_BIAS` (default `1`; max automatic CAD LOD step-down)
+- `CAD_SHADOW_LOD_BIAS` (default `1`; shadow-pass LOD bias to reduce shadow cost)
 - `SHOW_DEBUG_PANEL` (default `true`; enables diagnostics counters/panel)
 - `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
 - `INCOMING_COORD_CALIBRATION_PROFILE_PATH` (optional JSON calibration profile file path)

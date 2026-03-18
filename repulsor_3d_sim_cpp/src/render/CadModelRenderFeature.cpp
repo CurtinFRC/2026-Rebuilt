@@ -977,6 +977,10 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   shadowCascadeCount_ = std::clamp(shadowPolicy.cascadeCount, 1, 2);
   shadowCascadeSplitM_ = shadowPolicy.cascadeSplitDistanceM;
   triplanarScale_ = std::max(1e-4F, GetEnvFloat("CAD_TRIPLANAR_SCALE", triplanarScale_));
+  autoQualityEnabled_ = GetEnvBool("CAD_PERF_AUTO_QUALITY", autoQualityEnabled_);
+  perfTargetFrameMs_ = std::clamp(GetEnvFloat("CAD_PERF_TARGET_FRAME_MS", perfTargetFrameMs_), 8.0F, 66.0F);
+  maxAutoLodBias_ = std::clamp(GetEnvInt("CAD_AUTO_MAX_LOD_BIAS", maxAutoLodBias_), 0, 3);
+  shadowLodBias_ = std::clamp(GetEnvInt("CAD_SHADOW_LOD_BIAS", shadowLodBias_), 0, 3);
   StartLoadWorker();
   if (initialized_) {
     return true;
@@ -1091,9 +1095,32 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uSaturationLoc_, visualPolicy.saturation);
   backend_->SetUniform1f(uGammaLoc_, visualPolicy.gamma);
 
+  int adaptiveLodBias = 0;
+  bool reduceShadowQuality = false;
+  double frameAverageMs = 0.0;
+  if (context.diagnostics != nullptr) {
+    frameAverageMs = context.diagnostics->frameAverageMilliseconds > 0.0
+                         ? context.diagnostics->frameAverageMilliseconds
+                         : context.diagnostics->frameMilliseconds;
+  }
+  if (autoQualityEnabled_ && frameAverageMs > 0.0) {
+    if (frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.35F)) {
+      adaptiveLodBias = maxAutoLodBias_;
+    } else if (frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.15F)) {
+      adaptiveLodBias = std::min(1, maxAutoLodBias_);
+    }
+    reduceShadowQuality = frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.25F);
+  }
+  if (context.diagnosticsWriter != nullptr) {
+    context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
+    context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter("cad.auto.frame_ms", frameAverageMs);
+  }
+
   struct DrawItem {
     const GpuMesh* mesh = nullptr;
     const GpuMesh::LodGpu* lod = nullptr;
+    const GpuMesh::LodGpu* shadowLod = nullptr;
     const GpuTexture* albedoTexture = nullptr;
     const GpuTexture* normalTexture = nullptr;
     glm::mat4 model{1.0F};
@@ -1154,7 +1181,17 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
             const glm::mat4 mvp = context.viewProjection * model;
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
-            const auto& lod = mesh->lods[std::min(lodIndex, mesh->lods.size() - 1)];
+            const std::size_t drawLodIndex = std::min(
+                lodIndex + static_cast<std::size_t>(std::max(0, adaptiveLodBias)),
+                mesh->lods.size() - 1);
+            std::size_t shadowLodIndex = std::min(
+                drawLodIndex + static_cast<std::size_t>(std::max(0, shadowLodBias_)),
+                mesh->lods.size() - 1);
+            if (reduceShadowQuality) {
+              shadowLodIndex = std::min(shadowLodIndex + 1, mesh->lods.size() - 1);
+            }
+            const auto& lod = mesh->lods[drawLodIndex];
+            const auto& shadowLod = mesh->lods[shadowLodIndex];
 
             const std::string albedoPath = !instance.albedoTexturePath.empty()
                                                ? instance.albedoTexturePath
@@ -1168,6 +1205,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             drawItems.push_back(
                 {.mesh = mesh,
                  .lod = &lod,
+                 .shadowLod = &shadowLod,
                  .albedoTexture = albedoTexture,
                  .normalTexture = normalTexture,
                  .model = model,
@@ -1282,7 +1320,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   const glm::mat4 lightViewProjection = lightProjNear * lightViewNear;
 
   glm::mat4 lightViewProjectionFar = lightViewProjection;
-  const bool farCascadeRequested = shadowCascadeCount_ > 1;
+  const bool farCascadeRequested = shadowCascadeCount_ > 1 && !reduceShadowQuality;
   if (farCascadeRequested) {
     const glm::vec3 lightEyeFar = sceneCenter - lightDir * (sceneRadius * 2.3F);
     const glm::mat4 lightViewFar = glm::lookAt(lightEyeFar, sceneCenter, glm::vec3{0.0F, 0.0F, 1.0F});
@@ -1312,11 +1350,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     shadowBatches.reserve(drawItems.size());
     for (const auto& item : drawItems) {
       auto it = std::find_if(shadowBatches.begin(), shadowBatches.end(), [&](const ShadowBatch& batch) {
-        return batch.lod == item.lod && batch.mirroredWinding == item.mirroredWinding;
+        return batch.lod == item.shadowLod && batch.mirroredWinding == item.mirroredWinding;
       });
       if (it == shadowBatches.end()) {
         ShadowBatch batch;
-        batch.lod = item.lod;
+        batch.lod = item.shadowLod;
         batch.mirroredWinding = item.mirroredWinding;
         batch.instances.push_back(ToInstanceData(item.model));
         shadowBatches.push_back(std::move(batch));
@@ -1377,7 +1415,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniformMat4(uLightViewProjectionFarLoc_, &lightViewProjectionFarUniform[0][0]);
   backend_->SetUniform1i(uShadowEnabledLoc_, nearShadowReady ? 1 : 0);
   backend_->SetUniform1f(uShadowStrengthLoc_, shadowStrength_);
-  backend_->SetUniform1i(uShadowPcfRadiusLoc_, shadowPcfRadius_);
+  backend_->SetUniform1i(uShadowPcfRadiusLoc_, reduceShadowQuality ? std::max(1, shadowPcfRadius_ - 1) : shadowPcfRadius_);
   backend_->SetUniform1i(uShadowCascadeCountLoc_, farShadowReady ? 2 : 1);
   backend_->SetUniform1f(uShadowCascadeSplitMLoc_, shadowCascadeSplitM_);
   backend_->SetActiveTextureUnit(3);

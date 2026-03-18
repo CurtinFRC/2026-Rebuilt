@@ -213,6 +213,10 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uploadBudgetPerFrame_ = 1;
   int uploadsThisFrame_ = 0;
   float triplanarScale_ = 1.0F;
+  bool autoQualityEnabled_ = true;
+  float perfTargetFrameMs_ = 16.7F;
+  int maxAutoLodBias_ = 1;
+  int shadowLodBias_ = 1;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};
