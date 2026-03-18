@@ -17,9 +17,9 @@ CoordinateFrameMapper::Config BuildCoordinateMapperConfig(const ViewerConfig& cf
   const std::string mode = NormalizeLower(cfg.incomingCoordFrame);
   if (mode == "top_right_negative") {
     return CoordinateFrameMapper::Config{
-        .originXM = static_cast<double>(cfg.fieldLengthM) * 0.5,
-        .originYM = static_cast<double>(cfg.fieldWidthM) * 0.5,
-        .rotationDeg = 0.0,
+        .originXM = -static_cast<double>(cfg.fieldLengthM) * 0.5,
+        .originYM = -static_cast<double>(cfg.fieldWidthM) * 0.5,
+        .rotationDeg = 180.0,
         .scaleMPerUnit = 1.0,
         .zScaleMPerUnit = std::max(1e-6, static_cast<double>(cfg.incomingCoordZScaleMPerUnit))};
   }

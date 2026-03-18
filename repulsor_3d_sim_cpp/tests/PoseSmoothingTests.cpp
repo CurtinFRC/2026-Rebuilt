@@ -95,7 +95,7 @@ int RunCoordinateFrameMapperTests() {
   }
   const double halfLength = static_cast<double>(cfg.fieldLengthM) * 0.5;
   const double halfWidth = static_cast<double>(cfg.fieldWidthM) * 0.5;
-  if (!NearlyEqual(renderSnap.pose->x, halfLength) || !NearlyEqual(renderSnap.pose->y, halfWidth)) {
+  if (!NearlyEqual(renderSnap.pose->x, -halfLength) || !NearlyEqual(renderSnap.pose->y, -halfWidth)) {
     std::cerr << "Coordinate mapper top-right mismatch\n";
     return 8;
   }
@@ -111,7 +111,7 @@ int RunCoordinateFrameMapperTests() {
     std::cerr << "Coordinate mapper bottom-left expected pose output\n";
     return 9;
   }
-  if (!NearlyEqual(renderBottomLeft.pose->x, -halfLength) || !NearlyEqual(renderBottomLeft.pose->y, -halfWidth)) {
+  if (!NearlyEqual(renderBottomLeft.pose->x, halfLength) || !NearlyEqual(renderBottomLeft.pose->y, halfWidth)) {
     std::cerr << "Coordinate mapper bottom-left mismatch\n";
     return 10;
   }
