@@ -1,13 +1,16 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstddef>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <string>
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,6 +26,9 @@
 #include "repulsor3d/render/material/MaterialPipeline.hpp"
 
 namespace repulsor3d {
+namespace cad {
+class UniformGridBroadphase;
+}
 
 class IGeometryProvider;
 class Renderer;
@@ -112,6 +118,12 @@ class CadModelRenderFeature final : public IRenderFeature {
     std::size_t nextLod = 0;
   };
 
+  struct GpuTexture {
+    GlTextureHandle texture;
+    int width = 0;
+    int height = 0;
+  };
+
   bool CreateShader();
   static unsigned int CompileShader(unsigned int type, const char* source);
   static bool LinkShader(GlProgramHandle& program, unsigned int vs, unsigned int fs);
@@ -124,6 +136,10 @@ class CadModelRenderFeature final : public IRenderFeature {
   static bool UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
   static std::size_t SelectLodLevel(const GpuMesh& mesh, const glm::mat4& mvp, int viewportWidth, int viewportHeight);
+  void StartLoadWorker();
+  void StopLoadWorker();
+  void EnqueueLoadTask(std::packaged_task<PreparedCpuMesh()>&& task);
+  const GpuTexture* GetOrLoadTexture(const std::string& assetPath);
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);
 
@@ -154,9 +170,12 @@ class CadModelRenderFeature final : public IRenderFeature {
   MaterialPipeline materialPipeline_;
   GlProgramHandle shadowShader_;
   unsigned int shadowFbo_ = 0;
+  unsigned int shadowFboFar_ = 0;
   GlTextureHandle shadowDepthTexture_;
+  GlTextureHandle shadowDepthTextureFar_;
   int uShadowLightMvpLoc_ = -1;
   int uLightViewProjectionLoc_ = -1;
+  int uLightViewProjectionFarLoc_ = -1;
   int uShadowMapLoc_ = -1;
   int uShadowMapFarLoc_ = -1;
   int uShadowEnabledLoc_ = -1;
@@ -164,6 +183,12 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uShadowPcfRadiusLoc_ = -1;
   int uShadowCascadeCountLoc_ = -1;
   int uShadowCascadeSplitMLoc_ = -1;
+  int uAlbedoMapLoc_ = -1;
+  int uNormalMapLoc_ = -1;
+  int uHasAlbedoMapLoc_ = -1;
+  int uHasNormalMapLoc_ = -1;
+  int uNormalStrengthLoc_ = -1;
+  int uTriplanarScaleLoc_ = -1;
   int shadowMapSize_ = 2048;
   bool shadowEnabled_ = true;
   float shadowStrength_ = 0.55F;
@@ -172,11 +197,22 @@ class CadModelRenderFeature final : public IRenderFeature {
   float shadowCascadeSplitM_ = 12.0F;
   bool initialized_ = false;
   std::unordered_map<std::string, GpuMesh> meshCache_;
+  std::unordered_map<std::string, GpuTexture> textureCache_;
+  std::unordered_set<std::string> failedTextureLoads_;
   std::unordered_map<std::string, PendingLoad> pendingLoads_;
   std::unordered_map<std::string, PendingGpuUpload> pendingGpuUploads_;
   std::unordered_set<std::string> failedLoads_;
+  std::thread loadWorkerThread_;
+  std::mutex loadQueueMutex_;
+  std::condition_variable loadQueueCv_;
+  bool stopLoadWorker_ = false;
+  std::deque<std::packaged_task<PreparedCpuMesh()>> loadQueue_;
+  std::unique_ptr<cad::UniformGridBroadphase> broadphaseCache_;
+  float broadphaseCacheCellSizeM_ = -1.0F;
+  std::uint64_t broadphaseCacheFingerprint_ = 0ULL;
   int uploadBudgetPerFrame_ = 1;
   int uploadsThisFrame_ = 0;
+  float triplanarScale_ = 1.0F;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

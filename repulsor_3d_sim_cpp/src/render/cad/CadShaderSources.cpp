@@ -14,10 +14,12 @@ layout(location = 5) in vec4 iModelRow2;
 layout(location = 6) in vec4 iModelRow3;
 uniform mat4 uViewProjection;
 uniform mat4 uLightViewProjection;
+uniform mat4 uLightViewProjectionFar;
 out vec4 vColor;
 out vec3 vWorldPos;
 out vec3 vWorldNormal;
 out vec4 vLightClipPos;
+out vec4 vLightClipPosFar;
 void main() {
   mat4 model = mat4(iModelRow0, iModelRow1, iModelRow2, iModelRow3);
   vec4 worldPos = model * vec4(aPos, 1.0);
@@ -26,6 +28,7 @@ void main() {
   vWorldNormal = normalize(normalMatrix * aNormal);
   vColor = aColor;
   vLightClipPos = uLightViewProjection * worldPos;
+  vLightClipPosFar = uLightViewProjectionFar * worldPos;
   gl_Position = uViewProjection * worldPos;
 }
 )";
@@ -39,6 +42,7 @@ in vec4 vColor;
 in vec3 vWorldPos;
 in vec3 vWorldNormal;
 in vec4 vLightClipPos;
+in vec4 vLightClipPosFar;
 uniform vec4 uColor;
 uniform vec3 uLightDir;
 uniform vec3 uCameraPos;
@@ -57,11 +61,17 @@ uniform float uGamma;
 uniform float uUseAssetColor;
 uniform sampler2D uShadowMap;
 uniform sampler2D uShadowMapFar;
+uniform sampler2D uAlbedoMap;
+uniform sampler2D uNormalMap;
 uniform int uShadowEnabled;
 uniform float uShadowStrength;
 uniform int uShadowPcfRadius;
 uniform int uShadowCascadeCount;
 uniform float uShadowCascadeSplitM;
+uniform int uHasAlbedoMap;
+uniform int uHasNormalMap;
+uniform float uNormalStrength;
+uniform float uTriplanarScale;
 out vec4 FragColor;
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
@@ -99,6 +109,64 @@ vec3 TonemapAces(vec3 x) {
   const float d = 0.59;
   const float e = 0.14;
   return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+vec3 TriplanarWeights(vec3 n) {
+  vec3 an = abs(normalize(n));
+  an = pow(an, vec3(4.0));
+  float sum = max(an.x + an.y + an.z, 1e-6);
+  return an / sum;
+}
+
+vec4 SampleTriplanarColor(sampler2D tex, vec3 worldPos, vec3 worldNormal, float scale) {
+  vec3 weights = TriplanarWeights(worldNormal);
+  vec2 uvX = worldPos.yz * scale;
+  vec2 uvY = worldPos.xz * scale;
+  vec2 uvZ = worldPos.xy * scale;
+  vec4 cx = texture(tex, uvX);
+  vec4 cy = texture(tex, uvY);
+  vec4 cz = texture(tex, uvZ);
+  return cx * weights.x + cy * weights.y + cz * weights.z;
+}
+
+vec3 NormalFromProjectionX(vec3 nTex, vec3 worldNormal) {
+  float signX = worldNormal.x >= 0.0 ? 1.0 : -1.0;
+  vec3 t = vec3(0.0, 1.0, 0.0);
+  vec3 b = vec3(0.0, 0.0, signX);
+  vec3 n = vec3(signX, 0.0, 0.0);
+  return normalize(t * nTex.x + b * nTex.y + n * nTex.z);
+}
+
+vec3 NormalFromProjectionY(vec3 nTex, vec3 worldNormal) {
+  float signY = worldNormal.y >= 0.0 ? 1.0 : -1.0;
+  vec3 t = vec3(1.0, 0.0, 0.0);
+  vec3 b = vec3(0.0, 0.0, signY);
+  vec3 n = vec3(0.0, signY, 0.0);
+  return normalize(t * nTex.x + b * nTex.y + n * nTex.z);
+}
+
+vec3 NormalFromProjectionZ(vec3 nTex, vec3 worldNormal) {
+  float signZ = worldNormal.z >= 0.0 ? 1.0 : -1.0;
+  vec3 t = vec3(1.0, 0.0, 0.0);
+  vec3 b = vec3(0.0, signZ, 0.0);
+  vec3 n = vec3(0.0, 0.0, signZ);
+  return normalize(t * nTex.x + b * nTex.y + n * nTex.z);
+}
+
+vec3 SampleTriplanarNormal(sampler2D tex, vec3 worldPos, vec3 worldNormal, float scale) {
+  vec3 weights = TriplanarWeights(worldNormal);
+  vec2 uvX = worldPos.yz * scale;
+  vec2 uvY = worldPos.xz * scale;
+  vec2 uvZ = worldPos.xy * scale;
+
+  vec3 sx = texture(tex, uvX).xyz * 2.0 - 1.0;
+  vec3 sy = texture(tex, uvY).xyz * 2.0 - 1.0;
+  vec3 sz = texture(tex, uvZ).xyz * 2.0 - 1.0;
+
+  vec3 nx = NormalFromProjectionX(sx, worldNormal);
+  vec3 ny = NormalFromProjectionY(sy, worldNormal);
+  vec3 nz = NormalFromProjectionZ(sz, worldNormal);
+  return normalize(nx * weights.x + ny * weights.y + nz * weights.z);
 }
 
 float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir, int radius, bool useFarCascade) {
@@ -169,6 +237,25 @@ void main() {
 
   vec3 N = normalize(vWorldNormal);
   vec3 V = normalize(uCameraPos - vWorldPos);
+  if (uHasNormalMap == 1) {
+    vec3 mappedNormal = SampleTriplanarNormal(
+        uNormalMap,
+        vWorldPos,
+        N,
+        max(uTriplanarScale, 1e-4));
+    N = normalize(mix(N, mappedNormal, clamp(uNormalStrength, 0.0, 2.0)));
+  }
+
+  if (uHasAlbedoMap == 1) {
+    vec4 texColor = SampleTriplanarColor(
+        uAlbedoMap,
+        vWorldPos,
+        N,
+        max(uTriplanarScale, 1e-4));
+    baseColorSrgb *= texColor.rgb;
+    alpha *= texColor.a;
+  }
+
   vec3 albedo = pow(clamp(baseColorSrgb, 0.0, 1.0), vec3(2.2));
 
   float roughness = clamp(uRoughness, 0.03, 1.0);
@@ -206,7 +293,7 @@ void main() {
   float splitDistance = max(uShadowCascadeSplitM, 1.0);
   bool useFarCascade = (uShadowCascadeCount > 1) && (viewDistance > splitDistance);
   float shadow = useFarCascade
-                     ? ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, true)
+                     ? ComputeShadowFactor(vLightClipPosFar, N, keyDir, uShadowPcfRadius, true)
                      : ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, false);
   linearColor *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
 

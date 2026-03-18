@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <unordered_map>
 #include <utility>
@@ -27,6 +29,18 @@ std::string CanonicalKey(const std::string& value) {
     }
   }
   return out.empty() ? std::string{"default"} : out;
+}
+
+std::uint64_t ParseRequiredCapabilityFlags(const char* envName) {
+  const char* value = std::getenv(envName);
+  if (value == nullptr || *value == '\0') {
+    return 0ULL;
+  }
+  try {
+    return std::stoull(value, nullptr, 0);
+  } catch (...) {
+    return 0ULL;
+  }
 }
 
 std::unordered_map<std::string, SeasonModuleFactoryFn>& Registry() {
@@ -185,6 +199,11 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
     const PluginManifestV1* manifest = queryManifestFn();
     if (manifest == nullptr ||
         !IsPluginManifestCompatible(*manifest, PluginKind::SeasonModule, kSeasonModuleAbiVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
+    const std::uint64_t requiredCaps = ParseRequiredCapabilityFlags("SEASON_PLUGIN_REQUIRED_CAPS");
+    if (requiredCaps != 0ULL && !HasRequiredCapabilities(*manifest, requiredCaps)) {
       CloseLibrary(handle);
       return nullptr;
     }

@@ -47,6 +47,20 @@ cmake --build --preset build-release
 ctest --preset test-release
 ```
 
+Image regression harness (CPU top-down raster, deterministic golden hash):
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure -R repulsor_3d_sim_cpp_render_image_regression_tests
+```
+
+To refresh the golden hash after intentional visual-model changes:
+
+```powershell
+$env:REPULSOR_UPDATE_IMAGE_GOLDEN="1"
+.\build\Release\repulsor_3d_sim_cpp_render_image_regression_tests.exe
+Remove-Item Env:REPULSOR_UPDATE_IMAGE_GOLDEN
+```
+
 ## Run
 
 ```powershell

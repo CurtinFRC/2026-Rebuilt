@@ -1,5 +1,7 @@
 #include "repulsor3d/render/RenderFeaturePlugin.hpp"
 
+#include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 
 #include "repulsor3d/plugins/PluginManifest.hpp"
@@ -12,6 +14,18 @@
 
 namespace repulsor3d {
 namespace {
+
+std::uint64_t ParseRequiredCapabilityFlags(const char* envName) {
+  const char* value = std::getenv(envName);
+  if (value == nullptr || *value == '\0') {
+    return 0ULL;
+  }
+  try {
+    return std::stoull(value, nullptr, 0);
+  } catch (...) {
+    return 0ULL;
+  }
+}
 
 #if defined(_WIN32)
 using LibraryHandle = HMODULE;
@@ -123,6 +137,11 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
     const PluginManifestV1* manifest = queryManifestFn();
     if (manifest == nullptr ||
         !IsPluginManifestCompatible(*manifest, PluginKind::RenderFeature, kRenderFeaturePluginAbiVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
+    const std::uint64_t requiredCaps = ParseRequiredCapabilityFlags("RENDER_PLUGIN_REQUIRED_CAPS");
+    if (requiredCaps != 0ULL && !HasRequiredCapabilities(*manifest, requiredCaps)) {
       CloseLibrary(handle);
       return nullptr;
     }

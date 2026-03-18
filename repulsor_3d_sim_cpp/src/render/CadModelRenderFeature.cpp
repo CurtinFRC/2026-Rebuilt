@@ -1,6 +1,7 @@
 #include "repulsor3d/render/CadModelRenderFeature.hpp"
 
 #include <GL/glew.h>
+#include <stb_image.h>
 
 #include <algorithm>
 #include <array>
@@ -81,10 +82,31 @@ void FnvMixU64(std::uint64_t& hash, const std::uint64_t value) {
   FnvMixBytes(hash, bytes.data(), bytes.size());
 }
 
+void FnvMixFloat(std::uint64_t& hash, const float value) {
+  FnvMixU64(hash, static_cast<std::uint64_t>(FloatBits(value)));
+}
+
 std::string ToHexString(const std::uint64_t value) {
   std::ostringstream out;
   out << std::hex << value;
   return out.str();
+}
+
+std::uint64_t BuildBroadphaseFingerprint(
+    const std::vector<glm::vec3>& centers,
+    const std::vector<float>& radii,
+    const float cellSizeMeters) {
+  std::uint64_t hash = kFnv64OffsetBasis;
+  FnvMixU64(hash, static_cast<std::uint64_t>(centers.size()));
+  FnvMixFloat(hash, cellSizeMeters);
+  const std::size_t count = std::min(centers.size(), radii.size());
+  for (std::size_t i = 0; i < count; ++i) {
+    FnvMixFloat(hash, centers[i].x);
+    FnvMixFloat(hash, centers[i].y);
+    FnvMixFloat(hash, centers[i].z);
+    FnvMixFloat(hash, radii[i]);
+  }
+  return hash;
 }
 
 struct AssetFileMetadata {
@@ -903,6 +925,7 @@ void CadModelRenderFeature::WireframeMaterialPass::Apply(const MaterialInstance&
 }
 
 CadModelRenderFeature::~CadModelRenderFeature() {
+  StopLoadWorker();
   for (auto& [_, pending] : pendingLoads_) {
     if (pending.status != nullptr) {
       pending.status->cancelRequested = true;
@@ -924,11 +947,18 @@ CadModelRenderFeature::~CadModelRenderFeature() {
     DestroyMesh(mesh);
   }
   meshCache_.clear();
+  textureCache_.clear();
+  failedTextureLoads_.clear();
 
   shadowDepthTexture_.Reset();
+  shadowDepthTextureFar_.Reset();
   if (shadowFbo_ != 0) {
     glDeleteFramebuffers(1, &shadowFbo_);
     shadowFbo_ = 0;
+  }
+  if (shadowFboFar_ != 0) {
+    glDeleteFramebuffers(1, &shadowFboFar_);
+    shadowFboFar_ = 0;
   }
   shadowShader_.Reset();
   shader_.Reset();
@@ -944,14 +974,59 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   shadowMapSize_ = shadowPolicy.mapSize;
   shadowStrength_ = shadowPolicy.strength;
   shadowPcfRadius_ = shadowPolicy.pcfRadius;
-  shadowCascadeCount_ = shadowPolicy.cascadeCount;
+  shadowCascadeCount_ = std::clamp(shadowPolicy.cascadeCount, 1, 2);
   shadowCascadeSplitM_ = shadowPolicy.cascadeSplitDistanceM;
+  triplanarScale_ = std::max(1e-4F, GetEnvFloat("CAD_TRIPLANAR_SCALE", triplanarScale_));
+  StartLoadWorker();
   if (initialized_) {
     return true;
   }
 
   initialized_ = CreateShader();
   return initialized_;
+}
+
+void CadModelRenderFeature::StartLoadWorker() {
+  if (loadWorkerThread_.joinable()) {
+    return;
+  }
+  stopLoadWorker_ = false;
+  loadWorkerThread_ = std::thread([this]() {
+    for (;;) {
+      std::packaged_task<PreparedCpuMesh()> task;
+      {
+        std::unique_lock<std::mutex> lock(loadQueueMutex_);
+        loadQueueCv_.wait(lock, [this]() { return stopLoadWorker_ || !loadQueue_.empty(); });
+        if (stopLoadWorker_ && loadQueue_.empty()) {
+          break;
+        }
+        task = std::move(loadQueue_.front());
+        loadQueue_.pop_front();
+      }
+      if (task.valid()) {
+        task();
+      }
+    }
+  });
+}
+
+void CadModelRenderFeature::StopLoadWorker() {
+  {
+    std::scoped_lock lock(loadQueueMutex_);
+    stopLoadWorker_ = true;
+  }
+  loadQueueCv_.notify_all();
+  if (loadWorkerThread_.joinable()) {
+    loadWorkerThread_.join();
+  }
+}
+
+void CadModelRenderFeature::EnqueueLoadTask(std::packaged_task<PreparedCpuMesh()>&& task) {
+  {
+    std::scoped_lock lock(loadQueueMutex_);
+    loadQueue_.push_back(std::move(task));
+  }
+  loadQueueCv_.notify_one();
 }
 
 void CadModelRenderFeature::Render(const RenderFeatureContext& context, const RendererDrawApi& /*drawApi*/) {
@@ -1019,10 +1094,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   struct DrawItem {
     const GpuMesh* mesh = nullptr;
     const GpuMesh::LodGpu* lod = nullptr;
+    const GpuTexture* albedoTexture = nullptr;
+    const GpuTexture* normalTexture = nullptr;
     glm::mat4 model{1.0F};
     glm::vec4 color{1.0F};
     float roughness = 0.72F;
     float metallic = 0.0F;
+    float normalStrength = 1.0F;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
@@ -1078,9 +1156,20 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
             const auto& lod = mesh->lods[std::min(lodIndex, mesh->lods.size() - 1)];
 
+            const std::string albedoPath = !instance.albedoTexturePath.empty()
+                                               ? instance.albedoTexturePath
+                                               : mesh->materialHints.baseColorTexturePath;
+            const std::string normalPath = !instance.normalTexturePath.empty()
+                                               ? instance.normalTexturePath
+                                               : mesh->materialHints.normalTexturePath;
+            const GpuTexture* albedoTexture = GetOrLoadTexture(albedoPath);
+            const GpuTexture* normalTexture = GetOrLoadTexture(normalPath);
+
             drawItems.push_back(
                 {.mesh = mesh,
                  .lod = &lod,
+                 .albedoTexture = albedoTexture,
+                 .normalTexture = normalTexture,
                  .model = model,
                  .color = instance.color,
                  .roughness =
@@ -1091,6 +1180,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
                      (instance.metallicOverride >= 0.0F
                           ? instance.metallicOverride
                           : (mesh->materialHints.metallic >= 0.0F ? mesh->materialHints.metallic : visualPolicy.metallic)),
+                 .normalStrength = instance.normalStrength,
                  .useAssetColor = instance.useAssetColor,
                  .wireframe = instance.wireframe,
                  .mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F});
@@ -1105,12 +1195,25 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     if (visualPolicy.enableBroadphase) {
       cad::Aabb frustumAabb;
       if (cad::TryExtractFrustumAabb(context.viewProjection, frustumAabb)) {
-        cad::UniformGridBroadphase broadphase(visualPolicy.broadphaseCellSizeM);
-        for (std::size_t i = 0; i < drawItems.size(); ++i) {
-          broadphase.Insert(cad::BoundingSphereRef{drawCenters[i], drawRadii[i], i});
+        const float broadphaseCellSize = std::max(0.1F, visualPolicy.broadphaseCellSizeM);
+        if (broadphaseCache_ == nullptr ||
+            std::abs(broadphaseCacheCellSizeM_ - broadphaseCellSize) > 1e-5F) {
+          broadphaseCache_ = std::make_unique<cad::UniformGridBroadphase>(broadphaseCellSize);
+          broadphaseCacheCellSizeM_ = broadphaseCellSize;
+          broadphaseCacheFingerprint_ = 0ULL;
+        }
+
+        const std::uint64_t broadphaseFingerprint =
+            BuildBroadphaseFingerprint(drawCenters, drawRadii, broadphaseCellSize);
+        if (broadphaseFingerprint != broadphaseCacheFingerprint_) {
+          broadphaseCache_->Clear();
+          for (std::size_t i = 0; i < drawItems.size(); ++i) {
+            broadphaseCache_->Insert(cad::BoundingSphereRef{drawCenters[i], drawRadii[i], i});
+          }
+          broadphaseCacheFingerprint_ = broadphaseFingerprint;
         }
         std::vector<std::size_t> candidates;
-        broadphase.QueryAabb(frustumAabb, candidates);
+        broadphaseCache_->QueryAabb(frustumAabb, candidates);
         for (const std::size_t index : candidates) {
           if (index >= drawItems.size()) {
             continue;
@@ -1163,23 +1266,42 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   const glm::vec3 lightDir = glm::normalize(glm::vec3{-0.3F, -0.5F, -1.0F});
-  const glm::vec3 lightEye = sceneCenter - lightDir * (sceneRadius * 2.3F);
-  const glm::mat4 lightView = glm::lookAt(lightEye, sceneCenter, glm::vec3{0.0F, 0.0F, 1.0F});
-  const glm::mat4 lightProj =
-      glm::ortho(-sceneRadius, sceneRadius, -sceneRadius, sceneRadius, 0.1F, sceneRadius * 5.0F + 0.1F);
-  const glm::mat4 lightViewProjection = lightProj * lightView;
+  const float nearCascadeRadius = std::clamp(
+      shadowCascadeSplitM_ * 0.8F,
+      std::max(2.0F, sceneRadius * 0.25F),
+      sceneRadius);
+  const glm::vec3 lightEyeNear = sceneCenter - lightDir * (nearCascadeRadius * 2.3F);
+  const glm::mat4 lightViewNear = glm::lookAt(lightEyeNear, sceneCenter, glm::vec3{0.0F, 0.0F, 1.0F});
+  const glm::mat4 lightProjNear = glm::ortho(
+      -nearCascadeRadius,
+      nearCascadeRadius,
+      -nearCascadeRadius,
+      nearCascadeRadius,
+      0.1F,
+      nearCascadeRadius * 5.0F + 0.1F);
+  const glm::mat4 lightViewProjection = lightProjNear * lightViewNear;
 
-  if (shadowEnabled_ && shadowFbo_ != 0 && shadowShader_.Get() != 0) {
+  glm::mat4 lightViewProjectionFar = lightViewProjection;
+  const bool farCascadeRequested = shadowCascadeCount_ > 1;
+  if (farCascadeRequested) {
+    const glm::vec3 lightEyeFar = sceneCenter - lightDir * (sceneRadius * 2.3F);
+    const glm::mat4 lightViewFar = glm::lookAt(lightEyeFar, sceneCenter, glm::vec3{0.0F, 0.0F, 1.0F});
+    const glm::mat4 lightProjFar = glm::ortho(
+        -sceneRadius,
+        sceneRadius,
+        -sceneRadius,
+        sceneRadius,
+        0.1F,
+        sceneRadius * 5.0F + 0.1F);
+    lightViewProjectionFar = lightProjFar * lightViewFar;
+  }
+
+  const bool nearShadowReady = shadowEnabled_ && shadowFbo_ != 0 && shadowShader_.Get() != 0;
+  const bool farShadowReady = nearShadowReady && farCascadeRequested && shadowFboFar_ != 0;
+
+  if (nearShadowReady) {
     GLint oldViewport[4] = {0, 0, 0, 0};
     glGetIntegerv(GL_VIEWPORT, oldViewport);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glViewport(0, 0, shadowMapSize_, shadowMapSize_);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    glCullFace(GL_FRONT);
-    backend_->UseProgram(shadowShader_.Get());
-    backend_->SetUniformMat4(uShadowLightMvpLoc_, &lightViewProjection[0][0]);
 
     struct ShadowBatch {
       const GpuMesh::LodGpu* lod = nullptr;
@@ -1203,25 +1325,43 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       }
     }
 
-    for (const auto& batch : shadowBatches) {
-      if (batch.lod == nullptr || batch.instances.empty()) {
-        continue;
+    auto renderShadowPass = [&](const unsigned int fbo, const glm::mat4& lightViewProj) {
+      if (fbo == 0) {
+        return;
       }
-      if (batch.mirroredWinding) {
-        glFrontFace(GL_CW);
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      glViewport(0, 0, shadowMapSize_, shadowMapSize_);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+      glCullFace(GL_FRONT);
+      backend_->UseProgram(shadowShader_.Get());
+      backend_->SetUniformMat4(uShadowLightMvpLoc_, &lightViewProj[0][0]);
+
+      for (const auto& batch : shadowBatches) {
+        if (batch.lod == nullptr || batch.instances.empty()) {
+          continue;
+        }
+        if (batch.mirroredWinding) {
+          glFrontFace(GL_CW);
+        }
+        backend_->BindVertexArray(batch.lod->vao.Get());
+        backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
+        backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
+        if (batch.lod->indexCount > 0) {
+          backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
+        } else {
+          backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
+        }
+        backend_->BindVertexArray(0);
+        if (batch.mirroredWinding) {
+          glFrontFace(GL_CCW);
+        }
       }
-      backend_->BindVertexArray(batch.lod->vao.Get());
-      backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
-      backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
-      if (batch.lod->indexCount > 0) {
-        backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
-      } else {
-        backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
-      }
-      backend_->BindVertexArray(0);
-      if (batch.mirroredWinding) {
-        glFrontFace(GL_CCW);
-      }
+    };
+
+    renderShadowPass(shadowFbo_, lightViewProjection);
+    if (farShadowReady) {
+      renderShadowPass(shadowFboFar_, lightViewProjectionFar);
     }
 
     glCullFace(GL_BACK);
@@ -1231,35 +1371,43 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   backend_->UseProgram(shader_.Get());
+  const glm::mat4& lightViewProjectionFarUniform = farShadowReady ? lightViewProjectionFar : lightViewProjection;
   backend_->SetUniformMat4(uMvpLoc_, &context.viewProjection[0][0]);
   backend_->SetUniformMat4(uLightViewProjectionLoc_, &lightViewProjection[0][0]);
-  backend_->SetUniform1i(uShadowEnabledLoc_, (shadowEnabled_ && shadowFbo_ != 0) ? 1 : 0);
+  backend_->SetUniformMat4(uLightViewProjectionFarLoc_, &lightViewProjectionFarUniform[0][0]);
+  backend_->SetUniform1i(uShadowEnabledLoc_, nearShadowReady ? 1 : 0);
   backend_->SetUniform1f(uShadowStrengthLoc_, shadowStrength_);
   backend_->SetUniform1i(uShadowPcfRadiusLoc_, shadowPcfRadius_);
-  backend_->SetUniform1i(uShadowCascadeCountLoc_, shadowCascadeCount_);
+  backend_->SetUniform1i(uShadowCascadeCountLoc_, farShadowReady ? 2 : 1);
   backend_->SetUniform1f(uShadowCascadeSplitMLoc_, shadowCascadeSplitM_);
   backend_->SetActiveTextureUnit(3);
   backend_->BindTexture2D(shadowDepthTexture_.Get());
   backend_->SetUniform1i(uShadowMapLoc_, 3);
   backend_->SetActiveTextureUnit(4);
-  backend_->BindTexture2D(shadowDepthTexture_.Get());
+  backend_->BindTexture2D(farShadowReady ? shadowDepthTextureFar_.Get() : shadowDepthTexture_.Get());
   backend_->SetUniform1i(uShadowMapFarLoc_, 4);
 
   struct BatchKey {
     const GpuMesh::LodGpu* lod = nullptr;
+    const GpuTexture* albedoTexture = nullptr;
+    const GpuTexture* normalTexture = nullptr;
     std::uint32_t colorR = 0;
     std::uint32_t colorG = 0;
     std::uint32_t colorB = 0;
     std::uint32_t colorA = 0;
     std::uint32_t roughness = 0;
     std::uint32_t metallic = 0;
+    std::uint32_t normalStrength = 0;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
     bool operator==(const BatchKey& other) const {
       return lod == other.lod &&
+             albedoTexture == other.albedoTexture &&
+             normalTexture == other.normalTexture &&
              colorR == other.colorR && colorG == other.colorG && colorB == other.colorB && colorA == other.colorA &&
              roughness == other.roughness && metallic == other.metallic &&
+             normalStrength == other.normalStrength &&
              useAssetColor == other.useAssetColor && wireframe == other.wireframe &&
              mirroredWinding == other.mirroredWinding;
     }
@@ -1267,12 +1415,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   struct BatchKeyHash {
     std::size_t operator()(const BatchKey& key) const {
       std::size_t h = reinterpret_cast<std::size_t>(key.lod);
+      h ^= reinterpret_cast<std::size_t>(key.albedoTexture) * 2654435761U;
+      h ^= reinterpret_cast<std::size_t>(key.normalTexture) * 2246822519U;
       h ^= static_cast<std::size_t>(key.colorR) * 16777619U;
       h ^= static_cast<std::size_t>(key.colorG) * 2166136261U;
       h ^= static_cast<std::size_t>(key.colorB) * 709607U;
       h ^= static_cast<std::size_t>(key.colorA) * 1469598103U;
       h ^= static_cast<std::size_t>(key.roughness) * 1099511628211ULL;
       h ^= static_cast<std::size_t>(key.metallic) * 1315423911U;
+      h ^= static_cast<std::size_t>(key.normalStrength) * 374761393U;
       h ^= key.useAssetColor ? 0x1U : 0x0U;
       h ^= key.wireframe ? 0x2U : 0x0U;
       h ^= key.mirroredWinding ? 0x4U : 0x0U;
@@ -1284,6 +1435,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     glm::vec4 color{1.0F};
     float roughness = 0.72F;
     float metallic = 0.0F;
+    float normalStrength = 1.0F;
+    const GpuTexture* albedoTexture = nullptr;
+    const GpuTexture* normalTexture = nullptr;
     bool useAssetColor = false;
     bool wireframe = false;
     bool mirroredWinding = false;
@@ -1296,12 +1450,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   for (const auto& item : drawItems) {
     BatchKey key{
         .lod = item.lod,
+        .albedoTexture = item.albedoTexture,
+        .normalTexture = item.normalTexture,
         .colorR = FloatBits(item.color.r),
         .colorG = FloatBits(item.color.g),
         .colorB = FloatBits(item.color.b),
         .colorA = FloatBits(item.color.a),
         .roughness = FloatBits(item.roughness),
         .metallic = FloatBits(item.metallic),
+        .normalStrength = FloatBits(item.normalStrength),
         .useAssetColor = item.useAssetColor,
         .wireframe = item.wireframe,
         .mirroredWinding = item.mirroredWinding,
@@ -1310,6 +1467,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     batch.color = item.color;
     batch.roughness = item.roughness;
     batch.metallic = item.metallic;
+    batch.normalStrength = item.normalStrength;
+    batch.albedoTexture = item.albedoTexture;
+    batch.normalTexture = item.normalTexture;
     batch.useAssetColor = item.useAssetColor;
     batch.wireframe = item.wireframe;
     batch.mirroredWinding = item.mirroredWinding;
@@ -1327,7 +1487,17 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     materialPipeline_.Apply(material);
     backend_->SetUniform1f(uRoughnessLoc_, batch.roughness);
     backend_->SetUniform1f(uMetallicLoc_, batch.metallic);
+    backend_->SetUniform1f(uNormalStrengthLoc_, batch.normalStrength);
+    backend_->SetUniform1f(uTriplanarScaleLoc_, triplanarScale_);
     backend_->SetUniform1f(uUseAssetColorLoc_, batch.useAssetColor ? 1.0F : 0.0F);
+    backend_->SetUniform1i(uHasAlbedoMapLoc_, batch.albedoTexture != nullptr ? 1 : 0);
+    backend_->SetUniform1i(uHasNormalMapLoc_, batch.normalTexture != nullptr ? 1 : 0);
+    backend_->SetActiveTextureUnit(5);
+    backend_->BindTexture2D(batch.albedoTexture != nullptr ? batch.albedoTexture->texture.Get() : 0);
+    backend_->SetUniform1i(uAlbedoMapLoc_, 5);
+    backend_->SetActiveTextureUnit(6);
+    backend_->BindTexture2D(batch.normalTexture != nullptr ? batch.normalTexture->texture.Get() : 0);
+    backend_->SetUniform1i(uNormalMapLoc_, 6);
 
     if (batch.mirroredWinding) {
       glFrontFace(GL_CW);
@@ -1348,6 +1518,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   backend_->SetBlendEnabled(true);
   backend_->SetWireframeMode(false);
+  backend_->SetActiveTextureUnit(6);
+  backend_->BindTexture2D(0);
+  backend_->SetActiveTextureUnit(5);
+  backend_->BindTexture2D(0);
+  backend_->SetActiveTextureUnit(4);
+  backend_->BindTexture2D(0);
+  backend_->SetActiveTextureUnit(3);
   backend_->BindTexture2D(0);
 }
 
@@ -1396,6 +1573,7 @@ bool CadModelRenderFeature::CreateShader() {
   uGammaLoc_ = backend_->GetUniformLocation(shader_.Get(), "uGamma");
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
   uLightViewProjectionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjection");
+  uLightViewProjectionFarLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjectionFar");
   uShadowMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowMap");
   uShadowMapFarLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowMapFar");
   uShadowEnabledLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowEnabled");
@@ -1403,6 +1581,12 @@ bool CadModelRenderFeature::CreateShader() {
   uShadowPcfRadiusLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowPcfRadius");
   uShadowCascadeCountLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeCount");
   uShadowCascadeSplitMLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeSplitM");
+  uAlbedoMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uAlbedoMap");
+  uNormalMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalMap");
+  uHasAlbedoMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uHasAlbedoMap");
+  uHasNormalMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uHasNormalMap");
+  uNormalStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalStrength");
+  uTriplanarScaleLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTriplanarScale");
 
   constexpr const char* shadowVsSrc = R"(
 #version 330 core
@@ -1442,35 +1626,54 @@ void main() {}
   uShadowLightMvpLoc_ = backend_->GetUniformLocation(shadowShader_.Get(), "uLightViewProjection");
 
   if (shadowEnabled_) {
-    const unsigned int tex = backend_->CreateTexture2D();
-    shadowDepthTexture_.Set(tex);
-    glBindTexture(GL_TEXTURE_2D, shadowDepthTexture_.Get());
-    glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_DEPTH_COMPONENT24,
-        shadowMapSize_,
-        shadowMapSize_,
-        0,
-        GL_DEPTH_COMPONENT,
-        GL_FLOAT,
-        nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    const float border[] = {1.0F, 1.0F, 1.0F, 1.0F};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    auto createShadowTarget = [&](GlTextureHandle& textureHandle, unsigned int& fbo) -> bool {
+      const unsigned int tex = backend_->CreateTexture2D();
+      textureHandle.Set(tex);
+      glBindTexture(GL_TEXTURE_2D, textureHandle.Get());
+      glTexImage2D(
+          GL_TEXTURE_2D,
+          0,
+          GL_DEPTH_COMPONENT24,
+          shadowMapSize_,
+          shadowMapSize_,
+          0,
+          GL_DEPTH_COMPONENT,
+          GL_FLOAT,
+          nullptr);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+      const float border[] = {1.0F, 1.0F, 1.0F, 1.0F};
+      glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
 
-    glGenFramebuffers(1, &shadowFbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTexture_.Get(), 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      glGenFramebuffers(1, &fbo);
+      glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, textureHandle.Get(), 0);
+      glDrawBuffer(GL_NONE);
+      glReadBuffer(GL_NONE);
+      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        return false;
+      }
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      return true;
+    };
+
+    if (!createShadowTarget(shadowDepthTexture_, shadowFbo_)) {
       return false;
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (shadowCascadeCount_ > 1) {
+      if (!createShadowTarget(shadowDepthTextureFar_, shadowFboFar_)) {
+        return false;
+      }
+    } else {
+      shadowDepthTextureFar_.Reset();
+      if (shadowFboFar_ != 0) {
+        glDeleteFramebuffers(1, &shadowFboFar_);
+        shadowFboFar_ = 0;
+      }
+    }
   }
 
   materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(*backend_, uColorLoc_));
@@ -1483,10 +1686,14 @@ void main() {}
          uRimStrengthLoc_ >= 0 && uRoughnessLoc_ >= 0 && uMetallicLoc_ >= 0 &&
          uExposureLoc_ >= 0 && uFogDensityLoc_ >= 0 && uSaturationLoc_ >= 0 &&
          uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0 &&
-         uLightViewProjectionLoc_ >= 0 && uShadowMapLoc_ >= 0 &&
+         uLightViewProjectionLoc_ >= 0 && uLightViewProjectionFarLoc_ >= 0 &&
+         uShadowMapLoc_ >= 0 &&
          uShadowMapFarLoc_ >= 0 &&
          uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 &&
          uShadowPcfRadiusLoc_ >= 0 && uShadowCascadeCountLoc_ >= 0 && uShadowCascadeSplitMLoc_ >= 0 &&
+         uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
+         uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 &&
+         uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 &&
          uShadowLightMvpLoc_ >= 0;
 }
 
@@ -1806,10 +2013,8 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     std::scoped_lock lock(status->stageMutex);
     status->stage = "queued";
   }
-  pendingLoads_.emplace(
-      assetPath,
-      PendingLoad{
-          std::async(std::launch::async, [provider, assetPath, status]() {
+  std::packaged_task<PreparedCpuMesh()> loadTask(
+      [provider, assetPath, status]() {
             auto setStage = [&](const char* stage, const float progress) {
               if (status != nullptr) {
                 status->progress = progress;
@@ -1885,10 +2090,70 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             }
             setStage("completed", 1.00F);
             return prepared;
-          }),
-          status});
+          });
+  std::future<PreparedCpuMesh> future = loadTask.get_future();
+  EnqueueLoadTask(std::move(loadTask));
+  pendingLoads_.emplace(assetPath, PendingLoad{std::move(future), status});
   std::cerr << "CAD loading started: " << assetPath << "\n";
   return nullptr;
+}
+
+const CadModelRenderFeature::GpuTexture* CadModelRenderFeature::GetOrLoadTexture(const std::string& assetPath) {
+  if (assetPath.empty()) {
+    return nullptr;
+  }
+  const auto cached = textureCache_.find(assetPath);
+  if (cached != textureCache_.end()) {
+    return &cached->second;
+  }
+  if (failedTextureLoads_.contains(assetPath)) {
+    return nullptr;
+  }
+  if (renderer_ == nullptr || backend_ == nullptr) {
+    return nullptr;
+  }
+
+  const std::string resolved = renderer_->GetAssetResolver().ResolveFilePath(assetPath);
+  if (resolved.empty()) {
+    failedTextureLoads_.insert(assetPath);
+    return nullptr;
+  }
+
+  stbi_set_flip_vertically_on_load(0);
+  int width = 0;
+  int height = 0;
+  int channels = 0;
+  unsigned char* pixels = stbi_load(resolved.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+  if (pixels == nullptr || width <= 0 || height <= 0) {
+    if (pixels != nullptr) {
+      stbi_image_free(pixels);
+    }
+    failedTextureLoads_.insert(assetPath);
+    return nullptr;
+  }
+
+  GpuTexture texture;
+  texture.texture.Set(backend_->CreateTexture2D());
+  texture.width = width;
+  texture.height = height;
+  if (texture.texture.Get() == 0) {
+    stbi_image_free(pixels);
+    failedTextureLoads_.insert(assetPath);
+    return nullptr;
+  }
+  backend_->BindTexture2D(texture.texture.Get());
+  backend_->SetTexture2DLinearMipmapClamp();
+  backend_->UploadTexture2DRgba8(width, height, pixels);
+  backend_->GenerateTexture2DMipmaps();
+  backend_->BindTexture2D(0);
+  stbi_image_free(pixels);
+
+  auto [it, inserted] = textureCache_.emplace(assetPath, std::move(texture));
+  if (!inserted) {
+    return &it->second;
+  }
+  std::cerr << "CAD texture loaded: " << assetPath << " (" << width << "x" << height << ")\n";
+  return &it->second;
 }
 
 }  // namespace repulsor3d

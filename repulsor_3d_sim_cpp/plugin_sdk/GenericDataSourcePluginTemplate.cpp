@@ -40,7 +40,9 @@ extern "C" REPULSOR_DS_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* repulso
       .minHostAbiVersion = repulsor3d::kDataSourcePluginAbiVersion,
       .maxHostAbiVersion = repulsor3d::kDataSourcePluginAbiVersion,
       .pluginId = "generic_datasource_plugin",
-      .pluginVersion = "1.0.0"};
+      .pluginVersion = "1.1.0",
+      .buildSignature = "generic-datasource-template",
+      .capabilityFlags = repulsor3d::ToCapabilityBits(repulsor3d::PluginCapability::DiagnosticsAware)};
   return &manifest;
 }
 

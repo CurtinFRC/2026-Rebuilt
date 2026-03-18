@@ -46,7 +46,11 @@ extern "C" REPULSOR_RENDER_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* rep
       .minHostAbiVersion = repulsor3d::kRenderFeaturePluginAbiVersion,
       .maxHostAbiVersion = repulsor3d::kRenderFeaturePluginAbiVersion,
       .pluginId = "generic_render_feature_plugin",
-      .pluginVersion = "1.0.0"};
+      .pluginVersion = "1.1.0",
+      .buildSignature = "generic-render-template",
+      .capabilityFlags =
+          repulsor3d::ToCapabilityBits(repulsor3d::PluginCapability::DiagnosticsAware) |
+          repulsor3d::ToCapabilityBits(repulsor3d::PluginCapability::DynamicEntitiesAware)};
   return &manifest;
 }
 

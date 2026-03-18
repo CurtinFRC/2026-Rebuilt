@@ -440,6 +440,28 @@ if(REPULSOR_SIM_BUILD_TESTS)
   endif()
   add_test(NAME repulsor_3d_sim_cpp_render_regression_tests COMMAND repulsor_3d_sim_cpp_render_regression_tests)
 
+  add_executable(repulsor_3d_sim_cpp_render_image_regression_tests
+    tests/RenderImageRegressionTests.cpp
+    src/render/Season2026RebuiltModelBuilder.cpp
+    src/render/scenegraph/SceneGraphBuilder.cpp
+  )
+  target_include_directories(
+    repulsor_3d_sim_cpp_render_image_regression_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_compile_definitions(
+    repulsor_3d_sim_cpp_render_image_regression_tests PRIVATE
+    REPULSOR_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_render_image_regression_tests PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_render_image_regression_tests PRIVATE glm::glm)
+  endif()
+  add_test(
+    NAME repulsor_3d_sim_cpp_render_image_regression_tests
+    COMMAND repulsor_3d_sim_cpp_render_image_regression_tests
+  )
+
   if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
     add_executable(repulsor_3d_sim_cpp_plugin_abi_tests
       tests/PluginAbiSmokeTests.cpp

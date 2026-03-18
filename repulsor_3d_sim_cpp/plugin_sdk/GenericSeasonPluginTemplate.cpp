@@ -50,7 +50,11 @@ extern "C" REPULSOR_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* repulsor3d
       .minHostAbiVersion = repulsor3d::kSeasonModuleAbiVersion,
       .maxHostAbiVersion = repulsor3d::kSeasonModuleAbiVersion,
       .pluginId = "generic_sdk_plugin",
-      .pluginVersion = "1.0.0"};
+      .pluginVersion = "1.1.0",
+      .buildSignature = "generic-season-template",
+      .capabilityFlags =
+          repulsor3d::ToCapabilityBits(repulsor3d::PluginCapability::HotReloadSafe) |
+          repulsor3d::ToCapabilityBits(repulsor3d::PluginCapability::SceneDescriptorAware)};
   return &manifest;
 }
 
