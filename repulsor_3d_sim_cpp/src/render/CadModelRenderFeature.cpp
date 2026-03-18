@@ -981,6 +981,18 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   perfTargetFrameMs_ = std::clamp(GetEnvFloat("CAD_PERF_TARGET_FRAME_MS", perfTargetFrameMs_), 8.0F, 66.0F);
   maxAutoLodBias_ = std::clamp(GetEnvInt("CAD_AUTO_MAX_LOD_BIAS", maxAutoLodBias_), 0, 3);
   shadowLodBias_ = std::clamp(GetEnvInt("CAD_SHADOW_LOD_BIAS", shadowLodBias_), 0, 3);
+  shadowCasterMaxIndices_ = std::clamp(
+      GetEnvInt("CAD_SHADOW_CAST_MAX_INDICES", shadowCasterMaxIndices_),
+      0,
+      50000000);
+  fastShadingMinIndices_ = std::clamp(
+      GetEnvInt("CAD_FAST_SHADING_MIN_INDICES", fastShadingMinIndices_),
+      0,
+      50000000);
+  runtimeMaxDrawIndices_ = std::clamp(
+      GetEnvInt("CAD_RUNTIME_MAX_DRAW_INDICES", runtimeMaxDrawIndices_),
+      0,
+      50000000);
   StartLoadWorker();
   if (initialized_) {
     return true;
@@ -1097,6 +1109,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;
+  bool disableShadowsThisFrame = false;
   double frameAverageMs = 0.0;
   if (context.diagnostics != nullptr) {
     frameAverageMs = context.diagnostics->frameAverageMilliseconds > 0.0
@@ -1110,10 +1123,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       adaptiveLodBias = std::min(1, maxAutoLodBias_);
     }
     reduceShadowQuality = frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.25F);
+    disableShadowsThisFrame = frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.60F);
   }
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter("cad.auto.shadow_disabled", disableShadowsThisFrame ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.frame_ms", frameAverageMs);
   }
 
@@ -1129,6 +1144,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     float metallic = 0.0F;
     float normalStrength = 1.0F;
     bool useAssetColor = false;
+    bool fastShading = false;
     bool wireframe = false;
     bool mirroredWinding = false;
   };
@@ -1181,9 +1197,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
             const glm::mat4 mvp = context.viewProjection * model;
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
-            const std::size_t drawLodIndex = std::min(
+            std::size_t drawLodIndex = std::min(
                 lodIndex + static_cast<std::size_t>(std::max(0, adaptiveLodBias)),
                 mesh->lods.size() - 1);
+            if (runtimeMaxDrawIndices_ > 0) {
+              while (drawLodIndex + 1 < mesh->lods.size() &&
+                     std::max(mesh->lods[drawLodIndex].indexCount, 0) > runtimeMaxDrawIndices_) {
+                ++drawLodIndex;
+              }
+            }
             std::size_t shadowLodIndex = std::min(
                 drawLodIndex + static_cast<std::size_t>(std::max(0, shadowLodBias_)),
                 mesh->lods.size() - 1);
@@ -1192,6 +1214,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             }
             const auto& lod = mesh->lods[drawLodIndex];
             const auto& shadowLod = mesh->lods[shadowLodIndex];
+            const int drawIndexCount = std::max(lod.indexCount, 0);
+            const bool fastShading =
+                fastShadingMinIndices_ > 0 && drawIndexCount > fastShadingMinIndices_;
 
             const std::string albedoPath = !instance.albedoTexturePath.empty()
                                                ? instance.albedoTexturePath
@@ -1220,6 +1245,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
                           : (mesh->materialHints.metallic >= 0.0F ? mesh->materialHints.metallic : visualPolicy.metallic)),
                  .normalStrength = instance.normalStrength,
                  .useAssetColor = instance.useAssetColor,
+                 .fastShading = fastShading,
                  .wireframe = instance.wireframe,
                  .mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F});
           }
@@ -1282,6 +1308,18 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     backend_->SetWireframeMode(false);
     return;
   }
+  if (context.diagnosticsWriter != nullptr) {
+    double totalIndices = 0.0;
+    for (const auto& item : drawItems) {
+      if (item.lod == nullptr) {
+        continue;
+      }
+      const int indexCount = std::max(item.lod->indexCount, 0);
+      totalIndices += static_cast<double>(indexCount > 0 ? indexCount : std::max(item.lod->vertexCount, 0));
+    }
+    context.diagnosticsWriter->RecordCounter("cad.draw.items", static_cast<double>(drawItems.size()));
+    context.diagnosticsWriter->RecordCounter("cad.draw.indices", totalIndices);
+  }
 
   glm::vec3 sceneCenter{0.0F, 0.0F, 0.0F};
   float sceneRadius = 1.0F;
@@ -1334,8 +1372,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     lightViewProjectionFar = lightProjFar * lightViewFar;
   }
 
-  const bool nearShadowReady = shadowEnabled_ && shadowFbo_ != 0 && shadowShader_.Get() != 0;
+  const bool nearShadowReady =
+      shadowEnabled_ && !disableShadowsThisFrame && shadowFbo_ != 0 && shadowShader_.Get() != 0;
   const bool farShadowReady = nearShadowReady && farCascadeRequested && shadowFboFar_ != 0;
+  bool shadowsEnabledForShading = false;
 
   if (nearShadowReady) {
     GLint oldViewport[4] = {0, 0, 0, 0};
@@ -1348,7 +1388,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     };
     std::vector<ShadowBatch> shadowBatches;
     shadowBatches.reserve(drawItems.size());
+    int shadowCasterSkipped = 0;
     for (const auto& item : drawItems) {
+      const int shadowIndexCount = (item.shadowLod != nullptr) ? std::max(item.shadowLod->indexCount, 0) : 0;
+      if (shadowCasterMaxIndices_ > 0 && shadowIndexCount > shadowCasterMaxIndices_) {
+        ++shadowCasterSkipped;
+        continue;
+      }
       auto it = std::find_if(shadowBatches.begin(), shadowBatches.end(), [&](const ShadowBatch& batch) {
         return batch.lod == item.shadowLod && batch.mirroredWinding == item.mirroredWinding;
       });
@@ -1361,6 +1407,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       } else {
         it->instances.push_back(ToInstanceData(item.model));
       }
+    }
+    if (context.diagnosticsWriter != nullptr) {
+      context.diagnosticsWriter->RecordCounter("cad.shadow.casters_skipped", static_cast<double>(shadowCasterSkipped));
+      context.diagnosticsWriter->RecordCounter("cad.shadow.caster_batches", static_cast<double>(shadowBatches.size()));
     }
 
     auto renderShadowPass = [&](const unsigned int fbo, const glm::mat4& lightViewProj) {
@@ -1397,9 +1447,22 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       }
     };
 
-    renderShadowPass(shadowFbo_, lightViewProjection);
-    if (farShadowReady) {
-      renderShadowPass(shadowFboFar_, lightViewProjectionFar);
+    const bool hasShadowCasters = !shadowBatches.empty();
+    shadowsEnabledForShading = hasShadowCasters;
+    if (hasShadowCasters) {
+      renderShadowPass(shadowFbo_, lightViewProjection);
+      if (farShadowReady) {
+        renderShadowPass(shadowFboFar_, lightViewProjectionFar);
+      }
+    } else {
+      glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+      glViewport(0, 0, shadowMapSize_, shadowMapSize_);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      if (farShadowReady) {
+        glBindFramebuffer(GL_FRAMEBUFFER, shadowFboFar_);
+        glViewport(0, 0, shadowMapSize_, shadowMapSize_);
+        glClear(GL_DEPTH_BUFFER_BIT);
+      }
     }
 
     glCullFace(GL_BACK);
@@ -1413,7 +1476,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniformMat4(uMvpLoc_, &context.viewProjection[0][0]);
   backend_->SetUniformMat4(uLightViewProjectionLoc_, &lightViewProjection[0][0]);
   backend_->SetUniformMat4(uLightViewProjectionFarLoc_, &lightViewProjectionFarUniform[0][0]);
-  backend_->SetUniform1i(uShadowEnabledLoc_, nearShadowReady ? 1 : 0);
+  backend_->SetUniform1i(uShadowEnabledLoc_, shadowsEnabledForShading ? 1 : 0);
   backend_->SetUniform1f(uShadowStrengthLoc_, shadowStrength_);
   backend_->SetUniform1i(uShadowPcfRadiusLoc_, reduceShadowQuality ? std::max(1, shadowPcfRadius_ - 1) : shadowPcfRadius_);
   backend_->SetUniform1i(uShadowCascadeCountLoc_, farShadowReady ? 2 : 1);
@@ -1437,6 +1500,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     std::uint32_t metallic = 0;
     std::uint32_t normalStrength = 0;
     bool useAssetColor = false;
+    bool fastShading = false;
     bool wireframe = false;
     bool mirroredWinding = false;
     bool operator==(const BatchKey& other) const {
@@ -1446,7 +1510,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
              colorR == other.colorR && colorG == other.colorG && colorB == other.colorB && colorA == other.colorA &&
              roughness == other.roughness && metallic == other.metallic &&
              normalStrength == other.normalStrength &&
-             useAssetColor == other.useAssetColor && wireframe == other.wireframe &&
+             useAssetColor == other.useAssetColor && fastShading == other.fastShading &&
+             wireframe == other.wireframe &&
              mirroredWinding == other.mirroredWinding;
     }
   };
@@ -1463,8 +1528,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       h ^= static_cast<std::size_t>(key.metallic) * 1315423911U;
       h ^= static_cast<std::size_t>(key.normalStrength) * 374761393U;
       h ^= key.useAssetColor ? 0x1U : 0x0U;
-      h ^= key.wireframe ? 0x2U : 0x0U;
-      h ^= key.mirroredWinding ? 0x4U : 0x0U;
+      h ^= key.fastShading ? 0x2U : 0x0U;
+      h ^= key.wireframe ? 0x4U : 0x0U;
+      h ^= key.mirroredWinding ? 0x8U : 0x0U;
       return h;
     }
   };
@@ -1477,6 +1543,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     const GpuTexture* albedoTexture = nullptr;
     const GpuTexture* normalTexture = nullptr;
     bool useAssetColor = false;
+    bool fastShading = false;
     bool wireframe = false;
     bool mirroredWinding = false;
     const GpuMesh::LodGpu* lod = nullptr;
@@ -1498,6 +1565,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         .metallic = FloatBits(item.metallic),
         .normalStrength = FloatBits(item.normalStrength),
         .useAssetColor = item.useAssetColor,
+        .fastShading = item.fastShading,
         .wireframe = item.wireframe,
         .mirroredWinding = item.mirroredWinding,
     };
@@ -1509,6 +1577,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     batch.albedoTexture = item.albedoTexture;
     batch.normalTexture = item.normalTexture;
     batch.useAssetColor = item.useAssetColor;
+    batch.fastShading = item.fastShading;
     batch.wireframe = item.wireframe;
     batch.mirroredWinding = item.mirroredWinding;
     batch.lod = item.lod;
@@ -1528,13 +1597,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     backend_->SetUniform1f(uNormalStrengthLoc_, batch.normalStrength);
     backend_->SetUniform1f(uTriplanarScaleLoc_, triplanarScale_);
     backend_->SetUniform1f(uUseAssetColorLoc_, batch.useAssetColor ? 1.0F : 0.0F);
+    backend_->SetUniform1i(uShadingModeLoc_, batch.fastShading ? 1 : 0);
+    const bool useNormalMap = (batch.normalTexture != nullptr) && !batch.fastShading;
     backend_->SetUniform1i(uHasAlbedoMapLoc_, batch.albedoTexture != nullptr ? 1 : 0);
-    backend_->SetUniform1i(uHasNormalMapLoc_, batch.normalTexture != nullptr ? 1 : 0);
+    backend_->SetUniform1i(uHasNormalMapLoc_, useNormalMap ? 1 : 0);
     backend_->SetActiveTextureUnit(5);
     backend_->BindTexture2D(batch.albedoTexture != nullptr ? batch.albedoTexture->texture.Get() : 0);
     backend_->SetUniform1i(uAlbedoMapLoc_, 5);
     backend_->SetActiveTextureUnit(6);
-    backend_->BindTexture2D(batch.normalTexture != nullptr ? batch.normalTexture->texture.Get() : 0);
+    backend_->BindTexture2D(useNormalMap ? batch.normalTexture->texture.Get() : 0);
     backend_->SetUniform1i(uNormalMapLoc_, 6);
 
     if (batch.mirroredWinding) {
@@ -1623,6 +1694,7 @@ bool CadModelRenderFeature::CreateShader() {
   uNormalMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalMap");
   uHasAlbedoMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uHasAlbedoMap");
   uHasNormalMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uHasNormalMap");
+  uShadingModeLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadingMode");
   uNormalStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalStrength");
   uTriplanarScaleLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTriplanarScale");
 
@@ -1730,7 +1802,7 @@ void main() {}
          uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 &&
          uShadowPcfRadiusLoc_ >= 0 && uShadowCascadeCountLoc_ >= 0 && uShadowCascadeSplitMLoc_ >= 0 &&
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
-         uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 &&
+         uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
          uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 &&
          uShadowLightMvpLoc_ >= 0;
 }

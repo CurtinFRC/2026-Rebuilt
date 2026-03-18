@@ -47,6 +47,9 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   float fieldCadZOffsetM_ = 0.0F;
   float fieldCadOffsetXM_ = 0.0F;
   float fieldCadOffsetYM_ = 0.0F;
+  int maxRenderFuel_ = 400;
+  int maxRenderTruthFuel_ = 400;
+  int maxCameraDebugRaysPerCamera_ = 600;
 
   glm::vec4 colFuel_{1.0F, 0.95F, 0.15F, 0.95F};
   glm::vec4 colTruthFuel_{0.15F, 0.95F, 0.35F, 0.70F};

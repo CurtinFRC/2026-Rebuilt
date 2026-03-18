@@ -220,14 +220,21 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `NT_SCHEMA_PATH`, `HOT_RELOAD_NT_SCHEMA`
 - `TRUTH_SOCKET_ENABLED`, `TRUTH_SOCKET_HOST`, `TRUTH_SOCKET_PORT`
 - `WINDOW_W`, `WINDOW_H`, `FPS`
+- `VSYNC` (default `true`; set `false` to disable swap-interval lock)
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
-- `CAD_PERF_AUTO_QUALITY` (default `true`; adaptive CAD quality based on frame time)
+- `MAX_RENDER_FUEL` (default `400`; cap rendered field-vision fuel markers)
+- `MAX_RENDER_TRUTH_FUEL` (default `400`; cap rendered truth fuel markers)
+- `MAX_CAMERA_DEBUG_RAYS_PER_CAMERA` (default `600`; cap per-camera debug rays)
+- `CAD_PERF_AUTO_QUALITY` (default `false`; adaptive CAD quality based on frame time)
 - `CAD_PERF_TARGET_FRAME_MS` (default `16.7`; adaptive target frame time)
-- `CAD_AUTO_MAX_LOD_BIAS` (default `1`; max automatic CAD LOD step-down)
+- `CAD_AUTO_MAX_LOD_BIAS` (default `0`; max automatic CAD LOD step-down)
 - `CAD_SHADOW_LOD_BIAS` (default `1`; shadow-pass LOD bias to reduce shadow cost)
+- `CAD_SHADOW_CAST_MAX_INDICES` (default `0`; when >0, meshes above this index count do not cast dynamic shadows)
+- `CAD_FAST_SHADING_MIN_INDICES` (default `0`; optional large-mesh cheaper shading path, disabled by default)
+- `CAD_RUNTIME_MAX_DRAW_INDICES` (default `3500000`; hard runtime cap for selected CAD LOD draw index count)
 - `SHOW_DEBUG_PANEL` (default `true`; enables diagnostics counters/panel)
 - `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
 - `INCOMING_COORD_CALIBRATION_PROFILE_PATH` (optional JSON calibration profile file path)
@@ -237,7 +244,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `INCOMING_COORD_ROTATION_DEG` (default `0.0`)
 - `INCOMING_COORD_SCALE_M_PER_UNIT` (default `1.0`)
 - `INCOMING_COORD_Z_SCALE_M_PER_UNIT` (default `1.0`)
-- `CAD_LOD_COUNT` (default `2`)
+- `CAD_LOD_COUNT` (default `3`)
 - `CAD_LOD_RATIO` (default `0.62`)
 - `CAD_LOD_MIN_VERTICES` (default `700000`)
 - `CAD_LOD0_MAX_VERTICES` (default `4500000`)

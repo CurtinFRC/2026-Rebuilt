@@ -145,6 +145,11 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.showTruthFuel = GetEnvBool("SHOW_TRUTH_FUEL", cfg.showTruthFuel);
   cfg.showDiagnostics = GetEnvBool("SHOW_DIAGNOSTICS", cfg.showDiagnostics);
   cfg.showDebugPanel = GetEnvBool("SHOW_DEBUG_PANEL", cfg.showDebugPanel);
+  cfg.maxRenderFuel = std::max(0, GetEnvInt("MAX_RENDER_FUEL", cfg.maxRenderFuel));
+  cfg.maxRenderTruthFuel = std::max(0, GetEnvInt("MAX_RENDER_TRUTH_FUEL", cfg.maxRenderTruthFuel));
+  cfg.maxCameraDebugRaysPerCamera =
+      std::max(0, GetEnvInt("MAX_CAMERA_DEBUG_RAYS_PER_CAMERA", cfg.maxCameraDebugRaysPerCamera));
+  cfg.vsync = GetEnvBool("VSYNC", cfg.vsync);
 
   cfg.followSmoothTimeS = GetEnvFloat("FOLLOW_SMOOTH_TIME_S", cfg.followSmoothTimeS);
   cfg.followMaxSpeedMps = GetEnvFloat("FOLLOW_MAX_SPEED_MPS", cfg.followMaxSpeedMps);

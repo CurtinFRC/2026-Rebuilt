@@ -71,7 +71,7 @@ int ViewerApp::Run() {
   }
 
   glfwMakeContextCurrent(window_);
-  glfwSwapInterval(1);
+  glfwSwapInterval(cfg_.vsync ? 1 : 0);
 
   glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {

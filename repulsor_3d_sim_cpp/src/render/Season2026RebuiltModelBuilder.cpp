@@ -32,6 +32,9 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
   fieldCadZOffsetM_ = cfg.fieldCadZOffsetM;
   fieldCadOffsetXM_ = cfg.fieldCadOffsetXM;
   fieldCadOffsetYM_ = cfg.fieldCadOffsetYM;
+  maxRenderFuel_ = std::max(0, cfg.maxRenderFuel);
+  maxRenderTruthFuel_ = std::max(0, cfg.maxRenderTruthFuel);
+  maxCameraDebugRaysPerCamera_ = std::max(0, cfg.maxCameraDebugRaysPerCamera);
 }
 
 RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
@@ -101,7 +104,16 @@ void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
   }
 
   if (showAgeFilteredFuel) {
+    const std::size_t maxCount = static_cast<std::size_t>(std::max(0, maxRenderFuel_));
+    const std::size_t total = fuelCache_.size();
+    const std::size_t step = (maxCount > 0 && total > maxCount) ? ((total + maxCount - 1) / maxCount) : 1;
+    std::size_t sampleIndex = 0;
     for (const auto& [oid, o] : fuelCache_) {
+      if (step > 1 && (sampleIndex % step) != 0) {
+        ++sampleIndex;
+        continue;
+      }
+      ++sampleIndex;
       const double age = nowS - fuelLastSeen_[oid];
       if (age > static_cast<double>(cfg_.resourceHardMaxAgeS)) {
         continue;
@@ -118,7 +130,16 @@ void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
     return;
   }
 
+  const std::size_t maxCount = static_cast<std::size_t>(std::max(0, maxRenderFuel_));
+  const std::size_t total = snap.fieldVision.size();
+  const std::size_t step = (maxCount > 0 && total > maxCount) ? ((total + maxCount - 1) / maxCount) : 1;
+  std::size_t sampleIndex = 0;
   for (const auto& o : snap.fieldVision) {
+    if (step > 1 && (sampleIndex % step) != 0) {
+      ++sampleIndex;
+      continue;
+    }
+    ++sampleIndex;
     if (NormalizeType(o.type) != "fuel") {
       continue;
     }
@@ -132,7 +153,16 @@ void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
 }
 
 void Season2026RebuiltModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) {
+  const std::size_t maxCount = static_cast<std::size_t>(std::max(0, maxRenderTruthFuel_));
+  const std::size_t total = snap.truth.size();
+  const std::size_t step = (maxCount > 0 && total > maxCount) ? ((total + maxCount - 1) / maxCount) : 1;
+  std::size_t sampleIndex = 0;
   for (const auto& o : snap.truth) {
+    if (step > 1 && (sampleIndex % step) != 0) {
+      ++sampleIndex;
+      continue;
+    }
+    ++sampleIndex;
     frame.spheres.push_back({
         .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), fieldZ_ + static_cast<float>(o.z)},
         .radius = fuelRadius_ * 0.85F,
@@ -308,7 +338,16 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
     const float r21 = cp * sr;
     const float r22 = cp * cr;
 
+    const std::size_t maxRays = static_cast<std::size_t>(std::max(0, maxCameraDebugRaysPerCamera_));
+    const std::size_t total = snap.fieldVision.size();
+    const std::size_t step = (maxRays > 0 && total > maxRays) ? ((total + maxRays - 1) / maxRays) : 1;
+    std::size_t sampleIndex = 0;
     for (const auto& o : snap.fieldVision) {
+      if (step > 1 && (sampleIndex % step) != 0) {
+        ++sampleIndex;
+        continue;
+      }
+      ++sampleIndex;
       const float ox = static_cast<float>(o.x);
       const float oy = static_cast<float>(o.y);
       const float oz = rz + static_cast<float>(o.z);

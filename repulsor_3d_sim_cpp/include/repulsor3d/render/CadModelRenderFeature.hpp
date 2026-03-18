@@ -187,6 +187,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uNormalMapLoc_ = -1;
   int uHasAlbedoMapLoc_ = -1;
   int uHasNormalMapLoc_ = -1;
+  int uShadingModeLoc_ = -1;
   int uNormalStrengthLoc_ = -1;
   int uTriplanarScaleLoc_ = -1;
   int shadowMapSize_ = 2048;
@@ -213,10 +214,13 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uploadBudgetPerFrame_ = 1;
   int uploadsThisFrame_ = 0;
   float triplanarScale_ = 1.0F;
-  bool autoQualityEnabled_ = true;
+  bool autoQualityEnabled_ = false;
   float perfTargetFrameMs_ = 16.7F;
-  int maxAutoLodBias_ = 1;
+  int maxAutoLodBias_ = 0;
   int shadowLodBias_ = 1;
+  int shadowCasterMaxIndices_ = 0;
+  int fastShadingMinIndices_ = 0;
+  int runtimeMaxDrawIndices_ = 3500000;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

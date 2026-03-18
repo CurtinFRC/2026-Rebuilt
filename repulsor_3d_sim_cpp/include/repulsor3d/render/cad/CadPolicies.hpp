@@ -12,9 +12,9 @@ enum class ShadowQuality {
 };
 
 struct CadLodPolicy {
-  std::size_t maxLodCount = 2;
-  float reductionRatio = 0.62F;
-  std::size_t minVertexCount = 700000;
+  std::size_t maxLodCount = 3;
+  float reductionRatio = 0.72F;
+  std::size_t minVertexCount = 350000;
   std::size_t lod0VertexCap = 4500000;
   bool keepOriginalLod0 = true;
   std::size_t maxPreferredDrawIndices = 8500000;
@@ -61,4 +61,3 @@ const CadVisualPolicy& LoadCadVisualPolicy();
 const CadShadowPolicy& LoadCadShadowPolicy();
 
 }  // namespace repulsor3d::cad
-
