@@ -286,14 +286,16 @@ void Renderer::DrawGrid(const glm::mat4& vp) {
 
   const glm::vec4 col{0.15F, 0.15F, 0.18F, 1.0F};
   const float step = 1.0F;
+  const float halfLength = fieldLength_ * 0.5F;
+  const float halfWidth = fieldWidth_ * 0.5F;
 
-  for (float x = 0.0F; x <= fieldLength_ + 1e-4F; x += step) {
-    lines.push_back({glm::vec3{x, 0.0F, fieldZ_}, col});
-    lines.push_back({glm::vec3{x, fieldWidth_, fieldZ_}, col});
+  for (float x = -halfLength; x <= halfLength + 1e-4F; x += step) {
+    lines.push_back({glm::vec3{x, -halfWidth, fieldZ_}, col});
+    lines.push_back({glm::vec3{x, halfWidth, fieldZ_}, col});
   }
-  for (float y = 0.0F; y <= fieldWidth_ + 1e-4F; y += step) {
-    lines.push_back({glm::vec3{0.0F, y, fieldZ_}, col});
-    lines.push_back({glm::vec3{fieldLength_, y, fieldZ_}, col});
+  for (float y = -halfWidth; y <= halfWidth + 1e-4F; y += step) {
+    lines.push_back({glm::vec3{-halfLength, y, fieldZ_}, col});
+    lines.push_back({glm::vec3{halfLength, y, fieldZ_}, col});
   }
 
   DrawLineList(vp, lines, 1.0F);
