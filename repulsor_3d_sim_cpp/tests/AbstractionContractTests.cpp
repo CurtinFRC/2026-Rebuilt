@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "repulsor3d/Config.hpp"
+#include "repulsor3d/Diagnostics.hpp"
 #include "repulsor3d/core/LayerContracts.hpp"
 #include "repulsor3d/domain/CoordinateSystemService.hpp"
 #include "repulsor3d/plugins/PluginSdk.hpp"
@@ -60,8 +61,7 @@ std::optional<Layer> LayerFromFilePath(const fs::path& filePath) {
   if (p.find("DataSourceFactory.cpp") != std::string::npos ||
       p.find("SeasonModule.cpp") != std::string::npos ||
       p.find("RenderFeaturePlugin.cpp") != std::string::npos ||
-      p.find("RenderWorldAdapter.cpp") != std::string::npos ||
-      p.find("SceneModelBuilderFactory.cpp") != std::string::npos) {
+      p.find("RenderWorldAdapter.cpp") != std::string::npos) {
     return Layer::App;
   }
   if (p.find("/render/") != std::string::npos || p.find("\\render\\") != std::string::npos ||
@@ -386,6 +386,18 @@ int RunPluginSdkTests() {
   return 0;
 }
 
+int RunDiagnosticsMessageTests() {
+  repulsor3d::DiagnosticsService diagnostics;
+  diagnostics.BeginFrame();
+  diagnostics.RecordMessage("hot reload ok");
+  diagnostics.EndFrame(16.0);
+  const auto& latest = diagnostics.Latest();
+  if (latest.messages.empty() || latest.messages.front() != "hot reload ok") {
+    return 80;
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -415,6 +427,10 @@ int main() {
   }
   if (const int rc = RunPluginSdkTests(); rc != 0) {
     std::cerr << "Plugin SDK tests failed: " << rc << "\n";
+    return rc;
+  }
+  if (const int rc = RunDiagnosticsMessageTests(); rc != 0) {
+    std::cerr << "Diagnostics message tests failed: " << rc << "\n";
     return rc;
   }
 

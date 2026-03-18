@@ -51,6 +51,7 @@ class Renderer {
   void SetSceneModelBuilder(std::unique_ptr<ISceneModelBuilder> sceneBuilder);
   void SetRenderFeatures(std::vector<std::unique_ptr<IRenderFeature>> renderFeatures);
   void ApplyRuntimeConfig(const ViewerConfig& cfg);
+  void QueueDiagnosticMessage(std::string message);
   IRenderBackend& GetRenderBackend();
   IGeometryProvider& GetGeometryProvider();
   ISceneAssetResolver& GetAssetResolver();
@@ -179,6 +180,7 @@ class Renderer {
   std::uint64_t renderFeatureReloadCount_ = 0;
   std::uint64_t renderFeatureReloadFailedCount_ = 0;
   std::string renderFeatureReloadLastError_;
+  std::vector<std::string> queuedDiagnosticMessages_;
 };
 
 }  // namespace repulsor3d

@@ -70,6 +70,24 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.loads.failed", static_cast<double>(failedCount));
     context.diagnosticsWriter->RecordCounter("cad.loads.progress_pct", static_cast<double>(avgProgress * 100.0F));
     context.diagnosticsWriter->RecordCounter("cad.uploads.pending", static_cast<double>(pendingGpuUploads_.size()));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cache.mesh_count",
+        static_cast<double>(cacheLifetimeManager_.Stats(ResourceClass::Mesh).count));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cache.mesh_bytes",
+        static_cast<double>(cacheLifetimeManager_.Stats(ResourceClass::Mesh).bytes));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cache.texture_count",
+        static_cast<double>(cacheLifetimeManager_.Stats(ResourceClass::Texture).count));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cache.texture_bytes",
+        static_cast<double>(cacheLifetimeManager_.Stats(ResourceClass::Texture).bytes));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cache.over_budget",
+        (cacheLifetimeManager_.IsOverBudget(ResourceClass::Mesh) ||
+         cacheLifetimeManager_.IsOverBudget(ResourceClass::Texture))
+            ? 1.0
+            : 0.0);
   }
 
   if (renderPass_ == RenderPass::Opaque) {

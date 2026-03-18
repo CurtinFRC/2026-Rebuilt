@@ -57,7 +57,9 @@ CadModelRenderFeature::~CadModelRenderFeature() {
     DestroyMesh(mesh);
   }
   meshCache_.clear();
+  meshCacheBytes_.clear();
   textureCache_.clear();
+  textureCacheBytes_.clear();
   failedTextureLoads_.clear();
 
   shadowDepthTexture_.Reset();
@@ -108,6 +110,18 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
       GetEnvInt("CAD_RUNTIME_MAX_DRAW_INDICES_FIELD", runtimeMaxDrawIndicesField_),
       0,
       50000000);
+  const int meshBudgetMb = std::max(0, GetEnvInt("CAD_CACHE_MAX_MESH_MB", static_cast<int>(meshCacheBudgetBytes_ / (1024ULL * 1024ULL))));
+  const int textureBudgetMb =
+      std::max(0, GetEnvInt("CAD_CACHE_MAX_TEXTURE_MB", static_cast<int>(textureCacheBudgetBytes_ / (1024ULL * 1024ULL))));
+  meshCacheBudgetBytes_ = static_cast<std::size_t>(meshBudgetMb) * 1024ULL * 1024ULL;
+  textureCacheBudgetBytes_ = static_cast<std::size_t>(textureBudgetMb) * 1024ULL * 1024ULL;
+  meshCacheBudgetCount_ = static_cast<std::size_t>(std::max(0, GetEnvInt("CAD_CACHE_MAX_MESH_COUNT", static_cast<int>(meshCacheBudgetCount_))));
+  textureCacheBudgetCount_ = static_cast<std::size_t>(std::max(0, GetEnvInt("CAD_CACHE_MAX_TEXTURE_COUNT", static_cast<int>(textureCacheBudgetCount_))));
+  cacheLifetimeManager_.SetBudget(ResourceClass::Mesh, ResourceBudget{.maxCount = meshCacheBudgetCount_, .maxBytes = meshCacheBudgetBytes_});
+  cacheLifetimeManager_.SetBudget(
+      ResourceClass::Texture,
+      ResourceBudget{.maxCount = textureCacheBudgetCount_, .maxBytes = textureCacheBudgetBytes_});
+
   StartLoadWorker();
   if (initialized_) {
     return true;

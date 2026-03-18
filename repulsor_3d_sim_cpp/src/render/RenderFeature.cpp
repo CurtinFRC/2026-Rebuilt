@@ -137,6 +137,9 @@ class OverlayRenderFeature final : public IRenderFeature {
                " ms (avg " + std::to_string(asset.averageMilliseconds) + ")"});
         }
       }
+      for (const auto& message : context.diagnostics->messages) {
+        lines.push_back({"[Notice] " + message});
+      }
     }
 
     drawApi.DrawOverlay(context.viewportWidth, context.viewportHeight, lines);

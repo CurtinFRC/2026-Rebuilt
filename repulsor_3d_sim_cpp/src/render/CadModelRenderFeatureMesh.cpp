@@ -176,6 +176,24 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
   gpu.materialHints = PositionNormalMesh::MaterialHints{};
 }
 
+std::size_t CadModelRenderFeature::EstimateGpuMeshBytes(const GpuMesh& gpu) {
+  std::size_t bytes = 0;
+  const auto accumulateLod = [&](const GpuMesh::LodGpu& lod) {
+    const std::size_t vertexCount = static_cast<std::size_t>(std::max(lod.vertexCount, 0));
+    const std::size_t indexCount = static_cast<std::size_t>(std::max(lod.indexCount, 0));
+    bytes += vertexCount * sizeof(cadfeature::PackedVertex);
+    bytes += indexCount * sizeof(std::uint32_t);
+    bytes += sizeof(cadfeature::InstanceGpuData);
+  };
+  for (const auto& lod : gpu.lods) {
+    accumulateLod(lod);
+  }
+  if (gpu.shadowProxy.has_value()) {
+    accumulateLod(gpu.shadowProxy.value());
+  }
+  return bytes;
+}
+
 std::size_t CadModelRenderFeature::SelectLodLevel(
     const GpuMesh& mesh,
     const glm::mat4& mvp,

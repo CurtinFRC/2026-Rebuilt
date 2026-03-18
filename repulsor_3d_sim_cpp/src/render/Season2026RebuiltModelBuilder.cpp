@@ -11,6 +11,25 @@
 #include "repulsor3d/render/scenegraph/SceneGraphBuilder.hpp"
 
 namespace repulsor3d {
+namespace {
+
+RenderEntity MakeStaticEntity(
+    std::string id,
+    const RenderPass pass,
+    RenderEntityPayload payload,
+    const EntityCulling culling = {.enabled = true, .boundsRadius = 0.5F}) {
+  return RenderEntity{
+      .id = std::move(id),
+      .pass = pass,
+      .payload = std::move(payload),
+      .parentId = "",
+      .transform = {},
+      .hasTransform = false,
+      .culling = culling,
+  };
+}
+
+}  // namespace
 
 Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig& cfg) : cfg_(cfg) {
   fieldZ_ = cfg.fieldZM;
@@ -56,15 +75,15 @@ RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle&
 
   const WorldSnapshot& snap = bundle.snapshot;
   if (toggles.showTruthFuel) {
-    AppendTruthFuelPrimitives(frame, snap);
+    AppendTruthFuelPrimitives(sceneGraph, snap);
   }
 
-  AppendFuelPrimitives(frame, snap, toggles.showAgeFilteredFuel);
-  AppendObstaclePrimitives(frame, snap);
-  AppendRobotPrimitives(frame, sceneGraph, snap);
+  AppendFuelPrimitives(sceneGraph, snap, toggles.showAgeFilteredFuel);
+  AppendObstaclePrimitives(sceneGraph, snap);
+  AppendRobotPrimitives(sceneGraph, snap);
   AppendCadModelPrimitives(sceneGraph, snap);
   if (toggles.showCameraDebug) {
-    AppendCameraPrimitives(frame, snap);
+    AppendCameraPrimitives(sceneGraph, snap);
   }
   frame.entities = sceneGraph.ConsumeNodes();
 
@@ -72,7 +91,7 @@ RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle&
 }
 
 void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
-    RenderSceneFrame& frame,
+    scenegraph::SceneGraphBuilder& sceneGraph,
     const WorldSnapshot& snap,
     const bool showAgeFilteredFuel) {
   const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -121,11 +140,17 @@ void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
 
       const float w = std::exp(-cfg_.collectAgeDecay * static_cast<float>(std::max(0.0, age)));
       const float scale = 0.35F + 0.65F * w;
-      frame.spheres.push_back({
+      SpherePrimitive sphere{
           .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), fieldZ_ + static_cast<float>(o.z)},
           .radius = fuelRadius_,
           .color = colFuel_ * scale,
-      });
+          .pass = RenderPass::Opaque,
+      };
+      sceneGraph.AddNode(MakeStaticEntity(
+          "fuel_cached_" + oid,
+          RenderPass::Opaque,
+          sphere,
+          {.enabled = true, .boundsRadius = std::max(fuelRadius_, 0.05F)}));
     }
     return;
   }
@@ -144,15 +169,22 @@ void Season2026RebuiltModelBuilder::AppendFuelPrimitives(
       continue;
     }
 
-    frame.spheres.push_back({
+    SpherePrimitive sphere{
         .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), fieldZ_ + static_cast<float>(o.z)},
         .radius = fuelRadius_,
         .color = colFuel_,
-    });
+        .pass = RenderPass::Opaque,
+    };
+    const std::string id = o.oid.empty() ? ("fuel_live_" + std::to_string(sampleIndex)) : ("fuel_live_" + o.oid);
+    sceneGraph.AddNode(MakeStaticEntity(
+        id,
+        RenderPass::Opaque,
+        sphere,
+        {.enabled = true, .boundsRadius = std::max(fuelRadius_, 0.05F)}));
   }
 }
 
-void Season2026RebuiltModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) {
+void Season2026RebuiltModelBuilder::AppendTruthFuelPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) {
   const std::size_t maxCount = static_cast<std::size_t>(std::max(0, maxRenderTruthFuel_));
   const std::size_t total = snap.truth.size();
   const std::size_t step = (maxCount > 0 && total > maxCount) ? ((total + maxCount - 1) / maxCount) : 1;
@@ -163,28 +195,41 @@ void Season2026RebuiltModelBuilder::AppendTruthFuelPrimitives(RenderSceneFrame& 
       continue;
     }
     ++sampleIndex;
-    frame.spheres.push_back({
+    SpherePrimitive sphere{
         .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), fieldZ_ + static_cast<float>(o.z)},
         .radius = fuelRadius_ * 0.85F,
         .color = colTruthFuel_,
-    });
+        .pass = RenderPass::Opaque,
+    };
+    const std::string id = o.oid.empty() ? ("fuel_truth_" + std::to_string(sampleIndex)) : ("fuel_truth_" + o.oid);
+    sceneGraph.AddNode(MakeStaticEntity(
+        id,
+        RenderPass::Opaque,
+        sphere,
+        {.enabled = true, .boundsRadius = std::max(fuelRadius_ * 0.85F, 0.05F)}));
   }
 }
 
-void Season2026RebuiltModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendObstaclePrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const {
   const float hz = fieldZ_ + obsSide_ * 0.5F;
   for (const auto& o : snap.repulsorVision) {
-    frame.boxes.push_back({
+    BoxPrimitive box{
         .center = glm::vec3{static_cast<float>(o.x), static_cast<float>(o.y), hz},
         .size = glm::vec3{obsSide_, obsSide_, obsSide_},
         .yawDeg = 0.0F,
         .color = colOther_,
-    });
+        .pass = RenderPass::Opaque,
+    };
+    const std::string id = o.oid.empty() ? ("obstacle_" + std::to_string(sceneGraph.Size())) : ("obstacle_" + o.oid);
+    sceneGraph.AddNode(MakeStaticEntity(
+        id,
+        RenderPass::Opaque,
+        box,
+        {.enabled = true, .boundsRadius = std::max(obsSide_, 0.1F)}));
   }
 }
 
 void Season2026RebuiltModelBuilder::AppendRobotPrimitives(
-    RenderSceneFrame& frame,
     scenegraph::SceneGraphBuilder& sceneGraph,
     const WorldSnapshot& snap) const {
   if (snap.pose.has_value()) {
@@ -220,47 +265,70 @@ void Season2026RebuiltModelBuilder::AppendRobotPrimitives(
     const glm::vec3 end{start.x + headingLen * std::cos(static_cast<float>(p.thetaRad)),
                         start.y + headingLen * std::sin(static_cast<float>(p.thetaRad)),
                         start.z};
-
-    frame.lines.push_back({
+    LinePrimitive headingLine{
         .a = start,
         .b = end,
         .color = colHeading_,
         .width = 3.0F,
-    });
+        .pass = RenderPass::Transparent,
+    };
+    sceneGraph.AddNode(MakeStaticEntity(
+        "robot_heading_live",
+        RenderPass::Transparent,
+        headingLine,
+        {.enabled = false, .boundsRadius = 0.0F}));
   }
 
   if (snap.activeGoal.has_value()) {
     const Pose2D& p = snap.activeGoal.value();
-    frame.boxes.push_back({
+    BoxPrimitive box{
         .center = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ * 0.5F},
         .size = glm::vec3{robotL_, robotW_, robotH_},
         .yawDeg = glm::degrees(static_cast<float>(p.thetaRad)),
         .color = colActive_,
-    });
+        .pass = RenderPass::Transparent,
+    };
+    sceneGraph.AddNode(MakeStaticEntity(
+        "robot_goal_active",
+        RenderPass::Transparent,
+        box,
+        {.enabled = true, .boundsRadius = std::max(robotL_, robotW_)}));
   }
 
   if (snap.chosenCollect.has_value()) {
     const Pose2D& p = snap.chosenCollect.value();
-    frame.boxes.push_back({
+    BoxPrimitive box{
         .center = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ * 0.5F},
         .size = glm::vec3{robotL_, robotW_, robotH_},
         .yawDeg = glm::degrees(static_cast<float>(p.thetaRad)),
         .color = colChosen_,
-    });
+        .pass = RenderPass::Transparent,
+    };
+    sceneGraph.AddNode(MakeStaticEntity(
+        "robot_goal_chosen",
+        RenderPass::Transparent,
+        box,
+        {.enabled = true, .boundsRadius = std::max(robotL_, robotW_)}));
   }
 
   if (snap.finalCollect.has_value()) {
     const Pose2D& p = snap.finalCollect.value();
-    frame.boxes.push_back({
+    BoxPrimitive box{
         .center = glm::vec3{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ * 0.5F},
         .size = glm::vec3{robotL_, robotW_, robotH_},
         .yawDeg = glm::degrees(static_cast<float>(p.thetaRad)),
         .color = colFinal_,
-    });
+        .pass = RenderPass::Transparent,
+    };
+    sceneGraph.AddNode(MakeStaticEntity(
+        "robot_goal_final",
+        RenderPass::Transparent,
+        box,
+        {.enabled = true, .boundsRadius = std::max(robotL_, robotW_)}));
   }
 }
 
-void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendCameraPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const {
   if (!snap.pose.has_value() || snap.cameras.empty()) {
     return;
   }
@@ -274,7 +342,9 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
   const float yawCos = std::cos(yaw);
   const float yawSin = std::sin(yaw);
 
-  for (const auto& c : snap.cameras) {
+  for (std::size_t cameraIndex = 0; cameraIndex < snap.cameras.size(); ++cameraIndex) {
+    const auto& c = snap.cameras[cameraIndex];
+    const std::string cameraKey = c.name.empty() ? ("camera_" + std::to_string(cameraIndex)) : c.name;
     const float cx = rx + static_cast<float>(c.x) * yawCos - static_cast<float>(c.y) * yawSin;
     const float cy = ry + static_cast<float>(c.x) * yawSin + static_cast<float>(c.y) * yawCos;
     const float cz = rz + static_cast<float>(c.z);
@@ -287,12 +357,18 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
     const float vfov = glm::radians(std::max(1e-6F, static_cast<float>(c.vfovDeg)));
     const float depth = std::max(0.2F, static_cast<float>(c.maxRange));
 
-    frame.boxes.push_back({
+    BoxPrimitive cameraBody{
         .center = glm::vec3{cx, cy, cz},
         .size = glm::vec3{0.06F, 0.06F, 0.06F},
         .yawDeg = glm::degrees(yawWorld),
         .color = colCam_,
-    });
+        .pass = RenderPass::Transparent,
+    };
+    sceneGraph.AddNode(MakeStaticEntity(
+        "camera_body_" + cameraKey,
+        RenderPass::Transparent,
+        cameraBody,
+        {.enabled = true, .boundsRadius = 0.2F}));
 
     const float ch = std::cos(yawWorld);
     const float sh = std::sin(yawWorld);
@@ -317,12 +393,28 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
         farCenter - wv + hv,
     };
 
+    std::size_t edgeIndex = 0;
     for (const auto& p : corners) {
-      frame.lines.push_back({.a = glm::vec3{cx, cy, cz}, .b = p, .color = colCamFov_, .width = 1.0F});
+      LinePrimitive fovRay{.a = glm::vec3{cx, cy, cz}, .b = p, .color = colCamFov_, .width = 1.0F, .pass = RenderPass::Transparent};
+      sceneGraph.AddNode(MakeStaticEntity(
+          "camera_fov_ray_" + cameraKey + "_" + std::to_string(edgeIndex++),
+          RenderPass::Transparent,
+          fovRay,
+          {.enabled = false, .boundsRadius = 0.0F}));
     }
 
     for (size_t i = 0; i < corners.size(); ++i) {
-      frame.lines.push_back({.a = corners[i], .b = corners[(i + 1) % corners.size()], .color = colCamFov_, .width = 1.0F});
+      LinePrimitive fovEdge{
+          .a = corners[i],
+          .b = corners[(i + 1) % corners.size()],
+          .color = colCamFov_,
+          .width = 1.0F,
+          .pass = RenderPass::Transparent};
+      sceneGraph.AddNode(MakeStaticEntity(
+          "camera_fov_edge_" + cameraKey + "_" + std::to_string(i),
+          RenderPass::Transparent,
+          fovEdge,
+          {.enabled = false, .boundsRadius = 0.0F}));
     }
 
     const float cr = std::cos(rollWorld);
@@ -368,12 +460,18 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
         }
       }
 
-      frame.lines.push_back({
+      LinePrimitive debugRay{
           .a = glm::vec3{cx, cy, cz},
           .b = glm::vec3{ox, oy, oz},
           .color = rayColor,
           .width = 1.0F,
-      });
+          .pass = RenderPass::Transparent,
+      };
+      sceneGraph.AddNode(MakeStaticEntity(
+          "camera_debug_ray_" + cameraKey + "_" + std::to_string(sampleIndex),
+          RenderPass::Transparent,
+          debugRay,
+          {.enabled = false, .boundsRadius = 0.0F}));
     }
   }
 }

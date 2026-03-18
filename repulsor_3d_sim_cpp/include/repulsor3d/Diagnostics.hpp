@@ -25,6 +25,7 @@ struct DiagnosticsSnapshot {
   std::vector<TimingSample> assetTimings;
   std::vector<TimingSample> gpuTimings;
   std::vector<CounterSample> counters;
+  std::vector<std::string> messages;
 };
 
 class DiagnosticsService {
@@ -34,6 +35,7 @@ class DiagnosticsService {
   void RecordAssetTime(const std::string& assetEventName, double milliseconds);
   void RecordGpuTime(const std::string& passName, double milliseconds);
   void RecordCounter(const std::string& counterName, double value);
+  void RecordMessage(const std::string& message);
   void EndFrame(double frameMilliseconds);
 
   const DiagnosticsSnapshot& Latest() const;

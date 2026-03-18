@@ -199,6 +199,7 @@ void ViewerApp::MaybeReloadRuntimeConfigProfile(const std::chrono::steady_clock:
   std::string error;
   if (!LoadViewerConfigProfile(cfg_.runtimeConfigProfilePath, next, &error)) {
     std::cerr << "[RuntimeConfig] reload failed for '" << cfg_.runtimeConfigProfilePath << "': " << error << "\n";
+    renderer_.QueueDiagnosticMessage("runtime config reload failed: " + error);
     runtimeConfigWriteTime_ = writeTime;
     runtimeConfigWriteTimeKnown_ = true;
     return;
@@ -208,6 +209,7 @@ void ViewerApp::MaybeReloadRuntimeConfigProfile(const std::chrono::steady_clock:
   runtimeConfigWriteTimeKnown_ = true;
   ApplyRuntimeConfigProfile(next);
   std::cerr << "[RuntimeConfig] reloaded profile: " << cfg_.runtimeConfigProfilePath << "\n";
+  renderer_.QueueDiagnosticMessage("runtime config reloaded: " + cfg_.runtimeConfigProfilePath);
 }
 
 void ViewerApp::Tick(const double dt) {

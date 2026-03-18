@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -131,6 +132,19 @@ void Renderer::ApplyRuntimeConfig(const ViewerConfig& cfg) {
 
   if ((pipelineChanged || pluginChanged) && renderFeaturesInitialized_) {
     RebuildRenderFeatures("runtime_config");
+  }
+}
+
+void Renderer::QueueDiagnosticMessage(std::string message) {
+  if (message.empty()) {
+    return;
+  }
+  queuedDiagnosticMessages_.push_back(std::move(message));
+  constexpr std::size_t kMaxQueuedMessages = 16;
+  if (queuedDiagnosticMessages_.size() > kMaxQueuedMessages) {
+    queuedDiagnosticMessages_.erase(
+        queuedDiagnosticMessages_.begin(),
+        queuedDiagnosticMessages_.begin() + static_cast<std::ptrdiff_t>(queuedDiagnosticMessages_.size() - kMaxQueuedMessages));
   }
 }
 
@@ -286,6 +300,10 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("render_pipeline.reload_failed_count", static_cast<double>(renderFeatureReloadFailedCount_));
   diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
   diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
+  for (const auto& message : queuedDiagnosticMessages_) {
+    diagnostics_.RecordMessage(message);
+  }
+  queuedDiagnosticMessages_.clear();
   const auto frameStart = std::chrono::steady_clock::now();
 
   MaybeHotReloadRenderFeatures();
@@ -389,6 +407,7 @@ bool Renderer::RebuildRenderFeatures(std::string reason) {
       renderFeatureReloadLastError_ = "failed to load render plugin '" + cfg_.renderFeaturePluginPath + "'";
       ++renderFeatureReloadFailedCount_;
       std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+      QueueDiagnosticMessage("render pipeline reload failed: " + renderFeatureReloadLastError_);
       CaptureRenderFeatureInputStamps();
       return false;
     }
@@ -404,6 +423,7 @@ bool Renderer::RebuildRenderFeatures(std::string reason) {
     renderFeatureReloadLastError_ = "render feature list is empty";
     ++renderFeatureReloadFailedCount_;
     std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+    QueueDiagnosticMessage("render pipeline reload failed: " + renderFeatureReloadLastError_);
     CaptureRenderFeatureInputStamps();
     return false;
   }
@@ -416,6 +436,7 @@ bool Renderer::RebuildRenderFeatures(std::string reason) {
       renderFeatureReloadLastError_ = "feature init failed: " + feature->Name();
       ++renderFeatureReloadFailedCount_;
       std::cerr << "[Renderer] " << renderFeatureReloadLastError_ << "\n";
+      QueueDiagnosticMessage("render pipeline reload failed: " + renderFeatureReloadLastError_);
       CaptureRenderFeatureInputStamps();
       return false;
     }
@@ -428,6 +449,7 @@ bool Renderer::RebuildRenderFeatures(std::string reason) {
   renderFeatureReloadLastError_.clear();
   CaptureRenderFeatureInputStamps();
   std::cerr << "[Renderer] render features rebuilt (" << reason << ")\n";
+  QueueDiagnosticMessage("render features rebuilt (" + reason + ")");
   return true;
 }
 

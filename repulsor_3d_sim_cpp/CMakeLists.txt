@@ -116,6 +116,7 @@ set(REPULSOR_SIM_SOURCES
   src/Renderer.cpp
   src/app/InputActionMap.cpp
   src/app/CameraControllers.cpp
+  src/app/composition/SeasonWorldComposition.cpp
   src/async/TaskScheduler.cpp
   src/domain/CoordinateSystemService.cpp
   src/domain/SnapshotDomainAdapter.cpp
@@ -229,6 +230,40 @@ if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
   endif()
   if(MSVC)
     target_compile_options(repulsor3d_generic_render_feature_plugin PRIVATE /utf-8)
+  endif()
+
+  add_library(repulsor3d_invalid_season_plugin_no_sdk SHARED
+    plugin_sdk/InvalidSeasonPluginNoSdk.cpp
+  )
+  target_include_directories(repulsor3d_invalid_season_plugin_no_sdk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor3d_invalid_season_plugin_no_sdk PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor3d_invalid_season_plugin_no_sdk PRIVATE glm::glm)
+  endif()
+  if(MSVC)
+    target_compile_options(repulsor3d_invalid_season_plugin_no_sdk PRIVATE /utf-8)
+  endif()
+
+  add_library(repulsor3d_invalid_datasource_plugin_bad_flavor SHARED
+    plugin_sdk/InvalidDataSourcePluginBadFlavor.cpp
+  )
+  target_include_directories(repulsor3d_invalid_datasource_plugin_bad_flavor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(MSVC)
+    target_compile_options(repulsor3d_invalid_datasource_plugin_bad_flavor PRIVATE /utf-8)
+  endif()
+
+  add_library(repulsor3d_invalid_render_feature_plugin_bad_flavor SHARED
+    plugin_sdk/InvalidRenderFeaturePluginBadFlavor.cpp
+  )
+  target_include_directories(repulsor3d_invalid_render_feature_plugin_bad_flavor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor3d_invalid_render_feature_plugin_bad_flavor PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor3d_invalid_render_feature_plugin_bad_flavor PRIVATE glm::glm)
+  endif()
+  if(MSVC)
+    target_compile_options(repulsor3d_invalid_render_feature_plugin_bad_flavor PRIVATE /utf-8)
   endif()
 endif()
 
@@ -420,6 +455,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
     src/sim/SimWorld.cpp
     src/render/SceneDescriptor.cpp
     src/render/RenderWorldAdapter.cpp
+    src/app/composition/SeasonWorldComposition.cpp
     src/render/Season2026RebuiltModelBuilder.cpp
     src/render/scenegraph/SceneGraphBuilder.cpp
     src/render/SceneModelBuilderFactory.cpp
@@ -444,6 +480,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
     src/render/SceneDescriptor.cpp
     src/render/SceneModelBuilderFactory.cpp
     src/render/RenderWorldAdapter.cpp
+    src/app/composition/SeasonWorldComposition.cpp
     src/render/Season2026RebuiltModelBuilder.cpp
     src/render/scenegraph/SceneGraphBuilder.cpp
     src/render/pipeline/RenderPipelineConfig.cpp
@@ -451,6 +488,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
     src/domain/CoordinateSystemService.cpp
     src/async/TaskScheduler.cpp
     src/render/resources/ResourceLifetimeManager.cpp
+    src/Diagnostics.cpp
   )
   target_include_directories(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE nlohmann_json::nlohmann_json)
@@ -511,6 +549,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
       src/sim/SimWorld.cpp
       src/render/SceneDescriptor.cpp
       src/render/RenderWorldAdapter.cpp
+      src/app/composition/SeasonWorldComposition.cpp
       src/render/Season2026RebuiltModelBuilder.cpp
       src/render/scenegraph/SceneGraphBuilder.cpp
       src/render/SceneModelBuilderFactory.cpp
@@ -589,10 +628,59 @@ if(REPULSOR_SIM_BUILD_TESTS)
         $<TARGET_FILE:repulsor_3d_sim_cpp_render_plugin_abi_tests>
     )
 
+    add_executable(repulsor_3d_sim_cpp_plugin_abi_negative_tests
+      tests/PluginAbiNegativeTests.cpp
+      src/DataSourceFactory.cpp
+      src/ReplayDataSource.cpp
+      src/SnapshotIO.cpp
+      src/NullDataSource.cpp
+      src/sim/SimWorld.cpp
+      src/render/SceneDescriptor.cpp
+      src/render/RenderWorldAdapter.cpp
+      src/app/composition/SeasonWorldComposition.cpp
+      src/render/Season2026RebuiltModelBuilder.cpp
+      src/render/scenegraph/SceneGraphBuilder.cpp
+      src/render/SceneModelBuilderFactory.cpp
+      src/season/SeasonDefinitionRegistry.cpp
+      src/modules/SeasonModule.cpp
+      src/render/RenderFeaturePlugin.cpp
+    )
+    target_include_directories(
+      repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE nlohmann_json::nlohmann_json)
+    if(REPULSOR_SIM_FETCH_DEPS)
+      target_include_directories(repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE ${glm_SOURCE_DIR})
+    else()
+      target_link_libraries(repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE glm::glm)
+    endif()
+    if(WIN32)
+      target_link_libraries(repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE ws2_32)
+    endif()
+    if(MSVC)
+      target_compile_options(repulsor_3d_sim_cpp_plugin_abi_negative_tests PRIVATE /utf-8)
+    endif()
+    add_dependencies(
+      repulsor_3d_sim_cpp_plugin_abi_negative_tests
+      repulsor3d_invalid_season_plugin_no_sdk
+      repulsor3d_invalid_datasource_plugin_bad_flavor
+      repulsor3d_invalid_render_feature_plugin_bad_flavor
+    )
+    add_test(
+      NAME repulsor_3d_sim_cpp_plugin_abi_negative_tests
+      COMMAND
+        ${CMAKE_COMMAND} -E env
+        REPULSOR_TEST_INVALID_SEASON_NO_SDK_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_invalid_season_plugin_no_sdk>
+        REPULSOR_TEST_INVALID_DATASOURCE_BAD_FLAVOR_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_invalid_datasource_plugin_bad_flavor>
+        REPULSOR_TEST_INVALID_RENDER_BAD_FLAVOR_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_invalid_render_feature_plugin_bad_flavor>
+        $<TARGET_FILE:repulsor_3d_sim_cpp_plugin_abi_negative_tests>
+    )
+
     add_custom_target(repulsor_plugin_abi_check
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_plugin_abi_tests
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_datasource_plugin_abi_tests
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_render_plugin_abi_tests
+      COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_plugin_abi_negative_tests
       DEPENDS
         repulsor_3d_sim_cpp_plugin_abi_tests
         repulsor3d_generic_season_plugin
@@ -600,6 +688,10 @@ if(REPULSOR_SIM_BUILD_TESTS)
         repulsor3d_generic_datasource_plugin
         repulsor_3d_sim_cpp_render_plugin_abi_tests
         repulsor3d_generic_render_feature_plugin
+        repulsor_3d_sim_cpp_plugin_abi_negative_tests
+        repulsor3d_invalid_season_plugin_no_sdk
+        repulsor3d_invalid_datasource_plugin_bad_flavor
+        repulsor3d_invalid_render_feature_plugin_bad_flavor
     )
   endif()
 

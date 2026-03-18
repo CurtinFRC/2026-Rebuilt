@@ -5,9 +5,9 @@
 #include <filesystem>
 #include <utility>
 
+#include "repulsor3d/app/composition/SeasonWorldComposition.hpp"
 #include "repulsor3d/modules/SeasonModule.hpp"
 #include "repulsor3d/render/SceneDescriptor.hpp"
-#include "repulsor3d/render/SceneModelBuilderFactory.hpp"
 #include "repulsor3d/render/templates/GenericSeasonModelBuilderTemplate.hpp"
 
 namespace repulsor3d {
@@ -111,23 +111,9 @@ class HotReloadingRenderWorldAdapter final : public IRenderWorldAdapter {
   void RebuildAdapter() {
     adapter_.reset();
     module_.reset();
-
-    if (!cfg_.seasonModulePluginPath.empty()) {
-      module_ = CreateSeasonModuleFromPlugin(cfg_.seasonModulePluginPath);
-    }
-    if (module_ == nullptr) {
-      module_ = CreateSeasonModule(cfg_.sceneProfile);
-    }
-    if (module_ == nullptr) {
-      module_ = CreateSeasonModule("default");
-    }
-
-    if (module_ != nullptr) {
-      adapter_ = module_->CreateWorldAdapter(cfg_);
-    }
-    if (adapter_ == nullptr) {
-      adapter_ = CreateRenderWorldAdapterFromSceneBuilder(CreateDefaultSceneModelBuilder(cfg_));
-    }
+    auto composed = app::composition::ComposeSeasonWorldAdapter(cfg_);
+    module_ = std::move(composed.module);
+    adapter_ = std::move(composed.adapter);
 
     if (auto descriptor = LoadSceneDescriptorForProfile(cfg_); descriptor.has_value()) {
       adapter_ = std::make_unique<DescriptorDecoratingRenderWorldAdapter>(std::move(adapter_), std::move(*descriptor));

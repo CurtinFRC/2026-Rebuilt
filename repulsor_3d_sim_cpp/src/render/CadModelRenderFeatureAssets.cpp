@@ -22,9 +22,22 @@ using cadfeature::PreparedCpuMeshBlob;
 using cadfeature::StorePreparedCpuMeshCache;
 using cadfeature::TryLoadPreparedCpuMeshCache;
 
+namespace {
+
+std::string MeshHandleId(const std::string& assetPath) {
+  return "cad.mesh:" + assetPath;
+}
+
+std::string TextureHandleId(const std::string& assetPath) {
+  return "cad.texture:" + assetPath;
+}
+
+}  // namespace
+
 const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const std::string& assetPath) {
   const auto cached = meshCache_.find(assetPath);
   if (cached != meshCache_.end()) {
+    cacheLifetimeManager_.Touch(ResourceClass::Mesh, MeshHandleId(assetPath));
     return &cached->second;
   }
   if (failedLoads_.find(assetPath) != failedLoads_.end()) {
@@ -120,8 +133,13 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     auto [it, inserted] = meshCache_.emplace(assetPath, std::move(upload.gpu));
     pendingGpuUploads_.erase(assetPath);
     if (!inserted) {
+      cacheLifetimeManager_.Touch(ResourceClass::Mesh, MeshHandleId(assetPath));
       return &it->second;
     }
+    const std::size_t meshBytes = EstimateGpuMeshBytes(it->second);
+    meshCacheBytes_[assetPath] = meshBytes;
+    cacheLifetimeManager_.Register(ResourceClass::Mesh, MeshHandleId(assetPath), meshBytes);
+    EnforceGpuCacheBudgets();
 
     std::ostringstream lodSummary;
     for (std::size_t i = 0; i < it->second.lods.size(); ++i) {
@@ -262,6 +280,7 @@ const CadModelRenderFeature::GpuTexture* CadModelRenderFeature::GetOrLoadTexture
   }
   const auto cached = textureCache_.find(assetPath);
   if (cached != textureCache_.end()) {
+    cacheLifetimeManager_.Touch(ResourceClass::Texture, TextureHandleId(assetPath));
     return &cached->second;
   }
   if (failedTextureLoads_.contains(assetPath)) {
@@ -308,10 +327,82 @@ const CadModelRenderFeature::GpuTexture* CadModelRenderFeature::GetOrLoadTexture
 
   auto [it, inserted] = textureCache_.emplace(assetPath, std::move(texture));
   if (!inserted) {
+    cacheLifetimeManager_.Touch(ResourceClass::Texture, TextureHandleId(assetPath));
     return &it->second;
   }
+  const std::size_t textureBytes = static_cast<std::size_t>(std::max(0, width)) *
+                                   static_cast<std::size_t>(std::max(0, height)) * 4ULL;
+  textureCacheBytes_[assetPath] = textureBytes;
+  cacheLifetimeManager_.Register(ResourceClass::Texture, TextureHandleId(assetPath), textureBytes);
+  EnforceGpuCacheBudgets();
   std::cerr << "CAD texture loaded: " << assetPath << " (" << width << "x" << height << ")\n";
   return &it->second;
+}
+
+bool CadModelRenderFeature::EvictMeshAsset(const std::string& assetPath) {
+  if (assetPath.empty()) {
+    return false;
+  }
+  const auto it = meshCache_.find(assetPath);
+  if (it == meshCache_.end()) {
+    return false;
+  }
+  DestroyMesh(it->second);
+  meshCache_.erase(it);
+  meshCacheBytes_.erase(assetPath);
+  failedLoads_.erase(assetPath);
+  pendingLoads_.erase(assetPath);
+  pendingGpuUploads_.erase(assetPath);
+  std::cerr << "CAD mesh evicted: " << assetPath << "\n";
+  return true;
+}
+
+bool CadModelRenderFeature::EvictTextureAsset(const std::string& assetPath) {
+  if (assetPath.empty()) {
+    return false;
+  }
+  const auto it = textureCache_.find(assetPath);
+  if (it == textureCache_.end()) {
+    return false;
+  }
+  it->second.texture.Reset();
+  textureCache_.erase(it);
+  textureCacheBytes_.erase(assetPath);
+  failedTextureLoads_.erase(assetPath);
+  std::cerr << "CAD texture evicted: " << assetPath << "\n";
+  return true;
+}
+
+void CadModelRenderFeature::EnforceGpuCacheBudgets() {
+  while (cacheLifetimeManager_.IsOverBudget(ResourceClass::Mesh)) {
+    const bool evicted = cacheLifetimeManager_.EvictOne(
+        ResourceClass::Mesh,
+        [this](const ResourceLifetimeManager::EvictionCandidate& candidate) {
+          if (candidate.handleId.rfind("cad.mesh:", 0) != 0) {
+            return false;
+          }
+          const std::string assetPath = candidate.handleId.substr(std::string("cad.mesh:").size());
+          return EvictMeshAsset(assetPath);
+        });
+    if (!evicted) {
+      break;
+    }
+  }
+
+  while (cacheLifetimeManager_.IsOverBudget(ResourceClass::Texture)) {
+    const bool evicted = cacheLifetimeManager_.EvictOne(
+        ResourceClass::Texture,
+        [this](const ResourceLifetimeManager::EvictionCandidate& candidate) {
+          if (candidate.handleId.rfind("cad.texture:", 0) != 0) {
+            return false;
+          }
+          const std::string assetPath = candidate.handleId.substr(std::string("cad.texture:").size());
+          return EvictTextureAsset(assetPath);
+        });
+    if (!evicted) {
+      break;
+    }
+  }
 }
 
 }  // namespace repulsor3d

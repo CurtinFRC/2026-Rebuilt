@@ -14,14 +14,14 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
  public:
   explicit Season2026RebuiltModelBuilder(const ViewerConfig& cfg);
 
-  RenderSceneFrame BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) override;
+ RenderSceneFrame BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) override;
 
  private:
-  void AppendFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap, bool showAgeFilteredFuel);
-  void AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap);
-  void AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
-  void AppendRobotPrimitives(RenderSceneFrame& frame, scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
-  void AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
+  void AppendFuelPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap, bool showAgeFilteredFuel);
+  void AppendTruthFuelPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap);
+  void AppendObstaclePrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
+  void AppendRobotPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
+  void AppendCameraPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
   void AppendCadModelPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
 
   static std::string NormalizeType(const std::string& type);

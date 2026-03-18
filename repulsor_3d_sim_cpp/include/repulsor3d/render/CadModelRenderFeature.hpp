@@ -25,6 +25,7 @@
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/material/Material.hpp"
 #include "repulsor3d/render/material/MaterialPipeline.hpp"
+#include "repulsor3d/render/resources/ResourceLifetimeManager.hpp"
 
 namespace repulsor3d {
 namespace cad {
@@ -140,6 +141,7 @@ class CadModelRenderFeature final : public IRenderFeature {
       IRenderBackend& backend);
   static bool UploadMesh(const PreparedCpuMesh& cpu, GpuMesh& gpu, IRenderBackend& backend);
   static void DestroyMesh(GpuMesh& gpu);
+  static std::size_t EstimateGpuMeshBytes(const GpuMesh& gpu);
   static std::size_t SelectLodLevel(const GpuMesh& mesh, const glm::mat4& mvp, int viewportWidth, int viewportHeight);
   void StartLoadWorker();
   void StopLoadWorker();
@@ -148,6 +150,9 @@ class CadModelRenderFeature final : public IRenderFeature {
       TaskScheduler::TaskPriority priority = TaskScheduler::TaskPriority::Normal,
       TaskScheduler::CancellationToken token = {});
   const GpuTexture* GetOrLoadTexture(const std::string& assetPath);
+  bool EvictMeshAsset(const std::string& assetPath);
+  bool EvictTextureAsset(const std::string& assetPath);
+  void EnforceGpuCacheBudgets();
 
   const GpuMesh* GetOrLoadMesh(const std::string& assetPath);
 
@@ -227,6 +232,13 @@ class CadModelRenderFeature final : public IRenderFeature {
   int fastShadingMinIndices_ = 0;
   int runtimeMaxDrawIndices_ = 3000000;
   int runtimeMaxDrawIndicesField_ = 1800000;
+  std::size_t meshCacheBudgetBytes_ = 512ULL * 1024ULL * 1024ULL;
+  std::size_t textureCacheBudgetBytes_ = 256ULL * 1024ULL * 1024ULL;
+  std::size_t meshCacheBudgetCount_ = 0;
+  std::size_t textureCacheBudgetCount_ = 0;
+  ResourceLifetimeManager cacheLifetimeManager_;
+  std::unordered_map<std::string, std::size_t> meshCacheBytes_;
+  std::unordered_map<std::string, std::size_t> textureCacheBytes_;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

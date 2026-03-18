@@ -14,6 +14,7 @@ void DiagnosticsService::BeginFrame() {
   current_.assetTimings.clear();
   current_.gpuTimings.clear();
   current_.counters.clear();
+  current_.messages.clear();
 }
 
 void DiagnosticsService::RecordPassTime(const std::string& passName, const double milliseconds) {
@@ -30,6 +31,12 @@ void DiagnosticsService::RecordGpuTime(const std::string& passName, const double
 
 void DiagnosticsService::RecordCounter(const std::string& counterName, const double value) {
   current_.counters.push_back({counterName, value, value});
+}
+
+void DiagnosticsService::RecordMessage(const std::string& message) {
+  if (!message.empty()) {
+    current_.messages.push_back(message);
+  }
 }
 
 void DiagnosticsService::UpdateAverages(
