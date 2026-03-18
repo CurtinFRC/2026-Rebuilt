@@ -223,7 +223,8 @@ class CadModelRenderFeature final : public IRenderFeature {
   int shadowLodBias_ = 1;
   int shadowCasterMaxIndices_ = 0;
   int fastShadingMinIndices_ = 0;
-  int runtimeMaxDrawIndices_ = 3500000;
+  int runtimeMaxDrawIndices_ = 3000000;
+  int runtimeMaxDrawIndicesField_ = 1800000;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

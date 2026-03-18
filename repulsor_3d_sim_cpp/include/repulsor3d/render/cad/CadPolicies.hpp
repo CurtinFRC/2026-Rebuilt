@@ -12,9 +12,9 @@ enum class ShadowQuality {
 };
 
 struct CadLodPolicy {
-  std::size_t maxLodCount = 3;
-  float reductionRatio = 0.72F;
-  std::size_t minVertexCount = 350000;
+  std::size_t maxLodCount = 4;
+  float reductionRatio = 0.55F;
+  std::size_t minVertexCount = 120000;
   std::size_t lod0VertexCap = 4500000;
   bool keepOriginalLod0 = true;
   std::size_t maxPreferredDrawIndices = 8500000;
