@@ -16,6 +16,7 @@ set(REPULSOR_SIM_NTCORE_SOURCES
   src/NtDataSource.cpp
   src/nt/DefaultSchemas.cpp
   src/nt/DomainMappers.cpp
+  src/nt/PoseBinding.cpp
   src/nt/TopicPath.cpp
   src/nt/SubscriberCollection.cpp
   src/nt/DynamicEntityRegistry.cpp

@@ -3,41 +3,21 @@
 #include "repulsor3d/NtDataSource.hpp"
 
 #include <chrono>
-#include <cmath>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <networktables/NetworkTableInstance.h>
 
 #include "repulsor3d/nt/DefaultSchemas.hpp"
 #include "repulsor3d/nt/DomainMappers.hpp"
-#include "repulsor3d/nt/EntityStream.hpp"
+#include "repulsor3d/nt/PoseBinding.hpp"
+#include "repulsor3d/nt/SnapshotAppender.hpp"
 #include "repulsor3d/nt/SubscriberCollection.hpp"
 #include "repulsor3d/nt/TopicPath.hpp"
 
 namespace repulsor3d {
-namespace {
-
-bool IsFinite(const double value) {
-  return std::isfinite(value) != 0;
-}
-
-std::optional<Pose2D> ReadPose2D(const nt::SubscriberCollection& subs) {
-  if (!subs.ContainsKey("x") || !subs.ContainsKey("y") || !subs.ContainsKey("theta")) {
-    return std::nullopt;
-  }
-  const double x = subs.GetDouble("x");
-  const double y = subs.GetDouble("y");
-  const double theta = subs.GetDouble("theta");
-  if (!IsFinite(x) || !IsFinite(y) || !IsFinite(theta)) {
-    return std::nullopt;
-  }
-  return Pose2D{x, y, theta};
-}
-
-}  // namespace
 
 class NtDataSource::Impl {
  public:
@@ -49,10 +29,7 @@ class NtDataSource::Impl {
         chosenCollect_(inst_.get()),
         finalCollect_(inst_.get()),
         extrinsics_(inst_.get()),
-        scalars_(inst_.get()),
-        fieldVisionStream_(inst_.get(), nt::MakeFieldVisionObjectSchema(cfg_), nt::TryMapFieldVisionObject),
-        repulsorStream_(inst_.get(), nt::MakeRepulsorObstacleSchema(cfg_), nt::TryMapRepulsorObstacle),
-        cameraStream_(inst_.get(), nt::MakeCameraSchema(cfg_), nt::TryMapCameraInfo) {
+        scalars_(inst_.get()) {
     inst_->StopClient();
     inst_->StartClient4(cfg_.ntClientName);
     inst_->SetServerTeam(4788);
@@ -60,6 +37,7 @@ class NtDataSource::Impl {
 
     BindPoseSubscriptions();
     BindStaticSubscriptions();
+    BuildEntityAppenders();
   }
 
   SnapshotBundle Read() {
@@ -70,10 +48,10 @@ class NtDataSource::Impl {
     out.pieces = static_cast<int>(scalars_.GetDouble("pieces", 0.0));
     out.method = scalars_.GetString("method", "N/A");
 
-    out.snapshot.pose = ReadPose2D(pose_);
-    out.snapshot.activeGoal = ReadPose2D(activeGoal_);
-    out.snapshot.chosenCollect = ReadPose2D(chosenCollect_);
-    out.snapshot.finalCollect = ReadPose2D(finalCollect_);
+    out.snapshot.pose = pose_.ReadPose2D();
+    out.snapshot.activeGoal = activeGoal_.ReadPose2D();
+    out.snapshot.chosenCollect = chosenCollect_.ReadPose2D();
+    out.snapshot.finalCollect = finalCollect_.ReadPose2D();
 
     out.snapshot.extrinsics = {
         extrinsics_.GetDouble("x"),
@@ -84,27 +62,30 @@ class NtDataSource::Impl {
         extrinsics_.GetDouble("yaw"),
     };
 
-    fieldVisionStream_.AppendTo(out.snapshot.fieldVision);
-    repulsorStream_.AppendTo(out.snapshot.repulsorVision);
-    cameraStream_.AppendTo(out.snapshot.cameras);
+    for (const auto& appender : appenders_) {
+      appender->Append(out.snapshot);
+    }
     return out;
   }
 
  private:
+  template <typename TObject>
+  void AddEntityAppender(
+      nt::EntityGroupSchema schema,
+      typename nt::EntityStream<TObject>::Mapper mapper,
+      std::vector<TObject> WorldSnapshot::*target) {
+    appenders_.push_back(
+        std::make_unique<nt::VectorChannelAppender<TObject>>(inst_.get(), std::move(schema), std::move(mapper), target));
+  }
+
   void BindPoseSubscriptions() {
     const nt::TopicPathBuilder poseBase(cfg_.poseBasePath);
     const std::string poseRoot = nt::JoinTopic(poseBase.Prefix(), cfg_.poseStructKey);
 
-    BindPose(pose_, poseRoot);
-    BindPose(activeGoal_, "/AdvantageKit/RealOutputs/ActiveGoal");
-    BindPose(chosenCollect_, "/AdvantageKit/RealOutputs/Repulsor/ChosenCollect");
-    BindPose(finalCollect_, "/AdvantageKit/RealOutputs/FinalCollect");
-  }
-
-  void BindPose(nt::SubscriberCollection& group, const std::string& rootTopic) {
-    group.AddDouble("x", nt::JoinTopic(rootTopic, "translation/x"));
-    group.AddDouble("y", nt::JoinTopic(rootTopic, "translation/y"));
-    group.AddDouble("theta", nt::JoinTopic(rootTopic, "rotation/value"));
+    pose_.BindPose2D(poseRoot);
+    activeGoal_.BindPose2D("/AdvantageKit/RealOutputs/ActiveGoal");
+    chosenCollect_.BindPose2D("/AdvantageKit/RealOutputs/Repulsor/ChosenCollect");
+    finalCollect_.BindPose2D("/AdvantageKit/RealOutputs/FinalCollect");
   }
 
   void BindStaticSubscriptions() {
@@ -120,6 +101,14 @@ class NtDataSource::Impl {
     scalars_.AddString("method", "/AdvantageKit/RealOutputs/Method", "N/A");
   }
 
+  void BuildEntityAppenders() {
+    AddEntityAppender<FieldVisionObject>(
+        nt::MakeFieldVisionObjectSchema(cfg_), nt::TryMapFieldVisionObject, &WorldSnapshot::fieldVision);
+    AddEntityAppender<RepulsorVisionObstacle>(
+        nt::MakeRepulsorObstacleSchema(cfg_), nt::TryMapRepulsorObstacle, &WorldSnapshot::repulsorVision);
+    AddEntityAppender<CameraInfo>(nt::MakeCameraSchema(cfg_), nt::TryMapCameraInfo, &WorldSnapshot::cameras);
+  }
+
   void DiscoverDynamicTopics() {
     const auto now = std::chrono::steady_clock::now().time_since_epoch();
     const double nowS = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
@@ -128,24 +117,22 @@ class NtDataSource::Impl {
     }
     lastDiscoveryS_ = nowS;
 
-    fieldVisionStream_.Discover();
-    repulsorStream_.Discover();
-    cameraStream_.Discover();
+    for (const auto& appender : appenders_) {
+      appender->Discover();
+    }
   }
 
   ViewerConfig cfg_;
   std::unique_ptr<::nt::NetworkTableInstance> inst_;
 
-  nt::SubscriberCollection pose_;
-  nt::SubscriberCollection activeGoal_;
-  nt::SubscriberCollection chosenCollect_;
-  nt::SubscriberCollection finalCollect_;
+  nt::PoseBinding pose_;
+  nt::PoseBinding activeGoal_;
+  nt::PoseBinding chosenCollect_;
+  nt::PoseBinding finalCollect_;
   nt::SubscriberCollection extrinsics_;
   nt::SubscriberCollection scalars_;
 
-  nt::EntityStream<FieldVisionObject> fieldVisionStream_;
-  nt::EntityStream<RepulsorVisionObstacle> repulsorStream_;
-  nt::EntityStream<CameraInfo> cameraStream_;
+  std::vector<std::unique_ptr<nt::IWorldSnapshotAppender>> appenders_;
 
   double lastDiscoveryS_ = 0.0;
   double discoveryPeriodS_ = 0.25;
