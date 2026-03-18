@@ -70,10 +70,17 @@ ViewerConfig LoadConfigFromEnv() {
 
   cfg.ntServer = GetEnvString("NT_SERVER", cfg.ntServer);
   cfg.ntClientName = GetEnvString("NT_CLIENT_NAME", cfg.ntClientName);
+  cfg.dataSourceType = GetEnvString("DATA_SOURCE_TYPE", cfg.dataSourceType);
+  cfg.dataSourcePluginPath = GetEnvString("DATA_SOURCE_PLUGIN_PATH", cfg.dataSourcePluginPath);
+  cfg.replaySnapshotPath = GetEnvString("REPLAY_SNAPSHOT_PATH", cfg.replaySnapshotPath);
+  cfg.replayLoop = GetEnvBool("REPLAY_LOOP", cfg.replayLoop);
+  cfg.recordSnapshotPath = GetEnvString("RECORD_SNAPSHOT_PATH", cfg.recordSnapshotPath);
   cfg.fieldVisionPath = GetEnvString("NT_FIELDVISION_PATH", cfg.fieldVisionPath);
   cfg.repulsorVisionPath = GetEnvString("NT_REPULSORVISION_PATH", cfg.repulsorVisionPath);
   cfg.poseBasePath = GetEnvString("NT_POSE_BASE_PATH", cfg.poseBasePath);
   cfg.poseStructKey = GetEnvString("NT_POSE_STRUCT_KEY", cfg.poseStructKey);
+  cfg.ntSchemaPath = GetEnvString("NT_SCHEMA_PATH", cfg.ntSchemaPath);
+  cfg.hotReloadNtSchema = GetEnvBool("HOT_RELOAD_NT_SCHEMA", cfg.hotReloadNtSchema);
 
   cfg.truthSocketHost = GetEnvString("TRUTH_SOCKET_HOST", cfg.truthSocketHost);
   cfg.truthSocketPort = GetEnvInt("TRUTH_SOCKET_PORT", cfg.truthSocketPort);
@@ -132,6 +139,7 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.showCameraDebug = GetEnvBool("SHOW_CAMERA_DEBUG", cfg.showCameraDebug);
   cfg.showTruthFuel = GetEnvBool("SHOW_TRUTH_FUEL", cfg.showTruthFuel);
   cfg.showDiagnostics = GetEnvBool("SHOW_DIAGNOSTICS", cfg.showDiagnostics);
+  cfg.showDebugPanel = GetEnvBool("SHOW_DEBUG_PANEL", cfg.showDebugPanel);
 
   cfg.followSmoothTimeS = GetEnvFloat("FOLLOW_SMOOTH_TIME_S", cfg.followSmoothTimeS);
   cfg.followMaxSpeedMps = GetEnvFloat("FOLLOW_MAX_SPEED_MPS", cfg.followMaxSpeedMps);

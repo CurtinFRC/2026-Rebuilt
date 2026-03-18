@@ -8,6 +8,8 @@
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 
+#include "repulsor3d/render/scenegraph/SceneGraphBuilder.hpp"
+
 namespace repulsor3d {
 
 Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig& cfg) : cfg_(cfg) {
@@ -34,6 +36,7 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
 
 RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle& bundle, const SceneToggleState& toggles) {
   RenderSceneFrame frame;
+  scenegraph::SceneGraphBuilder sceneGraph;
   // frame.drawFieldImage = toggles.showFieldImage;
   frame.drawFieldImage = false;
 
@@ -55,11 +58,12 @@ RenderSceneFrame Season2026RebuiltModelBuilder::BuildFrame(const SnapshotBundle&
 
   AppendFuelPrimitives(frame, snap, toggles.showAgeFilteredFuel);
   AppendObstaclePrimitives(frame, snap);
-  AppendRobotPrimitives(frame, snap);
-  AppendCadModelPrimitives(frame, snap);
+  AppendRobotPrimitives(frame, sceneGraph, snap);
+  AppendCadModelPrimitives(sceneGraph, snap);
   if (toggles.showCameraDebug) {
     AppendCameraPrimitives(frame, snap);
   }
+  frame.entities = sceneGraph.ConsumeNodes();
 
   return frame;
 }
@@ -149,7 +153,10 @@ void Season2026RebuiltModelBuilder::AppendObstaclePrimitives(RenderSceneFrame& f
   }
 }
 
-void Season2026RebuiltModelBuilder::AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendRobotPrimitives(
+    RenderSceneFrame& frame,
+    scenegraph::SceneGraphBuilder& sceneGraph,
+    const WorldSnapshot& snap) const {
   if (snap.pose.has_value()) {
     const Pose2D& p = snap.pose.value();
     BoxPrimitive robotBody{
@@ -176,7 +183,7 @@ void Season2026RebuiltModelBuilder::AppendRobotPrimitives(RenderSceneFrame& fram
                 .boundsRadius = std::max(robotL_, robotW_),
             },
     };
-    frame.entities.push_back(std::move(robotEntity));
+    sceneGraph.AddNode(std::move(robotEntity));
 
     const float headingLen = std::max(robotL_, robotW_) * 0.95F;
     const glm::vec3 start{static_cast<float>(p.x), static_cast<float>(p.y), fieldZ_ + robotH_ + 0.02F};
@@ -332,7 +339,9 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
   }
 }
 
-void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
+void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
+    scenegraph::SceneGraphBuilder& sceneGraph,
+    const WorldSnapshot& snap) const {
   if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
     const float sx = fieldCadFlipX_ ? -fieldCadScaleM_ : fieldCadScaleM_;
     MeshInstancePrimitive mesh{
@@ -346,7 +355,7 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
         .wireframe = false,
         .pass = RenderPass::Opaque,
     };
-    frame.entities.push_back(
+    sceneGraph.AddNode(
         {.id = "field_cad",
          .pass = RenderPass::Opaque,
          .payload = mesh,
@@ -401,7 +410,7 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& f
                 .boundsRadius = std::max(robotL_, robotW_),
             },
     };
-    frame.entities.push_back(std::move(entity));
+    sceneGraph.AddNode(std::move(entity));
   };
 
   appendPoseCad(snap.pose, glm::vec4{0.95F, 0.45F, 0.15F, 0.90F}, "robot_cad_live", "robot_pose_live", false);

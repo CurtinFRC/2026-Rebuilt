@@ -10,12 +10,15 @@ option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
 option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
 option(REPULSOR_SIM_BUILD_PLUGIN_SDK "Build sample season plugin SDK target + ABI checks" ON)
+option(REPULSOR_SIM_ENABLE_CLANG_TIDY "Enable clang-tidy during compilation when available" OFF)
+option(REPULSOR_SIM_ENABLE_SANITIZERS "Enable address/undefined sanitizers for non-MSVC builds" OFF)
 set(REPULSOR_SIM_NTCORE_ROOT "C:/Users/paulh/allwpilib" CACHE PATH "Root directory of a local allwpilib checkout/build for ntcore")
 set(REPULSOR_SIM_NTCORE_HINTS "" CACHE STRING "Optional semicolon-separated extra hint paths for ntcore package discovery")
 set(REPULSOR_SIM_NTCORE_SOURCES
   src/NtDataSource.cpp
   src/nt/DefaultSchemas.cpp
   src/nt/DomainMappers.cpp
+  src/nt/SchemaFileLoader.cpp
   src/nt/PoseBinding.cpp
   src/nt/TopicPath.cpp
   src/nt/SubscriberCollection.cpp
@@ -23,6 +26,16 @@ set(REPULSOR_SIM_NTCORE_SOURCES
 )
 
 include(FetchContent)
+
+if(REPULSOR_SIM_ENABLE_CLANG_TIDY)
+  find_program(REPULSOR_CLANG_TIDY_EXE NAMES clang-tidy)
+  if(REPULSOR_CLANG_TIDY_EXE)
+    set(CMAKE_CXX_CLANG_TIDY "${REPULSOR_CLANG_TIDY_EXE}")
+    message(STATUS "clang-tidy enabled: ${REPULSOR_CLANG_TIDY_EXE}")
+  else()
+    message(WARNING "REPULSOR_SIM_ENABLE_CLANG_TIDY=ON but clang-tidy not found")
+  endif()
+endif()
 
 if(REPULSOR_SIM_FETCH_DEPS)
   set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
@@ -84,7 +97,10 @@ set(REPULSOR_SIM_SOURCES
   src/Config.cpp
   src/ConfigValidation.cpp
   src/Diagnostics.cpp
+  src/DataSourceFactory.cpp
   src/TruthSocketReceiver.cpp
+  src/SnapshotIO.cpp
+  src/ReplayDataSource.cpp
   src/SnapshotWorker.cpp
   src/NullDataSource.cpp
   src/Camera.cpp
@@ -102,6 +118,8 @@ set(REPULSOR_SIM_SOURCES
   src/render/SceneDescriptor.cpp
   src/render/ecs/EntityRegistry.cpp
   src/render/ecs/Systems.cpp
+  src/render/ecs/SpatialIndex.cpp
+  src/render/scenegraph/SceneGraphBuilder.cpp
   src/render/RendererResources.cpp
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
@@ -125,6 +143,11 @@ set(REPULSOR_SIM_SOURCES
 add_executable(repulsor_3d_sim_cpp ${REPULSOR_SIM_SOURCES})
 if(MSVC)
   target_compile_options(repulsor_3d_sim_cpp PRIVATE /utf-8)
+endif()
+
+if(REPULSOR_SIM_ENABLE_SANITIZERS AND NOT MSVC)
+  target_compile_options(repulsor_3d_sim_cpp PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+  target_link_options(repulsor_3d_sim_cpp PRIVATE -fsanitize=address,undefined)
 endif()
 
 target_include_directories(repulsor_3d_sim_cpp
@@ -157,6 +180,14 @@ if(REPULSOR_SIM_BUILD_PLUGIN_SDK)
   endif()
   if(MSVC)
     target_compile_options(repulsor3d_generic_season_plugin PRIVATE /utf-8)
+  endif()
+
+  add_library(repulsor3d_generic_datasource_plugin SHARED
+    plugin_sdk/GenericDataSourcePluginTemplate.cpp
+  )
+  target_include_directories(repulsor3d_generic_datasource_plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(MSVC)
+    target_compile_options(repulsor3d_generic_datasource_plugin PRIVATE /utf-8)
   endif()
 endif()
 
@@ -333,12 +364,20 @@ if(REPULSOR_SIM_BUILD_TESTS)
 
   add_test(NAME repulsor_3d_sim_cpp_tests COMMAND repulsor_3d_sim_cpp_tests)
 
+  add_executable(repulsor_3d_sim_cpp_perf_tests
+    tests/PerformanceSmokeTests.cpp
+    src/sim/PoseSmoothing.cpp
+  )
+  target_include_directories(repulsor_3d_sim_cpp_perf_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  add_test(NAME repulsor_3d_sim_cpp_perf_tests COMMAND repulsor_3d_sim_cpp_perf_tests)
+
   add_executable(repulsor_3d_sim_cpp_module_tests
     tests/ModuleAbstractionTests.cpp
     src/sim/SimWorld.cpp
     src/render/SceneDescriptor.cpp
     src/render/RenderWorldAdapter.cpp
     src/render/Season2026RebuiltModelBuilder.cpp
+    src/render/scenegraph/SceneGraphBuilder.cpp
     src/render/SceneModelBuilderFactory.cpp
     src/modules/SeasonModule.cpp
   )
@@ -360,6 +399,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
       src/render/SceneDescriptor.cpp
       src/render/RenderWorldAdapter.cpp
       src/render/Season2026RebuiltModelBuilder.cpp
+      src/render/scenegraph/SceneGraphBuilder.cpp
       src/render/SceneModelBuilderFactory.cpp
       src/modules/SeasonModule.cpp
     )
@@ -385,9 +425,57 @@ if(REPULSOR_SIM_BUILD_TESTS)
         $<TARGET_FILE:repulsor_3d_sim_cpp_plugin_abi_tests>
     )
 
+    add_executable(repulsor_3d_sim_cpp_datasource_plugin_abi_tests
+      tests/DataSourcePluginAbiSmokeTests.cpp
+      src/DataSourceFactory.cpp
+      src/ReplayDataSource.cpp
+      src/SnapshotIO.cpp
+      src/NullDataSource.cpp
+    )
+    target_include_directories(
+      repulsor_3d_sim_cpp_datasource_plugin_abi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(repulsor_3d_sim_cpp_datasource_plugin_abi_tests PRIVATE nlohmann_json::nlohmann_json)
+    if(WIN32)
+      target_link_libraries(repulsor_3d_sim_cpp_datasource_plugin_abi_tests PRIVATE ws2_32)
+    endif()
+    if(MSVC)
+      target_compile_options(repulsor_3d_sim_cpp_datasource_plugin_abi_tests PRIVATE /utf-8)
+    endif()
+    add_dependencies(repulsor_3d_sim_cpp_datasource_plugin_abi_tests repulsor3d_generic_datasource_plugin)
+    add_test(
+      NAME repulsor_3d_sim_cpp_datasource_plugin_abi_tests
+      COMMAND
+        ${CMAKE_COMMAND} -E env
+        REPULSOR_TEST_DS_PLUGIN_PATH=$<TARGET_FILE:repulsor3d_generic_datasource_plugin>
+        $<TARGET_FILE:repulsor_3d_sim_cpp_datasource_plugin_abi_tests>
+    )
+
     add_custom_target(repulsor_plugin_abi_check
       COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_plugin_abi_tests
-      DEPENDS repulsor_3d_sim_cpp_plugin_abi_tests repulsor3d_generic_season_plugin
+      COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG> --output-on-failure -R repulsor_3d_sim_cpp_datasource_plugin_abi_tests
+      DEPENDS
+        repulsor_3d_sim_cpp_plugin_abi_tests
+        repulsor3d_generic_season_plugin
+        repulsor_3d_sim_cpp_datasource_plugin_abi_tests
+        repulsor3d_generic_datasource_plugin
     )
   endif()
+
+  add_executable(repulsor_3d_sim_cpp_render_bench
+    bench/RenderEcsBenchmark.cpp
+    src/render/RenderCommandBuffer.cpp
+    src/render/ecs/Systems.cpp
+    src/render/ecs/SpatialIndex.cpp
+  )
+  target_include_directories(repulsor_3d_sim_cpp_render_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_render_bench PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_render_bench PRIVATE glm::glm)
+  endif()
+  if(MSVC)
+    target_compile_options(repulsor_3d_sim_cpp_render_bench PRIVATE /utf-8)
+  endif()
+  add_test(NAME repulsor_3d_sim_cpp_render_bench COMMAND repulsor_3d_sim_cpp_render_bench)
 endif()

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -14,7 +15,10 @@
 #include <glm/common.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/trigonometric.hpp>
+
+#include "repulsor3d/render/ecs/SpatialIndex.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -89,6 +93,47 @@ bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center
   return true;
 }
 
+bool TryExtractFrustumAabb(const glm::mat4& viewProjection, SpatialAabb& out) {
+  const glm::mat4 inverseVp = glm::inverse(viewProjection);
+  if (!glm::all(glm::isfinite(inverseVp[0])) ||
+      !glm::all(glm::isfinite(inverseVp[1])) ||
+      !glm::all(glm::isfinite(inverseVp[2])) ||
+      !glm::all(glm::isfinite(inverseVp[3]))) {
+    return false;
+  }
+
+  constexpr std::array<glm::vec3, 8> clipCorners{
+      glm::vec3{-1.0F, -1.0F, -1.0F},
+      glm::vec3{1.0F, -1.0F, -1.0F},
+      glm::vec3{-1.0F, 1.0F, -1.0F},
+      glm::vec3{1.0F, 1.0F, -1.0F},
+      glm::vec3{-1.0F, -1.0F, 1.0F},
+      glm::vec3{1.0F, -1.0F, 1.0F},
+      glm::vec3{-1.0F, 1.0F, 1.0F},
+      glm::vec3{1.0F, 1.0F, 1.0F},
+  };
+
+  glm::vec3 minP{std::numeric_limits<float>::max()};
+  glm::vec3 maxP{std::numeric_limits<float>::lowest()};
+  for (const glm::vec3& clip : clipCorners) {
+    const glm::vec4 worldH = inverseVp * glm::vec4{clip, 1.0F};
+    if (std::abs(worldH.w) <= 1e-6F) {
+      continue;
+    }
+    const glm::vec3 world = glm::vec3{worldH} / worldH.w;
+    minP = glm::min(minP, world);
+    maxP = glm::max(maxP, world);
+  }
+
+  if (!glm::all(glm::isfinite(minP)) || !glm::all(glm::isfinite(maxP))) {
+    return false;
+  }
+
+  out.min = minP;
+  out.max = maxP;
+  return true;
+}
+
 void ApplyWorldTransformToPayload(const glm::mat4& world, RenderEntityPayload& payload) {
   const glm::vec3 worldScale = ExtractScale(world);
   const float maxScale = std::max(worldScale.x, std::max(worldScale.y, worldScale.z));
@@ -149,9 +194,12 @@ std::pair<glm::vec3, float> ComputeEntityBounds(const RenderEntity& entity) {
 
 }  // namespace
 
-void ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame, const glm::mat4& viewProjection) {
+EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame, const glm::mat4& viewProjection) {
+  EntityCullingStats stats;
+  stats.totalEntities = static_cast<int>(frame.entities.size());
+
   if (frame.entities.empty()) {
-    return;
+    return stats;
   }
 
   std::unordered_map<std::string, size_t> entityIndexById;
@@ -207,22 +255,72 @@ void ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame, const glm::ma
   }
 
   const auto frustumPlanes = ExtractFrustumPlanes(viewProjection);
+  SpatialAabb frustumAabb;
+  const bool hasFrustumAabb = TryExtractFrustumAabb(viewProjection, frustumAabb);
+  UniformGridSpatialIndex spatialIndex(2.5F);
+  std::vector<SpatialSphere> cullableSpheres;
+  cullableSpheres.reserve(frame.entities.size());
+  for (std::size_t i = 0; i < frame.entities.size(); ++i) {
+    const auto& entity = frame.entities[i];
+    const bool isOverlay = entity.pass == RenderPass::Overlay || std::holds_alternative<OverlayLine>(entity.payload);
+    if (isOverlay || !entity.culling.enabled) {
+      continue;
+    }
+    const auto [center, radius] = ComputeEntityBounds(entity);
+    SpatialSphere sphere{
+        .center = center,
+        .radius = radius,
+        .entityIndex = i,
+    };
+    cullableSpheres.push_back(sphere);
+    spatialIndex.Insert(sphere);
+  }
+
+  std::vector<std::size_t> broadPhaseCandidates;
+  if (hasFrustumAabb) {
+    spatialIndex.QueryAabb(frustumAabb, broadPhaseCandidates);
+  }
+  if (broadPhaseCandidates.empty()) {
+    broadPhaseCandidates.reserve(cullableSpheres.size());
+    for (const auto& sphere : cullableSpheres) {
+      broadPhaseCandidates.push_back(sphere.entityIndex);
+    }
+  }
+  stats.candidates = static_cast<int>(broadPhaseCandidates.size());
+
+  std::unordered_map<std::size_t, std::pair<glm::vec3, float>> candidateBounds;
+  candidateBounds.reserve(broadPhaseCandidates.size());
+  for (const std::size_t index : broadPhaseCandidates) {
+    if (index >= frame.entities.size()) {
+      continue;
+    }
+    candidateBounds.emplace(index, ComputeEntityBounds(frame.entities[index]));
+  }
+
   std::vector<RenderEntity> visible;
   visible.reserve(frame.entities.size());
-  for (auto& entity : frame.entities) {
+  for (std::size_t i = 0; i < frame.entities.size(); ++i) {
+    auto& entity = frame.entities[i];
     const bool isOverlay = entity.pass == RenderPass::Overlay || std::holds_alternative<OverlayLine>(entity.payload);
     if (isOverlay || !entity.culling.enabled) {
       visible.push_back(std::move(entity));
       continue;
     }
 
-    const auto [center, radius] = ComputeEntityBounds(entity);
+    const auto boundsIt = candidateBounds.find(i);
+    if (boundsIt == candidateBounds.end()) {
+      continue;
+    }
+    const auto [center, radius] = boundsIt->second;
     if (IsSphereVisible(frustumPlanes, center, radius)) {
       visible.push_back(std::move(entity));
     }
   }
 
   frame.entities = std::move(visible);
+  stats.visible = static_cast<int>(frame.entities.size());
+  stats.culled = std::max(0, stats.totalEntities - stats.visible);
+  return stats;
 }
 
 }  // namespace repulsor3d

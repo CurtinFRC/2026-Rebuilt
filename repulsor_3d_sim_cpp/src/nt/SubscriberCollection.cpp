@@ -100,7 +100,10 @@ void SubscriberCollection::CopyFieldsWithPrefix(
     std::unordered_map<std::string, std::string>& outStrings,
     std::unordered_map<std::string, bool>& outBooleans) const {
   const auto suffixFor = [&keyPrefix](const std::string& key) -> std::string {
-    if (keyPrefix.empty() || key.rfind(keyPrefix, 0) != 0) {
+    if (keyPrefix.empty()) {
+      return key;
+    }
+    if (key.rfind(keyPrefix, 0) != 0) {
       return {};
     }
     return key.substr(keyPrefix.size());

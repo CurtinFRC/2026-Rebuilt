@@ -1,0 +1,85 @@
+{
+  "fieldVision": {
+    "tablePrefix": "/FieldVision/main",
+    "idPrefix": "object_",
+    "autoCaptureAdditionalScalars": true,
+    "extraKeyPrefix": "extra.",
+    "aliveField": {
+      "key": "alive",
+      "topicSuffix": "",
+      "type": "boolean",
+      "defaultBoolean": false
+    },
+    "fields": [
+      {"key": "type", "topicSuffix": "type", "type": "string"},
+      {"key": "x", "topicSuffix": "x", "type": "double"},
+      {"key": "y", "topicSuffix": "y", "type": "double"},
+      {"key": "z", "topicSuffix": "z", "type": "double"},
+      {"key": "roll", "topicSuffix": "roll", "type": "double"},
+      {"key": "pitch", "topicSuffix": "pitch", "type": "double"},
+      {"key": "yaw", "topicSuffix": "yaw", "type": "double"}
+    ]
+  },
+  "repulsor": {
+    "tablePrefix": "/RepulsorVision",
+    "idPrefix": "obs_",
+    "autoCaptureAdditionalScalars": true,
+    "extraKeyPrefix": "extra.",
+    "aliveField": {
+      "key": "alive",
+      "topicSuffix": "",
+      "type": "boolean",
+      "defaultBoolean": false
+    },
+    "fields": [
+      {"key": "kind", "topicSuffix": "kind", "type": "string"},
+      {"key": "x", "topicSuffix": "x", "type": "double"},
+      {"key": "y", "topicSuffix": "y", "type": "double"},
+      {"key": "size_x", "topicSuffix": "size_x", "type": "double"},
+      {"key": "size_y", "topicSuffix": "size_y", "type": "double"}
+    ]
+  },
+  "cameras": {
+    "tablePrefix": "/FieldVision/main",
+    "idPrefix": "camera_",
+    "autoCaptureAdditionalScalars": true,
+    "extraKeyPrefix": "extra.",
+    "aliveField": {
+      "key": "alive",
+      "topicSuffix": "",
+      "type": "boolean",
+      "defaultBoolean": false
+    },
+    "fields": [
+      {"key": "x", "topicSuffix": "x", "type": "double"},
+      {"key": "y", "topicSuffix": "y", "type": "double"},
+      {"key": "z", "topicSuffix": "z", "type": "double"},
+      {"key": "yaw_deg", "topicSuffix": "yaw_deg", "type": "double"},
+      {"key": "pitch_deg", "topicSuffix": "pitch_deg", "type": "double"},
+      {"key": "roll_deg", "topicSuffix": "roll_deg", "type": "double"},
+      {"key": "hfov_deg", "topicSuffix": "hfov_deg", "type": "double"},
+      {"key": "vfov_deg", "topicSuffix": "vfov_deg", "type": "double"},
+      {"key": "max_range", "topicSuffix": "max_range", "type": "double"}
+    ]
+  },
+  "channels": [
+    {
+      "channel": "robot_debug",
+      "tablePrefix": "/Debug/Robot",
+      "idPrefix": "entry_",
+      "autoCaptureAdditionalScalars": true,
+      "extraKeyPrefix": "",
+      "aliveField": {
+        "key": "alive",
+        "topicSuffix": "",
+        "type": "boolean",
+        "defaultBoolean": false
+      },
+      "fields": [
+        {"key": "label", "topicSuffix": "label", "type": "string"},
+        {"key": "x", "topicSuffix": "x", "type": "double"},
+        {"key": "y", "topicSuffix": "y", "type": "double"}
+      ]
+    }
+  ]
+}

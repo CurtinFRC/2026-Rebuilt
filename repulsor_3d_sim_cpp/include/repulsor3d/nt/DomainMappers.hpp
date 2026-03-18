@@ -13,8 +13,8 @@ namespace repulsor3d::nt {
 std::optional<FieldVisionObject> TryMapFieldVisionObject(const std::string& id, const SubscriberCollection& subs);
 std::optional<RepulsorVisionObstacle> TryMapRepulsorObstacle(const std::string& id, const SubscriberCollection& subs);
 std::optional<CameraInfo> TryMapCameraInfo(const std::string& id, const SubscriberCollection& subs);
+std::optional<DynamicEntityRecord> TryMapDynamicEntityRecord(const std::string& id, const SubscriberCollection& subs);
 
 }  // namespace repulsor3d::nt
 
 #endif  // defined(REPULSOR_HAS_NTCORE)
-

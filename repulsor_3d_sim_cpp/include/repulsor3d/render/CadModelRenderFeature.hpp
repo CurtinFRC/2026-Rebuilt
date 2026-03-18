@@ -128,6 +128,8 @@ class CadModelRenderFeature final : public IRenderFeature {
   std::unordered_map<std::string, GpuMesh> meshCache_;
   std::unordered_map<std::string, PendingLoad> pendingLoads_;
   std::unordered_set<std::string> failedLoads_;
+  int uploadBudgetPerFrame_ = 1;
+  int uploadsThisFrame_ = 0;
   RenderPass renderPass_ = RenderPass::Opaque;
   std::string featureName_ = "cad_opaque";
   std::vector<std::string> dependencies_ = {"geometry_opaque"};

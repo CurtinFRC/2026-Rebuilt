@@ -100,10 +100,15 @@ class OverlayRenderFeature final : public IRenderFeature {
           command);
     }
 
-    if (context.diagnostics != nullptr) {
+    if (context.diagnostics != nullptr && context.showDebugPanel) {
       lines.push_back(
           {"Frame ms: " + std::to_string(context.diagnostics->frameMilliseconds) +
            " (avg " + std::to_string(context.diagnostics->frameAverageMilliseconds) + ")"});
+      for (const auto& counter : context.diagnostics->counters) {
+        lines.push_back(
+            {"[Counter " + counter.name + "] " + std::to_string(counter.value) +
+             " (avg " + std::to_string(counter.averageValue) + ")"});
+      }
       for (const auto& pass : context.diagnostics->passTimings) {
         lines.push_back(
             {"[CPU " + pass.name + "] " + std::to_string(pass.milliseconds) +

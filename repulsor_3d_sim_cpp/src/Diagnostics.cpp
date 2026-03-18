@@ -13,6 +13,7 @@ void DiagnosticsService::BeginFrame() {
   current_.passTimings.clear();
   current_.assetTimings.clear();
   current_.gpuTimings.clear();
+  current_.counters.clear();
 }
 
 void DiagnosticsService::RecordPassTime(const std::string& passName, const double milliseconds) {
@@ -25,6 +26,10 @@ void DiagnosticsService::RecordAssetTime(const std::string& assetEventName, cons
 
 void DiagnosticsService::RecordGpuTime(const std::string& passName, const double milliseconds) {
   current_.gpuTimings.push_back({passName, milliseconds});
+}
+
+void DiagnosticsService::RecordCounter(const std::string& counterName, const double value) {
+  current_.counters.push_back({counterName, value, value});
 }
 
 void DiagnosticsService::UpdateAverages(
@@ -44,6 +49,23 @@ void DiagnosticsService::UpdateAverages(
   }
 }
 
+void DiagnosticsService::UpdateCounterAverages(
+    std::vector<CounterSample>& samples,
+    std::unordered_map<std::string, double>& averages) {
+  for (auto& sample : samples) {
+    const auto it = averages.find(sample.name);
+    if (it == averages.end()) {
+      averages[sample.name] = sample.value;
+      sample.averageValue = sample.value;
+      continue;
+    }
+
+    const double nextAverage = (1.0 - kAverageAlpha) * it->second + kAverageAlpha * sample.value;
+    it->second = nextAverage;
+    sample.averageValue = nextAverage;
+  }
+}
+
 void DiagnosticsService::EndFrame(const double frameMilliseconds) {
   current_.frameMilliseconds = frameMilliseconds;
   if (!frameAverageInitialized_) {
@@ -57,6 +79,7 @@ void DiagnosticsService::EndFrame(const double frameMilliseconds) {
   UpdateAverages(current_.passTimings, passAverages_);
   UpdateAverages(current_.assetTimings, assetAverages_);
   UpdateAverages(current_.gpuTimings, gpuAverages_);
+  UpdateCounterAverages(current_.counters, counterAverages_);
 
   latest_ = current_;
 }

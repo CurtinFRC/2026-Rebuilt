@@ -3,6 +3,8 @@
 #if defined(REPULSOR_HAS_NTCORE)
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -44,7 +46,38 @@ class VectorChannelAppender final : public IWorldSnapshotAppender {
   TargetMember targetMember_;
 };
 
+template <typename TObject>
+class NamedVectorMapChannelAppender final : public IWorldSnapshotAppender {
+ public:
+  using TargetMember = std::unordered_map<std::string, std::vector<TObject>> WorldSnapshot::*;
+
+  NamedVectorMapChannelAppender(
+      ::nt::NetworkTableInstance* instance,
+      std::string channelName,
+      EntityGroupSchema schema,
+      typename EntityStream<TObject>::Mapper mapper,
+      TargetMember targetMember)
+      : channelName_(std::move(channelName)),
+        stream_(instance, std::move(schema), std::move(mapper)),
+        targetMember_(targetMember) {}
+
+  void Discover() override {
+    stream_.Discover();
+  }
+
+  void Append(WorldSnapshot& snapshot) const override {
+    auto& targetMap = snapshot.*targetMember_;
+    auto& targetVector = targetMap[channelName_];
+    targetVector.clear();
+    stream_.AppendTo(targetVector);
+  }
+
+ private:
+  std::string channelName_;
+  EntityStream<TObject> stream_;
+  TargetMember targetMember_;
+};
+
 }  // namespace repulsor3d::nt
 
 #endif  // defined(REPULSOR_HAS_NTCORE)
-

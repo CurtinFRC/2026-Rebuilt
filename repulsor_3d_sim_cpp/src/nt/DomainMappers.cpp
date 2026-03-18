@@ -55,7 +55,20 @@ std::optional<CameraInfo> TryMapCameraInfo(const std::string& id, const Subscrib
   return camera;
 }
 
+std::optional<DynamicEntityRecord> TryMapDynamicEntityRecord(const std::string& id, const SubscriberCollection& subs) {
+  if (!subs.GetBoolean("alive", false)) {
+    return std::nullopt;
+  }
+
+  DynamicEntityRecord out;
+  out.id = id;
+  subs.CopyFieldsWithPrefix("", out.doubles, out.strings, out.booleans);
+  out.doubles.erase("alive");
+  out.strings.erase("alive");
+  out.booleans.erase("alive");
+  return out;
+}
+
 }  // namespace repulsor3d::nt
 
 #endif  // defined(REPULSOR_HAS_NTCORE)
-

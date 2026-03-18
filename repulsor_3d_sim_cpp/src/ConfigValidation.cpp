@@ -39,6 +39,13 @@ ConfigValidationResult ValidateConfig(const ViewerConfig& cfg) {
   if (!(cfg.incomingCoordFrame == "top_right_negative" || cfg.incomingCoordFrame == "custom")) {
     result.warnings.push_back("INCOMING_COORD_FRAME should be 'top_right_negative' or 'custom'");
   }
+  if (!(cfg.dataSourceType == "auto" || cfg.dataSourceType == "nt" || cfg.dataSourceType == "replay" ||
+        cfg.dataSourceType == "null")) {
+    result.warnings.push_back("DATA_SOURCE_TYPE should be one of: auto, nt, replay, null");
+  }
+  if (cfg.dataSourceType == "replay" && cfg.replaySnapshotPath.empty()) {
+    result.errors.push_back("REPLAY_SNAPSHOT_PATH is required when DATA_SOURCE_TYPE=replay");
+  }
 
   return result;
 }

@@ -90,6 +90,27 @@ class CoordinateFrameMapper {
       camera.maxRange = TransformLengthXY(camera.maxRange);
     }
 
+    for (auto& [_, group] : snapshot.dynamicEntityGroups) {
+      for (auto& record : group) {
+        auto xIt = record.doubles.find("x");
+        auto yIt = record.doubles.find("y");
+        if (xIt != record.doubles.end() && yIt != record.doubles.end()) {
+          const glm::vec2 p = TransformPointXY(xIt->second, yIt->second);
+          xIt->second = static_cast<double>(p.x);
+          yIt->second = static_cast<double>(p.y);
+        }
+        if (auto zIt = record.doubles.find("z"); zIt != record.doubles.end()) {
+          zIt->second = TransformZ(zIt->second);
+        }
+        if (auto thetaIt = record.doubles.find("theta"); thetaIt != record.doubles.end()) {
+          thetaIt->second = TransformAngleRad(thetaIt->second);
+        }
+        if (auto yawIt = record.doubles.find("yaw"); yawIt != record.doubles.end()) {
+          yawIt->second = TransformAngleRad(yawIt->second);
+        }
+      }
+    }
+
     if (snapshot.pose.has_value()) {
       snapshot.pose = TransformPose(*snapshot.pose);
     }

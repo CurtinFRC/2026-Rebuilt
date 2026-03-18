@@ -101,7 +101,14 @@ EntityGroupSchema MakeCameraSchema(const ViewerConfig& cfg) {
   };
 }
 
+NtSchemaSet MakeDefaultSchemaSet(const ViewerConfig& cfg) {
+  return NtSchemaSet{
+      .fieldVision = MakeFieldVisionObjectSchema(cfg),
+      .repulsor = MakeRepulsorObstacleSchema(cfg),
+      .cameras = MakeCameraSchema(cfg),
+  };
+}
+
 }  // namespace repulsor3d::nt
 
 #endif  // defined(REPULSOR_HAS_NTCORE)
-

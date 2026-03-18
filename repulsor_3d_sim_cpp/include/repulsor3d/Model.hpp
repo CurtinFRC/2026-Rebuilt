@@ -50,6 +50,13 @@ struct CameraInfo {
   std::unordered_map<std::string, bool> extraBooleans;
 };
 
+struct DynamicEntityRecord {
+  std::string id;
+  std::unordered_map<std::string, double> doubles;
+  std::unordered_map<std::string, std::string> strings;
+  std::unordered_map<std::string, bool> booleans;
+};
+
 struct Pose2D {
   double x = 0.0;
   double y = 0.0;
@@ -60,6 +67,7 @@ struct WorldSnapshot {
   std::vector<FieldVisionObject> fieldVision;
   std::vector<RepulsorVisionObstacle> repulsorVision;
   std::vector<CameraInfo> cameras;
+  std::unordered_map<std::string, std::vector<DynamicEntityRecord>> dynamicEntityGroups;
   std::vector<FieldVisionObject> truth;
 
   std::optional<Pose2D> pose;

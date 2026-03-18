@@ -6,6 +6,9 @@
 #include "repulsor3d/render/SceneModelBuilder.hpp"
 
 namespace repulsor3d {
+namespace scenegraph {
+class SceneGraphBuilder;
+}
 
 class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
  public:
@@ -17,9 +20,9 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   void AppendFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap, bool showAgeFilteredFuel);
   void AppendTruthFuelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap);
   void AppendObstaclePrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
-  void AppendRobotPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
+  void AppendRobotPrimitives(RenderSceneFrame& frame, scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
   void AppendCameraPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
-  void AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const;
+  void AppendCadModelPrimitives(scenegraph::SceneGraphBuilder& sceneGraph, const WorldSnapshot& snap) const;
 
   static std::string NormalizeType(const std::string& type);
 

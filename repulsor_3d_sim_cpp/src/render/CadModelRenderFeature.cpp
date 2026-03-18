@@ -1033,6 +1033,7 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   renderer_ = &renderer;
   geometryProvider_ = &renderer.GetGeometryProvider();
   backend_ = &renderer.GetRenderBackend();
+  uploadBudgetPerFrame_ = std::max(1, GetEnvInt("CAD_UPLOADS_PER_FRAME", uploadBudgetPerFrame_));
   if (initialized_) {
     return true;
   }
@@ -1045,6 +1046,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   if (!initialized_ || shader_.Get() == 0 || geometryProvider_ == nullptr || backend_ == nullptr) {
     return;
   }
+  uploadsThisFrame_ = 0;
 
   if (renderPass_ == RenderPass::Opaque) {
     backend_->SetBlendEnabled(false);
@@ -1565,6 +1567,9 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   if (pending != pendingLoads_.end()) {
     if (pending->second.future.valid() &&
         pending->second.future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+      if (uploadsThisFrame_ >= uploadBudgetPerFrame_) {
+        return nullptr;
+      }
       PreparedCpuMesh prepared = pending->second.future.get();
       pendingLoads_.erase(pending);
       if (prepared.lods.empty()) {
@@ -1598,6 +1603,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 << ", " << lodSummary.str()
                 << ", centerXY=(" << it->second.boundsCenter.x << ", " << it->second.boundsCenter.y << ")"
                 << ", radius=" << it->second.boundsRadius << ")\n";
+      ++uploadsThisFrame_;
       return &it->second;
     }
     return nullptr;

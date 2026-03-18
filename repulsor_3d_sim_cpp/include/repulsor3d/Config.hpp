@@ -13,10 +13,17 @@ struct ViewerConfig {
 
   std::string ntServer = "127.0.0.1";
   std::string ntClientName = "repulsor_3d_sim_cpp";
+  std::string dataSourceType = "auto";
+  std::string dataSourcePluginPath = "";
+  std::string replaySnapshotPath = "";
+  bool replayLoop = true;
+  std::string recordSnapshotPath = "";
   std::string fieldVisionPath = "FieldVision/main";
   std::string repulsorVisionPath = "RepulsorVision";
   std::string poseBasePath = "AdvantageKit/RealOutputs/Odometry";
   std::string poseStructKey = "Robot";
+  std::string ntSchemaPath = "";
+  bool hotReloadNtSchema = true;
 
   std::string truthSocketHost = "127.0.0.1";
   int truthSocketPort = 5809;
@@ -79,6 +86,7 @@ struct ViewerConfig {
   bool showCameraDebug = true;
   bool showTruthFuel = true;
   bool showDiagnostics = true;
+  bool showDebugPanel = true;
 
   float followSmoothTimeS = 0.18F;
   float followMaxSpeedMps = 12.0F;

@@ -179,7 +179,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   const glm::mat4 view = camera.ViewMatrix();
   const glm::mat4 projection = camera.ProjectionMatrix(aspect);
   const glm::mat4 vp = projection * view;
-  ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
+  const EntityCullingStats cullingStats = ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
 
   const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
@@ -191,10 +191,16 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
       .frame = sceneFrame,
       .commandBuffer = commandBuffer,
       .diagnostics = diag,
+      .showDebugPanel = cfg_.showDebugPanel,
   };
   const RendererDrawApi drawApi(*this);
 
   diagnostics_.BeginFrame();
+  diagnostics_.RecordCounter("entities.total", cullingStats.totalEntities);
+  diagnostics_.RecordCounter("entities.candidates", cullingStats.candidates);
+  diagnostics_.RecordCounter("entities.visible", cullingStats.visible);
+  diagnostics_.RecordCounter("entities.culled", cullingStats.culled);
+  diagnostics_.RecordCounter("commands.total", static_cast<double>(commandBuffer.size()));
   const auto frameStart = std::chrono::steady_clock::now();
 
   RenderGraph graph;

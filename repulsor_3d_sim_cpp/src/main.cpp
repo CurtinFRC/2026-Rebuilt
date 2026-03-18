@@ -5,26 +5,7 @@
 #include "repulsor3d/App.hpp"
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/ConfigValidation.hpp"
-#include "repulsor3d/DataSource.hpp"
-#include "repulsor3d/NullDataSource.hpp"
-
-#if defined(REPULSOR_HAS_NTCORE)
-#include "repulsor3d/NtDataSource.hpp"
-#endif
-
-namespace repulsor3d {
-
-std::unique_ptr<ISnapshotSource> CreateDataSource(const ViewerConfig& cfg) {
-#if defined(REPULSOR_HAS_NTCORE)
-  return std::make_unique<NtDataSource>(cfg);
-#else
-  (void)cfg;
-  std::cerr << "NT4 backend not compiled in, using NullDataSource\n";
-  return std::make_unique<NullDataSource>();
-#endif
-}
-
-}  // namespace repulsor3d
+#include "repulsor3d/DataSourceFactory.hpp"
 
 int main() {
   try {
@@ -40,7 +21,7 @@ int main() {
       return 2;
     }
 
-    auto source = repulsor3d::CreateDataSource(cfg);
+    auto source = repulsor3d::CreateDataSourceFromConfig(cfg);
 
     repulsor3d::ViewerApp app(cfg, std::move(source));
     return app.Run();

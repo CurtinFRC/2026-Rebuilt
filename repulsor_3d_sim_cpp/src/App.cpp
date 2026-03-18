@@ -97,7 +97,7 @@ int ViewerApp::Run() {
   }
 
   worker_ = std::make_unique<SnapshotWorker>(
-      *source_, static_cast<double>(cfg_.fps) * 2.0, truth_ != nullptr ? truth_.get() : nullptr);
+      *source_, static_cast<double>(cfg_.fps) * 2.0, cfg_, truth_ != nullptr ? truth_.get() : nullptr);
   worker_->Start();
 
   auto last = timeSource_.Now();

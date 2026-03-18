@@ -2,12 +2,20 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iostream>
+
+#include "repulsor3d/SnapshotIO.hpp"
 
 namespace repulsor3d {
 
-SnapshotWorker::SnapshotWorker(ISnapshotSource& source, const double hz, const TruthSocketReceiver* truthReceiver)
+SnapshotWorker::SnapshotWorker(
+    ISnapshotSource& source,
+    const double hz,
+    const ViewerConfig& cfg,
+    const TruthSocketReceiver* truthReceiver)
     : source_(source),
       periodS_(1.0 / std::max(1.0, hz)),
+      cfg_(cfg),
       truthReceiver_(truthReceiver) {}
 
 SnapshotWorker::~SnapshotWorker() { Stop(); }
@@ -52,6 +60,21 @@ void SnapshotWorker::Run() {
     {
       std::scoped_lock lock(mutex_);
       latest_ = std::move(bundle);
+    }
+
+    if (!cfg_.recordSnapshotPath.empty()) {
+      if (!recordEnabled_) {
+        recordStream_.open(cfg_.recordSnapshotPath, std::ios::out | std::ios::trunc);
+        if (!recordStream_.is_open()) {
+          std::cerr << "[SnapshotWorker] failed to open record path: " << cfg_.recordSnapshotPath << "\n";
+        } else {
+          recordEnabled_ = true;
+          std::cerr << "[SnapshotWorker] recording snapshots to " << cfg_.recordSnapshotPath << "\n";
+        }
+      }
+      if (recordEnabled_) {
+        recordStream_ << SnapshotBundleToJson(latest_).dump() << '\n';
+      }
     }
 
     nextTick += std::chrono::duration_cast<std::chrono::steady_clock::duration>(

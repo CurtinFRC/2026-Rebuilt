@@ -39,6 +39,14 @@ cmake -S . -B build -DREPULSOR_SIM_FETCH_DEPS=ON -DREPULSOR_SIM_USE_NTCORE=ON -D
 cmake --build build --config Release
 ```
 
+You can also use presets:
+
+```powershell
+cmake --preset release
+cmake --build --preset build-release
+ctest --preset test-release
+```
+
 ## Run
 
 ```powershell
@@ -96,6 +104,9 @@ The renderer is now split into a backend + season-model pipeline:
   - `include/repulsor3d/render/ecs/Systems.hpp`
   - entities support optional parent linkage and local transforms
   - culling bounds are per-entity and run before render command generation
+- Scene graph builder abstraction:
+  - `include/repulsor3d/render/scenegraph/SceneGraphBuilder.hpp`
+  - season builders can compose parent/child render entities through a generic builder API (used by `2026Rebuilt`)
 - Overlay layout engine:
   - overlay widgets support `TopLeft`, `TopRight`, `BottomLeft`, `BottomRight` anchors
   - smoothed FPS widget is rendered via the same overlay widget path (top-right)
@@ -137,19 +148,61 @@ NTCore discovery order:
 If NTCore is found at configure time, the app builds with NT4 input support.
 If not found, it falls back to `NullDataSource` (renderer still runs).
 
+## Data Source Modes
+
+Datasource selection is now configurable via `DATA_SOURCE_TYPE`:
+- `auto` (default): uses replay if `REPLAY_SNAPSHOT_PATH` is set, otherwise NT (or null if NT not compiled)
+- `nt`: force NetworkTables source
+- `replay`: force replay source
+- `null`: force no live input
+
+Optional plugin override:
+- `DATA_SOURCE_PLUGIN_PATH` (if set and valid, plugin source is used before built-ins)
+
+Replay/record env vars:
+- `REPLAY_SNAPSHOT_PATH` (NDJSON snapshot log path)
+- `REPLAY_LOOP` (`true`/`false`)
+- `RECORD_SNAPSHOT_PATH` (write NDJSON snapshots while running)
+
+Each line in replay/record files is one JSON `SnapshotBundle`.
+
+## NT Schema File (Data-Driven + Hot Reload)
+
+You can override default NT stream schemas from a JSON file:
+- `NT_SCHEMA_PATH` (schema override file path)
+- `HOT_RELOAD_NT_SCHEMA` (default `true`)
+
+Supported top-level keys:
+- `fieldVision`
+- `repulsor`
+- `cameras`
+
+Each group may include:
+- `tablePrefix`, `idPrefix`
+- `aliveField` object
+- `fields` array of field objects (`key`, `topicSuffix`, `type`, defaults)
+- `autoCaptureAdditionalScalars`, `extraKeyPrefix`
+
+When hot reload is enabled, changes to this file are picked up at runtime.
+
 ## Environment Variables
 
 The C++ app accepts the same key env vars used by the Python sim, including:
 
 - `NT_SERVER`, `NT_CLIENT_NAME`
+- `DATA_SOURCE_TYPE` (`auto|nt|replay|null`)
+- `DATA_SOURCE_PLUGIN_PATH`
+- `REPLAY_SNAPSHOT_PATH`, `REPLAY_LOOP`, `RECORD_SNAPSHOT_PATH`
 - `NT_FIELDVISION_PATH`, `NT_REPULSORVISION_PATH`
 - `NT_POSE_BASE_PATH`, `NT_POSE_STRUCT_KEY`
+- `NT_SCHEMA_PATH`, `HOT_RELOAD_NT_SCHEMA`
 - `TRUTH_SOCKET_ENABLED`, `TRUTH_SOCKET_HOST`, `TRUTH_SOCKET_PORT`
 - `WINDOW_W`, `WINDOW_H`, `FPS`
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
+- `SHOW_DEBUG_PANEL` (default `true`; enables diagnostics counters/panel)
 - `INCOMING_COORD_FRAME` (default `top_right_negative`; `custom` to use affine params below)
 - `INCOMING_COORD_ORIGIN_X_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
 - `INCOMING_COORD_ORIGIN_Y_M` (used when `INCOMING_COORD_FRAME=custom`, default `0.0`)
@@ -167,6 +220,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `CAD_LOD0_SCREEN_RADIUS_PX` (default `1200`)
 - `CAD_LOD_SCREEN_RADIUS_DECAY` (default `0.5`)
 - `CAD_PREPARED_CACHE_DIR` (optional override for cached prepared CAD LOD data; default is under `%LOCALAPPDATA%/repulsor_3d_sim_cpp/cad_prepared_cache` on Windows)
+- `CAD_UPLOADS_PER_FRAME` (default `1`; caps CAD GPU uploads per frame to reduce hitching on heavy assets)
 - `CAD_FRUSTUM_CULLING` (default `true`)
 - `CAD_KEY_LIGHT_INTENSITY` (default `1.35`)
 - `CAD_FILL_LIGHT_INTENSITY` (default `0.20`)
@@ -201,10 +255,43 @@ CAD meshes now go through an abstract multi-stage path in `CadModelRenderFeature
 
 This is season-agnostic and applies to any mesh instance (including `2026Rebuilt` field CAD).
 
+### Dynamic NT Channels
+
+`NT_SCHEMA_PATH` now supports generic runtime channels:
+
+```json
+{
+  "channels": [
+    {
+      "channel": "robot_debug",
+      "tablePrefix": "/Debug/Robot",
+      "idPrefix": "entry_",
+      "aliveField": {"key":"alive","topicSuffix":"","type":"boolean"},
+      "fields": [{"key":"label","topicSuffix":"label","type":"string"}]
+    }
+  ]
+}
+```
+
+Those channels are appended into `WorldSnapshot::dynamicEntityGroups[channel]` as key/value records without new C++ topic wiring.
+
+## Season Scaffolding
+
+Generate a new season model-builder scaffold:
+
+```powershell
+.\tools\new-season.ps1 -SeasonName Season2027Prototype
+```
+
+This creates:
+- `include/repulsor3d/render/Season2027PrototypeModelBuilder.hpp`
+- `src/render/Season2027PrototypeModelBuilder.cpp`
+
 ## Plugin SDK + ABI Checks
 
 - Sample plugin SDK template source:
   - `plugin_sdk/GenericSeasonPluginTemplate.cpp`
+  - `plugin_sdk/GenericDataSourcePluginTemplate.cpp`
   - `plugin_sdk/CMakeLists.txt`
 - ABI contract now requires plugin export:
   - `repulsor3d_query_season_module_abi_version`
@@ -212,10 +299,23 @@ This is season-agnostic and applies to any mesh instance (including `2026Rebuilt
   - `repulsor3d_destroy_season_module`
 - CTest includes plugin ABI smoke test:
   - `repulsor_3d_sim_cpp_plugin_abi_tests`
+  - `repulsor_3d_sim_cpp_datasource_plugin_abi_tests`
 - CMake target for CI-style ABI check:
 
 ```powershell
 cmake --build build --config Release --target repulsor_plugin_abi_check
+```
+
+Performance smoke test target:
+
+```powershell
+ctest --test-dir build -C Release --output-on-failure -R repulsor_3d_sim_cpp_perf_tests
+```
+
+Render benchmark target:
+
+```powershell
+.\tools\benchmark.ps1 -Config Release
 ```
 
 ## Clangd / LSP

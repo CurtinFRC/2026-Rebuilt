@@ -1,9 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <fstream>
 #include <mutex>
 #include <thread>
 
+#include "repulsor3d/Config.hpp"
 #include "repulsor3d/DataSource.hpp"
 #include "repulsor3d/TruthSocketReceiver.hpp"
 
@@ -11,7 +13,11 @@ namespace repulsor3d {
 
 class SnapshotWorker {
  public:
-  SnapshotWorker(ISnapshotSource& source, double hz, const TruthSocketReceiver* truthReceiver = nullptr);
+  SnapshotWorker(
+      ISnapshotSource& source,
+      double hz,
+      const ViewerConfig& cfg,
+      const TruthSocketReceiver* truthReceiver = nullptr);
   ~SnapshotWorker();
 
   SnapshotWorker(const SnapshotWorker&) = delete;
@@ -27,6 +33,7 @@ class SnapshotWorker {
 
   ISnapshotSource& source_;
   double periodS_;
+  ViewerConfig cfg_;
   const TruthSocketReceiver* truthReceiver_;
 
   std::atomic<bool> stop_{false};
@@ -35,6 +42,8 @@ class SnapshotWorker {
 
   mutable std::mutex mutex_;
   SnapshotBundle latest_;
+  std::ofstream recordStream_;
+  bool recordEnabled_ = false;
 };
 
 }  // namespace repulsor3d
