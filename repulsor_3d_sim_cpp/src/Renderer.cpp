@@ -176,13 +176,16 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   }
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
-  const glm::mat4 vp = camera.ProjectionMatrix(aspect) * camera.ViewMatrix();
+  const glm::mat4 view = camera.ViewMatrix();
+  const glm::mat4 projection = camera.ProjectionMatrix(aspect);
+  const glm::mat4 vp = projection * view;
   ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
 
   const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
   const RenderFeatureContext context{
       .viewProjection = vp,
+      .cameraWorldPosition = camera.Eye(),
       .viewportWidth = width_,
       .viewportHeight = height_,
       .frame = sceneFrame,

@@ -145,7 +145,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
-- `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_Z_OFFSET_M`
+- `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
 - `CAD_LOD_COUNT` (default `2`)
 - `CAD_LOD_RATIO` (default `0.62`)
 - `CAD_LOD_MIN_VERTICES` (default `700000`)
@@ -157,6 +157,19 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `CAD_LOD0_SCREEN_RADIUS_PX` (default `1200`)
 - `CAD_LOD_SCREEN_RADIUS_DECAY` (default `0.5`)
 - `CAD_PREPARED_CACHE_DIR` (optional override for cached prepared CAD LOD data; default is under `%LOCALAPPDATA%/repulsor_3d_sim_cpp/cad_prepared_cache` on Windows)
+- `CAD_FRUSTUM_CULLING` (default `true`)
+- `CAD_KEY_LIGHT_INTENSITY` (default `1.35`)
+- `CAD_FILL_LIGHT_INTENSITY` (default `0.20`)
+- `CAD_AMBIENT_STRENGTH` (default `0.12`)
+- `CAD_DEPTH_CUE_STRENGTH` (default `0.08`)
+- `CAD_SPECULAR_STRENGTH` (default `0.42`)
+- `CAD_RIM_STRENGTH` (default `0.03`)
+- `CAD_ROUGHNESS` (default `0.72`)
+- `CAD_METALLIC` (default `0.00`)
+- `CAD_EXPOSURE` (default `0.86`)
+- `CAD_FOG_DENSITY` (default `0.003`)
+- `CAD_SATURATION` (default `1.00`)
+- `CAD_GAMMA` (default `2.2`)
 - `SIM_SCENE_PROFILE` (defaults to `2026Rebuilt`)
 - `SCENE_DESCRIPTOR_PATH` (optional JSON descriptor path)
 - `SEASON_MODULE_PLUGIN_PATH` (optional path to season module plugin `.dll`/`.so`)

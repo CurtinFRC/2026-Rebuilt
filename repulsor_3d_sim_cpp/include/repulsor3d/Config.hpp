@@ -55,6 +55,7 @@ struct ViewerConfig {
   bool showFieldCadModel = true;
   std::string fieldCadModelPath = "field_2026rebuilt.gltf";
   float fieldCadScaleM = 1.0F;
+  bool fieldCadFlipX = true;
   float fieldCadZOffsetM = 0.0F;
   float fieldCadOffsetXM = 0.0F;
   float fieldCadOffsetYM = 0.0F;

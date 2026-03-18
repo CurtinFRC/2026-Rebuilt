@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 
 #include "repulsor3d/Diagnostics.hpp"
 #include "repulsor3d/render/RenderCommandBuffer.hpp"
@@ -16,6 +17,7 @@ class Renderer;
 
 struct RenderFeatureContext {
   const glm::mat4& viewProjection;
+  glm::vec3 cameraWorldPosition{0.0F, 0.0F, 0.0F};
   int viewportWidth = 1;
   int viewportHeight = 1;
   const RenderSceneFrame& frame;

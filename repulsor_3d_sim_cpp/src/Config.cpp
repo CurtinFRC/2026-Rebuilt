@@ -112,6 +112,7 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.showFieldCadModel = GetEnvBool("SHOW_FIELD_CAD_MODEL", cfg.showFieldCadModel);
   cfg.fieldCadModelPath = GetEnvString("FIELD_CAD_MODEL_PATH", cfg.fieldCadModelPath);
   cfg.fieldCadScaleM = GetEnvFloat("FIELD_CAD_SCALE_M", cfg.fieldCadScaleM);
+  cfg.fieldCadFlipX = GetEnvBool("FIELD_CAD_FLIP_X", cfg.fieldCadFlipX);
   cfg.fieldCadZOffsetM = GetEnvFloat("FIELD_CAD_Z_OFFSET_M", cfg.fieldCadZOffsetM);
   cfg.fieldCadOffsetXM = GetEnvFloat("FIELD_CAD_OFFSET_X_M", cfg.fieldCadOffsetXM);
   cfg.fieldCadOffsetYM = GetEnvFloat("FIELD_CAD_OFFSET_Y_M", cfg.fieldCadOffsetYM);

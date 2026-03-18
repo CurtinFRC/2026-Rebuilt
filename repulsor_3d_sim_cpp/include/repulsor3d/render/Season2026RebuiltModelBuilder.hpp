@@ -40,6 +40,7 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   bool showFieldCadModel_ = false;
   std::string fieldCadModelPath_;
   float fieldCadScaleM_ = 1.0F;
+  bool fieldCadFlipX_ = true;
   float fieldCadZOffsetM_ = 0.0F;
   float fieldCadOffsetXM_ = 0.0F;
   float fieldCadOffsetYM_ = 0.0F;

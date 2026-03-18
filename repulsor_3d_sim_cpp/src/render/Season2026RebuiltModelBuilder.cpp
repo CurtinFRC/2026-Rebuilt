@@ -26,6 +26,7 @@ Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig&
   showFieldCadModel_ = cfg.showFieldCadModel;
   fieldCadModelPath_ = cfg.fieldCadModelPath;
   fieldCadScaleM_ = cfg.fieldCadScaleM;
+  fieldCadFlipX_ = cfg.fieldCadFlipX;
   fieldCadZOffsetM_ = cfg.fieldCadZOffsetM;
   fieldCadOffsetXM_ = cfg.fieldCadOffsetXM;
   fieldCadOffsetYM_ = cfg.fieldCadOffsetYM;
@@ -333,11 +334,12 @@ void Season2026RebuiltModelBuilder::AppendCameraPrimitives(RenderSceneFrame& fra
 
 void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(RenderSceneFrame& frame, const WorldSnapshot& snap) const {
   if (showFieldCadModel_ && !fieldCadModelPath_.empty()) {
+    const float sx = fieldCadFlipX_ ? -fieldCadScaleM_ : fieldCadScaleM_;
     MeshInstancePrimitive mesh{
         .assetPath = fieldCadModelPath_,
         .position = glm::vec3{fieldCadOffsetXM_, fieldCadOffsetYM_, fieldZ_ + fieldCadZOffsetM_},
         .rotationDeg = glm::vec3{0.0F, 0.0F, 0.0F},
-        .scale = glm::vec3{fieldCadScaleM_, fieldCadScaleM_, fieldCadScaleM_},
+        .scale = glm::vec3{sx, fieldCadScaleM_, fieldCadScaleM_},
         .color = glm::vec4{1.0F, 1.0F, 1.0F, 1.0F},
         .useAssetColor = true,
         .centerOnMeshBounds = true,

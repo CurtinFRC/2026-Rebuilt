@@ -105,9 +105,23 @@ class CadModelRenderFeature final : public IRenderFeature {
 
   GlProgramHandle shader_;
   int uMvpLoc_ = -1;
+  int uModelLoc_ = -1;
   int uNormalMatrixLoc_ = -1;
   int uColorLoc_ = -1;
   int uLightDirLoc_ = -1;
+  int uCameraPosLoc_ = -1;
+  int uKeyLightIntensityLoc_ = -1;
+  int uFillLightIntensityLoc_ = -1;
+  int uAmbientStrengthLoc_ = -1;
+  int uDepthCueStrengthLoc_ = -1;
+  int uSpecularStrengthLoc_ = -1;
+  int uRimStrengthLoc_ = -1;
+  int uRoughnessLoc_ = -1;
+  int uMetallicLoc_ = -1;
+  int uExposureLoc_ = -1;
+  int uFogDensityLoc_ = -1;
+  int uSaturationLoc_ = -1;
+  int uGammaLoc_ = -1;
   int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
   bool initialized_ = false;

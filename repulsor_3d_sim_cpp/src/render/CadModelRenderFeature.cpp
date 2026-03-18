@@ -116,6 +116,43 @@ const CadLodPolicy& LoadCadLodPolicy() {
   return policy;
 }
 
+struct CadVisualPolicy {
+  bool enableFrustumCulling = true;
+  float keyLightIntensity = 1.35F;
+  float fillLightIntensity = 0.20F;
+  float ambientStrength = 0.12F;
+  float depthCueStrength = 0.08F;
+  float specularStrength = 0.42F;
+  float rimStrength = 0.03F;
+  float roughness = 0.72F;
+  float metallic = 0.00F;
+  float exposure = 0.86F;
+  float fogDensity = 0.003F;
+  float saturation = 1.00F;
+  float gamma = 2.2F;
+};
+
+const CadVisualPolicy& LoadCadVisualPolicy() {
+  static const CadVisualPolicy policy = []() {
+    CadVisualPolicy out;
+    out.enableFrustumCulling = GetEnvBool("CAD_FRUSTUM_CULLING", out.enableFrustumCulling);
+    out.keyLightIntensity = std::clamp(GetEnvFloat("CAD_KEY_LIGHT_INTENSITY", out.keyLightIntensity), 0.0F, 8.0F);
+    out.fillLightIntensity = std::clamp(GetEnvFloat("CAD_FILL_LIGHT_INTENSITY", out.fillLightIntensity), 0.0F, 6.0F);
+    out.ambientStrength = std::clamp(GetEnvFloat("CAD_AMBIENT_STRENGTH", out.ambientStrength), 0.0F, 2.0F);
+    out.depthCueStrength = std::clamp(GetEnvFloat("CAD_DEPTH_CUE_STRENGTH", out.depthCueStrength), 0.0F, 1.5F);
+    out.specularStrength = std::clamp(GetEnvFloat("CAD_SPECULAR_STRENGTH", out.specularStrength), 0.0F, 2.0F);
+    out.rimStrength = std::clamp(GetEnvFloat("CAD_RIM_STRENGTH", out.rimStrength), 0.0F, 2.0F);
+    out.roughness = std::clamp(GetEnvFloat("CAD_ROUGHNESS", out.roughness), 0.03F, 1.0F);
+    out.metallic = std::clamp(GetEnvFloat("CAD_METALLIC", out.metallic), 0.0F, 1.0F);
+    out.exposure = std::clamp(GetEnvFloat("CAD_EXPOSURE", out.exposure), 0.1F, 4.0F);
+    out.fogDensity = std::clamp(GetEnvFloat("CAD_FOG_DENSITY", out.fogDensity), 0.0F, 0.25F);
+    out.saturation = std::clamp(GetEnvFloat("CAD_SATURATION", out.saturation), 0.0F, 2.0F);
+    out.gamma = std::clamp(GetEnvFloat("CAD_GAMMA", out.gamma), 1.0F, 3.2F);
+    return out;
+  }();
+  return policy;
+}
+
 constexpr std::uint64_t kFnv64OffsetBasis = 1469598103934665603ULL;
 constexpr std::uint64_t kFnv64Prime = 1099511628211ULL;
 constexpr std::uint32_t kPreparedCacheMagic = 0x524C4F44U;  // "RLOD"
@@ -886,6 +923,45 @@ float ComputeScreenSpaceRadiusPixels(
   return ndcRadius * 0.5F * static_cast<float>(std::min(viewportWidth, viewportHeight));
 }
 
+struct Plane {
+  glm::vec3 normal{0.0F, 0.0F, 1.0F};
+  float d = 0.0F;
+};
+
+Plane NormalizePlane(const glm::vec4& plane) {
+  const glm::vec3 n{plane.x, plane.y, plane.z};
+  const float len = glm::length(n);
+  if (len <= 1e-6F) {
+    return {};
+  }
+  return {n / len, plane.w / len};
+}
+
+std::array<Plane, 6> ExtractFrustumPlanes(const glm::mat4& viewProjection) {
+  const glm::vec4 row0{viewProjection[0][0], viewProjection[1][0], viewProjection[2][0], viewProjection[3][0]};
+  const glm::vec4 row1{viewProjection[0][1], viewProjection[1][1], viewProjection[2][1], viewProjection[3][1]};
+  const glm::vec4 row2{viewProjection[0][2], viewProjection[1][2], viewProjection[2][2], viewProjection[3][2]};
+  const glm::vec4 row3{viewProjection[0][3], viewProjection[1][3], viewProjection[2][3], viewProjection[3][3]};
+  return {
+      NormalizePlane(row3 + row0),
+      NormalizePlane(row3 - row0),
+      NormalizePlane(row3 + row1),
+      NormalizePlane(row3 - row1),
+      NormalizePlane(row3 + row2),
+      NormalizePlane(row3 - row2),
+  };
+}
+
+bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center, const float radius) {
+  for (const auto& plane : planes) {
+    const float distance = glm::dot(plane.normal, center) + plane.d;
+    if (distance < -radius) {
+      return false;
+    }
+  }
+  return true;
+}
+
 struct PackedVertex {
   glm::vec3 position{0.0F, 0.0F, 0.0F};
   glm::vec3 normal{0.0F, 0.0F, 1.0F};
@@ -977,7 +1053,26 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   backend_->UseProgram(shader_.Get());
+  const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
+  const auto frustumPlanes = ExtractFrustumPlanes(context.viewProjection);
   backend_->SetUniformVec3(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
+  backend_->SetUniformVec3(
+      uCameraPosLoc_,
+      context.cameraWorldPosition.x,
+      context.cameraWorldPosition.y,
+      context.cameraWorldPosition.z);
+  backend_->SetUniform1f(uDepthCueStrengthLoc_, visualPolicy.depthCueStrength);
+  backend_->SetUniform1f(uSpecularStrengthLoc_, visualPolicy.specularStrength);
+  backend_->SetUniform1f(uRimStrengthLoc_, visualPolicy.rimStrength);
+  backend_->SetUniform1f(uKeyLightIntensityLoc_, visualPolicy.keyLightIntensity);
+  backend_->SetUniform1f(uFillLightIntensityLoc_, visualPolicy.fillLightIntensity);
+  backend_->SetUniform1f(uAmbientStrengthLoc_, visualPolicy.ambientStrength);
+  backend_->SetUniform1f(uRoughnessLoc_, visualPolicy.roughness);
+  backend_->SetUniform1f(uMetallicLoc_, visualPolicy.metallic);
+  backend_->SetUniform1f(uExposureLoc_, visualPolicy.exposure);
+  backend_->SetUniform1f(uFogDensityLoc_, visualPolicy.fogDensity);
+  backend_->SetUniform1f(uSaturationLoc_, visualPolicy.saturation);
+  backend_->SetUniform1f(uGammaLoc_, visualPolicy.gamma);
 
   for (const auto& command : context.commandBuffer) {
     std::visit(
@@ -1004,9 +1099,26 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
               model = model * glm::translate(glm::mat4(1.0F), glm::vec3{-mesh->boundsCenter.x, -mesh->boundsCenter.y, 0.0F});
             }
 
+            if (visualPolicy.enableFrustumCulling) {
+              glm::vec3 localBoundsCenter = mesh->boundsCenter;
+              if (instance.centerOnMeshBounds) {
+                localBoundsCenter.x = 0.0F;
+                localBoundsCenter.y = 0.0F;
+              }
+              const glm::vec3 worldBoundsCenter = glm::vec3(model * glm::vec4(localBoundsCenter, 1.0F));
+              const float maxScale = std::max(
+                  std::abs(instance.scale.x),
+                  std::max(std::abs(instance.scale.y), std::abs(instance.scale.z)));
+              const float worldBoundsRadius = std::max(mesh->boundsRadius * std::max(maxScale, 1e-4F), 1e-4F);
+              if (!IsSphereVisible(frustumPlanes, worldBoundsCenter, worldBoundsRadius)) {
+                return;
+              }
+            }
+
             const glm::mat4 mvp = context.viewProjection * model;
             const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
             backend_->SetUniformMat4(uMvpLoc_, &mvp[0][0]);
+            backend_->SetUniformMat4(uModelLoc_, &model[0][0]);
             backend_->SetUniformMat3(uNormalMatrixLoc_, &normalMatrix[0][0]);
             backend_->SetUniform1f(uUseAssetColorLoc_, instance.useAssetColor ? 1.0F : 0.0F);
 
@@ -1017,6 +1129,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
             const auto& lod = mesh->lods[std::min(lodIndex, mesh->lods.size() - 1)];
+            const bool mirroredWinding = glm::determinant(glm::mat3(model)) < 0.0F;
+            if (mirroredWinding) {
+              glFrontFace(GL_CW);
+            }
 
             backend_->BindVertexArray(lod.vao.Get());
             if (lod.indexCount > 0) {
@@ -1025,6 +1141,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
               backend_->DrawTriangles(lod.vertexCount);
             }
             backend_->BindVertexArray(0);
+            if (mirroredWinding) {
+              glFrontFace(GL_CCW);
+            }
           }
         },
         command);
@@ -1041,14 +1160,15 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec4 aColor;
 uniform mat4 uMvp;
+uniform mat4 uModel;
 uniform mat3 uNormalMatrix;
-uniform vec3 uLightDir;
 out vec4 vColor;
-out float vLighting;
+out vec3 vWorldPos;
+out vec3 vWorldNormal;
 void main() {
-  vec3 n = normalize(uNormalMatrix * aNormal);
-  float diff = max(dot(n, normalize(-uLightDir)), 0.0);
-  vLighting = 0.25 + 0.75 * diff;
+  vec4 worldPos = uModel * vec4(aPos, 1.0);
+  vWorldPos = worldPos.xyz;
+  vWorldNormal = normalize(uNormalMatrix * aNormal);
   vColor = aColor;
   gl_Position = uMvp * vec4(aPos, 1.0);
 }
@@ -1056,16 +1176,146 @@ void main() {
 
   constexpr const char* fsSrc = R"(
 #version 330 core
+const float PI = 3.14159265359;
 in vec4 vColor;
-in float vLighting;
+in vec3 vWorldPos;
+in vec3 vWorldNormal;
 uniform vec4 uColor;
+uniform vec3 uLightDir;
+uniform vec3 uCameraPos;
+uniform float uKeyLightIntensity;
+uniform float uFillLightIntensity;
+uniform float uAmbientStrength;
+uniform float uDepthCueStrength;
+uniform float uSpecularStrength;
+uniform float uRimStrength;
+uniform float uRoughness;
+uniform float uMetallic;
+uniform float uExposure;
+uniform float uFogDensity;
+uniform float uSaturation;
+uniform float uGamma;
 uniform float uUseAssetColor;
 out vec4 FragColor;
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0) {
+  return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float NdotH = max(dot(N, H), 0.0);
+  float NdotH2 = NdotH * NdotH;
+  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+  return a2 / max(PI * denom * denom, 1e-6);
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness) {
+  float r = roughness + 1.0;
+  float k = (r * r) / 8.0;
+  float denom = NdotV * (1.0 - k) + k;
+  return NdotV / max(denom, 1e-6);
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+  float NdotV = max(dot(N, V), 0.0);
+  float NdotL = max(dot(N, L), 0.0);
+  float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+  float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+  return ggx1 * ggx2;
+}
+
+vec3 TonemapAces(vec3 x) {
+  const float a = 2.51;
+  const float b = 0.03;
+  const float c = 2.43;
+  const float d = 0.59;
+  const float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+vec3 ShadePbrLight(
+    vec3 N,
+    vec3 V,
+    vec3 L,
+    vec3 lightColor,
+    float lightIntensity,
+    vec3 albedo,
+    float roughness,
+    float metallic,
+    vec3 F0) {
+  float NdotL = max(dot(N, L), 0.0);
+  if (NdotL <= 1e-5) {
+    return vec3(0.0);
+  }
+
+  vec3 H = normalize(V + L);
+  float NDF = DistributionGGX(N, H, roughness);
+  float G = GeometrySmith(N, V, L, roughness);
+  vec3 F = FresnelSchlick(max(dot(H, V), 0.0), F0);
+
+  vec3 numerator = NDF * G * F;
+  float denominator = max(4.0 * max(dot(N, V), 0.0) * NdotL, 1e-5);
+  vec3 specular = numerator / denominator;
+
+  vec3 kS = F;
+  vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+  vec3 radiance = lightColor * lightIntensity;
+  return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
 void main() {
   float useAssetColor = clamp(uUseAssetColor, 0.0, 1.0);
-  vec3 baseColor = mix(uColor.rgb, vColor.rgb * uColor.rgb, useAssetColor);
+  vec3 baseColorSrgb = mix(uColor.rgb, vColor.rgb * uColor.rgb, useAssetColor);
   float alpha = uColor.a * mix(1.0, vColor.a, useAssetColor);
-  FragColor = vec4(baseColor * vLighting, alpha);
+
+  vec3 N = normalize(vWorldNormal);
+  vec3 V = normalize(uCameraPos - vWorldPos);
+  vec3 albedo = pow(clamp(baseColorSrgb, 0.0, 1.0), vec3(2.2));
+
+  float roughness = clamp(uRoughness, 0.03, 1.0);
+  float metallic = clamp(uMetallic, 0.0, 1.0);
+  vec3 F0 = mix(vec3(0.04), albedo, metallic) * max(uSpecularStrength, 0.0);
+
+  vec3 keyDir = normalize(-uLightDir);
+  vec3 fillDir = normalize(vec3(0.40, 0.55, 0.72));
+
+  vec3 direct = vec3(0.0);
+  direct += ShadePbrLight(
+      N, V, keyDir, vec3(1.00, 0.98, 0.94), max(uKeyLightIntensity, 0.0), albedo, roughness, metallic, F0);
+  direct += ShadePbrLight(
+      N, V, fillDir, vec3(0.60, 0.70, 0.85), max(uFillLightIntensity, 0.0), albedo, roughness, metallic, F0);
+
+  float up = clamp(N.z * 0.5 + 0.5, 0.0, 1.0);
+  vec3 skyAmbient = vec3(0.44, 0.52, 0.64);
+  vec3 groundAmbient = vec3(0.19, 0.18, 0.17);
+  vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
+
+  float rim = pow(1.0 - max(dot(N, V), 0.0), 2.6) * max(uRimStrength, 0.0);
+  vec3 rimColor = vec3(0.85, 0.92, 1.0) * rim;
+
+  vec3 R = reflect(-V, N);
+  float envMix = clamp(R.z * 0.5 + 0.5, 0.0, 1.0);
+  vec3 envColor = mix(vec3(0.10, 0.11, 0.12), vec3(0.30, 0.36, 0.46), envMix);
+  vec3 envFresnel = FresnelSchlick(max(dot(N, V), 0.0), F0);
+  vec3 envSpec = envColor * envFresnel * (1.0 - roughness * 0.65) * 0.32;
+
+  float viewDistance = length(uCameraPos - vWorldPos);
+  float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 120.0, 0.0, 1.0);
+  float keyShadow = max(dot(N, keyDir), 0.0);
+  float shadowContrast = mix(0.70, 1.0, keyShadow);
+  vec3 linearColor = (ambient + direct + rimColor + envSpec) * max(depthCue, 0.45) * shadowContrast;
+
+  float fog = 1.0 - exp(-max(uFogDensity, 0.0) * viewDistance);
+  vec3 fogColor = vec3(0.57, 0.62, 0.70);
+  linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
+
+  vec3 mapped = TonemapAces(linearColor * max(uExposure, 0.01));
+  float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
+  mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));
+  mapped = pow(max(mapped, vec3(0.0)), vec3(1.0 / max(uGamma, 1e-3)));
+  FragColor = vec4(mapped, alpha);
 }
 )";
 
@@ -1091,15 +1341,35 @@ void main() {
   glDeleteShader(fs);
 
   uMvpLoc_ = backend_->GetUniformLocation(shader_.Get(), "uMvp");
+  uModelLoc_ = backend_->GetUniformLocation(shader_.Get(), "uModel");
   uNormalMatrixLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalMatrix");
   uColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uColor");
   uLightDirLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightDir");
+  uCameraPosLoc_ = backend_->GetUniformLocation(shader_.Get(), "uCameraPos");
+  uKeyLightIntensityLoc_ = backend_->GetUniformLocation(shader_.Get(), "uKeyLightIntensity");
+  uFillLightIntensityLoc_ = backend_->GetUniformLocation(shader_.Get(), "uFillLightIntensity");
+  uAmbientStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uAmbientStrength");
+  uDepthCueStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uDepthCueStrength");
+  uSpecularStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uSpecularStrength");
+  uRimStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uRimStrength");
+  uRoughnessLoc_ = backend_->GetUniformLocation(shader_.Get(), "uRoughness");
+  uMetallicLoc_ = backend_->GetUniformLocation(shader_.Get(), "uMetallic");
+  uExposureLoc_ = backend_->GetUniformLocation(shader_.Get(), "uExposure");
+  uFogDensityLoc_ = backend_->GetUniformLocation(shader_.Get(), "uFogDensity");
+  uSaturationLoc_ = backend_->GetUniformLocation(shader_.Get(), "uSaturation");
+  uGammaLoc_ = backend_->GetUniformLocation(shader_.Get(), "uGamma");
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
 
   materialPipeline_.AddPass(std::make_unique<FlatLitMaterialPass>(*backend_, uColorLoc_));
   materialPipeline_.AddPass(std::make_unique<WireframeMaterialPass>(*backend_));
-  return uMvpLoc_ >= 0 && uNormalMatrixLoc_ >= 0 &&
-         uColorLoc_ >= 0 && uLightDirLoc_ >= 0 && uUseAssetColorLoc_ >= 0;
+  return uMvpLoc_ >= 0 && uModelLoc_ >= 0 && uNormalMatrixLoc_ >= 0 &&
+         uColorLoc_ >= 0 && uLightDirLoc_ >= 0 && uCameraPosLoc_ >= 0 &&
+         uKeyLightIntensityLoc_ >= 0 && uFillLightIntensityLoc_ >= 0 &&
+         uAmbientStrengthLoc_ >= 0 &&
+         uDepthCueStrengthLoc_ >= 0 && uSpecularStrengthLoc_ >= 0 &&
+         uRimStrengthLoc_ >= 0 && uRoughnessLoc_ >= 0 && uMetallicLoc_ >= 0 &&
+         uExposureLoc_ >= 0 && uFogDensityLoc_ >= 0 && uSaturationLoc_ >= 0 &&
+         uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0;
 }
 
 unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const char* source) {
