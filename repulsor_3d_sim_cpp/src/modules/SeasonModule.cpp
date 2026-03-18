@@ -10,6 +10,8 @@
 
 #include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
 #include "repulsor3d/plugins/PluginManifest.hpp"
+#include "repulsor3d/plugins/PluginSdk.hpp"
+#include "repulsor3d/season/SeasonDefinitionRegistry.hpp"
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -126,6 +128,9 @@ class Season2026RebuiltModule final : public ISeasonModule {
   std::string Id() const override { return "2026rebuilt"; }
 
   std::unique_ptr<IRenderWorldAdapter> CreateWorldAdapter(const ViewerConfig& cfg) const override {
+    if (auto season = CreateSeasonDefinition("2026rebuilt"); season != nullptr) {
+      return season->CreateWorldAdapter(cfg);
+    }
     return CreateRenderWorldAdapterFromSceneBuilder(std::make_unique<Season2026RebuiltModelBuilder>(cfg));
   }
 };
@@ -182,6 +187,7 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
   auto* destroyFnRaw = ResolveSymbol(handle, "repulsor3d_destroy_season_module");
   auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_season_module_abi_version");
   auto* queryManifestRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1");
+  auto* querySdkRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_sdk_info_v1");
   if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
@@ -191,9 +197,17 @@ std::unique_ptr<ISeasonModule> CreateSeasonModuleFromPlugin(const std::string& p
   const auto destroyFn = reinterpret_cast<DestroySeasonModuleAbiFn>(destroyFnRaw);
   const auto queryAbiVersionFn = reinterpret_cast<QuerySeasonModuleAbiVersionFn>(queryAbiVersionRaw);
   const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(queryManifestRaw);
+  const auto querySdkFn = reinterpret_cast<QueryPluginSdkInfoV1Fn>(querySdkRaw);
   if (queryAbiVersionFn == nullptr || queryAbiVersionFn() != kSeasonModuleAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (querySdkFn != nullptr) {
+    const PluginSdkInfoV1* sdkInfo = querySdkFn();
+    if (sdkInfo == nullptr || !IsPluginSdkCompatible(*sdkInfo, kPluginSdkVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
   if (queryManifestFn != nullptr) {
     const PluginManifestV1* manifest = queryManifestFn();

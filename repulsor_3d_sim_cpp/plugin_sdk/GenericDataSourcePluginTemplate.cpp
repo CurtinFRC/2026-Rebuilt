@@ -1,5 +1,6 @@
 #include "repulsor3d/datasource/DataSourcePluginAbi.hpp"
 #include "repulsor3d/plugins/PluginManifest.hpp"
+#include "repulsor3d/plugins/PluginSdk.hpp"
 
 #if defined(_WIN32)
 #define REPULSOR_DS_PLUGIN_EXPORT __declspec(dllexport)
@@ -30,6 +31,11 @@ class GenericDataSourcePluginTemplate final : public ISnapshotSource {
 
 extern "C" REPULSOR_DS_PLUGIN_EXPORT int repulsor3d_query_data_source_plugin_abi_version() {
   return repulsor3d::kDataSourcePluginAbiVersion;
+}
+
+extern "C" REPULSOR_DS_PLUGIN_EXPORT const repulsor3d::PluginSdkInfoV1* repulsor3d_query_plugin_sdk_info_v1() {
+  static const repulsor3d::PluginSdkInfoV1 sdkInfo{};
+  return &sdkInfo;
 }
 
 extern "C" REPULSOR_DS_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* repulsor3d_query_plugin_manifest_v1() {

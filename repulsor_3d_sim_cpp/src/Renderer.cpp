@@ -26,6 +26,10 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
       backend_(std::make_unique<OpenGLRenderBackend>()),
       assetResolver_(std::make_unique<DefaultSceneAssetResolver>()),
       geometryProvider_(std::make_unique<DefaultGeometryProvider>(*assetResolver_)) {
+  resourceManager_.SetBudget(ResourceClass::Buffer, ResourceBudget{.maxCount = 4096, .maxBytes = 0});
+  resourceManager_.SetBudget(ResourceClass::Texture, ResourceBudget{.maxCount = 512, .maxBytes = 0});
+  resourceManager_.SetBudget(ResourceClass::VertexArray, ResourceBudget{.maxCount = 2048, .maxBytes = 0});
+
   showCameraDebug = cfg.showCameraDebug;
   showTruthFuel = cfg.showTruthFuel;
   showAgeFilteredFuel = cfg.showAgeFilteredFuel;
@@ -46,7 +50,7 @@ Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter>
     worldAdapter_ = CreateDefaultRenderWorldAdapter(cfg_);
   }
 
-  renderFeatures_ = CreateDefaultRenderFeatures();
+  renderFeatures_ = CreateDefaultRenderFeatures(cfg_);
   if (renderFeaturePlugin_ != nullptr) {
     auto pluginFeatures = renderFeaturePlugin_->CreateFeatures(cfg_);
     for (auto& feature : pluginFeatures) {
@@ -73,6 +77,22 @@ Renderer::~Renderer() {
         queryId = 0;
       }
     }
+  }
+
+  if (dynamicLineVbo_.Get() != 0) {
+    resourceManager_.Release(ResourceClass::Buffer);
+  }
+  if (textVbo_.Get() != 0) {
+    resourceManager_.Release(ResourceClass::Buffer);
+  }
+  if (dynamicLineVao_.Get() != 0) {
+    resourceManager_.Release(ResourceClass::VertexArray);
+  }
+  if (textVao_.Get() != 0) {
+    resourceManager_.Release(ResourceClass::VertexArray);
+  }
+  if (fieldTexture_.Get() != 0) {
+    resourceManager_.Release(ResourceClass::Texture);
   }
 }
 
@@ -125,6 +145,8 @@ bool Renderer::Initialize() {
 
   const unsigned int dynamicLineVao = backend_->CreateVertexArray();
   const unsigned int dynamicLineVbo = backend_->CreateBuffer();
+  resourceManager_.Register(ResourceClass::VertexArray);
+  resourceManager_.Register(ResourceClass::Buffer);
   dynamicLineVao_.Set(dynamicLineVao);
   dynamicLineVbo_.Set(dynamicLineVbo);
 
@@ -139,6 +161,8 @@ bool Renderer::Initialize() {
 
   const unsigned int textVao = backend_->CreateVertexArray();
   const unsigned int textVbo = backend_->CreateBuffer();
+  resourceManager_.Register(ResourceClass::VertexArray);
+  resourceManager_.Register(ResourceClass::Buffer);
   textVao_.Set(textVao);
   textVbo_.Set(textVbo);
 
@@ -218,6 +242,20 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("entities.visible", cullingStats.visible);
   diagnostics_.RecordCounter("entities.culled", cullingStats.culled);
   diagnostics_.RecordCounter("commands.total", static_cast<double>(commandBuffer.size()));
+  const auto& caps = backend_->Capabilities();
+  diagnostics_.RecordCounter("backend.max_texture_size", static_cast<double>(caps.maxTextureSize));
+  diagnostics_.RecordCounter("backend.max_vertex_attribs", static_cast<double>(caps.maxVertexAttribs));
+  diagnostics_.RecordCounter("backend.supports_gpu_timers", caps.supportsGpuTimers ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("resources.buffers", static_cast<double>(resourceManager_.Stats(ResourceClass::Buffer).count));
+  diagnostics_.RecordCounter("resources.textures", static_cast<double>(resourceManager_.Stats(ResourceClass::Texture).count));
+  diagnostics_.RecordCounter("resources.vertex_arrays", static_cast<double>(resourceManager_.Stats(ResourceClass::VertexArray).count));
+  diagnostics_.RecordCounter(
+      "resources.over_budget",
+      (resourceManager_.IsOverBudget(ResourceClass::Buffer) ||
+       resourceManager_.IsOverBudget(ResourceClass::Texture) ||
+       resourceManager_.IsOverBudget(ResourceClass::VertexArray))
+          ? 1.0
+          : 0.0);
   const auto frameStart = std::chrono::steady_clock::now();
 
   RenderGraph graph;

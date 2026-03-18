@@ -20,6 +20,7 @@
 #include "repulsor3d/render/assets/SceneAssetResolver.hpp"
 #include "repulsor3d/render/backend/GlHandles.hpp"
 #include "repulsor3d/render/backend/RenderBackend.hpp"
+#include "repulsor3d/render/resources/ResourceLifetimeManager.hpp"
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
 #include "repulsor3d/render/SceneModelBuilder.hpp"
@@ -100,7 +101,7 @@ class Renderer {
   bool CreateFieldTexture();
 
   void DestroyShader(Shader& shader) const;
-  void DestroyMesh(Mesh& mesh) const;
+  void DestroyMesh(Mesh& mesh);
 
   unsigned int CompileShader(unsigned int type, const char* source) const;
   bool LinkShader(Shader& shader, unsigned int vs, unsigned int fs) const;
@@ -132,6 +133,7 @@ class Renderer {
   std::unique_ptr<IRenderBackend> backend_;
   std::unique_ptr<ISceneAssetResolver> assetResolver_;
   std::unique_ptr<IGeometryProvider> geometryProvider_;
+  ResourceLifetimeManager resourceManager_;
   DiagnosticsService diagnostics_;
 
   Shader solidShader_;

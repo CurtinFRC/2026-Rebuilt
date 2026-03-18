@@ -10,7 +10,6 @@
 #include <optional>
 #include <thread>
 #include <string>
-#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -19,7 +18,9 @@
 #include <glm/vec3.hpp>
 
 #include "repulsor3d/render/RenderFeature.hpp"
+#include "repulsor3d/async/TaskScheduler.hpp"
 #include "repulsor3d/render/backend/GlHandles.hpp"
+#include "repulsor3d/render/assets/MeshProvider.hpp"
 #include "repulsor3d/render/backend/RenderBackend.hpp"
 #include "repulsor3d/render/geometry/GeometryProvider.hpp"
 #include "repulsor3d/render/material/Material.hpp"
@@ -148,6 +149,7 @@ class CadModelRenderFeature final : public IRenderFeature {
 
   Renderer* renderer_ = nullptr;
   IGeometryProvider* geometryProvider_ = nullptr;
+  std::unique_ptr<IMeshProvider> meshProvider_;
   IRenderBackend* backend_ = nullptr;
 
   GlProgramHandle shader_;
@@ -206,11 +208,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   std::unordered_map<std::string, PendingLoad> pendingLoads_;
   std::unordered_map<std::string, PendingGpuUpload> pendingGpuUploads_;
   std::unordered_set<std::string> failedLoads_;
-  std::thread loadWorkerThread_;
-  std::mutex loadQueueMutex_;
-  std::condition_variable loadQueueCv_;
-  bool stopLoadWorker_ = false;
-  std::deque<std::packaged_task<PreparedCpuMesh()>> loadQueue_;
+  TaskScheduler loadScheduler_;
   std::unique_ptr<cad::UniformGridBroadphase> broadphaseCache_;
   float broadphaseCacheCellSizeM_ = -1.0F;
   std::uint64_t broadphaseCacheFingerprint_ = 0ULL;

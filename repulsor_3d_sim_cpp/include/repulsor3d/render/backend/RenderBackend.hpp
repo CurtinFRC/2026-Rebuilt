@@ -1,14 +1,26 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 #include <glm/vec4.hpp>
 
 namespace repulsor3d {
 
+struct RenderBackendCapabilities {
+  std::string backendName = "unknown";
+  int maxTextureSize = 0;
+  int maxVertexAttribs = 0;
+  bool supportsGpuTimers = false;
+  bool supportsInstancing = false;
+  bool supportsMipmapTextures = false;
+};
+
 class IRenderBackend {
  public:
   virtual ~IRenderBackend() = default;
+
+  virtual const RenderBackendCapabilities& Capabilities() const = 0;
 
   virtual void ConfigureDefaultState() = 0;
   virtual void ClearFrame(const glm::vec4& clearColor) = 0;
@@ -60,6 +72,7 @@ class IRenderBackend {
 
 class OpenGLRenderBackend final : public IRenderBackend {
  public:
+  const RenderBackendCapabilities& Capabilities() const override { return capabilities_; }
   void ConfigureDefaultState() override;
   void ClearFrame(const glm::vec4& clearColor) override;
   void ResizeViewport(int width, int height) override;
@@ -106,6 +119,9 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void BeginGpuTimerQuery(unsigned int queryId) override;
   void EndGpuTimerQuery() override;
   bool TryReadGpuTimerMilliseconds(unsigned int queryId, double& outMilliseconds) override;
+
+ private:
+  RenderBackendCapabilities capabilities_;
 };
 
 }  // namespace repulsor3d

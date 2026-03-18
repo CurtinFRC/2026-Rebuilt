@@ -40,11 +40,16 @@ CoordinateFrameMapper::Config BuildCoordinateMapperConfig(const ViewerConfig& cf
 }  // namespace
 
 SnapshotDomainAdapter::SnapshotDomainAdapter(const ViewerConfig& cfg)
-    : cfg_(cfg), coordinateMapper_(BuildCoordinateMapperConfig(cfg)) {}
+    : cfg_(cfg) {
+  coordinateSystem_.SetTransform(
+      CoordinateFrameId::Incoming,
+      CoordinateFrameId::Field,
+      BuildCoordinateMapperConfig(cfg));
+}
 
 WorldSnapshot SnapshotDomainAdapter::BuildRenderSnapshot(const SnapshotBundle& latest, const double dt) {
   WorldSnapshot out = latest.snapshot;
-  coordinateMapper_.TransformSnapshot(out);
+  coordinateSystem_.TransformSnapshot(CoordinateFrameId::Incoming, CoordinateFrameId::Field, out);
   out.pose = SmoothPose(out.pose, poseState_, cfg_, dt);
   return out;
 }

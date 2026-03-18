@@ -6,9 +6,13 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <iostream>
+#include <cctype>
 
 #include "repulsor3d/Renderer.hpp"
 #include "repulsor3d/render/CadModelRenderFeature.hpp"
+#include "repulsor3d/render/pipeline/RenderFeatureFactoryRegistry.hpp"
+#include "repulsor3d/render/pipeline/RenderPipelineConfig.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -139,6 +143,25 @@ class OverlayRenderFeature final : public IRenderFeature {
   }
 };
 
+RenderPass ParseRenderPass(std::string value, const RenderPass fallback) {
+  std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (value == "opaque") {
+    return RenderPass::Opaque;
+  }
+  if (value == "transparent") {
+    return RenderPass::Transparent;
+  }
+  if (value == "overlay") {
+    return RenderPass::Overlay;
+  }
+  if (value == "background") {
+    return RenderPass::Background;
+  }
+  return fallback;
+}
+
 }  // namespace
 
 RendererDrawApi::RendererDrawApi(Renderer& renderer) : renderer_(renderer) {}
@@ -171,18 +194,44 @@ void RendererDrawApi::DrawOverlay(const int width, const int height, const std::
   renderer_.DrawOverlay(width, height, lines);
 }
 
-std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures() {
-  std::vector<std::unique_ptr<IRenderFeature>> features;
-  features.push_back(std::make_unique<WorldRenderFeature>());
-  features.push_back(
-      std::make_unique<GeometryPassRenderFeature>(RenderPass::Opaque, "geometry_opaque", std::vector<std::string>{"world"}));
-  features.push_back(std::make_unique<CadModelRenderFeature>(
-      RenderPass::Opaque, "cad_opaque", std::vector<std::string>{"geometry_opaque"}));
-  features.push_back(std::make_unique<GeometryPassRenderFeature>(
-      RenderPass::Transparent, "geometry_transparent", std::vector<std::string>{"cad_opaque"}));
-  features.push_back(std::make_unique<CadModelRenderFeature>(
-      RenderPass::Transparent, "cad_transparent", std::vector<std::string>{"geometry_transparent"}));
-  features.push_back(std::make_unique<OverlayRenderFeature>());
+std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures(const ViewerConfig& cfg) {
+  RenderPipelineConfig pipelineConfig = MakeDefaultRenderPipelineConfig();
+  if (!cfg.renderPipelinePath.empty()) {
+    RenderPipelineConfig loaded;
+    std::string error;
+    if (LoadRenderPipelineConfigFromFile(cfg.renderPipelinePath, loaded, &error)) {
+      pipelineConfig = std::move(loaded);
+    } else {
+      std::cerr << "[RenderFeature] failed to load pipeline config '" << cfg.renderPipelinePath
+                << "': " << error << ". Using defaults.\n";
+    }
+  }
+
+  RenderFeatureFactoryRegistry registry;
+  registry.Register("world", [](const RenderPipelinePassSpec& /*spec*/) {
+    return std::make_unique<WorldRenderFeature>();
+  });
+  registry.Register("geometry", [](const RenderPipelinePassSpec& spec) {
+    return std::make_unique<GeometryPassRenderFeature>(
+        ParseRenderPass(spec.renderPass, RenderPass::Opaque),
+        spec.name,
+        spec.dependencies);
+  });
+  registry.Register("cad", [](const RenderPipelinePassSpec& spec) {
+    return std::make_unique<CadModelRenderFeature>(
+        ParseRenderPass(spec.renderPass, RenderPass::Opaque),
+        spec.name,
+        spec.dependencies);
+  });
+  registry.Register("overlay", [](const RenderPipelinePassSpec& /*spec*/) {
+    return std::make_unique<OverlayRenderFeature>();
+  });
+
+  auto features = BuildRenderFeaturesFromPipeline(pipelineConfig, registry);
+  if (features.empty()) {
+    RenderPipelineConfig fallback = MakeDefaultRenderPipelineConfig();
+    features = BuildRenderFeaturesFromPipeline(fallback, registry);
+  }
   return features;
 }
 

@@ -10,6 +10,7 @@
 
 #include "repulsor3d/datasource/DataSourcePluginAbi.hpp"
 #include "repulsor3d/plugins/PluginManifest.hpp"
+#include "repulsor3d/plugins/PluginSdk.hpp"
 #include "repulsor3d/NullDataSource.hpp"
 #include "repulsor3d/ReplayDataSource.hpp"
 
@@ -133,6 +134,8 @@ std::unique_ptr<ISnapshotSource> CreateDataSourceFromPlugin(const std::string& p
       ResolveSymbol(handle, "repulsor3d_query_data_source_plugin_abi_version"));
   const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(
       ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1"));
+  const auto querySdkFn = reinterpret_cast<QueryPluginSdkInfoV1Fn>(
+      ResolveSymbol(handle, "repulsor3d_query_plugin_sdk_info_v1"));
   if (createFn == nullptr || destroyFn == nullptr || queryAbiFn == nullptr) {
     CloseLibrary(handle);
     return nullptr;
@@ -142,6 +145,13 @@ std::unique_ptr<ISnapshotSource> CreateDataSourceFromPlugin(const std::string& p
   if (abiVersion != kDataSourcePluginAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (querySdkFn != nullptr) {
+    const PluginSdkInfoV1* sdkInfo = querySdkFn();
+    if (sdkInfo == nullptr || !IsPluginSdkCompatible(*sdkInfo, kPluginSdkVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
   if (queryManifestFn != nullptr) {
     const PluginManifestV1* manifest = queryManifestFn();

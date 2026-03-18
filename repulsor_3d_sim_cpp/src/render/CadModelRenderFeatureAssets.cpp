@@ -148,7 +148,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
     return nullptr;
   }
 
-  IGeometryProvider* provider = geometryProvider_;
+  IMeshProvider* provider = meshProvider_.get();
   auto status = std::make_shared<PendingLoad::Status>();
   status->progress = 0.02F;
   {
@@ -212,7 +212,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
 
             setStage("import", 0.25F);
             PositionNormalMesh cpu;
-            if (provider == nullptr || !provider->GetCadMesh(assetPath, cpu)) {
+            if (provider == nullptr || !provider->LoadPositionNormalMesh(assetPath, cpu)) {
               setStage("import_failed", 1.0F);
               if (status != nullptr) {
                 status->failed = true;

@@ -7,6 +7,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include "repulsor3d/Config.hpp"
 #include "repulsor3d/Diagnostics.hpp"
 #include "repulsor3d/render/RenderCommandBuffer.hpp"
 #include "repulsor3d/render/SceneFrame.hpp"
@@ -59,6 +60,6 @@ class IRenderFeature {
   virtual void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) = 0;
 };
 
-std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures();
+std::vector<std::unique_ptr<IRenderFeature>> CreateDefaultRenderFeatures(const ViewerConfig& cfg);
 
 }  // namespace repulsor3d

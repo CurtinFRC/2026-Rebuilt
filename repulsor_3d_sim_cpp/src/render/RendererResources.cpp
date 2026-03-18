@@ -176,6 +176,9 @@ bool Renderer::CreateMeshes() {
             cubeMesh_.indexCount)) {
       return false;
     }
+    resourceManager_.Register(ResourceClass::VertexArray);
+    resourceManager_.Register(ResourceClass::Buffer);
+    resourceManager_.Register(ResourceClass::Buffer);
   }
 
   {
@@ -196,6 +199,9 @@ bool Renderer::CreateMeshes() {
             sphereMesh_.indexCount)) {
       return false;
     }
+    resourceManager_.Register(ResourceClass::VertexArray);
+    resourceManager_.Register(ResourceClass::Buffer);
+    resourceManager_.Register(ResourceClass::Buffer);
   }
 
   {
@@ -218,6 +224,9 @@ bool Renderer::CreateMeshes() {
             true)) {
       return false;
     }
+    resourceManager_.Register(ResourceClass::VertexArray);
+    resourceManager_.Register(ResourceClass::Buffer);
+    resourceManager_.Register(ResourceClass::Buffer);
   }
 
   return true;
@@ -244,6 +253,7 @@ bool Renderer::CreateFieldTexture() {
 
   const unsigned int textureId = backend_->CreateTexture2D();
   fieldTexture_.Set(textureId);
+  resourceManager_.Register(ResourceClass::Texture);
   backend_->BindTexture2D(fieldTexture_.Get());
   backend_->SetTexture2DLinearMipmapClamp();
   backend_->UploadTexture2DRgba8(width, height, pixels);
@@ -257,7 +267,16 @@ void Renderer::DestroyShader(Shader& shader) const {
   shader.program.Reset();
 }
 
-void Renderer::DestroyMesh(Mesh& mesh) const {
+void Renderer::DestroyMesh(Mesh& mesh) {
+  if (mesh.ebo.Get() != 0) {
+    resourceManager_.Release(ResourceClass::Buffer);
+  }
+  if (mesh.vbo.Get() != 0) {
+    resourceManager_.Release(ResourceClass::Buffer);
+  }
+  if (mesh.vao.Get() != 0) {
+    resourceManager_.Release(ResourceClass::VertexArray);
+  }
   mesh.ebo.Reset();
   mesh.vbo.Reset();
   mesh.vao.Reset();

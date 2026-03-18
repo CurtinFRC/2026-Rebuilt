@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "repulsor3d/render/Season2026RebuiltModelBuilder.hpp"
+#include "repulsor3d/season/SeasonDefinitionRegistry.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -26,13 +27,22 @@ void RegisterBuiltinsOnce() {
     return;
   }
 
-  RegisterSceneModelBuilder("2026rebuilt", [](const ViewerConfig& cfg) {
+  RegisterSceneModelBuilder("2026rebuilt", [](const ViewerConfig& cfg) -> std::unique_ptr<ISceneModelBuilder> {
+    if (auto season = CreateSeasonDefinition("2026rebuilt"); season != nullptr) {
+      return season->CreateSceneModelBuilder(cfg);
+    }
     return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
   });
-  RegisterSceneModelBuilder("rebuilt2026", [](const ViewerConfig& cfg) {
+  RegisterSceneModelBuilder("rebuilt2026", [](const ViewerConfig& cfg) -> std::unique_ptr<ISceneModelBuilder> {
+    if (auto season = CreateSeasonDefinition("2026rebuilt"); season != nullptr) {
+      return season->CreateSceneModelBuilder(cfg);
+    }
     return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
   });
-  RegisterSceneModelBuilder("default", [](const ViewerConfig& cfg) {
+  RegisterSceneModelBuilder("default", [](const ViewerConfig& cfg) -> std::unique_ptr<ISceneModelBuilder> {
+    if (auto season = CreateDefaultSeasonDefinition(cfg); season != nullptr) {
+      return season->CreateSceneModelBuilder(cfg);
+    }
     return std::make_unique<Season2026RebuiltModelBuilder>(cfg);
   });
 
@@ -52,6 +62,11 @@ std::unique_ptr<ISceneModelBuilder> CreateSceneModelBuilder(const std::string& s
   RegisterBuiltinsOnce();
 
   const std::string key = ToLower(sceneProfile);
+  if (auto season = CreateSeasonDefinition(key); season != nullptr) {
+    if (auto builder = season->CreateSceneModelBuilder(cfg); builder != nullptr) {
+      return builder;
+    }
+  }
   const auto it = Registry().find(key);
   if (it != Registry().end()) {
     return it->second(cfg);

@@ -3,6 +3,7 @@
 
 #include "repulsor3d/modules/SeasonModule.hpp"
 #include "repulsor3d/plugins/PluginManifest.hpp"
+#include "repulsor3d/plugins/PluginSdk.hpp"
 
 namespace repulsor3d {
 
@@ -40,6 +41,11 @@ class GenericSdkSeasonModule final : public ISeasonModule {
 
 extern "C" REPULSOR_PLUGIN_EXPORT int repulsor3d_query_season_module_abi_version() {
   return repulsor3d::kSeasonModuleAbiVersion;
+}
+
+extern "C" REPULSOR_PLUGIN_EXPORT const repulsor3d::PluginSdkInfoV1* repulsor3d_query_plugin_sdk_info_v1() {
+  static const repulsor3d::PluginSdkInfoV1 sdkInfo{};
+  return &sdkInfo;
 }
 
 extern "C" REPULSOR_PLUGIN_EXPORT const repulsor3d::PluginManifestV1* repulsor3d_query_plugin_manifest_v1() {

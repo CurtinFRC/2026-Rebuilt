@@ -5,6 +5,8 @@
 #include <cstdlib>
 #include <string>
 
+#include "repulsor3d/config/RuntimeConfigProfile.hpp"
+
 namespace repulsor3d {
 namespace {
 
@@ -63,11 +65,15 @@ ViewerConfig LoadConfigFromEnv() {
   ViewerConfig cfg;
 
   cfg.sceneProfile = GetEnvString("SIM_SCENE_PROFILE", cfg.sceneProfile);
+  cfg.renderPipelinePath = GetEnvString("RENDER_PIPELINE_PATH", cfg.renderPipelinePath);
   cfg.sceneDescriptorPath = GetEnvString("SCENE_DESCRIPTOR_PATH", cfg.sceneDescriptorPath);
   cfg.seasonModulePluginPath = GetEnvString("SEASON_MODULE_PLUGIN_PATH", cfg.seasonModulePluginPath);
   cfg.renderFeaturePluginPath = GetEnvString("RENDER_FEATURE_PLUGIN_PATH", cfg.renderFeaturePluginPath);
   cfg.hotReloadSceneDescriptor = GetEnvBool("HOT_RELOAD_SCENE_DESCRIPTOR", cfg.hotReloadSceneDescriptor);
   cfg.hotReloadSeasonModule = GetEnvBool("HOT_RELOAD_SEASON_MODULE", cfg.hotReloadSeasonModule);
+  cfg.runtimeConfigProfilePath = GetEnvString("RUNTIME_CONFIG_PROFILE_PATH", cfg.runtimeConfigProfilePath);
+  cfg.hotReloadRuntimeConfigProfile =
+      GetEnvBool("HOT_RELOAD_RUNTIME_CONFIG_PROFILE", cfg.hotReloadRuntimeConfigProfile);
 
   cfg.ntServer = GetEnvString("NT_SERVER", cfg.ntServer);
   cfg.ntClientName = GetEnvString("NT_CLIENT_NAME", cfg.ntClientName);
@@ -155,6 +161,13 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.followMaxSpeedMps = GetEnvFloat("FOLLOW_MAX_SPEED_MPS", cfg.followMaxSpeedMps);
   cfg.robotSmoothTimeS = GetEnvFloat("ROBOT_SMOOTH_TIME_S", cfg.robotSmoothTimeS);
   cfg.robotMaxSpeedMps = GetEnvFloat("ROBOT_MAX_SPEED_MPS", cfg.robotMaxSpeedMps);
+
+  if (!cfg.runtimeConfigProfilePath.empty()) {
+    std::string profileError;
+    if (!LoadViewerConfigProfile(cfg.runtimeConfigProfilePath, cfg, &profileError)) {
+      (void)profileError;
+    }
+  }
 
   return cfg;
 }

@@ -7,6 +7,8 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
+#include "repulsor3d/render/primitives/RenderableComponent.hpp"
+
 namespace repulsor3d {
 
 enum class RenderPass {
@@ -95,6 +97,16 @@ struct RenderEntity {
   EntityCulling culling;
 };
 
+struct SceneNode {
+  std::string id;
+  std::string parentId;
+  RenderEntityPayload payload = SpherePrimitive{};
+  RenderPass pass = RenderPass::Opaque;
+  Transform3D localTransform;
+  bool hasLocalTransform = false;
+  EntityCulling culling;
+};
+
 struct RenderSceneFrame {
   bool drawFieldImage = true;
   bool drawGrid = true;
@@ -106,6 +118,8 @@ struct RenderSceneFrame {
   std::vector<MeshInstancePrimitive> meshInstances;
   std::vector<OverlayLine> overlayLines;
   std::vector<RenderEntity> entities;
+  std::vector<SceneNode> sceneNodes;
+  std::vector<RenderableComponentBinding> components;
 };
 
 }  // namespace repulsor3d

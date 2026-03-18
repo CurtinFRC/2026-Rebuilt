@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "repulsor3d/plugins/PluginManifest.hpp"
+#include "repulsor3d/plugins/PluginSdk.hpp"
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -120,6 +121,7 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
   auto* destroyFnRaw = ResolveSymbol(handle, "repulsor3d_destroy_render_feature_plugin");
   auto* queryAbiVersionRaw = ResolveSymbol(handle, "repulsor3d_query_render_feature_plugin_abi_version");
   auto* queryManifestRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_manifest_v1");
+  auto* querySdkRaw = ResolveSymbol(handle, "repulsor3d_query_plugin_sdk_info_v1");
   if (createFnRaw == nullptr || destroyFnRaw == nullptr || queryAbiVersionRaw == nullptr) {
     CloseLibrary(handle);
     return nullptr;
@@ -129,9 +131,17 @@ std::unique_ptr<IRenderFeaturePlugin> CreateRenderFeaturePluginFromPath(const st
   const auto destroyFn = reinterpret_cast<DestroyRenderFeaturePluginAbiFn>(destroyFnRaw);
   const auto queryAbiVersionFn = reinterpret_cast<QueryRenderFeaturePluginAbiVersionFn>(queryAbiVersionRaw);
   const auto queryManifestFn = reinterpret_cast<QueryPluginManifestV1Fn>(queryManifestRaw);
+  const auto querySdkFn = reinterpret_cast<QueryPluginSdkInfoV1Fn>(querySdkRaw);
   if (queryAbiVersionFn == nullptr || queryAbiVersionFn() != kRenderFeaturePluginAbiVersion) {
     CloseLibrary(handle);
     return nullptr;
+  }
+  if (querySdkFn != nullptr) {
+    const PluginSdkInfoV1* sdkInfo = querySdkFn();
+    if (sdkInfo == nullptr || !IsPluginSdkCompatible(*sdkInfo, kPluginSdkVersion)) {
+      CloseLibrary(handle);
+      return nullptr;
+    }
   }
   if (queryManifestFn != nullptr) {
     const PluginManifestV1* manifest = queryManifestFn();

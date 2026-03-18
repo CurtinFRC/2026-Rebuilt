@@ -103,6 +103,7 @@ find_package(OpenGL REQUIRED)
 set(REPULSOR_SIM_SOURCES
   src/main.cpp
   src/Config.cpp
+  src/config/RuntimeConfigProfile.cpp
   src/ConfigValidation.cpp
   src/Diagnostics.cpp
   src/DataSourceFactory.cpp
@@ -115,8 +116,11 @@ set(REPULSOR_SIM_SOURCES
   src/Renderer.cpp
   src/app/InputActionMap.cpp
   src/app/CameraControllers.cpp
+  src/async/TaskScheduler.cpp
+  src/domain/CoordinateSystemService.cpp
   src/domain/SnapshotDomainAdapter.cpp
   src/domain/CoordinateCalibrationProfile.cpp
+  src/season/SeasonDefinitionRegistry.cpp
   src/sim/PoseSmoothing.cpp
   src/sim/SimWorld.cpp
   src/time/TimeSource.cpp
@@ -133,6 +137,8 @@ set(REPULSOR_SIM_SOURCES
   src/render/RendererText.cpp
   src/render/RenderFeature.cpp
   src/render/RenderFeaturePlugin.cpp
+  src/render/pipeline/RenderPipelineConfig.cpp
+  src/render/pipeline/RenderFeatureFactoryRegistry.cpp
   src/render/CadModelRenderFeature.cpp
   src/render/CadModelRenderFeatureRender.cpp
   src/render/CadModelRenderFeatureShader.cpp
@@ -151,11 +157,14 @@ set(REPULSOR_SIM_SOURCES
   src/render/assets/CadMeshImporterFactory.cpp
   src/render/assets/CadMeshCache.cpp
   src/render/assets/CadMeshAssetPipeline.cpp
+  src/render/assets/MeshProvider.cpp
   src/render/assets/SceneAssetResolver.cpp
+  src/render/resources/ResourceLifetimeManager.cpp
   src/render/geometry/GeometryProvider.cpp
   src/render/Season2026RebuiltModelBuilder.cpp
   src/render/SceneModelBuilderFactory.cpp
   src/modules/SeasonModule.cpp
+  src/nt/TopicSchemaRegistry.cpp
   src/App.cpp
 )
 
@@ -385,6 +394,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
     tests/PoseSmoothingTests.cpp
     src/sim/PoseSmoothing.cpp
     src/domain/SnapshotDomainAdapter.cpp
+    src/domain/CoordinateSystemService.cpp
     src/domain/CoordinateCalibrationProfile.cpp
   )
 
@@ -413,6 +423,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
     src/render/Season2026RebuiltModelBuilder.cpp
     src/render/scenegraph/SceneGraphBuilder.cpp
     src/render/SceneModelBuilderFactory.cpp
+    src/season/SeasonDefinitionRegistry.cpp
     src/modules/SeasonModule.cpp
   )
 
@@ -425,6 +436,33 @@ if(REPULSOR_SIM_BUILD_TESTS)
   endif()
 
   add_test(NAME repulsor_3d_sim_cpp_module_tests COMMAND repulsor_3d_sim_cpp_module_tests)
+
+  add_executable(repulsor_3d_sim_cpp_abstraction_contract_tests
+    tests/AbstractionContractTests.cpp
+    src/season/SeasonDefinitionRegistry.cpp
+    src/modules/SeasonModule.cpp
+    src/render/SceneDescriptor.cpp
+    src/render/SceneModelBuilderFactory.cpp
+    src/render/RenderWorldAdapter.cpp
+    src/render/Season2026RebuiltModelBuilder.cpp
+    src/render/scenegraph/SceneGraphBuilder.cpp
+    src/render/pipeline/RenderPipelineConfig.cpp
+    src/render/pipeline/RenderFeatureFactoryRegistry.cpp
+    src/domain/CoordinateSystemService.cpp
+    src/async/TaskScheduler.cpp
+    src/render/resources/ResourceLifetimeManager.cpp
+  )
+  target_include_directories(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE nlohmann_json::nlohmann_json)
+  if(REPULSOR_SIM_FETCH_DEPS)
+    target_include_directories(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE ${glm_SOURCE_DIR})
+  else()
+    target_link_libraries(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE glm::glm)
+  endif()
+  add_test(
+    NAME repulsor_3d_sim_cpp_abstraction_contract_tests
+    COMMAND repulsor_3d_sim_cpp_abstraction_contract_tests
+  )
 
   add_executable(repulsor_3d_sim_cpp_render_regression_tests
     tests/RenderRegressionTests.cpp
@@ -476,6 +514,7 @@ if(REPULSOR_SIM_BUILD_TESTS)
       src/render/Season2026RebuiltModelBuilder.cpp
       src/render/scenegraph/SceneGraphBuilder.cpp
       src/render/SceneModelBuilderFactory.cpp
+      src/season/SeasonDefinitionRegistry.cpp
       src/modules/SeasonModule.cpp
     )
 

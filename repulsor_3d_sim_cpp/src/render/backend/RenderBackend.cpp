@@ -5,6 +5,13 @@
 namespace repulsor3d {
 
 void OpenGLRenderBackend::ConfigureDefaultState() {
+  capabilities_.backendName = "OpenGL";
+  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &capabilities_.maxTextureSize);
+  glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &capabilities_.maxVertexAttribs);
+  capabilities_.supportsGpuTimers = true;
+  capabilities_.supportsInstancing = true;
+  capabilities_.supportsMipmapTextures = true;
+
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
   glEnable(GL_BLEND);

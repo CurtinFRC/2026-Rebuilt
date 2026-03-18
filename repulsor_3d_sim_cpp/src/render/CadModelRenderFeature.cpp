@@ -77,6 +77,7 @@ CadModelRenderFeature::~CadModelRenderFeature() {
 bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   renderer_ = &renderer;
   geometryProvider_ = &renderer.GetGeometryProvider();
+  meshProvider_ = CreateDefaultMeshProvider(*geometryProvider_);
   backend_ = &renderer.GetRenderBackend();
   uploadBudgetPerFrame_ = std::max(1, GetEnvInt("CAD_UPLOADS_PER_FRAME", uploadBudgetPerFrame_));
   const CadShadowPolicy& shadowPolicy = LoadCadShadowPolicy();
@@ -117,46 +118,15 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
 }
 
 void CadModelRenderFeature::StartLoadWorker() {
-  if (loadWorkerThread_.joinable()) {
-    return;
-  }
-  stopLoadWorker_ = false;
-  loadWorkerThread_ = std::thread([this]() {
-    for (;;) {
-      std::packaged_task<PreparedCpuMesh()> task;
-      {
-        std::unique_lock<std::mutex> lock(loadQueueMutex_);
-        loadQueueCv_.wait(lock, [this]() { return stopLoadWorker_ || !loadQueue_.empty(); });
-        if (stopLoadWorker_ && loadQueue_.empty()) {
-          break;
-        }
-        task = std::move(loadQueue_.front());
-        loadQueue_.pop_front();
-      }
-      if (task.valid()) {
-        task();
-      }
-    }
-  });
+  loadScheduler_.Start(1);
 }
 
 void CadModelRenderFeature::StopLoadWorker() {
-  {
-    std::scoped_lock lock(loadQueueMutex_);
-    stopLoadWorker_ = true;
-  }
-  loadQueueCv_.notify_all();
-  if (loadWorkerThread_.joinable()) {
-    loadWorkerThread_.join();
-  }
+  loadScheduler_.Stop();
 }
 
 void CadModelRenderFeature::EnqueueLoadTask(std::packaged_task<PreparedCpuMesh()>&& task) {
-  {
-    std::scoped_lock lock(loadQueueMutex_);
-    loadQueue_.push_back(std::move(task));
-  }
-  loadQueueCv_.notify_one();
+  loadScheduler_.Enqueue(std::move(task));
 }
 
 }  // namespace repulsor3d
