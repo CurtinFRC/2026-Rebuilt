@@ -4,6 +4,7 @@
 
 #include "repulsor3d/Config.hpp"
 #include "repulsor3d/Model.hpp"
+#include "repulsor3d/domain/CoordinateFrameMapper.hpp"
 #include "repulsor3d/sim/PoseSmoothing.hpp"
 
 namespace repulsor3d {
@@ -18,6 +19,7 @@ class SnapshotDomainAdapter {
 
  private:
   ViewerConfig cfg_;
+  CoordinateFrameMapper coordinateMapper_;
   PoseSmoothingState poseState_;
 };
 

@@ -117,6 +117,12 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.fieldCadOffsetXM = GetEnvFloat("FIELD_CAD_OFFSET_X_M", cfg.fieldCadOffsetXM);
   cfg.fieldCadOffsetYM = GetEnvFloat("FIELD_CAD_OFFSET_Y_M", cfg.fieldCadOffsetYM);
 
+  cfg.incomingCoordOriginXM = GetEnvFloat("INCOMING_COORD_ORIGIN_X_M", cfg.incomingCoordOriginXM);
+  cfg.incomingCoordOriginYM = GetEnvFloat("INCOMING_COORD_ORIGIN_Y_M", cfg.incomingCoordOriginYM);
+  cfg.incomingCoordRotationDeg = GetEnvFloat("INCOMING_COORD_ROTATION_DEG", cfg.incomingCoordRotationDeg);
+  cfg.incomingCoordScaleMPerUnit = GetEnvFloat("INCOMING_COORD_SCALE_M_PER_UNIT", cfg.incomingCoordScaleMPerUnit);
+  cfg.incomingCoordZScaleMPerUnit = GetEnvFloat("INCOMING_COORD_Z_SCALE_M_PER_UNIT", cfg.incomingCoordZScaleMPerUnit);
+
   cfg.cameraDistanceM = GetEnvFloat("CAMERA_DISTANCE_M", cfg.cameraDistanceM);
   cfg.cameraPitchDeg = GetEnvFloat("CAMERA_PITCH_DEG", cfg.cameraPitchDeg);
   cfg.cameraYawDeg = GetEnvFloat("CAMERA_YAW_DEG", cfg.cameraYawDeg);

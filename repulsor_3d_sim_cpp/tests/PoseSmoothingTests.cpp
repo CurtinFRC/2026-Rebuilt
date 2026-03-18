@@ -53,6 +53,11 @@ int RunPoseSmoothingTests() {
 
 int RunDomainAdapterTests() {
   repulsor3d::ViewerConfig cfg;
+  cfg.incomingCoordOriginXM = 0.0F;
+  cfg.incomingCoordOriginYM = 0.0F;
+  cfg.incomingCoordRotationDeg = 0.0F;
+  cfg.incomingCoordScaleMPerUnit = 1.0F;
+  cfg.incomingCoordZScaleMPerUnit = 1.0F;
   repulsor3d::SnapshotDomainAdapter adapter(cfg);
 
   repulsor3d::SnapshotBundle bundle;
@@ -73,6 +78,31 @@ int RunDomainAdapterTests() {
   return 0;
 }
 
+int RunCoordinateFrameMapperTests() {
+  repulsor3d::ViewerConfig cfg;
+  cfg.incomingCoordOriginXM = 3.0F;
+  cfg.incomingCoordOriginYM = 0.5F;
+  cfg.incomingCoordRotationDeg = 0.0F;
+  cfg.incomingCoordScaleMPerUnit = 1.0F;
+  cfg.incomingCoordZScaleMPerUnit = 1.0F;
+
+  repulsor3d::SnapshotDomainAdapter adapter(cfg);
+  repulsor3d::SnapshotBundle bundle;
+  bundle.snapshot.pose = repulsor3d::Pose2D{.x = 0.0, .y = 0.0, .thetaRad = 0.0};
+
+  const auto renderSnap = adapter.BuildRenderSnapshot(bundle, 0.02);
+  if (!renderSnap.pose.has_value()) {
+    std::cerr << "Coordinate mapper test expected pose output\n";
+    return 7;
+  }
+  if (!NearlyEqual(renderSnap.pose->x, 3.0) || !NearlyEqual(renderSnap.pose->y, 0.5)) {
+    std::cerr << "Coordinate mapper origin-offset mismatch\n";
+    return 8;
+  }
+
+  return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -80,6 +110,9 @@ int main() {
     return rc;
   }
   if (const int rc = RunDomainAdapterTests(); rc != 0) {
+    return rc;
+  }
+  if (const int rc = RunCoordinateFrameMapperTests(); rc != 0) {
     return rc;
   }
 

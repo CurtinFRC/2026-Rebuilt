@@ -2,10 +2,18 @@
 
 namespace repulsor3d {
 
-SnapshotDomainAdapter::SnapshotDomainAdapter(const ViewerConfig& cfg) : cfg_(cfg) {}
+SnapshotDomainAdapter::SnapshotDomainAdapter(const ViewerConfig& cfg)
+    : cfg_(cfg),
+      coordinateMapper_(CoordinateFrameMapper::Config{
+          .originXM = static_cast<double>(cfg.incomingCoordOriginXM),
+          .originYM = static_cast<double>(cfg.incomingCoordOriginYM),
+          .rotationDeg = static_cast<double>(cfg.incomingCoordRotationDeg),
+          .scaleMPerUnit = static_cast<double>(cfg.incomingCoordScaleMPerUnit),
+          .zScaleMPerUnit = static_cast<double>(cfg.incomingCoordZScaleMPerUnit)}) {}
 
 WorldSnapshot SnapshotDomainAdapter::BuildRenderSnapshot(const SnapshotBundle& latest, const double dt) {
   WorldSnapshot out = latest.snapshot;
+  coordinateMapper_.TransformSnapshot(out);
   out.pose = SmoothPose(out.pose, poseState_, cfg_, dt);
   return out;
 }

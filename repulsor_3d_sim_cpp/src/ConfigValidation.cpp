@@ -30,6 +30,12 @@ ConfigValidationResult ValidateConfig(const ViewerConfig& cfg) {
   if (cfg.fieldCadScaleM <= 0.0F && cfg.showFieldCadModel) {
     result.warnings.push_back("FIELD_CAD_SCALE_M should be > 0 when SHOW_FIELD_CAD_MODEL is enabled");
   }
+  if (cfg.incomingCoordScaleMPerUnit <= 0.0F) {
+    result.errors.push_back("INCOMING_COORD_SCALE_M_PER_UNIT must be > 0");
+  }
+  if (cfg.incomingCoordZScaleMPerUnit <= 0.0F) {
+    result.errors.push_back("INCOMING_COORD_Z_SCALE_M_PER_UNIT must be > 0");
+  }
 
   return result;
 }

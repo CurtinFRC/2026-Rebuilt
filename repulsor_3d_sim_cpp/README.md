@@ -71,6 +71,10 @@ The renderer is now split into a backend + season-model pipeline:
   - world state boundary (`include/repulsor3d/sim/SimWorld.hpp`)
   - adapter boundary from world -> render frame (`include/repulsor3d/render/RenderWorldAdapter.hpp`)
   - renderer now consumes adapters, not season-specific builders directly
+- Coordinate-frame mapper:
+  - `CoordinateFrameMapper` (`include/repulsor3d/domain/CoordinateFrameMapper.hpp`)
+  - domain-layer transform maps incoming coordinates to render-space meters before scene building
+  - keeps season builders focused on visuals, not frame-conversion math
 - `IRenderFeature` pipeline (`include/repulsor3d/render/RenderFeature.hpp`, `src/render/RenderFeature.cpp`):
   - pluggable render passes (default: world, primitives, CAD meshes, overlay)
   - allows adding new visuals (3D fields, custom post-processing, extra UI overlays) by adding feature modules instead of editing `Renderer::Draw`
@@ -146,6 +150,11 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`
 - `SHOW_FIELD_CAD_MODEL`, `FIELD_CAD_MODEL_PATH`, `FIELD_CAD_SCALE_M`, `FIELD_CAD_FLIP_X`, `FIELD_CAD_Z_OFFSET_M`
+- `INCOMING_COORD_ORIGIN_X_M` (default `3.0`)
+- `INCOMING_COORD_ORIGIN_Y_M` (default `0.5`)
+- `INCOMING_COORD_ROTATION_DEG` (default `0.0`)
+- `INCOMING_COORD_SCALE_M_PER_UNIT` (default `1.0`)
+- `INCOMING_COORD_Z_SCALE_M_PER_UNIT` (default `1.0`)
 - `CAD_LOD_COUNT` (default `2`)
 - `CAD_LOD_RATIO` (default `0.62`)
 - `CAD_LOD_MIN_VERTICES` (default `700000`)
