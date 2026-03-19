@@ -50,6 +50,21 @@ void HashMixFloat(std::uint64_t& hash, const float value) {
   HashMixU64(hash, static_cast<std::uint64_t>(FloatBits(value)));
 }
 
+std::uint64_t BuildInstanceUploadFingerprint(const cadfeature::InstanceGpuData* data, const std::size_t instanceCount) {
+  if (data == nullptr || instanceCount == 0) {
+    return 0ULL;
+  }
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(data);
+  const std::size_t byteCount = instanceCount * sizeof(cadfeature::InstanceGpuData);
+  std::uint64_t hash = kFnvOffsetBasis;
+  HashMixU64(hash, static_cast<std::uint64_t>(byteCount));
+  for (std::size_t i = 0; i < byteCount; ++i) {
+    hash ^= static_cast<std::uint64_t>(bytes[i]);
+    hash *= kFnvPrime;
+  }
+  return hash;
+}
+
 struct DrawElementsIndirectCommand {
   std::uint32_t count = 0;
   std::uint32_t instanceCount = 1;
@@ -738,22 +753,47 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   bool shadowCacheReused = false;
   std::uint64_t instanceUploadBytes = 0ULL;
   int instanceBufferResizes = 0;
-  auto uploadInstances = [this, &instanceUploadBytes, &instanceBufferResizes](
+  int instanceBufferOrphans = 0;
+  int instanceUploadSkipped = 0;
+  double instanceUploadCpuMs = 0.0;
+  auto uploadInstances = [this, &visualPolicy, &instanceUploadBytes, &instanceBufferResizes, &instanceBufferOrphans, &instanceUploadSkipped, &instanceUploadCpuMs](
                              GpuMesh::LodGpu& lod,
                              const InstanceGpuData* data,
                              const std::size_t instanceCount) {
     if (backend_ == nullptr || data == nullptr || instanceCount == 0) {
       return;
     }
+    const auto uploadStart = std::chrono::steady_clock::now();
     const std::size_t requiredBytes = instanceCount * sizeof(InstanceGpuData);
-    instanceUploadBytes += static_cast<std::uint64_t>(requiredBytes);
+    if (visualPolicy.enableInstanceUploadDedup) {
+      const std::uint64_t fingerprint = BuildInstanceUploadFingerprint(data, instanceCount);
+      if (lod.instanceDataValid &&
+          lod.instanceLastUploadBytes == requiredBytes &&
+          lod.instanceLastUploadFingerprint == fingerprint) {
+        ++instanceUploadSkipped;
+        return;
+      }
+      lod.instanceLastUploadFingerprint = fingerprint;
+    }
     backend_->BindArrayBuffer(lod.instanceVbo.Get());
     if (requiredBytes > lod.instanceCapacityBytes) {
-      lod.instanceCapacityBytes = requiredBytes;
+      const std::size_t grownCapacity =
+          std::max(requiredBytes, std::max<std::size_t>(lod.instanceCapacityBytes * 2ULL, 256ULL));
+      lod.instanceCapacityBytes = grownCapacity;
       backend_->UploadArrayBufferData(lod.instanceCapacityBytes, nullptr, true);
       ++instanceBufferResizes;
+      ++instanceBufferOrphans;
+    } else if (visualPolicy.enableInstanceBufferOrphaning) {
+      backend_->UploadArrayBufferData(lod.instanceCapacityBytes, nullptr, true);
+      ++instanceBufferOrphans;
     }
     backend_->UploadArrayBufferSubData(0, requiredBytes, data);
+    lod.instanceLastUploadBytes = requiredBytes;
+    lod.instanceDataValid = true;
+    instanceUploadBytes += static_cast<std::uint64_t>(requiredBytes);
+    const auto uploadEnd = std::chrono::steady_clock::now();
+    instanceUploadCpuMs +=
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(uploadEnd - uploadStart).count();
   };
 
   if (nearShadowReady) {
@@ -912,8 +952,36 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     if (ranges.empty()) {
       return;
     }
-    if (!allowMdi || cadIndirectDrawBuffer_.Get() == 0 || ranges.size() <= 1) {
+    std::vector<DrawRange> splitRanges;
+    splitRanges.reserve(ranges.size());
+    const std::uint32_t maxIndicesPerDraw =
+        static_cast<std::uint32_t>(std::max(0, visualPolicy.maxIndicesPerDrawCall));
+    if (maxIndicesPerDraw > 0) {
+      const std::uint32_t chunkBase = std::max(3U, maxIndicesPerDraw - (maxIndicesPerDraw % 3U));
       for (const auto& range : ranges) {
+        std::uint32_t remaining = range.indexCount;
+        std::uint32_t first = range.firstIndex;
+        while (remaining > 0) {
+          std::uint32_t chunk = std::min(remaining, chunkBase);
+          if (chunk >= 3U) {
+            chunk -= (chunk % 3U);
+          }
+          if (chunk == 0U) {
+            chunk = std::min(remaining, 3U);
+          }
+          splitRanges.push_back(DrawRange{
+              .firstIndex = first,
+              .indexCount = chunk,
+              .depth01 = range.depth01,
+          });
+          first += chunk;
+          remaining = (remaining > chunk) ? (remaining - chunk) : 0U;
+        }
+      }
+    }
+    const std::vector<DrawRange>& activeRanges = splitRanges.empty() ? ranges : splitRanges;
+    if (!allowMdi || cadIndirectDrawBuffer_.Get() == 0 || activeRanges.size() <= 1) {
+      for (const auto& range : activeRanges) {
         if (range.indexCount == 0) {
           continue;
         }
@@ -926,8 +994,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     }
 
     std::vector<DrawElementsIndirectCommand> commands;
-    commands.reserve(ranges.size());
-    for (const auto& range : ranges) {
+    commands.reserve(activeRanges.size());
+    for (const auto& range : activeRanges) {
       if (range.indexCount == 0) {
         continue;
       }
@@ -1121,6 +1189,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.bytes", static_cast<double>(instanceUploadBytes));
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.resizes", static_cast<double>(instanceBufferResizes));
+    context.diagnosticsWriter->RecordCounter("cad.instance_upload.orphans", static_cast<double>(instanceBufferOrphans));
+    context.diagnosticsWriter->RecordCounter("cad.instance_upload.skipped", static_cast<double>(instanceUploadSkipped));
+    context.diagnosticsWriter->RecordCounter("cad.instance_upload.cpu_ms", instanceUploadCpuMs);
   }
 
   glDepthMask(GL_TRUE);

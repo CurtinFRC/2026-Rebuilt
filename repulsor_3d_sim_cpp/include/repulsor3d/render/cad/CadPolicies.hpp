@@ -42,6 +42,7 @@ struct CadVisualPolicy {
   int hzbTilesY = 36;
   float hzbDepthMargin = 0.01F;
   float hzbMaxCullRadiusPx = 120.0F;
+  int maxIndicesPerDrawCall = 1500000;
   float keyLightIntensity = 1.35F;
   float fillLightIntensity = 0.20F;
   float ambientStrength = 0.12F;
@@ -54,6 +55,8 @@ struct CadVisualPolicy {
   float fogDensity = 0.003F;
   float saturation = 1.00F;
   float gamma = 2.2F;
+  bool enableInstanceUploadDedup = true;
+  bool enableInstanceBufferOrphaning = true;
 };
 
 struct CadShadowPolicy {

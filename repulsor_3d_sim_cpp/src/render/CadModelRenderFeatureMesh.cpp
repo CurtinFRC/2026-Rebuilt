@@ -217,6 +217,9 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vertexCount = 0;
     lod.indexCount = 0;
     lod.instanceCapacityBytes = 0;
+    lod.instanceLastUploadBytes = 0;
+    lod.instanceLastUploadFingerprint = 0ULL;
+    lod.instanceDataValid = false;
     lod.clusters.clear();
   }
   gpu.lods.clear();
@@ -229,6 +232,9 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vertexCount = 0;
     lod.indexCount = 0;
     lod.instanceCapacityBytes = 0;
+    lod.instanceLastUploadBytes = 0;
+    lod.instanceLastUploadFingerprint = 0ULL;
+    lod.instanceDataValid = false;
     lod.clusters.clear();
     gpu.shadowProxy.reset();
   }

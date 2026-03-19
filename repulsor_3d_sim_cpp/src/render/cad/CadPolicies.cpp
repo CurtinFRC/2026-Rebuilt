@@ -94,6 +94,10 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.hzbTilesY = std::clamp(GetEnvInt("CAD_HIZ_TILES_Y", out.hzbTilesY), 8, 256);
     out.hzbDepthMargin = std::clamp(GetEnvFloat("CAD_HIZ_DEPTH_MARGIN", out.hzbDepthMargin), 0.0F, 0.2F);
     out.hzbMaxCullRadiusPx = std::clamp(GetEnvFloat("CAD_HIZ_MAX_CULL_RADIUS_PX", out.hzbMaxCullRadiusPx), 8.0F, 500.0F);
+    out.maxIndicesPerDrawCall = std::clamp(
+        GetEnvInt("CAD_MAX_INDICES_PER_DRAW_CALL", out.maxIndicesPerDrawCall),
+        0,
+        50000000);
     out.keyLightIntensity = std::clamp(GetEnvFloat("CAD_KEY_LIGHT_INTENSITY", out.keyLightIntensity), 0.0F, 8.0F);
     out.fillLightIntensity = std::clamp(GetEnvFloat("CAD_FILL_LIGHT_INTENSITY", out.fillLightIntensity), 0.0F, 6.0F);
     out.ambientStrength = std::clamp(GetEnvFloat("CAD_AMBIENT_STRENGTH", out.ambientStrength), 0.0F, 2.0F);
@@ -106,6 +110,8 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.fogDensity = std::clamp(GetEnvFloat("CAD_FOG_DENSITY", out.fogDensity), 0.0F, 0.25F);
     out.saturation = std::clamp(GetEnvFloat("CAD_SATURATION", out.saturation), 0.0F, 2.0F);
     out.gamma = std::clamp(GetEnvFloat("CAD_GAMMA", out.gamma), 1.0F, 3.2F);
+    out.enableInstanceUploadDedup = GetEnvBool("CAD_INSTANCE_UPLOAD_DEDUP", out.enableInstanceUploadDedup);
+    out.enableInstanceBufferOrphaning = GetEnvBool("CAD_INSTANCE_BUFFER_ORPHANING", out.enableInstanceBufferOrphaning);
     return out;
   }();
   return policy;

@@ -86,6 +86,9 @@ class CadModelRenderFeature final : public IRenderFeature {
       GlBufferHandle ebo;
       GlBufferHandle instanceVbo;
       std::size_t instanceCapacityBytes = 0;
+      std::size_t instanceLastUploadBytes = 0;
+      std::uint64_t instanceLastUploadFingerprint = 0ULL;
+      bool instanceDataValid = false;
       int vertexCount = 0;
       int indexCount = 0;
       std::vector<ClusterGpu> clusters;

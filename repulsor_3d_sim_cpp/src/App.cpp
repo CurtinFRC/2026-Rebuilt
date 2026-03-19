@@ -100,6 +100,7 @@ int ViewerApp::Run() {
   double swapWaitAverageMs = 0.0;
   bool swapWaitAverageInitialized = false;
   int highSwapWaitFrames = 0;
+  int highCpuGpuMismatchFrames = 0;
 
   glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {
@@ -173,10 +174,18 @@ int ViewerApp::Run() {
     }
     renderer_.QueueDiagnosticCounter("app.swap_wait_ms", swapWaitMs);
     renderer_.QueueDiagnosticCounter("app.swap_wait_avg_ms", swapWaitAverageMs);
+    renderer_.QueueDiagnosticCounter("app.vsync_active", cfg_.vsync ? 1.0 : 0.0);
 
     if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled) {
       const auto& diag = renderer_.LatestDiagnostics();
       const double frameAvgMs = diag.frameAverageMilliseconds > 0.0 ? diag.frameAverageMilliseconds : diag.frameMilliseconds;
+      double cadGpuMs = 0.0;
+      for (const auto& gpuSample : diag.gpuTimings) {
+        if (gpuSample.name == "cad_opaque") {
+          cadGpuMs = gpuSample.milliseconds;
+          break;
+        }
+      }
       const bool highSwapWait = swapWaitAverageMs > 8.0;
       const bool lowFps = frameAvgMs > 25.0;
       if (highSwapWait && lowFps) {
@@ -184,12 +193,20 @@ int ViewerApp::Run() {
       } else {
         highSwapWaitFrames = 0;
       }
-      if (highSwapWaitFrames >= 45) {
+      const bool largeCpuGpuGap = cadGpuMs > 0.0 && frameAvgMs > (cadGpuMs * 3.0);
+      if (lowFps && largeCpuGpuGap) {
+        ++highCpuGpuMismatchFrames;
+      } else {
+        highCpuGpuMismatchFrames = 0;
+      }
+      if (highSwapWaitFrames >= 45 || highCpuGpuMismatchFrames >= 45) {
         glfwSwapInterval(0);
         cfg_.vsync = false;
         vsyncAutoDisabled = true;
         renderer_.QueueDiagnosticMessage(
-            "auto-disabled vsync (swap_wait_avg_ms=" + std::to_string(swapWaitAverageMs) + ")");
+            "auto-disabled vsync (swap_wait_avg_ms=" + std::to_string(swapWaitAverageMs) +
+            ", frame_avg_ms=" + std::to_string(frameAvgMs) +
+            ", cad_gpu_ms=" + std::to_string(cadGpuMs) + ")");
       }
     }
   }
