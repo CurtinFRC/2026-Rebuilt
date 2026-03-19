@@ -149,6 +149,7 @@ uniform vec3 uSkyZenith;
 uniform vec3 uSkyHorizon;
 uniform vec3 uSkyGround;
 uniform vec3 uArenaGlow;
+uniform float uTime;
 out vec4 FragColor;
 
 float Hash12(vec2 p) {
@@ -164,21 +165,39 @@ void main() {
   col = mix(col, uSkyHorizon, clamp(horizon * 0.75, 0.0, 1.0));
 
   // Stylized aurora streaks to add arena atmosphere depth.
-  float swirl = sin((dir.x * 5.2 + dir.y * 7.1) + dir.z * 10.0);
+  float drift = uTime * 0.06;
+  float swirl = sin((dir.x * 5.2 + dir.y * 7.1) + dir.z * 10.0 + drift * 2.7);
   float arc = smoothstep(0.35, 0.95, up) * (0.5 + 0.5 * swirl);
   vec3 auroraA = vec3(0.08, 0.38, 0.62);
   vec3 auroraB = vec3(0.09, 0.22, 0.44);
-  col += mix(auroraA, auroraB, 0.5 + 0.5 * dir.x) * arc * 0.22;
+  col += mix(auroraA, auroraB, 0.5 + 0.5 * dir.x) * arc * 0.24;
 
   // Sparse stars on upper hemisphere so it still reads as an arena night sky.
   float dirLen = max(length(dir.xy), 1e-4);
-  vec2 starUv = (dir.xy / dirLen) * (1.0 + abs(dir.z)) * 420.0;
+  vec2 starUv = (dir.xy / dirLen) * (1.0 + abs(dir.z)) * 420.0 + vec2(drift * 12.0, -drift * 9.0);
   float starNoise = Hash12(floor(starUv));
+  float twinkle = 0.75 + 0.25 * sin(uTime * 0.9 + starNoise * 12.0);
   float starGate = step(0.9965, starNoise) * smoothstep(0.55, 0.92, up);
-  col += vec3(1.0, 0.98, 0.93) * starGate * 0.45;
+  col += vec3(1.0, 0.98, 0.93) * starGate * twinkle * 0.5;
 
   // Soft arena glow around horizon.
   col += uArenaGlow * pow(clamp(1.0 - abs(dir.z), 0.0, 1.0), 5.0) * 0.55;
+
+  // Distant moon disk for additional depth and orientation.
+  vec3 moonDir = normalize(vec3(-0.45, 0.35, 0.82));
+  float moonDot = dot(dir, moonDir);
+  float moon = smoothstep(0.992, 0.9985, moonDot);
+  col += vec3(0.95, 0.98, 1.0) * moon * 0.85;
+
+  // Very soft procedural cloud bands.
+  float cloudBase = sin(dir.x * 12.0 + dir.y * 8.0 + uTime * 0.07) * 0.5 + 0.5;
+  float cloudFine = sin(dir.x * 33.0 - dir.y * 19.0 - uTime * 0.13) * 0.5 + 0.5;
+  float cloudMask = smoothstep(0.62, 0.95, cloudBase * 0.65 + cloudFine * 0.35) * smoothstep(0.35, 0.92, up);
+  col = mix(col, col + vec3(0.10, 0.14, 0.18), cloudMask * 0.24);
+
+  // Subtle chromatic fringe near horizon for cinematic bloom feel.
+  float fringe = pow(clamp(1.0 - abs(dir.z), 0.0, 1.0), 7.0);
+  col += vec3(0.05, 0.11, 0.18) * fringe * 0.55;
   FragColor = vec4(col, 1.0);
 }
 )";

@@ -601,6 +601,10 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   const float ringBaseRadius = std::max(fieldHalfLength, fieldHalfWidth) + ringPadding;
   const float outerRadius = ringBaseRadius + 9.0F;
   const float floorZ = fieldZ_ - 0.05F;
+  const auto now = std::chrono::steady_clock::now();
+  static const auto kEnvStartTime = now;
+  const float envTimeS =
+      std::chrono::duration_cast<std::chrono::duration<float>>(now - kEnvStartTime).count();
 
   const bool cullWasEnabled = glIsEnabled(GL_CULL_FACE) == GL_TRUE;
   const bool depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
@@ -622,11 +626,14 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const int horizonLoc = backend_->GetUniformLocation(skyProgram, "uSkyHorizon");
     const int groundLoc = backend_->GetUniformLocation(skyProgram, "uSkyGround");
     const int glowLoc = backend_->GetUniformLocation(skyProgram, "uArenaGlow");
+    const int timeLoc = backend_->GetUniformLocation(skyProgram, "uTime");
+    const float skyBeat = 0.5F + 0.5F * std::sin(envTimeS * 0.21F);
     backend_->SetUniformMat4(mvpLoc, &skyMvp[0][0]);
-    backend_->SetUniformVec3(zenithLoc, 0.06F, 0.11F, 0.22F);
-    backend_->SetUniformVec3(horizonLoc, 0.28F, 0.47F, 0.72F);
-    backend_->SetUniformVec3(groundLoc, 0.03F, 0.03F, 0.05F);
-    backend_->SetUniformVec3(glowLoc, 0.10F, 0.23F, 0.42F);
+    backend_->SetUniformVec3(zenithLoc, 0.05F + 0.02F * skyBeat, 0.09F + 0.03F * skyBeat, 0.20F + 0.04F * skyBeat);
+    backend_->SetUniformVec3(horizonLoc, 0.20F + 0.10F * skyBeat, 0.40F + 0.10F * skyBeat, 0.66F + 0.10F * skyBeat);
+    backend_->SetUniformVec3(groundLoc, 0.025F, 0.025F, 0.05F + 0.02F * skyBeat);
+    backend_->SetUniformVec3(glowLoc, 0.08F + 0.05F * skyBeat, 0.20F + 0.08F * skyBeat, 0.38F + 0.06F * skyBeat);
+    backend_->SetUniform1f(timeLoc, envTimeS);
     backend_->BindVertexArray(sphereMesh_.vao.Get());
     backend_->DrawIndexedTriangles(sphereMesh_.indexCount);
     backend_->BindVertexArray(0);
@@ -650,6 +657,41 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .color = glm::vec4{0.09F, 0.14F, 0.24F, 1.0F},
           .pass = RenderPass::Background,
       });
+
+  // Distant skyline silhouettes around the stadium shell.
+  const int skylineSegments = std::max(20, segments * 3);
+  const float skylineRadius = ringBaseRadius + 13.5F;
+  for (int i = 0; i < skylineSegments; ++i) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(skylineSegments);
+    const float yawDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * skylineRadius;
+    const float cy = std::sin(angle) * skylineRadius;
+    const float hSeed = Hash01(static_cast<std::uint32_t>(i * 8191 + 97));
+    const float wSeed = Hash01(static_cast<std::uint32_t>(i * 4567 + 33));
+    const float height = 5.5F + hSeed * 8.5F;
+    const float width = 0.9F + wSeed * 1.4F;
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, fieldZ_ + height * 0.5F - 0.2F},
+            .size = glm::vec3{width, 1.0F, height},
+            .yawDeg = yawDeg,
+            .color = glm::vec4{0.04F, 0.05F, 0.07F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+    if ((i % 3) == 0) {
+      const float wndPulse = 0.45F + 0.55F * std::sin(envTimeS * 0.8F + static_cast<float>(i));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + height * 0.72F},
+              .size = glm::vec3{width * 0.7F, 0.12F, height * 0.08F},
+              .yawDeg = yawDeg,
+              .color = glm::vec4{0.20F * wndPulse, 0.40F * wndPulse, 0.72F * wndPulse, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
+  }
   glDepthMask(GL_TRUE);
   backend_->SetDepthTestEnabled(depthTestWasEnabled);
 
@@ -663,6 +705,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   DrawBox(vp, groundApron);
 
   // Neon trim around the playable field footprint.
+  const float trimPulse = 0.72F + 0.28F * std::sin(envTimeS * 1.9F);
   const float trimZ = fieldZ_ + 0.02F;
   const float trimH = 0.03F;
   const float trimT = 0.06F;
@@ -672,7 +715,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .center = glm::vec3{0.0F, fieldHalfWidth + trimT, trimZ},
           .size = glm::vec3{fieldLength_ + 0.14F, trimT, trimH},
           .yawDeg = 0.0F,
-          .color = glm::vec4{0.24F, 0.72F, 1.0F, 1.0F},
+          .color = glm::vec4{0.18F * trimPulse, 0.74F * trimPulse, 1.0F * trimPulse, 1.0F},
           .pass = RenderPass::Opaque,
       });
   DrawBox(
@@ -681,7 +724,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .center = glm::vec3{0.0F, -fieldHalfWidth - trimT, trimZ},
           .size = glm::vec3{fieldLength_ + 0.14F, trimT, trimH},
           .yawDeg = 0.0F,
-          .color = glm::vec4{0.24F, 0.72F, 1.0F, 1.0F},
+          .color = glm::vec4{0.18F * trimPulse, 0.74F * trimPulse, 1.0F * trimPulse, 1.0F},
           .pass = RenderPass::Opaque,
       });
   DrawBox(
@@ -690,7 +733,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .center = glm::vec3{fieldHalfLength + trimT, 0.0F, trimZ},
           .size = glm::vec3{fieldWidth_ + 0.14F, trimT, trimH},
           .yawDeg = 90.0F,
-          .color = glm::vec4{0.26F, 0.58F, 0.94F, 1.0F},
+          .color = glm::vec4{0.22F * trimPulse, 0.62F * trimPulse, 0.96F * trimPulse, 1.0F},
           .pass = RenderPass::Opaque,
       });
   DrawBox(
@@ -699,7 +742,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .center = glm::vec3{-fieldHalfLength - trimT, 0.0F, trimZ},
           .size = glm::vec3{fieldWidth_ + 0.14F, trimT, trimH},
           .yawDeg = 90.0F,
-          .color = glm::vec4{0.26F, 0.58F, 0.94F, 1.0F},
+          .color = glm::vec4{0.22F * trimPulse, 0.62F * trimPulse, 0.96F * trimPulse, 1.0F},
           .pass = RenderPass::Opaque,
       });
 
@@ -752,7 +795,8 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
       const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
       const float cx = std::cos(angle) * rowRadius;
       const float cy = std::sin(angle) * rowRadius;
-      const float pulse = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
+      const float seed = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
+      const float pulse = 0.5F + 0.5F * std::sin(envTimeS * 1.4F + seed * 6.2831853F);
       const glm::vec4 crowdCol = LerpColor(
           glm::vec4{0.07F, 0.08F, 0.10F, 1.0F},
           glm::vec4{0.33F, 0.56F, 0.92F, 1.0F},
@@ -777,12 +821,13 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
     const float cx = std::cos(angle) * fasciaRadius;
     const float cy = std::sin(angle) * fasciaRadius;
-    const float pulse = 0.5F + 0.5F * std::sin(angle * 3.0F);
+    const float pulse = 0.5F + 0.5F * std::sin(angle * 3.0F + envTimeS * 0.8F);
     const float sparkle = Hash01(static_cast<std::uint32_t>(i * 11939 + 911));
+    const float scan = 0.5F + 0.5F * std::sin(angle * 11.0F - envTimeS * 4.2F);
     const glm::vec4 panelColor = LerpColor(
         glm::vec4{0.11F, 0.34F, 0.62F, 1.0F},
         glm::vec4{0.06F, 0.14F, 0.24F, 1.0F},
-        pulse * 0.6F + sparkle * 0.4F);
+        pulse * 0.5F + sparkle * 0.2F + scan * 0.3F);
     DrawBox(
         vp,
         BoxPrimitive{
@@ -802,7 +847,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
     const float cx = std::cos(angle) * lightRingRadius;
     const float cy = std::sin(angle) * lightRingRadius;
-    const float glow = 0.62F + 0.38F * std::cos(angle * 4.0F);
+    const float glow = 0.62F + 0.38F * std::cos(angle * 4.0F + envTimeS * 1.25F);
     const float hueJitter = Hash01(static_cast<std::uint32_t>(i * 4099 + 73));
     DrawBox(
         vp,
@@ -820,12 +865,34 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
         });
   }
 
+  // Secondary ribbon board near upper bowl with faster chase lights.
+  const float ribbonRadius = ringBaseRadius + 4.4F;
+  const float ribbonZ = fieldZ_ + stadiumHeight * 0.72F;
+  const float ribbonLen = std::max(1.4F, (2.0F * kPi * ribbonRadius / static_cast<float>(segments)) * 0.90F);
+  for (int i = 0; i < segments; ++i) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * ribbonRadius;
+    const float cy = std::sin(angle) * ribbonRadius;
+    const float chase = 0.5F + 0.5F * std::sin(envTimeS * 5.2F - static_cast<float>(i) * 0.9F);
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, ribbonZ},
+            .size = glm::vec3{ribbonLen, 0.24F, 0.42F},
+            .yawDeg = angleDeg,
+            .color = glm::vec4{0.10F + 0.30F * chase, 0.24F + 0.60F * chase, 0.42F + 0.58F * chase, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
   const float beaconRadius = ringBaseRadius + 3.4F;
   for (int i = 0; i < segments; i += 3) {
     const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
     const float cx = std::cos(angle) * beaconRadius;
     const float cy = std::sin(angle) * beaconRadius;
     const float hue = Hash01(static_cast<std::uint32_t>(i * 731 + 5));
+    const float beat = 0.72F + 0.28F * std::sin(envTimeS * 1.7F + static_cast<float>(i));
     DrawBox(
         vp,
         BoxPrimitive{
@@ -841,7 +908,12 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
             .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F + 0.78F},
             .size = glm::vec3{0.56F, 0.56F, 0.14F},
             .yawDeg = 0.0F,
-            .color = glm::vec4{0.45F + 0.35F * hue, 0.56F + 0.26F * (1.0F - hue), 0.95F, 1.0F},
+            .color =
+                glm::vec4{
+                    (0.45F + 0.35F * hue) * beat,
+                    (0.56F + 0.26F * (1.0F - hue)) * beat,
+                    0.95F * beat,
+                    1.0F},
             .pass = RenderPass::Opaque,
         });
   }
@@ -869,7 +941,12 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
             .center = glm::vec3{cx, cy, tunnelZ + 0.2F},
             .size = glm::vec3{2.2F, 0.15F, 1.2F},
             .yawDeg = yawDeg,
-            .color = glm::vec4{0.28F, 0.70F, 0.98F, 1.0F},
+            .color =
+                glm::vec4{
+                    0.18F + 0.10F * std::sin(envTimeS + static_cast<float>(i)),
+                    0.62F + 0.08F * std::cos(envTimeS * 0.7F + static_cast<float>(i)),
+                    0.94F,
+                    1.0F},
             .pass = RenderPass::Opaque,
         });
   }
@@ -925,15 +1002,98 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const float cx = std::cos(angle) * haloRadius;
     const float cy = std::sin(angle) * haloRadius;
     const float hue = Hash01(static_cast<std::uint32_t>(i * 827 + 11));
+    const float sweep = 0.55F + 0.45F * std::sin(envTimeS * 1.6F + angle * 4.0F);
     DrawBox(
         vp,
         BoxPrimitive{
             .center = glm::vec3{cx, cy, roofZ + 0.95F},
             .size = glm::vec3{haloLength, 0.22F, 0.18F},
             .yawDeg = angleDeg,
-            .color = glm::vec4{0.30F + hue * 0.30F, 0.54F + hue * 0.20F, 0.98F, 1.0F},
+            .color =
+                glm::vec4{
+                    (0.24F + hue * 0.36F) * sweep,
+                    (0.50F + hue * 0.24F) * sweep,
+                    0.98F * sweep,
+                    1.0F},
             .pass = RenderPass::Opaque,
         });
+  }
+
+  // Light beams from upper rig toward the field center.
+  const float beamRadius = ringBaseRadius + 5.0F;
+  const int beamCount = std::max(12, segments);
+  for (int i = 0; i < beamCount; ++i) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(beamCount);
+    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * beamRadius;
+    const float cy = std::sin(angle) * beamRadius;
+    const float glow = 0.45F + 0.55F * std::max(0.0F, std::cos(envTimeS * 1.25F + angle * 3.0F));
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx * 0.78F, cy * 0.78F, fieldZ_ + stadiumHeight * 0.56F},
+            .size = glm::vec3{0.16F, beamRadius * 0.20F, stadiumHeight * 0.72F},
+            .yawDeg = angleDeg,
+            .color = glm::vec4{0.35F * glow, 0.62F * glow, 1.0F * glow, 0.30F},
+            .pass = RenderPass::Transparent,
+        });
+  }
+
+  // Suspended camera drones around scoreboard for extra motion cues.
+  const float droneOrbitR = 4.4F;
+  for (int i = 0; i < 6; ++i) {
+    const float phase = envTimeS * 0.55F + static_cast<float>(i) * (2.0F * kPi / 6.0F);
+    const float cx = std::cos(phase) * droneOrbitR;
+    const float cy = std::sin(phase) * droneOrbitR;
+    const float cz = fieldZ_ + stadiumHeight * (0.86F + 0.03F * std::sin(phase * 1.8F));
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, cz},
+            .size = glm::vec3{0.28F, 0.28F, 0.16F},
+            .yawDeg = glm::degrees(phase),
+            .color = glm::vec4{0.10F, 0.12F, 0.16F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, cz - 0.12F},
+            .size = glm::vec3{0.42F, 0.06F, 0.04F},
+            .yawDeg = glm::degrees(phase + kPi * 0.5F),
+            .color = glm::vec4{0.35F, 0.72F, 1.0F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
+  // Rotating hologram rings above center for broadcast-style flair.
+  const int holoSegments = std::max(24, segments * 2);
+  for (int layer = 0; layer < 3; ++layer) {
+    const float baseRadius = 1.8F + static_cast<float>(layer) * 0.75F;
+    const float z = fieldZ_ + stadiumHeight * (0.70F + 0.05F * static_cast<float>(layer));
+    const float rot = envTimeS * (0.7F + 0.25F * static_cast<float>(layer));
+    const float len = std::max(0.10F, (2.0F * kPi * baseRadius / static_cast<float>(holoSegments)) * 0.72F);
+    for (int i = 0; i < holoSegments; i += 2) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(holoSegments) + rot;
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * baseRadius;
+      const float cy = std::sin(angle) * baseRadius;
+      const float beat = 0.5F + 0.5F * std::sin(envTimeS * 4.5F + static_cast<float>(i));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, z},
+              .size = glm::vec3{len, 0.06F, 0.035F},
+              .yawDeg = angleDeg,
+              .color =
+                  glm::vec4{
+                      (0.18F + 0.18F * static_cast<float>(layer)) * beat,
+                      (0.55F + 0.14F * static_cast<float>(layer)) * beat,
+                      0.98F * beat,
+                      0.70F},
+              .pass = RenderPass::Transparent,
+          });
+    }
   }
 
   DrawBox(
