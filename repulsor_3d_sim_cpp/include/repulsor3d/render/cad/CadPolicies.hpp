@@ -30,7 +30,7 @@ struct CadVisualPolicy {
   bool enableBroadphase = true;
   float broadphaseCellSizeM = 3.0F;
   bool enableClusterCulling = true;
-  bool fieldDisableClusterCulling = true;
+  bool fieldDisableClusterCulling = false;
   bool fieldForceLod0 = true;
   bool optimizeVertexCache = true;
   int clusterTargetIndices = 32768;

@@ -76,6 +76,10 @@ class DiagnosticsFileLogger {
     if (!enabled_ || !stream_.is_open()) {
       return;
     }
+    ++frameCounter_;
+    if (logEveryFrames_ > 1 && (frameCounter_ % logEveryFrames_) != 0) {
+      return;
+    }
 
     stream_ << std::fixed << std::setprecision(3);
     stream_ << "{";
@@ -116,6 +120,7 @@ class DiagnosticsFileLogger {
       return;
     }
     flushEveryFrames_ = std::max(1, ParseFlushEveryFrames());
+    logEveryFrames_ = std::max(1, ParseLogEveryFrames());
   }
 
   int ParseFlushEveryFrames() const {
@@ -127,6 +132,18 @@ class DiagnosticsFileLogger {
       return std::stoi(value);
     } catch (...) {
       return 20;
+    }
+  }
+
+  int ParseLogEveryFrames() const {
+    const char* value = std::getenv("DIAGNOSTICS_LOG_EVERY_N_FRAMES");
+    if (value == nullptr || *value == '\0') {
+      return 8;
+    }
+    try {
+      return std::stoi(value);
+    } catch (...) {
+      return 8;
     }
   }
 
@@ -177,7 +194,9 @@ class DiagnosticsFileLogger {
   bool enabled_ = true;
   std::ofstream stream_;
   int flushEveryFrames_ = 20;
+  int logEveryFrames_ = 8;
   int framesSinceFlush_ = 0;
+  int frameCounter_ = 0;
 };
 
 DiagnosticsFileLogger& GetDiagnosticsFileLogger() {

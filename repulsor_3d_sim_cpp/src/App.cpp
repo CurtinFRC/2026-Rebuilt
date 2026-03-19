@@ -146,9 +146,9 @@ int ViewerApp::Run() {
   const bool useFixedTick = ParseEnvBool("APP_USE_FIXED_TICK", false);
   const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", true);
   const int presentStallEnableThresholdFrames =
-      std::max(30, ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_FRAMES", 90));
+      std::max(5, ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_FRAMES", 15));
   const double presentStallEnableThresholdMs =
-      std::max(20.0, static_cast<double>(ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_MS", 40)));
+      std::max(10.0, static_cast<double>(ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_MS", 25)));
   bool vsyncAutoDisabled = false;
   bool vsyncAutoEnabledForPresentStall = false;
   double swapWaitAverageMs = 0.0;
@@ -254,9 +254,7 @@ int ViewerApp::Run() {
     renderer_.QueueDiagnosticCounter(
         "app.loop_fps",
         (loopMs > 1e-4) ? (1000.0 / loopMs) : 0.0);
-    if ((frameCounter % 120ULL) == 0ULL) {
-      renderer_.QueueDiagnosticCounter("app.swap_interval_effective", static_cast<double>(QuerySwapInterval()));
-    }
+    renderer_.QueueDiagnosticCounter("app.swap_interval_effective", static_cast<double>(QuerySwapInterval()));
     ++frameCounter;
 
     if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled && !vsyncAutoEnabledForPresentStall) {

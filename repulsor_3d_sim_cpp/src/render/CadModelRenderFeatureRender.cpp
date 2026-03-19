@@ -641,7 +641,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         const glm::vec3 worldCenter = glm::vec3(item.model * glm::vec4(cluster.boundsCenter, 1.0F));
         const float worldRadius = std::max(cluster.boundsRadius * std::max(item.worldMaxScale, 1e-4F), 1e-4F);
         const float clusterMargin =
-            std::max(std::max(0.0F, visualPolicy.frustumCullMarginM), worldRadius * 0.08F + 0.03F);
+            item.aggressiveLodCap
+                ? std::max(std::max(0.0F, visualPolicy.frustumCullMarginM), worldRadius * 0.22F + 0.10F)
+                : std::max(std::max(0.0F, visualPolicy.frustumCullMarginM), worldRadius * 0.08F + 0.03F);
         if (visualPolicy.enableFrustumCulling &&
             !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius, clusterMargin)) {
           ++culledClusters;

@@ -253,7 +253,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             if (preparedCacheHit) {
               setStage("cache_hit", 0.70F);
               const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
-              const bool rebuildClustersOnCacheHit = GetEnvBool("CAD_CACHE_HIT_REBUILD_CLUSTERS", false);
+              const bool rebuildClustersOnCacheHit = GetEnvBool("CAD_CACHE_HIT_REBUILD_CLUSTERS", true);
               PreparedCpuMesh prepared;
               prepared.loadedFromPreparedCache = true;
               prepared.boundsCenter = cachedBlob.boundsCenter;
