@@ -226,8 +226,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   const bool allowMdi = !mdiRuntimeDisabled &&
                         backend_->Capabilities().supportsMultiDrawIndirect &&
                         GetEnvBool("CAD_MULTI_DRAW_INDIRECT", true);
-  const std::uint32_t clusterMergeGap =
+  std::uint32_t clusterMergeGap =
       static_cast<std::uint32_t>(std::max(0, visualPolicy.clusterMergeGapIndices));
+  if (!allowMdi) {
+    // When MDI is unavailable, merge more adjacent cluster ranges to reduce CPU draw-call overhead.
+    clusterMergeGap = std::max(clusterMergeGap, 4096U);
+  }
   if (allowMdi && cadIndirectDrawBuffer_.Get() == 0) {
     cadIndirectDrawBuffer_.Set(backend_->CreateBuffer());
   }
@@ -500,9 +504,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     return;
   }
 
-  std::sort(drawItems.begin(), drawItems.end(), [](const DrawItem& a, const DrawItem& b) {
-    return a.depth01 < b.depth01;
-  });
+  if (drawItems.size() > 1) {
+    std::sort(drawItems.begin(), drawItems.end(), [](const DrawItem& a, const DrawItem& b) {
+      return a.depth01 < b.depth01;
+    });
+  }
 
   cad::TiledOcclusionBuffer occlusionBuffer;
   if (visualPolicy.enableOcclusionCulling) {
@@ -1083,8 +1089,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     }
     std::vector<DrawRange> splitRanges;
     splitRanges.reserve(ranges.size());
+    const int configuredMaxIndices = std::max(0, visualPolicy.maxIndicesPerDrawCall);
+    const int effectiveMaxIndices =
+        allowMdi ? configuredMaxIndices : std::max(configuredMaxIndices, 8000000);
     const std::uint32_t maxIndicesPerDraw =
-        static_cast<std::uint32_t>(std::max(0, visualPolicy.maxIndicesPerDrawCall));
+        static_cast<std::uint32_t>(effectiveMaxIndices);
     if (maxIndicesPerDraw > 0) {
       const std::uint32_t chunkBase = std::max(3U, maxIndicesPerDraw - (maxIndicesPerDraw % 3U));
       for (const auto& range : ranges) {
@@ -1244,41 +1253,43 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   for (std::size_t i = 0; i < drawOrder.size(); ++i) {
     drawOrder[i] = i;
   }
-  std::sort(drawOrder.begin(), drawOrder.end(), [&](const std::size_t a, const std::size_t b) {
-    const auto keyA = std::tuple{
-        drawCalls[a].wireframe,
-        drawCalls[a].fastShading,
-        drawCalls[a].useAssetColor,
-        reinterpret_cast<std::uintptr_t>(drawCalls[a].albedoTexture),
-        reinterpret_cast<std::uintptr_t>(drawCalls[a].normalTexture),
-        FloatBits(drawCalls[a].color.r),
-        FloatBits(drawCalls[a].color.g),
-        FloatBits(drawCalls[a].color.b),
-        FloatBits(drawCalls[a].color.a),
-        FloatBits(drawCalls[a].roughness),
-        FloatBits(drawCalls[a].metallic),
-        FloatBits(drawCalls[a].normalStrength),
-        reinterpret_cast<std::uintptr_t>(drawCalls[a].lod),
-        drawCalls[a].mirroredWinding,
-        drawCalls[a].depth01};
-    const auto keyB = std::tuple{
-        drawCalls[b].wireframe,
-        drawCalls[b].fastShading,
-        drawCalls[b].useAssetColor,
-        reinterpret_cast<std::uintptr_t>(drawCalls[b].albedoTexture),
-        reinterpret_cast<std::uintptr_t>(drawCalls[b].normalTexture),
-        FloatBits(drawCalls[b].color.r),
-        FloatBits(drawCalls[b].color.g),
-        FloatBits(drawCalls[b].color.b),
-        FloatBits(drawCalls[b].color.a),
-        FloatBits(drawCalls[b].roughness),
-        FloatBits(drawCalls[b].metallic),
-        FloatBits(drawCalls[b].normalStrength),
-        reinterpret_cast<std::uintptr_t>(drawCalls[b].lod),
-        drawCalls[b].mirroredWinding,
-        drawCalls[b].depth01};
-    return keyA < keyB;
-  });
+  if (drawOrder.size() > 1) {
+    std::sort(drawOrder.begin(), drawOrder.end(), [&](const std::size_t a, const std::size_t b) {
+      const auto keyA = std::tuple{
+          drawCalls[a].wireframe,
+          drawCalls[a].fastShading,
+          drawCalls[a].useAssetColor,
+          reinterpret_cast<std::uintptr_t>(drawCalls[a].albedoTexture),
+          reinterpret_cast<std::uintptr_t>(drawCalls[a].normalTexture),
+          FloatBits(drawCalls[a].color.r),
+          FloatBits(drawCalls[a].color.g),
+          FloatBits(drawCalls[a].color.b),
+          FloatBits(drawCalls[a].color.a),
+          FloatBits(drawCalls[a].roughness),
+          FloatBits(drawCalls[a].metallic),
+          FloatBits(drawCalls[a].normalStrength),
+          reinterpret_cast<std::uintptr_t>(drawCalls[a].lod),
+          drawCalls[a].mirroredWinding,
+          drawCalls[a].depth01};
+      const auto keyB = std::tuple{
+          drawCalls[b].wireframe,
+          drawCalls[b].fastShading,
+          drawCalls[b].useAssetColor,
+          reinterpret_cast<std::uintptr_t>(drawCalls[b].albedoTexture),
+          reinterpret_cast<std::uintptr_t>(drawCalls[b].normalTexture),
+          FloatBits(drawCalls[b].color.r),
+          FloatBits(drawCalls[b].color.g),
+          FloatBits(drawCalls[b].color.b),
+          FloatBits(drawCalls[b].color.a),
+          FloatBits(drawCalls[b].roughness),
+          FloatBits(drawCalls[b].metallic),
+          FloatBits(drawCalls[b].normalStrength),
+          reinterpret_cast<std::uintptr_t>(drawCalls[b].lod),
+          drawCalls[b].mirroredWinding,
+          drawCalls[b].depth01};
+      return keyA < keyB;
+    });
+  }
 
   for (const std::size_t callIndex : drawOrder) {
     const auto& call = drawCalls[callIndex];

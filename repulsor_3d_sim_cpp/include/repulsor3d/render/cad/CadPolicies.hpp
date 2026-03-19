@@ -35,7 +35,7 @@ struct CadVisualPolicy {
   bool optimizeVertexCache = true;
   int clusterTargetIndices = 32768;
   int clusterMinIndices = 8192;
-  int clusterMergeGapIndices = 192;
+  int clusterMergeGapIndices = 512;
   int fieldClusterMaxVisibleIndices = 0;
   bool fieldClusterAdaptiveBudget = true;
   float fieldClusterAdaptiveMinScale = 0.55F;
@@ -46,7 +46,7 @@ struct CadVisualPolicy {
   int hzbTilesY = 36;
   float hzbDepthMargin = 0.01F;
   float hzbMaxCullRadiusPx = 120.0F;
-  int maxIndicesPerDrawCall = 500000;
+  int maxIndicesPerDrawCall = 4000000;
   float keyLightIntensity = 1.35F;
   float fillLightIntensity = 0.32F;
   float ambientStrength = 0.10F;
@@ -65,7 +65,7 @@ struct CadVisualPolicy {
   float clearcoatStrength = 0.22F;
   float shadowTintStrength = 0.35F;
   bool enableInstanceUploadDedup = true;
-  bool enableInstanceBufferOrphaning = true;
+  bool enableInstanceBufferOrphaning = false;
 };
 
 struct CadShadowPolicy {
