@@ -43,7 +43,9 @@ class UniformGridBroadphase {
 
   float cellSizeMeters_ = 3.0F;
   std::unordered_map<CellKey, std::vector<std::size_t>, CellKeyHasher> cells_;
+  bool hasCellBounds_ = false;
+  CellKey minCell_{};
+  CellKey maxCell_{};
 };
 
 }  // namespace repulsor3d::cad
-

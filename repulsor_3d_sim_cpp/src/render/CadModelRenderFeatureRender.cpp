@@ -4,6 +4,7 @@
 #include <GL/glew.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -95,6 +96,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   if (!initialized_ || shader_.Get() == 0 || geometryProvider_ == nullptr || backend_ == nullptr) {
     return;
   }
+  const auto renderStartTime = std::chrono::steady_clock::now();
+  double stageCommandBuildMs = 0.0;
+  double stageCullBuildMs = 0.0;
+  double stageShadowMs = 0.0;
+  double stageDrawMs = 0.0;
   uploadsThisFrame_ = 0;
 
   if (GetEnvBool("CAD_CANCEL_PENDING_LOADS", false)) {
@@ -230,6 +236,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   std::vector<DrawItem> drawItems;
   drawItems.reserve(256);
 
+  const auto commandBuildStart = std::chrono::steady_clock::now();
   for (const auto& command : context.commandBuffer) {
     std::visit(
         [&](const auto& typed) {
@@ -333,7 +340,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         },
         command);
   }
+  stageCommandBuildMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+          std::chrono::steady_clock::now() - commandBuildStart)
+          .count();
 
+  const auto cullBuildStart = std::chrono::steady_clock::now();
   if (visualPolicy.enableFrustumCulling && !drawItems.empty()) {
     const float frustumCullMarginM = std::max(0.0F, visualPolicy.frustumCullMarginM);
     std::vector<DrawItem> filtered;
@@ -670,6 +682,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         .ranges = std::move(ranges),
     });
   }
+  stageCullBuildMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+          std::chrono::steady_clock::now() - cullBuildStart)
+          .count();
 
   if (drawCalls.empty()) {
     backend_->SetBlendEnabled(true);
@@ -815,6 +831,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(uploadEnd - uploadStart).count();
   };
 
+  const auto shadowStart = std::chrono::steady_clock::now();
   if (nearShadowReady) {
     struct ShadowBatch {
       const GpuMesh::LodGpu* lod = nullptr;
@@ -966,7 +983,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     shadowCacheValid_ = false;
     shadowCacheFingerprint_ = 0ULL;
   }
+  stageShadowMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+          std::chrono::steady_clock::now() - shadowStart)
+          .count();
 
+  const auto drawStart = std::chrono::steady_clock::now();
   auto drawIndexedRangesSingleInstance = [&](const std::vector<DrawRange>& ranges) {
     if (ranges.empty()) {
       return;
@@ -1211,6 +1233,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       glFrontFace(GL_CCW);
     }
   }
+  stageDrawMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+          std::chrono::steady_clock::now() - drawStart)
+          .count();
 
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.bytes", static_cast<double>(instanceUploadBytes));
@@ -1223,6 +1249,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter(
         "cad.draw.max_indices_per_call",
         static_cast<double>(std::max(0, visualPolicy.maxIndicesPerDrawCall)));
+    context.diagnosticsWriter->RecordCounter("cad.stage.command_ms", stageCommandBuildMs);
+    context.diagnosticsWriter->RecordCounter("cad.stage.cull_build_ms", stageCullBuildMs);
+    context.diagnosticsWriter->RecordCounter("cad.stage.shadow_ms", stageShadowMs);
+    context.diagnosticsWriter->RecordCounter("cad.stage.draw_ms", stageDrawMs);
+    context.diagnosticsWriter->RecordCounter(
+        "cad.stage.total_internal_ms",
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
+            std::chrono::steady_clock::now() - renderStartTime)
+            .count());
   }
 
   glDepthMask(GL_TRUE);
