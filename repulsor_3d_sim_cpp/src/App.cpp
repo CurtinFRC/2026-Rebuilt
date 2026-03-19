@@ -37,6 +37,18 @@ bool ParseEnvBool(const char* name, const bool fallback) {
   return fallback;
 }
 
+int ParseEnvInt(const char* name, const int fallback) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  try {
+    return std::stoi(value);
+  } catch (...) {
+    return fallback;
+  }
+}
+
 #if defined(_WIN32)
 using WglSwapIntervalExtFn = int(__stdcall*)(int);
 using WglGetSwapIntervalExtFn = int(__stdcall*)(void);
@@ -131,11 +143,19 @@ int ViewerApp::Run() {
   glfwSwapInterval(cfg_.vsync ? 1 : 0);
   ForceSwapInterval(cfg_.vsync ? 1 : 0);
   const bool vsyncAutoDisableEnabled = ParseEnvBool("VSYNC_AUTO_DISABLE", true);
+  const bool useFixedTick = ParseEnvBool("APP_USE_FIXED_TICK", false);
+  const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", true);
+  const int presentStallEnableThresholdFrames =
+      std::max(30, ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_FRAMES", 90));
+  const double presentStallEnableThresholdMs =
+      std::max(20.0, static_cast<double>(ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_MS", 40)));
   bool vsyncAutoDisabled = false;
+  bool vsyncAutoEnabledForPresentStall = false;
   double swapWaitAverageMs = 0.0;
   bool swapWaitAverageInitialized = false;
   int highSwapWaitFrames = 0;
   int highCpuGpuMismatchFrames = 0;
+  int highPresentStallFrames = 0;
   std::uint64_t frameCounter = 0;
 
   glewExperimental = GL_TRUE;
@@ -179,7 +199,18 @@ int ViewerApp::Run() {
 
     MaybeReloadRuntimeConfigProfile(now);
 
-    fixedTicker_.Advance(frameDt, [this](const double dt) { Tick(dt); });
+    int tickSteps = 0;
+    if (useFixedTick) {
+      fixedTicker_.Advance(frameDt, [this, &tickSteps](const double dt) {
+        Tick(dt);
+        ++tickSteps;
+      });
+    } else {
+      Tick(std::min(frameDt, 0.100));
+      tickSteps = 1;
+    }
+    renderer_.QueueDiagnosticCounter("app.tick_mode_fixed", useFixedTick ? 1.0 : 0.0);
+    renderer_.QueueDiagnosticCounter("app.tick_steps", static_cast<double>(tickSteps));
 
     int width = 0;
     int height = 0;
@@ -228,7 +259,7 @@ int ViewerApp::Run() {
     }
     ++frameCounter;
 
-    if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled) {
+    if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled && !vsyncAutoEnabledForPresentStall) {
       const auto& diag = renderer_.LatestDiagnostics();
       const double frameAvgMs = diag.frameAverageMilliseconds > 0.0 ? diag.frameAverageMilliseconds : diag.frameMilliseconds;
       double cadGpuMs = 0.0;
@@ -260,6 +291,24 @@ int ViewerApp::Run() {
             "auto-disabled vsync (swap_wait_avg_ms=" + std::to_string(swapWaitAverageMs) +
             ", frame_avg_ms=" + std::to_string(frameAvgMs) +
             ", cad_gpu_ms=" + std::to_string(cadGpuMs) + ")");
+      }
+    }
+
+    if (!cfg_.vsync && autoEnableVsyncOnPresentStall) {
+      if (swapWaitAverageMs >= presentStallEnableThresholdMs) {
+        ++highPresentStallFrames;
+      } else {
+        highPresentStallFrames = 0;
+      }
+      if (highPresentStallFrames >= presentStallEnableThresholdFrames) {
+        glfwSwapInterval(1);
+        ForceSwapInterval(1);
+        cfg_.vsync = true;
+        vsyncAutoEnabledForPresentStall = true;
+        highPresentStallFrames = 0;
+        renderer_.QueueDiagnosticMessage(
+            "auto-enabled vsync due present stall (swap_wait_avg_ms=" +
+            std::to_string(swapWaitAverageMs) + ")");
       }
     }
 
