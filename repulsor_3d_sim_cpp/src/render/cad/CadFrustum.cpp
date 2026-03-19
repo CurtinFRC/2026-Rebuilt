@@ -44,10 +44,11 @@ std::array<Plane, 6> ExtractFrustumPlanes(const glm::mat4& viewProjection) {
   };
 }
 
-bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center, const float radius) {
+bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center, const float radius, const float margin) {
+  const float effectiveRadius = std::max(0.0F, radius + std::max(0.0F, margin));
   for (const auto& plane : planes) {
     const float distance = glm::dot(plane.normal, center) + plane.d;
-    if (distance < -radius) {
+    if (distance < -effectiveRadius) {
       return false;
     }
   }

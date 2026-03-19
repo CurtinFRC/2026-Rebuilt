@@ -75,14 +75,14 @@ void TiledOcclusionBuffer::Reset(const int viewportWidth, const int viewportHeig
   tilesY_ = std::max(tilesY, 1);
   tileWidth_ = static_cast<float>(viewportWidth_) / static_cast<float>(tilesX_);
   tileHeight_ = static_cast<float>(viewportHeight_) / static_cast<float>(tilesY_);
-  nearestDepth01_.assign(static_cast<std::size_t>(tilesX_ * tilesY_), 1.0F);
+  occluderFarDepth01_.assign(static_cast<std::size_t>(tilesX_ * tilesY_), 0.0F);
 }
 
 bool TiledOcclusionBuffer::IsOccluded(
     const ProjectedSphere& projected,
     const float depthMargin,
     const float maxCullRadiusPx) const {
-  if (!projected.valid || nearestDepth01_.empty()) {
+  if (!projected.valid || occluderFarDepth01_.empty()) {
     return false;
   }
   if (projected.radiusPx > maxCullRadiusPx) {
@@ -98,10 +98,10 @@ bool TiledOcclusionBuffer::IsOccluded(
   for (int y = tileMinY; y <= tileMaxY; ++y) {
     for (int x = tileMinX; x <= tileMaxX; ++x) {
       const std::size_t idx = static_cast<std::size_t>(y * tilesX_ + x);
-      if (idx >= nearestDepth01_.size()) {
+      if (idx >= occluderFarDepth01_.size()) {
         continue;
       }
-      if (nearestDepth01_[idx] > requiredDepth) {
+      if (occluderFarDepth01_[idx] < requiredDepth) {
         return false;
       }
     }
@@ -110,7 +110,7 @@ bool TiledOcclusionBuffer::IsOccluded(
 }
 
 void TiledOcclusionBuffer::SubmitOccluder(const ProjectedSphere& projected) {
-  if (!projected.valid || nearestDepth01_.empty()) {
+  if (!projected.valid || occluderFarDepth01_.empty()) {
     return;
   }
   const int tileMinX = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.minX) / tileWidth_)), 0, tilesX_ - 1);
@@ -121,10 +121,10 @@ void TiledOcclusionBuffer::SubmitOccluder(const ProjectedSphere& projected) {
   for (int y = tileMinY; y <= tileMaxY; ++y) {
     for (int x = tileMinX; x <= tileMaxX; ++x) {
       const std::size_t idx = static_cast<std::size_t>(y * tilesX_ + x);
-      if (idx >= nearestDepth01_.size()) {
+      if (idx >= occluderFarDepth01_.size()) {
         continue;
       }
-      nearestDepth01_[idx] = std::min(nearestDepth01_[idx], projected.nearDepth01);
+      occluderFarDepth01_[idx] = std::max(occluderFarDepth01_[idx], projected.farDepth01);
     }
   }
 }

@@ -72,6 +72,7 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
   static const CadVisualPolicy policy = []() {
     CadVisualPolicy out;
     out.enableFrustumCulling = GetEnvBool("CAD_FRUSTUM_CULLING", out.enableFrustumCulling);
+    out.frustumCullMarginM = std::clamp(GetEnvFloat("CAD_FRUSTUM_MARGIN_M", out.frustumCullMarginM), 0.0F, 3.0F);
     out.enableBroadphase = GetEnvBool("CAD_BROADPHASE_ENABLED", out.enableBroadphase);
     out.broadphaseCellSizeM = std::clamp(GetEnvFloat("CAD_BROADPHASE_CELL_SIZE_M", out.broadphaseCellSizeM), 0.5F, 20.0F);
     out.enableClusterCulling = GetEnvBool("CAD_CLUSTER_CULLING", out.enableClusterCulling);

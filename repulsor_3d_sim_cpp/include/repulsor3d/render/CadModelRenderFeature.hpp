@@ -226,6 +226,8 @@ class CadModelRenderFeature final : public IRenderFeature {
   int shadowPcfRadius_ = 2;
   int shadowCascadeCount_ = 1;
   float shadowCascadeSplitM_ = 12.0F;
+  std::uint64_t shadowCacheFingerprint_ = 0ULL;
+  bool shadowCacheValid_ = false;
   bool initialized_ = false;
   GlBufferHandle cadIndirectDrawBuffer_;
   std::unordered_map<std::string, GpuMesh> meshCache_;

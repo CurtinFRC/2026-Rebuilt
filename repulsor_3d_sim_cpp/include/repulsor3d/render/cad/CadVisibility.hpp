@@ -38,7 +38,7 @@ class TiledOcclusionBuffer {
   int viewportHeight_ = 1;
   float tileWidth_ = 1.0F;
   float tileHeight_ = 1.0F;
-  std::vector<float> nearestDepth01_;
+  std::vector<float> occluderFarDepth01_;
 };
 
 }  // namespace repulsor3d::cad

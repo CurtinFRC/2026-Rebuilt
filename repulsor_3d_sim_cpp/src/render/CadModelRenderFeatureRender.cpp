@@ -34,6 +34,22 @@ std::uint32_t FloatBits(const float value) {
   return bits;
 }
 
+constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
+constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
+
+void HashMixU64(std::uint64_t& hash, const std::uint64_t value) {
+  std::uint64_t v = value;
+  for (int i = 0; i < 8; ++i) {
+    hash ^= static_cast<std::uint8_t>(v & 0xFFULL);
+    hash *= kFnvPrime;
+    v >>= 8U;
+  }
+}
+
+void HashMixFloat(std::uint64_t& hash, const float value) {
+  HashMixU64(hash, static_cast<std::uint64_t>(FloatBits(value)));
+}
+
 struct DrawElementsIndirectCommand {
   std::uint32_t count = 0;
   std::uint32_t instanceCount = 1;
@@ -303,12 +319,16 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   if (visualPolicy.enableFrustumCulling && !drawItems.empty()) {
+    const float frustumCullMarginM = std::max(0.0F, visualPolicy.frustumCullMarginM);
     std::vector<DrawItem> filtered;
     filtered.reserve(drawItems.size());
     if (visualPolicy.enableBroadphase) {
       cad::Aabb frustumAabb;
       if (cad::TryExtractFrustumAabb(context.viewProjection, frustumAabb)) {
         const float broadphaseCellSize = std::max(0.1F, visualPolicy.broadphaseCellSizeM);
+        const float broadphasePadding = std::max(frustumCullMarginM, broadphaseCellSize * 0.35F);
+        frustumAabb.min -= glm::vec3{broadphasePadding, broadphasePadding, broadphasePadding};
+        frustumAabb.max += glm::vec3{broadphasePadding, broadphasePadding, broadphasePadding};
         if (broadphaseCache_ == nullptr ||
             std::abs(broadphaseCacheCellSizeM_ - broadphaseCellSize) > 1e-5F) {
           broadphaseCache_ = std::make_unique<cad::UniformGridBroadphase>(broadphaseCellSize);
@@ -340,20 +360,24 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           if (index >= drawItems.size()) {
             continue;
           }
-          if (cad::IsSphereVisible(frustumPlanes, drawItems[index].worldBoundsCenter, drawItems[index].worldBoundsRadius)) {
+          if (cad::IsSphereVisible(
+                  frustumPlanes,
+                  drawItems[index].worldBoundsCenter,
+                  drawItems[index].worldBoundsRadius,
+                  frustumCullMarginM)) {
             filtered.push_back(drawItems[index]);
           }
         }
       } else {
         for (const auto& item : drawItems) {
-          if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius)) {
+          if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius, frustumCullMarginM)) {
             filtered.push_back(item);
           }
         }
       }
     } else {
       for (const auto& item : drawItems) {
-        if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius)) {
+        if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius, frustumCullMarginM)) {
           filtered.push_back(item);
         }
       }
@@ -421,10 +445,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         float depth01 = 1.0F;
         float score = 0.0F;
       };
+      const bool enableFieldIndexBudget =
+          item.aggressiveLodCap &&
+          visualPolicy.fieldClusterMaxVisibleIndices > 0 &&
+          autoQualityEnabled_ &&
+          (adaptiveLodBias > 0 || frameAverageMs > static_cast<double>(perfTargetFrameMs_));
       const bool needProjected =
           visualPolicy.enableOcclusionCulling ||
           visualPolicy.minClusterScreenRadiusPx > 0.0F ||
-          (item.aggressiveLodCap && visualPolicy.fieldClusterMaxVisibleIndices > 0);
+          enableFieldIndexBudget;
       std::vector<ClusterCandidate> candidates;
       candidates.reserve(item.lod->clusters.size());
       for (const auto& cluster : item.lod->clusters) {
@@ -435,7 +464,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         const glm::vec3 worldCenter = glm::vec3(item.model * glm::vec4(cluster.boundsCenter, 1.0F));
         const float worldRadius = std::max(cluster.boundsRadius * std::max(item.worldMaxScale, 1e-4F), 1e-4F);
         if (visualPolicy.enableFrustumCulling &&
-            !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius)) {
+            !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius, std::max(0.0F, visualPolicy.frustumCullMarginM))) {
           ++culledClusters;
           continue;
         }
@@ -490,7 +519,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         }
       }
 
-      if (item.aggressiveLodCap && visualPolicy.fieldClusterMaxVisibleIndices > 0 && surviving.size() > 1) {
+      if (enableFieldIndexBudget && surviving.size() > 1) {
         std::uint64_t totalVisibleIndices = 0ULL;
         for (const auto& candidate : surviving) {
           if (candidate.cluster == nullptr) {
@@ -644,7 +673,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.cluster.merge_gap_indices", static_cast<double>(clusterMergeGap));
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.field_index_budget",
-        static_cast<double>(std::max(0, visualPolicy.fieldClusterMaxVisibleIndices)));
+        autoQualityEnabled_ ? static_cast<double>(std::max(0, visualPolicy.fieldClusterMaxVisibleIndices)) : 0.0);
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.min_screen_radius_px",
         static_cast<double>(std::max(0.0F, visualPolicy.minClusterScreenRadiusPx)));
@@ -706,11 +735,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       shadowEnabled_ && !disableShadowsThisFrame && shadowFbo_ != 0 && shadowShader_.Get() != 0;
   const bool farShadowReady = nearShadowReady && farCascadeRequested && shadowFboFar_ != 0;
   bool shadowsEnabledForShading = false;
+  bool shadowCacheReused = false;
 
   if (nearShadowReady) {
-    GLint oldViewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, oldViewport);
-
     struct ShadowBatch {
       const GpuMesh::LodGpu* lod = nullptr;
       bool mirroredWinding = false;
@@ -790,9 +817,51 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     const bool hasShadowCasters = !shadowBatches.empty();
     shadowsEnabledForShading = hasShadowCasters;
     if (hasShadowCasters) {
-      renderShadowPass(shadowFbo_, lightViewProjection);
-      if (farShadowReady) {
-        renderShadowPass(shadowFboFar_, lightViewProjectionFar);
+      std::uint64_t shadowFingerprint = kFnvOffsetBasis;
+      HashMixU64(shadowFingerprint, static_cast<std::uint64_t>(shadowMapSize_));
+      HashMixU64(shadowFingerprint, farShadowReady ? 1ULL : 0ULL);
+      for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+          HashMixFloat(shadowFingerprint, lightViewProjection[col][row]);
+          HashMixFloat(shadowFingerprint, lightViewProjectionFar[col][row]);
+        }
+      }
+      for (const auto& batch : shadowBatches) {
+        HashMixU64(shadowFingerprint, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(batch.lod)));
+        HashMixU64(shadowFingerprint, batch.mirroredWinding ? 1ULL : 0ULL);
+        HashMixU64(shadowFingerprint, static_cast<std::uint64_t>(batch.instances.size()));
+        for (const auto& instance : batch.instances) {
+          HashMixFloat(shadowFingerprint, instance.modelRow0.x);
+          HashMixFloat(shadowFingerprint, instance.modelRow0.y);
+          HashMixFloat(shadowFingerprint, instance.modelRow0.z);
+          HashMixFloat(shadowFingerprint, instance.modelRow0.w);
+          HashMixFloat(shadowFingerprint, instance.modelRow1.x);
+          HashMixFloat(shadowFingerprint, instance.modelRow1.y);
+          HashMixFloat(shadowFingerprint, instance.modelRow1.z);
+          HashMixFloat(shadowFingerprint, instance.modelRow1.w);
+          HashMixFloat(shadowFingerprint, instance.modelRow2.x);
+          HashMixFloat(shadowFingerprint, instance.modelRow2.y);
+          HashMixFloat(shadowFingerprint, instance.modelRow2.z);
+          HashMixFloat(shadowFingerprint, instance.modelRow2.w);
+          HashMixFloat(shadowFingerprint, instance.modelRow3.x);
+          HashMixFloat(shadowFingerprint, instance.modelRow3.y);
+          HashMixFloat(shadowFingerprint, instance.modelRow3.z);
+          HashMixFloat(shadowFingerprint, instance.modelRow3.w);
+        }
+      }
+
+      const bool shouldRenderShadowMaps =
+          !shadowCacheValid_ ||
+          shadowFingerprint != shadowCacheFingerprint_;
+      shadowCacheReused = !shouldRenderShadowMaps;
+
+      if (shouldRenderShadowMaps) {
+        renderShadowPass(shadowFbo_, lightViewProjection);
+        if (farShadowReady) {
+          renderShadowPass(shadowFboFar_, lightViewProjectionFar);
+        }
+        shadowCacheFingerprint_ = shadowFingerprint;
+        shadowCacheValid_ = true;
       }
     } else {
       glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
@@ -803,12 +872,21 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         glViewport(0, 0, shadowMapSize_, shadowMapSize_);
         glClear(GL_DEPTH_BUFFER_BIT);
       }
+      shadowCacheValid_ = false;
+      shadowCacheFingerprint_ = 0ULL;
+    }
+
+    if (context.diagnosticsWriter != nullptr) {
+      context.diagnosticsWriter->RecordCounter("cad.shadow.cache_reused", shadowCacheReused ? 1.0 : 0.0);
     }
 
     glCullFace(GL_BACK);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+    glViewport(0, 0, context.viewportWidth, context.viewportHeight);
+  } else {
+    shadowCacheValid_ = false;
+    shadowCacheFingerprint_ = 0ULL;
   }
 
   auto drawIndexedRangesSingleInstance = [&](const std::vector<DrawRange>& ranges) {

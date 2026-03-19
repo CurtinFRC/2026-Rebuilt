@@ -26,6 +26,7 @@ struct CadLodPolicy {
 
 struct CadVisualPolicy {
   bool enableFrustumCulling = true;
+  float frustumCullMarginM = 0.08F;
   bool enableBroadphase = true;
   float broadphaseCellSizeM = 3.0F;
   bool enableClusterCulling = true;
