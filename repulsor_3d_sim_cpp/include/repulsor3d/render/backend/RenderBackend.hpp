@@ -14,6 +14,7 @@ struct RenderBackendCapabilities {
   bool supportsGpuTimers = false;
   bool supportsInstancing = false;
   bool supportsMipmapTextures = false;
+  bool supportsMultiDrawIndirect = false;
 };
 
 class IRenderBackend {
@@ -59,8 +60,10 @@ class IRenderBackend {
   virtual void SetActiveTextureUnit(int unit) = 0;
   virtual void DrawTriangles(int vertexCount) = 0;
   virtual void DrawIndexedTriangles(int indexCount) = 0;
+  virtual void DrawIndexedTrianglesRange(int indexCount, std::size_t firstIndex) = 0;
   virtual void DrawTrianglesInstanced(int vertexCount, int instanceCount) = 0;
   virtual void DrawIndexedTrianglesInstanced(int indexCount, int instanceCount) = 0;
+  virtual void DrawIndexedTrianglesInstancedRange(int indexCount, int instanceCount, std::size_t firstIndex) = 0;
   virtual void DrawLines(int vertexCount, float lineWidth) = 0;
 
   virtual unsigned int CreateGpuTimerQuery() = 0;
@@ -110,8 +113,10 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void SetActiveTextureUnit(int unit) override;
   void DrawTriangles(int vertexCount) override;
   void DrawIndexedTriangles(int indexCount) override;
+  void DrawIndexedTrianglesRange(int indexCount, std::size_t firstIndex) override;
   void DrawTrianglesInstanced(int vertexCount, int instanceCount) override;
   void DrawIndexedTrianglesInstanced(int indexCount, int instanceCount) override;
+  void DrawIndexedTrianglesInstancedRange(int indexCount, int instanceCount, std::size_t firstIndex) override;
   void DrawLines(int vertexCount, float lineWidth) override;
 
   unsigned int CreateGpuTimerQuery() override;

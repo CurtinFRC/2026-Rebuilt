@@ -11,9 +11,12 @@
 namespace repulsor3d {
 
 using cad::CadLodPolicy;
+using cad::CadVisualPolicy;
 using cad::LoadCadLodPolicy;
+using cad::LoadCadVisualPolicy;
 using cadfeature::BuildIndexedMesh;
 using cadfeature::BuildLodChain;
+using cadfeature::BuildMeshClusters;
 using cadfeature::BuildShadowProxyMesh;
 using cadfeature::ComputeRadiusFromCenter;
 using cadfeature::ComputeScreenSpaceRadiusPixels;
@@ -22,6 +25,7 @@ using cadfeature::IndexedMesh;
 using cadfeature::InstanceGpuData;
 using cadfeature::PackedVertex;
 using cadfeature::PackVerticesForGpu;
+using cadfeature::OptimizeIndexOrderForVertexCache;
 using cadfeature::RemoveDegenerateTriangles;
 
 CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(const PositionNormalMesh& cpu) {
@@ -31,6 +35,7 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
   }
 
   const CadLodPolicy& lodPolicy = LoadCadLodPolicy();
+  const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
   IndexedMesh indexed = BuildIndexedMesh(cpu);
   RemoveDegenerateTriangles(indexed);
   if (indexed.vertices.empty() || indexed.indices.empty()) {
@@ -46,12 +51,36 @@ CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(con
     if (lod.vertices.empty() || lod.indices.empty()) {
       continue;
     }
+    std::vector<cadfeature::MeshCluster> clusters = BuildMeshClusters(
+        lod.indices,
+        lod.vertices,
+        static_cast<std::size_t>(std::max(visualPolicy.clusterTargetIndices, 3)),
+        static_cast<std::size_t>(std::max(visualPolicy.clusterMinIndices, 3)),
+        visualPolicy.optimizeVertexCache);
+    if (clusters.empty()) {
+      clusters.push_back(cadfeature::MeshCluster{
+          .firstIndex = 0U,
+          .indexCount = static_cast<std::uint32_t>(lod.indices.size()),
+          .boundsCenter = center,
+          .boundsRadius = std::max(radius, 1e-3F),
+      });
+    }
     PreparedCpuMesh::LodCpu outLod;
     outLod.vertices = std::move(lod.vertices);
     outLod.indices = std::move(lod.indices);
+    outLod.clusters.reserve(clusters.size());
+    for (const auto& cluster : clusters) {
+      outLod.clusters.push_back(PreparedCpuMesh::ClusterCpu{
+          .firstIndex = cluster.firstIndex,
+          .indexCount = cluster.indexCount,
+          .boundsCenter = cluster.boundsCenter,
+          .boundsRadius = cluster.boundsRadius,
+      });
+    }
     prepared.lods.push_back(std::move(outLod));
   }
   if (!shadowProxy.vertices.empty() && !shadowProxy.indices.empty()) {
+    OptimizeIndexOrderForVertexCache(shadowProxy.indices, 32);
     PreparedCpuMesh::LodCpu outShadow;
     outShadow.vertices = std::move(shadowProxy.vertices);
     outShadow.indices = std::move(shadowProxy.indices);
@@ -148,6 +177,27 @@ bool CadModelRenderFeature::UploadSingleLod(
 
   gpuLod.vertexCount = static_cast<int>(cpuLod.vertices.size());
   gpuLod.indexCount = static_cast<int>(cpuLod.indices.size());
+  gpuLod.clusters.clear();
+  gpuLod.clusters.reserve(cpuLod.clusters.size());
+  for (const auto& cluster : cpuLod.clusters) {
+    if (cluster.indexCount == 0) {
+      continue;
+    }
+    gpuLod.clusters.push_back(GpuMesh::ClusterGpu{
+        .firstIndex = cluster.firstIndex,
+        .indexCount = cluster.indexCount,
+        .boundsCenter = cluster.boundsCenter,
+        .boundsRadius = cluster.boundsRadius,
+    });
+  }
+  if (gpuLod.clusters.empty() && gpuLod.indexCount > 0) {
+    gpuLod.clusters.push_back(GpuMesh::ClusterGpu{
+        .firstIndex = 0U,
+        .indexCount = static_cast<std::uint32_t>(std::max(gpuLod.indexCount, 0)),
+        .boundsCenter = glm::vec3{0.0F, 0.0F, 0.0F},
+        .boundsRadius = 1.0F,
+    });
+  }
   return true;
 }
 
@@ -159,6 +209,7 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vao.Reset();
     lod.vertexCount = 0;
     lod.indexCount = 0;
+    lod.clusters.clear();
   }
   gpu.lods.clear();
   if (gpu.shadowProxy.has_value()) {
@@ -169,6 +220,7 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vao.Reset();
     lod.vertexCount = 0;
     lod.indexCount = 0;
+    lod.clusters.clear();
     gpu.shadowProxy.reset();
   }
   gpu.boundsCenter = glm::vec3{0.0F, 0.0F, 0.0F};
@@ -184,6 +236,7 @@ std::size_t CadModelRenderFeature::EstimateGpuMeshBytes(const GpuMesh& gpu) {
     bytes += vertexCount * sizeof(cadfeature::PackedVertex);
     bytes += indexCount * sizeof(std::uint32_t);
     bytes += sizeof(cadfeature::InstanceGpuData);
+    bytes += lod.clusters.size() * sizeof(GpuMesh::ClusterGpu);
   };
   for (const auto& lod : gpu.lods) {
     accumulateLod(lod);

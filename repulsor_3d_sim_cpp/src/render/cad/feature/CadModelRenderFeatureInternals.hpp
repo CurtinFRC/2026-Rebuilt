@@ -37,6 +37,13 @@ struct PackedVertex {
   std::array<std::uint8_t, 4> color{255, 255, 255, 255};
 };
 
+struct MeshCluster {
+  std::uint32_t firstIndex = 0;
+  std::uint32_t indexCount = 0;
+  glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+  float boundsRadius = 0.0F;
+};
+
 struct InstanceGpuData {
   glm::vec4 modelRow0{1.0F, 0.0F, 0.0F, 0.0F};
   glm::vec4 modelRow1{0.0F, 1.0F, 0.0F, 0.0F};
@@ -65,6 +72,13 @@ IndexedMesh BuildIndexedMesh(const PositionNormalMesh& mesh);
 void RemoveDegenerateTriangles(IndexedMesh& mesh);
 std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const cad::CadLodPolicy& policy);
 IndexedMesh BuildShadowProxyMesh(const std::vector<IndexedMesh>& lods, const cad::CadLodPolicy& policy);
+void OptimizeIndexOrderForVertexCache(std::vector<std::uint32_t>& triangleIndices, std::size_t cacheSize = 32);
+std::vector<MeshCluster> BuildMeshClusters(
+    std::vector<std::uint32_t>& triangleIndices,
+    const std::vector<PositionNormalMesh::Vertex>& vertices,
+    std::size_t targetClusterIndices,
+    std::size_t minClusterIndices,
+    bool optimizeVertexCache);
 float ComputeScreenSpaceRadiusPixels(
     const glm::vec3& center,
     float radius,

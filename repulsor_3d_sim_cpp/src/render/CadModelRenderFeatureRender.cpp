@@ -1,9 +1,14 @@
+﻿
 #include "repulsor3d/render/CadModelRenderFeature.hpp"
+
+#include <GL/glew.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <tuple>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -16,6 +21,7 @@
 #include "repulsor3d/render/cad/CadBroadphase.hpp"
 #include "repulsor3d/render/cad/CadFrustum.hpp"
 #include "repulsor3d/render/cad/CadPolicies.hpp"
+#include "repulsor3d/render/cad/CadVisibility.hpp"
 #include "cad/feature/CadModelRenderFeatureInternals.hpp"
 
 namespace repulsor3d {
@@ -26,6 +32,22 @@ std::uint32_t FloatBits(const float value) {
   std::uint32_t bits = 0;
   std::memcpy(&bits, &value, sizeof(bits));
   return bits;
+}
+
+struct DrawElementsIndirectCommand {
+  std::uint32_t count = 0;
+  std::uint32_t instanceCount = 1;
+  std::uint32_t firstIndex = 0;
+  std::uint32_t baseVertex = 0;
+  std::uint32_t baseInstance = 0;
+};
+
+float ComputeDepth01(const glm::mat4& viewProjection, const glm::vec3& worldPoint) {
+  const glm::vec4 clip = viewProjection * glm::vec4(worldPoint, 1.0F);
+  if (std::abs(clip.w) <= 1e-6F) {
+    return 1.0F;
+  }
+  return std::clamp((clip.z / clip.w) * 0.5F + 0.5F, 0.0F, 1.0F);
 }
 
 }  // namespace
@@ -98,6 +120,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   backend_->UseProgram(shader_.Get());
   const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
+  const bool allowMdi = backend_->Capabilities().supportsMultiDrawIndirect && GetEnvBool("CAD_MULTI_DRAW_INDIRECT", true);
+  const std::uint32_t clusterMergeGap =
+      static_cast<std::uint32_t>(std::max(0, visualPolicy.clusterMergeGapIndices));
+  if (allowMdi && cadIndirectDrawBuffer_.Get() == 0) {
+    cadIndirectDrawBuffer_.Set(backend_->CreateBuffer());
+  }
   const auto frustumPlanes = cad::ExtractFrustumPlanes(context.viewProjection);
   backend_->SetUniformVec3(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
   backend_->SetUniformVec3(
@@ -154,6 +182,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     float roughness = 0.72F;
     float metallic = 0.0F;
     float normalStrength = 1.0F;
+    glm::vec3 worldBoundsCenter{0.0F, 0.0F, 0.0F};
+    float worldBoundsRadius = 1.0F;
+    float worldMaxScale = 1.0F;
+    float depth01 = 1.0F;
     bool useAssetColor = false;
     bool fastShading = false;
     bool aggressiveLodCap = false;
@@ -162,10 +194,6 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   };
   std::vector<DrawItem> drawItems;
   drawItems.reserve(256);
-  std::vector<glm::vec3> drawCenters;
-  std::vector<float> drawRadii;
-  drawCenters.reserve(256);
-  drawRadii.reserve(256);
 
   for (const auto& command : context.commandBuffer) {
     std::visit(
@@ -195,17 +223,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
                   model * glm::translate(glm::mat4(1.0F), glm::vec3{-mesh->boundsCenter.x, -mesh->boundsCenter.y, 0.0F});
             }
 
-            if (visualPolicy.enableFrustumCulling) {
-              const glm::vec3 worldBoundsCenter = glm::vec3(model * glm::vec4(mesh->boundsCenter, 1.0F));
-              const glm::vec3 scaleAxisX{model[0][0], model[0][1], model[0][2]};
-              const glm::vec3 scaleAxisY{model[1][0], model[1][1], model[1][2]};
-              const glm::vec3 scaleAxisZ{model[2][0], model[2][1], model[2][2]};
-              const float maxScale =
-                  std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
-              const float worldBoundsRadius = std::max(mesh->boundsRadius * std::max(maxScale, 1e-4F), 1e-4F);
-              drawCenters.push_back(worldBoundsCenter);
-              drawRadii.push_back(worldBoundsRadius);
-            }
+            const glm::vec3 scaleAxisX{model[0][0], model[0][1], model[0][2]};
+            const glm::vec3 scaleAxisY{model[1][0], model[1][1], model[1][2]};
+            const glm::vec3 scaleAxisZ{model[2][0], model[2][1], model[2][2]};
+            const float maxScale =
+                std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
+            const glm::vec3 worldBoundsCenter = glm::vec3(model * glm::vec4(mesh->boundsCenter, 1.0F));
+            const float worldBoundsRadius = std::max(mesh->boundsRadius * std::max(maxScale, 1e-4F), 1e-4F);
 
             const glm::mat4 mvp = context.viewProjection * model;
             const std::size_t lodIndex = SelectLodLevel(*mesh, mvp, context.viewportWidth, context.viewportHeight);
@@ -261,6 +285,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
                           ? instance.metallicOverride
                           : (mesh->materialHints.metallic >= 0.0F ? mesh->materialHints.metallic : visualPolicy.metallic)),
                  .normalStrength = instance.normalStrength,
+                 .worldBoundsCenter = worldBoundsCenter,
+                 .worldBoundsRadius = worldBoundsRadius,
+                 .worldMaxScale = maxScale,
+                 .depth01 = ComputeDepth01(context.viewProjection, worldBoundsCenter),
                  .useAssetColor = instance.useAssetColor,
                  .fastShading = fastShading,
                  .aggressiveLodCap = instance.centerOnMeshBounds,
@@ -285,12 +313,21 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           broadphaseCacheFingerprint_ = 0ULL;
         }
 
+        std::vector<glm::vec3> centers;
+        std::vector<float> radii;
+        centers.reserve(drawItems.size());
+        radii.reserve(drawItems.size());
+        for (const auto& item : drawItems) {
+          centers.push_back(item.worldBoundsCenter);
+          radii.push_back(item.worldBoundsRadius);
+        }
+
         const std::uint64_t broadphaseFingerprint =
-            BuildBroadphaseFingerprint(drawCenters, drawRadii, broadphaseCellSize);
+            BuildBroadphaseFingerprint(centers, radii, broadphaseCellSize);
         if (broadphaseFingerprint != broadphaseCacheFingerprint_) {
           broadphaseCache_->Clear();
           for (std::size_t i = 0; i < drawItems.size(); ++i) {
-            broadphaseCache_->Insert(cad::BoundingSphereRef{drawCenters[i], drawRadii[i], i});
+            broadphaseCache_->Insert(cad::BoundingSphereRef{drawItems[i].worldBoundsCenter, drawItems[i].worldBoundsRadius, i});
           }
           broadphaseCacheFingerprint_ = broadphaseFingerprint;
         }
@@ -300,21 +337,21 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           if (index >= drawItems.size()) {
             continue;
           }
-          if (cad::IsSphereVisible(frustumPlanes, drawCenters[index], drawRadii[index])) {
+          if (cad::IsSphereVisible(frustumPlanes, drawItems[index].worldBoundsCenter, drawItems[index].worldBoundsRadius)) {
             filtered.push_back(drawItems[index]);
           }
         }
       } else {
-        for (std::size_t i = 0; i < drawItems.size(); ++i) {
-          if (cad::IsSphereVisible(frustumPlanes, drawCenters[i], drawRadii[i])) {
-            filtered.push_back(drawItems[i]);
+        for (const auto& item : drawItems) {
+          if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius)) {
+            filtered.push_back(item);
           }
         }
       }
     } else {
-      for (std::size_t i = 0; i < drawItems.size(); ++i) {
-        if (cad::IsSphereVisible(frustumPlanes, drawCenters[i], drawRadii[i])) {
-          filtered.push_back(drawItems[i]);
+      for (const auto& item : drawItems) {
+        if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius)) {
+          filtered.push_back(item);
         }
       }
     }
@@ -326,17 +363,203 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     backend_->SetWireframeMode(false);
     return;
   }
+
+  std::sort(drawItems.begin(), drawItems.end(), [](const DrawItem& a, const DrawItem& b) {
+    return a.depth01 < b.depth01;
+  });
+
+  cad::TiledOcclusionBuffer occlusionBuffer;
+  if (visualPolicy.enableOcclusionCulling) {
+    occlusionBuffer.Reset(
+        context.viewportWidth,
+        context.viewportHeight,
+        std::max(8, visualPolicy.hzbTilesX),
+        std::max(8, visualPolicy.hzbTilesY));
+  }
+
+  struct DrawRange {
+    std::uint32_t firstIndex = 0;
+    std::uint32_t indexCount = 0;
+    float depth01 = 1.0F;
+  };
+  struct DrawCall {
+    const GpuMesh* mesh = nullptr;
+    const GpuMesh::LodGpu* lod = nullptr;
+    const GpuMesh::LodGpu* shadowLod = nullptr;
+    const GpuTexture* albedoTexture = nullptr;
+    const GpuTexture* normalTexture = nullptr;
+    glm::mat4 model{1.0F};
+    glm::vec4 color{1.0F};
+    float roughness = 0.72F;
+    float metallic = 0.0F;
+    float normalStrength = 1.0F;
+    float depth01 = 1.0F;
+    bool useAssetColor = false;
+    bool fastShading = false;
+    bool wireframe = false;
+    bool mirroredWinding = false;
+    std::vector<DrawRange> ranges;
+  };
+
+  std::vector<DrawCall> drawCalls;
+  drawCalls.reserve(drawItems.size());
+  std::size_t totalClusters = 0;
+  std::size_t culledClusters = 0;
+  for (const auto& item : drawItems) {
+    if (item.lod == nullptr) {
+      continue;
+    }
+
+    std::vector<DrawRange> ranges;
+    if (visualPolicy.enableClusterCulling && !item.lod->clusters.empty() && item.lod->indexCount > 0) {
+      struct ClusterCandidate {
+        const GpuMesh::ClusterGpu* cluster = nullptr;
+        cad::ProjectedSphere projected{};
+        float depth01 = 1.0F;
+      };
+      std::vector<ClusterCandidate> candidates;
+      candidates.reserve(item.lod->clusters.size());
+      for (const auto& cluster : item.lod->clusters) {
+        ++totalClusters;
+        if (cluster.indexCount == 0) {
+          continue;
+        }
+        const glm::vec3 worldCenter = glm::vec3(item.model * glm::vec4(cluster.boundsCenter, 1.0F));
+        const float worldRadius = std::max(cluster.boundsRadius * std::max(item.worldMaxScale, 1e-4F), 1e-4F);
+        if (visualPolicy.enableFrustumCulling &&
+            !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius)) {
+          ++culledClusters;
+          continue;
+        }
+        ClusterCandidate candidate;
+        candidate.cluster = &cluster;
+        candidate.depth01 = ComputeDepth01(context.viewProjection, worldCenter);
+        if (visualPolicy.enableOcclusionCulling) {
+          candidate.projected = cad::ProjectSphereToViewport(
+              worldCenter,
+              worldRadius,
+              context.viewProjection,
+              context.viewportWidth,
+              context.viewportHeight);
+        }
+        candidates.push_back(candidate);
+      }
+
+      if (visualPolicy.enableOcclusionCulling) {
+        std::sort(candidates.begin(), candidates.end(), [](const ClusterCandidate& a, const ClusterCandidate& b) {
+          return a.depth01 < b.depth01;
+        });
+      }
+
+      for (const auto& candidate : candidates) {
+        if (candidate.cluster == nullptr) {
+          continue;
+        }
+        const bool occluded = visualPolicy.enableOcclusionCulling &&
+                              candidate.projected.valid &&
+                              occlusionBuffer.IsOccluded(
+                                  candidate.projected,
+                                  visualPolicy.hzbDepthMargin,
+                                  visualPolicy.hzbMaxCullRadiusPx);
+        if (occluded) {
+          ++culledClusters;
+          continue;
+        }
+
+        const std::uint32_t expectedNext = !ranges.empty() ? (ranges.back().firstIndex + ranges.back().indexCount) : 0U;
+        if (!ranges.empty() &&
+            candidate.cluster->firstIndex >= expectedNext &&
+            (candidate.cluster->firstIndex - expectedNext) <= clusterMergeGap) {
+          ranges.back().indexCount += (candidate.cluster->firstIndex - expectedNext) + candidate.cluster->indexCount;
+          ranges.back().depth01 = std::min(ranges.back().depth01, candidate.depth01);
+        } else {
+          ranges.push_back(DrawRange{
+              .firstIndex = candidate.cluster->firstIndex,
+              .indexCount = candidate.cluster->indexCount,
+              .depth01 = candidate.depth01,
+          });
+        }
+
+        if (visualPolicy.enableOcclusionCulling && candidate.projected.valid) {
+          occlusionBuffer.SubmitOccluder(candidate.projected);
+        }
+      }
+    } else if (item.lod->indexCount > 0) {
+      ranges.push_back(DrawRange{
+          .firstIndex = 0U,
+          .indexCount = static_cast<std::uint32_t>(std::max(item.lod->indexCount, 0)),
+          .depth01 = item.depth01,
+      });
+      if (visualPolicy.enableOcclusionCulling) {
+        const cad::ProjectedSphere projected = cad::ProjectSphereToViewport(
+            item.worldBoundsCenter,
+            item.worldBoundsRadius,
+            context.viewProjection,
+            context.viewportWidth,
+            context.viewportHeight);
+        if (!occlusionBuffer.IsOccluded(projected, visualPolicy.hzbDepthMargin, visualPolicy.hzbMaxCullRadiusPx)) {
+          occlusionBuffer.SubmitOccluder(projected);
+        }
+      }
+    }
+
+    if (ranges.empty() && item.lod->vertexCount > 0) {
+      ranges.push_back(DrawRange{
+          .firstIndex = 0U,
+          .indexCount = 0U,
+          .depth01 = item.depth01,
+      });
+    }
+    if (ranges.empty()) {
+      continue;
+    }
+
+    drawCalls.push_back(DrawCall{
+        .mesh = item.mesh,
+        .lod = item.lod,
+        .shadowLod = item.shadowLod,
+        .albedoTexture = item.albedoTexture,
+        .normalTexture = item.normalTexture,
+        .model = item.model,
+        .color = item.color,
+        .roughness = item.roughness,
+        .metallic = item.metallic,
+        .normalStrength = item.normalStrength,
+        .depth01 = item.depth01,
+        .useAssetColor = item.useAssetColor,
+        .fastShading = item.fastShading,
+        .wireframe = item.wireframe,
+        .mirroredWinding = item.mirroredWinding,
+        .ranges = std::move(ranges),
+    });
+  }
+
+  if (drawCalls.empty()) {
+    backend_->SetBlendEnabled(true);
+    backend_->SetWireframeMode(false);
+    return;
+  }
+
   if (context.diagnosticsWriter != nullptr) {
     double totalIndices = 0.0;
-    for (const auto& item : drawItems) {
-      if (item.lod == nullptr) {
-        continue;
+    std::size_t totalRanges = 0;
+    for (const auto& call : drawCalls) {
+      for (const auto& range : call.ranges) {
+        if (range.indexCount > 0) {
+          totalIndices += static_cast<double>(range.indexCount);
+        } else if (call.lod != nullptr) {
+          totalIndices += static_cast<double>(std::max(call.lod->vertexCount, 0));
+        }
       }
-      const int indexCount = std::max(item.lod->indexCount, 0);
-      totalIndices += static_cast<double>(indexCount > 0 ? indexCount : std::max(item.lod->vertexCount, 0));
+      totalRanges += call.ranges.size();
     }
-    context.diagnosticsWriter->RecordCounter("cad.draw.items", static_cast<double>(drawItems.size()));
+    context.diagnosticsWriter->RecordCounter("cad.draw.items", static_cast<double>(drawCalls.size()));
+    context.diagnosticsWriter->RecordCounter("cad.draw.ranges", static_cast<double>(totalRanges));
     context.diagnosticsWriter->RecordCounter("cad.draw.indices", totalIndices);
+    context.diagnosticsWriter->RecordCounter("cad.cluster.total", static_cast<double>(totalClusters));
+    context.diagnosticsWriter->RecordCounter("cad.cluster.culled", static_cast<double>(culledClusters));
+    context.diagnosticsWriter->RecordCounter("cad.cluster.merge_gap_indices", static_cast<double>(clusterMergeGap));
+    context.diagnosticsWriter->RecordCounter("cad.mdi.enabled", allowMdi ? 1.0 : 0.0);
   }
 
   glm::vec3 sceneCenter{0.0F, 0.0F, 0.0F};
@@ -344,14 +567,14 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   {
     glm::vec3 minP{std::numeric_limits<float>::max()};
     glm::vec3 maxP{std::numeric_limits<float>::lowest()};
-    for (const auto& item : drawItems) {
-      const glm::vec3 c = glm::vec3(item.model * glm::vec4(item.mesh->boundsCenter, 1.0F));
-      const glm::vec3 scaleAxisX{item.model[0][0], item.model[0][1], item.model[0][2]};
-      const glm::vec3 scaleAxisY{item.model[1][0], item.model[1][1], item.model[1][2]};
-      const glm::vec3 scaleAxisZ{item.model[2][0], item.model[2][1], item.model[2][2]};
+    for (const auto& call : drawCalls) {
+      const glm::vec3 c = glm::vec3(call.model * glm::vec4(call.mesh->boundsCenter, 1.0F));
+      const glm::vec3 scaleAxisX{call.model[0][0], call.model[0][1], call.model[0][2]};
+      const glm::vec3 scaleAxisY{call.model[1][0], call.model[1][1], call.model[1][2]};
+      const glm::vec3 scaleAxisZ{call.model[2][0], call.model[2][1], call.model[2][2]};
       const float maxScale =
           std::max(glm::length(scaleAxisX), std::max(glm::length(scaleAxisY), glm::length(scaleAxisZ)));
-      const float r = std::max(item.mesh->boundsRadius * std::max(maxScale, 1e-4F), 0.1F);
+      const float r = std::max(call.mesh->boundsRadius * std::max(maxScale, 1e-4F), 0.1F);
       minP = glm::min(minP, c - glm::vec3(r, r, r));
       maxP = glm::max(maxP, c + glm::vec3(r, r, r));
     }
@@ -405,25 +628,25 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       std::vector<InstanceGpuData> instances;
     };
     std::vector<ShadowBatch> shadowBatches;
-    shadowBatches.reserve(drawItems.size());
+    shadowBatches.reserve(drawCalls.size());
     int shadowCasterSkipped = 0;
-    for (const auto& item : drawItems) {
-      const int shadowIndexCount = (item.shadowLod != nullptr) ? std::max(item.shadowLod->indexCount, 0) : 0;
+    for (const auto& call : drawCalls) {
+      const int shadowIndexCount = (call.shadowLod != nullptr) ? std::max(call.shadowLod->indexCount, 0) : 0;
       if (shadowCasterMaxIndices_ > 0 && shadowIndexCount > shadowCasterMaxIndices_) {
         ++shadowCasterSkipped;
         continue;
       }
       auto it = std::find_if(shadowBatches.begin(), shadowBatches.end(), [&](const ShadowBatch& batch) {
-        return batch.lod == item.shadowLod && batch.mirroredWinding == item.mirroredWinding;
+        return batch.lod == call.shadowLod && batch.mirroredWinding == call.mirroredWinding;
       });
       if (it == shadowBatches.end()) {
         ShadowBatch batch;
-        batch.lod = item.shadowLod;
-        batch.mirroredWinding = item.mirroredWinding;
-        batch.instances.push_back(ToInstanceData(item.model));
+        batch.lod = call.shadowLod;
+        batch.mirroredWinding = call.mirroredWinding;
+        batch.instances.push_back(ToInstanceData(call.model));
         shadowBatches.push_back(std::move(batch));
       } else {
-        it->instances.push_back(ToInstanceData(item.model));
+        it->instances.push_back(ToInstanceData(call.model));
       }
     }
     if (context.diagnosticsWriter != nullptr) {
@@ -499,6 +722,101 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
   }
 
+  auto drawIndexedRangesSingleInstance = [&](const std::vector<DrawRange>& ranges) {
+    if (ranges.empty()) {
+      return;
+    }
+    if (!allowMdi || cadIndirectDrawBuffer_.Get() == 0 || ranges.size() <= 1) {
+      for (const auto& range : ranges) {
+        if (range.indexCount == 0) {
+          continue;
+        }
+        backend_->DrawIndexedTrianglesInstancedRange(
+            static_cast<int>(range.indexCount),
+            1,
+            static_cast<std::size_t>(range.firstIndex));
+      }
+      return;
+    }
+
+    std::vector<DrawElementsIndirectCommand> commands;
+    commands.reserve(ranges.size());
+    for (const auto& range : ranges) {
+      if (range.indexCount == 0) {
+        continue;
+      }
+      commands.push_back(DrawElementsIndirectCommand{
+          .count = range.indexCount,
+          .instanceCount = 1U,
+          .firstIndex = range.firstIndex,
+          .baseVertex = 0U,
+          .baseInstance = 0U,
+      });
+    }
+    if (commands.empty()) {
+      return;
+    }
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, cadIndirectDrawBuffer_.Get());
+    glBufferData(
+        GL_DRAW_INDIRECT_BUFFER,
+        static_cast<GLsizeiptr>(commands.size() * sizeof(DrawElementsIndirectCommand)),
+        commands.data(),
+        GL_STREAM_DRAW);
+    glMultiDrawElementsIndirect(
+        GL_TRIANGLES,
+        GL_UNSIGNED_INT,
+        nullptr,
+        static_cast<GLsizei>(commands.size()),
+        0);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+  };
+
+  if (visualPolicy.enableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) {
+    std::vector<std::size_t> prepassOrder(drawCalls.size());
+    for (std::size_t i = 0; i < prepassOrder.size(); ++i) {
+      prepassOrder[i] = i;
+    }
+    std::sort(prepassOrder.begin(), prepassOrder.end(), [&](const std::size_t a, const std::size_t b) {
+      return drawCalls[a].depth01 < drawCalls[b].depth01;
+    });
+
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    backend_->UseProgram(depthPrepassShader_.Get());
+    backend_->SetUniformMat4(uDepthPrepassViewProjectionLoc_, &context.viewProjection[0][0]);
+
+    for (const std::size_t callIndex : prepassOrder) {
+      const auto& call = drawCalls[callIndex];
+      if (call.lod == nullptr) {
+        continue;
+      }
+      if (call.mirroredWinding) {
+        glFrontFace(GL_CW);
+      }
+      const InstanceGpuData instanceData = ToInstanceData(call.model);
+      backend_->BindVertexArray(call.lod->vao.Get());
+      backend_->BindArrayBuffer(call.lod->instanceVbo.Get());
+      backend_->UploadArrayBufferData(sizeof(InstanceGpuData), &instanceData, true);
+      if (call.lod->indexCount > 0) {
+        drawIndexedRangesSingleInstance(call.ranges);
+      } else {
+        backend_->DrawTrianglesInstanced(call.lod->vertexCount, 1);
+      }
+      backend_->BindVertexArray(0);
+      if (call.mirroredWinding) {
+        glFrontFace(GL_CCW);
+      }
+    }
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_FALSE);
+    glDepthFunc(GL_LEQUAL);
+  } else {
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LEQUAL);
+  }
+
   backend_->UseProgram(shader_.Get());
   const glm::mat4& lightViewProjectionFarUniform = farShadowReady ? lightViewProjectionFar : lightViewProjection;
   backend_->SetUniformMat4(uMvpLoc_, &context.viewProjection[0][0]);
@@ -516,143 +834,91 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->BindTexture2D(farShadowReady ? shadowDepthTextureFar_.Get() : shadowDepthTexture_.Get());
   backend_->SetUniform1i(uShadowMapFarLoc_, 4);
 
-  struct BatchKey {
-    const GpuMesh::LodGpu* lod = nullptr;
-    const GpuTexture* albedoTexture = nullptr;
-    const GpuTexture* normalTexture = nullptr;
-    std::uint32_t colorR = 0;
-    std::uint32_t colorG = 0;
-    std::uint32_t colorB = 0;
-    std::uint32_t colorA = 0;
-    std::uint32_t roughness = 0;
-    std::uint32_t metallic = 0;
-    std::uint32_t normalStrength = 0;
-    bool useAssetColor = false;
-    bool fastShading = false;
-    bool wireframe = false;
-    bool mirroredWinding = false;
-    bool operator==(const BatchKey& other) const {
-      return lod == other.lod &&
-             albedoTexture == other.albedoTexture &&
-             normalTexture == other.normalTexture &&
-             colorR == other.colorR && colorG == other.colorG && colorB == other.colorB && colorA == other.colorA &&
-             roughness == other.roughness && metallic == other.metallic &&
-             normalStrength == other.normalStrength &&
-             useAssetColor == other.useAssetColor && fastShading == other.fastShading &&
-             wireframe == other.wireframe &&
-             mirroredWinding == other.mirroredWinding;
-    }
-  };
-  struct BatchKeyHash {
-    std::size_t operator()(const BatchKey& key) const {
-      std::size_t h = reinterpret_cast<std::size_t>(key.lod);
-      h ^= reinterpret_cast<std::size_t>(key.albedoTexture) * 2654435761U;
-      h ^= reinterpret_cast<std::size_t>(key.normalTexture) * 2246822519U;
-      h ^= static_cast<std::size_t>(key.colorR) * 16777619U;
-      h ^= static_cast<std::size_t>(key.colorG) * 2166136261U;
-      h ^= static_cast<std::size_t>(key.colorB) * 709607U;
-      h ^= static_cast<std::size_t>(key.colorA) * 1469598103U;
-      h ^= static_cast<std::size_t>(key.roughness) * 1099511628211ULL;
-      h ^= static_cast<std::size_t>(key.metallic) * 1315423911U;
-      h ^= static_cast<std::size_t>(key.normalStrength) * 374761393U;
-      h ^= key.useAssetColor ? 0x1U : 0x0U;
-      h ^= key.fastShading ? 0x2U : 0x0U;
-      h ^= key.wireframe ? 0x4U : 0x0U;
-      h ^= key.mirroredWinding ? 0x8U : 0x0U;
-      return h;
-    }
-  };
-
-  struct DrawBatch {
-    glm::vec4 color{1.0F};
-    float roughness = 0.72F;
-    float metallic = 0.0F;
-    float normalStrength = 1.0F;
-    const GpuTexture* albedoTexture = nullptr;
-    const GpuTexture* normalTexture = nullptr;
-    bool useAssetColor = false;
-    bool fastShading = false;
-    bool wireframe = false;
-    bool mirroredWinding = false;
-    const GpuMesh::LodGpu* lod = nullptr;
-    std::vector<InstanceGpuData> instances;
-  };
-
-  std::unordered_map<BatchKey, DrawBatch, BatchKeyHash> batches;
-  batches.reserve(drawItems.size());
-  for (const auto& item : drawItems) {
-    BatchKey key{
-        .lod = item.lod,
-        .albedoTexture = item.albedoTexture,
-        .normalTexture = item.normalTexture,
-        .colorR = FloatBits(item.color.r),
-        .colorG = FloatBits(item.color.g),
-        .colorB = FloatBits(item.color.b),
-        .colorA = FloatBits(item.color.a),
-        .roughness = FloatBits(item.roughness),
-        .metallic = FloatBits(item.metallic),
-        .normalStrength = FloatBits(item.normalStrength),
-        .useAssetColor = item.useAssetColor,
-        .fastShading = item.fastShading,
-        .wireframe = item.wireframe,
-        .mirroredWinding = item.mirroredWinding,
-    };
-    auto& batch = batches[key];
-    batch.color = item.color;
-    batch.roughness = item.roughness;
-    batch.metallic = item.metallic;
-    batch.normalStrength = item.normalStrength;
-    batch.albedoTexture = item.albedoTexture;
-    batch.normalTexture = item.normalTexture;
-    batch.useAssetColor = item.useAssetColor;
-    batch.fastShading = item.fastShading;
-    batch.wireframe = item.wireframe;
-    batch.mirroredWinding = item.mirroredWinding;
-    batch.lod = item.lod;
-    batch.instances.push_back(ToInstanceData(item.model));
+  std::vector<std::size_t> drawOrder(drawCalls.size());
+  for (std::size_t i = 0; i < drawOrder.size(); ++i) {
+    drawOrder[i] = i;
   }
+  std::sort(drawOrder.begin(), drawOrder.end(), [&](const std::size_t a, const std::size_t b) {
+    const auto keyA = std::tuple{
+        drawCalls[a].wireframe,
+        drawCalls[a].fastShading,
+        drawCalls[a].useAssetColor,
+        reinterpret_cast<std::uintptr_t>(drawCalls[a].albedoTexture),
+        reinterpret_cast<std::uintptr_t>(drawCalls[a].normalTexture),
+        FloatBits(drawCalls[a].color.r),
+        FloatBits(drawCalls[a].color.g),
+        FloatBits(drawCalls[a].color.b),
+        FloatBits(drawCalls[a].color.a),
+        FloatBits(drawCalls[a].roughness),
+        FloatBits(drawCalls[a].metallic),
+        FloatBits(drawCalls[a].normalStrength),
+        reinterpret_cast<std::uintptr_t>(drawCalls[a].lod),
+        drawCalls[a].mirroredWinding,
+        drawCalls[a].depth01};
+    const auto keyB = std::tuple{
+        drawCalls[b].wireframe,
+        drawCalls[b].fastShading,
+        drawCalls[b].useAssetColor,
+        reinterpret_cast<std::uintptr_t>(drawCalls[b].albedoTexture),
+        reinterpret_cast<std::uintptr_t>(drawCalls[b].normalTexture),
+        FloatBits(drawCalls[b].color.r),
+        FloatBits(drawCalls[b].color.g),
+        FloatBits(drawCalls[b].color.b),
+        FloatBits(drawCalls[b].color.a),
+        FloatBits(drawCalls[b].roughness),
+        FloatBits(drawCalls[b].metallic),
+        FloatBits(drawCalls[b].normalStrength),
+        reinterpret_cast<std::uintptr_t>(drawCalls[b].lod),
+        drawCalls[b].mirroredWinding,
+        drawCalls[b].depth01};
+    return keyA < keyB;
+  });
 
-  for (auto& [_, batch] : batches) {
-    if (batch.lod == nullptr || batch.instances.empty()) {
+  for (const std::size_t callIndex : drawOrder) {
+    const auto& call = drawCalls[callIndex];
+    if (call.lod == nullptr || call.ranges.empty()) {
       continue;
     }
     MaterialInstance material;
-    material.definition.baseColor = batch.color;
-    material.definition.wireframe = batch.wireframe;
+    material.definition.baseColor = call.color;
+    material.definition.wireframe = call.wireframe;
     materialPipeline_.Apply(material);
-    backend_->SetUniform1f(uRoughnessLoc_, batch.roughness);
-    backend_->SetUniform1f(uMetallicLoc_, batch.metallic);
-    backend_->SetUniform1f(uNormalStrengthLoc_, batch.normalStrength);
+    backend_->SetUniform1f(uRoughnessLoc_, call.roughness);
+    backend_->SetUniform1f(uMetallicLoc_, call.metallic);
+    backend_->SetUniform1f(uNormalStrengthLoc_, call.normalStrength);
     backend_->SetUniform1f(uTriplanarScaleLoc_, triplanarScale_);
-    backend_->SetUniform1f(uUseAssetColorLoc_, batch.useAssetColor ? 1.0F : 0.0F);
-    backend_->SetUniform1i(uShadingModeLoc_, batch.fastShading ? 1 : 0);
-    const bool useNormalMap = (batch.normalTexture != nullptr) && !batch.fastShading;
-    backend_->SetUniform1i(uHasAlbedoMapLoc_, batch.albedoTexture != nullptr ? 1 : 0);
+    backend_->SetUniform1f(uUseAssetColorLoc_, call.useAssetColor ? 1.0F : 0.0F);
+    backend_->SetUniform1i(uShadingModeLoc_, call.fastShading ? 1 : 0);
+    const bool useNormalMap = (call.normalTexture != nullptr) && !call.fastShading;
+    backend_->SetUniform1i(uHasAlbedoMapLoc_, call.albedoTexture != nullptr ? 1 : 0);
     backend_->SetUniform1i(uHasNormalMapLoc_, useNormalMap ? 1 : 0);
     backend_->SetActiveTextureUnit(5);
-    backend_->BindTexture2D(batch.albedoTexture != nullptr ? batch.albedoTexture->texture.Get() : 0);
+    backend_->BindTexture2D(call.albedoTexture != nullptr ? call.albedoTexture->texture.Get() : 0);
     backend_->SetUniform1i(uAlbedoMapLoc_, 5);
     backend_->SetActiveTextureUnit(6);
-    backend_->BindTexture2D(useNormalMap ? batch.normalTexture->texture.Get() : 0);
+    backend_->BindTexture2D(useNormalMap ? call.normalTexture->texture.Get() : 0);
     backend_->SetUniform1i(uNormalMapLoc_, 6);
 
-    if (batch.mirroredWinding) {
+    if (call.mirroredWinding) {
       glFrontFace(GL_CW);
     }
-    backend_->BindVertexArray(batch.lod->vao.Get());
-    backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
-    backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
-    if (batch.lod->indexCount > 0) {
-      backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
+    const InstanceGpuData instanceData = ToInstanceData(call.model);
+    backend_->BindVertexArray(call.lod->vao.Get());
+    backend_->BindArrayBuffer(call.lod->instanceVbo.Get());
+    backend_->UploadArrayBufferData(sizeof(InstanceGpuData), &instanceData, true);
+    if (call.lod->indexCount > 0) {
+      drawIndexedRangesSingleInstance(call.ranges);
     } else {
-      backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
+      backend_->DrawTrianglesInstanced(call.lod->vertexCount, 1);
     }
     backend_->BindVertexArray(0);
-    if (batch.mirroredWinding) {
+    if (call.mirroredWinding) {
       glFrontFace(GL_CCW);
     }
   }
 
+  glDepthMask(GL_TRUE);
+  glDepthFunc(GL_LEQUAL);
   backend_->SetBlendEnabled(true);
   backend_->SetWireframeMode(false);
   backend_->SetActiveTextureUnit(6);

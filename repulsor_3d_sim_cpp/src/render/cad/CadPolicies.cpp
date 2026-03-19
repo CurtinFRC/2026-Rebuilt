@@ -74,6 +74,17 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.enableFrustumCulling = GetEnvBool("CAD_FRUSTUM_CULLING", out.enableFrustumCulling);
     out.enableBroadphase = GetEnvBool("CAD_BROADPHASE_ENABLED", out.enableBroadphase);
     out.broadphaseCellSizeM = std::clamp(GetEnvFloat("CAD_BROADPHASE_CELL_SIZE_M", out.broadphaseCellSizeM), 0.5F, 20.0F);
+    out.enableClusterCulling = GetEnvBool("CAD_CLUSTER_CULLING", out.enableClusterCulling);
+    out.optimizeVertexCache = GetEnvBool("CAD_OPTIMIZE_VERTEX_CACHE", out.optimizeVertexCache);
+    out.clusterTargetIndices = std::clamp(GetEnvInt("CAD_CLUSTER_TARGET_INDICES", out.clusterTargetIndices), 3 * 64, 3 * 1024 * 1024);
+    out.clusterMinIndices = std::clamp(GetEnvInt("CAD_CLUSTER_MIN_INDICES", out.clusterMinIndices), 3 * 16, out.clusterTargetIndices);
+    out.clusterMergeGapIndices = std::clamp(GetEnvInt("CAD_CLUSTER_MERGE_GAP_INDICES", out.clusterMergeGapIndices), 0, 3 * 4096);
+    out.enableDepthPrepass = GetEnvBool("CAD_DEPTH_PREPASS", out.enableDepthPrepass);
+    out.enableOcclusionCulling = GetEnvBool("CAD_HIZ_OCCLUSION", out.enableOcclusionCulling);
+    out.hzbTilesX = std::clamp(GetEnvInt("CAD_HIZ_TILES_X", out.hzbTilesX), 8, 256);
+    out.hzbTilesY = std::clamp(GetEnvInt("CAD_HIZ_TILES_Y", out.hzbTilesY), 8, 256);
+    out.hzbDepthMargin = std::clamp(GetEnvFloat("CAD_HIZ_DEPTH_MARGIN", out.hzbDepthMargin), 0.0F, 0.2F);
+    out.hzbMaxCullRadiusPx = std::clamp(GetEnvFloat("CAD_HIZ_MAX_CULL_RADIUS_PX", out.hzbMaxCullRadiusPx), 8.0F, 500.0F);
     out.keyLightIntensity = std::clamp(GetEnvFloat("CAD_KEY_LIGHT_INTENSITY", out.keyLightIntensity), 0.0F, 8.0F);
     out.fillLightIntensity = std::clamp(GetEnvFloat("CAD_FILL_LIGHT_INTENSITY", out.fillLightIntensity), 0.0F, 6.0F);
     out.ambientStrength = std::clamp(GetEnvFloat("CAD_AMBIENT_STRENGTH", out.ambientStrength), 0.0F, 2.0F);
@@ -129,4 +140,3 @@ const CadShadowPolicy& LoadCadShadowPolicy() {
 }
 
 }  // namespace repulsor3d::cad
-

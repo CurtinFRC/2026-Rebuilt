@@ -14,9 +14,12 @@
 namespace repulsor3d {
 
 using cad::CadLodPolicy;
+using cad::CadVisualPolicy;
 using cad::GetEnvBool;
 using cad::LoadCadLodPolicy;
+using cad::LoadCadVisualPolicy;
 using cadfeature::BuildShadowProxyMesh;
+using cadfeature::BuildMeshClusters;
 using cadfeature::IndexedMesh;
 using cadfeature::PreparedCpuMeshBlob;
 using cadfeature::StorePreparedCpuMeshCache;
@@ -191,6 +194,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             PreparedCpuMeshBlob cachedBlob;
             if (TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob)) {
               setStage("cache_hit", 0.70F);
+              const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
               PreparedCpuMesh prepared;
               prepared.boundsCenter = cachedBlob.boundsCenter;
               prepared.boundsRadius = cachedBlob.boundsRadius;
@@ -201,6 +205,21 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 PreparedCpuMesh::LodCpu lod;
                 lod.vertices = std::move(cachedLod.vertices);
                 lod.indices = std::move(cachedLod.indices);
+                std::vector<cadfeature::MeshCluster> clusters = BuildMeshClusters(
+                    lod.indices,
+                    lod.vertices,
+                    static_cast<std::size_t>(std::max(visualPolicy.clusterTargetIndices, 3)),
+                    static_cast<std::size_t>(std::max(visualPolicy.clusterMinIndices, 3)),
+                    visualPolicy.optimizeVertexCache);
+                lod.clusters.reserve(clusters.size());
+                for (const auto& cluster : clusters) {
+                  lod.clusters.push_back(PreparedCpuMesh::ClusterCpu{
+                      .firstIndex = cluster.firstIndex,
+                      .indexCount = cluster.indexCount,
+                      .boundsCenter = cluster.boundsCenter,
+                      .boundsRadius = cluster.boundsRadius,
+                  });
+                }
                 prepared.lods.push_back(std::move(lod));
               }
               if (!prepared.lods.empty()) {

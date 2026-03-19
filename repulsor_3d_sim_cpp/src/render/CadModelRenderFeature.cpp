@@ -58,6 +58,7 @@ CadModelRenderFeature::~CadModelRenderFeature() {
   }
   meshCache_.clear();
   meshCacheBytes_.clear();
+  cadIndirectDrawBuffer_.Reset();
   textureCache_.clear();
   textureCacheBytes_.clear();
   failedTextureLoads_.clear();
@@ -72,6 +73,7 @@ CadModelRenderFeature::~CadModelRenderFeature() {
     glDeleteFramebuffers(1, &shadowFboFar_);
     shadowFboFar_ = 0;
   }
+  depthPrepassShader_.Reset();
   shadowShader_.Reset();
   shader_.Reset();
 }

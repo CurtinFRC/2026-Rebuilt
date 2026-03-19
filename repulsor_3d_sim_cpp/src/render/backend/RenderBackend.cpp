@@ -1,6 +1,7 @@
 #include "repulsor3d/render/backend/RenderBackend.hpp"
 
 #include <GL/glew.h>
+#include <cstdint>
 
 namespace repulsor3d {
 
@@ -11,6 +12,7 @@ void OpenGLRenderBackend::ConfigureDefaultState() {
   capabilities_.supportsGpuTimers = true;
   capabilities_.supportsInstancing = true;
   capabilities_.supportsMipmapTextures = true;
+  capabilities_.supportsMultiDrawIndirect = GLEW_ARB_multi_draw_indirect != 0;
 
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
@@ -186,6 +188,15 @@ void OpenGLRenderBackend::DrawIndexedTriangles(const int indexCount) {
   glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr);
 }
 
+void OpenGLRenderBackend::DrawIndexedTrianglesRange(const int indexCount, const std::size_t firstIndex) {
+  const std::size_t byteOffset = firstIndex * sizeof(std::uint32_t);
+  glDrawElements(
+      GL_TRIANGLES,
+      static_cast<GLsizei>(indexCount),
+      GL_UNSIGNED_INT,
+      reinterpret_cast<const void*>(byteOffset));
+}
+
 void OpenGLRenderBackend::DrawTrianglesInstanced(const int vertexCount, const int instanceCount) {
   glDrawArraysInstanced(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount), static_cast<GLsizei>(instanceCount));
 }
@@ -196,6 +207,19 @@ void OpenGLRenderBackend::DrawIndexedTrianglesInstanced(const int indexCount, co
       static_cast<GLsizei>(indexCount),
       GL_UNSIGNED_INT,
       nullptr,
+      static_cast<GLsizei>(instanceCount));
+}
+
+void OpenGLRenderBackend::DrawIndexedTrianglesInstancedRange(
+    const int indexCount,
+    const int instanceCount,
+    const std::size_t firstIndex) {
+  const std::size_t byteOffset = firstIndex * sizeof(std::uint32_t);
+  glDrawElementsInstanced(
+      GL_TRIANGLES,
+      static_cast<GLsizei>(indexCount),
+      GL_UNSIGNED_INT,
+      reinterpret_cast<const void*>(byteOffset),
       static_cast<GLsizei>(instanceCount));
 }
 

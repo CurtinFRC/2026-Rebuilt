@@ -28,6 +28,17 @@ struct CadVisualPolicy {
   bool enableFrustumCulling = true;
   bool enableBroadphase = true;
   float broadphaseCellSizeM = 3.0F;
+  bool enableClusterCulling = true;
+  bool optimizeVertexCache = true;
+  int clusterTargetIndices = 131072;
+  int clusterMinIndices = 24576;
+  int clusterMergeGapIndices = 192;
+  bool enableDepthPrepass = true;
+  bool enableOcclusionCulling = true;
+  int hzbTilesX = 64;
+  int hzbTilesY = 36;
+  float hzbDepthMargin = 0.01F;
+  float hzbMaxCullRadiusPx = 120.0F;
   float keyLightIntensity = 1.35F;
   float fillLightIntensity = 0.20F;
   float ambientStrength = 0.12F;

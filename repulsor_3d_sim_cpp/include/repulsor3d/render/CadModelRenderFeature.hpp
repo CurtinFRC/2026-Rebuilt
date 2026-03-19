@@ -74,6 +74,12 @@ class CadModelRenderFeature final : public IRenderFeature {
   };
 
   struct GpuMesh {
+    struct ClusterGpu {
+      std::uint32_t firstIndex = 0;
+      std::uint32_t indexCount = 0;
+      glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+      float boundsRadius = 0.0F;
+    };
     struct LodGpu {
       GlVertexArrayHandle vao;
       GlBufferHandle vbo;
@@ -81,6 +87,7 @@ class CadModelRenderFeature final : public IRenderFeature {
       GlBufferHandle instanceVbo;
       int vertexCount = 0;
       int indexCount = 0;
+      std::vector<ClusterGpu> clusters;
     };
     std::vector<LodGpu> lods;
     std::optional<LodGpu> shadowProxy;
@@ -90,9 +97,16 @@ class CadModelRenderFeature final : public IRenderFeature {
   };
 
   struct PreparedCpuMesh {
+    struct ClusterCpu {
+      std::uint32_t firstIndex = 0;
+      std::uint32_t indexCount = 0;
+      glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
+      float boundsRadius = 0.0F;
+    };
     struct LodCpu {
       std::vector<PositionNormalMesh::Vertex> vertices;
       std::vector<std::uint32_t> indices;
+      std::vector<ClusterCpu> clusters;
     };
     std::vector<LodCpu> lods;
     std::optional<LodCpu> shadowProxy;
@@ -183,11 +197,13 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
   GlProgramHandle shadowShader_;
+  GlProgramHandle depthPrepassShader_;
   unsigned int shadowFbo_ = 0;
   unsigned int shadowFboFar_ = 0;
   GlTextureHandle shadowDepthTexture_;
   GlTextureHandle shadowDepthTextureFar_;
   int uShadowLightMvpLoc_ = -1;
+  int uDepthPrepassViewProjectionLoc_ = -1;
   int uLightViewProjectionLoc_ = -1;
   int uLightViewProjectionFarLoc_ = -1;
   int uShadowMapLoc_ = -1;
@@ -211,6 +227,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int shadowCascadeCount_ = 1;
   float shadowCascadeSplitM_ = 12.0F;
   bool initialized_ = false;
+  GlBufferHandle cadIndirectDrawBuffer_;
   std::unordered_map<std::string, GpuMesh> meshCache_;
   std::unordered_map<std::string, GpuTexture> textureCache_;
   std::unordered_set<std::string> failedTextureLoads_;

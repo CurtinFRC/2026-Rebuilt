@@ -38,7 +38,7 @@ std::uint32_t FloatBits(const float value) {
 constexpr std::uint64_t kFnv64OffsetBasis = 1469598103934665603ULL;
 constexpr std::uint64_t kFnv64Prime = 1099511628211ULL;
 constexpr std::uint32_t kPreparedCacheMagic = 0x524C4F44U;  // "RLOD"
-constexpr std::uint32_t kPreparedCacheVersion = 1U;
+constexpr std::uint32_t kPreparedCacheVersion = 2U;
 
 void FnvMixBytes(std::uint64_t& hash, const std::uint8_t* data, const std::size_t count) {
   for (std::size_t i = 0; i < count; ++i) {
@@ -845,6 +845,414 @@ IndexedMesh BuildShadowProxyMesh(const std::vector<IndexedMesh>& lods, const Cad
   }
   const int proxyNormalBins = std::clamp(policy.normalBins / 2, 8, 20);
   return SimplifyByVertexClustering(source, targetVertices, proxyNormalBins, policy.preserveFlatShading);
+}
+
+namespace {
+
+float VertexCacheScore(const int cachePosition, const int activeTriangleCount, const std::size_t cacheSize) {
+  if (activeTriangleCount <= 0) {
+    return -1.0F;
+  }
+
+  constexpr float kCacheDecayPower = 1.5F;
+  constexpr float kLastTriScore = 0.75F;
+  constexpr float kValenceBoostScale = 2.0F;
+  constexpr float kValenceBoostPower = 0.5F;
+
+  float score = 0.0F;
+  if (cachePosition >= 0) {
+    if (cachePosition < 3) {
+      score = kLastTriScore;
+    } else if (cacheSize > 3) {
+      const float scaler = 1.0F / static_cast<float>(cacheSize - 3);
+      const float normalized = 1.0F - (static_cast<float>(cachePosition - 3) * scaler);
+      score = std::pow(std::clamp(normalized, 0.0F, 1.0F), kCacheDecayPower);
+    }
+  }
+  score += kValenceBoostScale * std::pow(static_cast<float>(activeTriangleCount), -kValenceBoostPower);
+  return score;
+}
+
+void SpatiallyBucketTriangles(
+    std::vector<std::uint32_t>& triangleIndices,
+    const std::vector<PositionNormalMesh::Vertex>& vertices,
+    const std::size_t targetClusterIndices) {
+  if (triangleIndices.size() < 3 || vertices.empty()) {
+    return;
+  }
+  const std::size_t triCount = triangleIndices.size() / 3;
+  if (triCount < 512) {
+    return;
+  }
+
+  const std::size_t targetClusterTriCount = std::max<std::size_t>(128, (targetClusterIndices / 3));
+  const std::size_t desiredClusters = std::max<std::size_t>(1, triCount / targetClusterTriCount);
+  int binsX = std::clamp(static_cast<int>(std::ceil(std::sqrt(static_cast<float>(desiredClusters)))), 4, 96);
+  int binsY = binsX;
+  int binsZ = std::clamp(static_cast<int>(std::ceil(static_cast<float>(desiredClusters) / static_cast<float>(binsX * binsY))), 1, 8);
+  if (binsX * binsY * binsZ > 16384) {
+    binsZ = std::max(1, 16384 / std::max(1, binsX * binsY));
+  }
+  const int totalBins = std::max(1, binsX * binsY * binsZ);
+
+  glm::vec3 minC{std::numeric_limits<float>::max()};
+  glm::vec3 maxC{std::numeric_limits<float>::lowest()};
+  for (std::size_t t = 0; t < triCount; ++t) {
+    const std::uint32_t ia = triangleIndices[t * 3 + 0];
+    const std::uint32_t ib = triangleIndices[t * 3 + 1];
+    const std::uint32_t ic = triangleIndices[t * 3 + 2];
+    if (ia >= vertices.size() || ib >= vertices.size() || ic >= vertices.size()) {
+      continue;
+    }
+    const glm::vec3 c = (vertices[ia].position + vertices[ib].position + vertices[ic].position) * (1.0F / 3.0F);
+    minC = glm::min(minC, c);
+    maxC = glm::max(maxC, c);
+  }
+  glm::vec3 extent = maxC - minC;
+  extent.x = std::max(extent.x, 1e-5F);
+  extent.y = std::max(extent.y, 1e-5F);
+  extent.z = std::max(extent.z, 1e-5F);
+
+  std::vector<std::vector<std::uint32_t>> bins(static_cast<std::size_t>(totalBins));
+  for (auto& bucket : bins) {
+    bucket.reserve(std::max<std::size_t>(4, triCount / static_cast<std::size_t>(totalBins)));
+  }
+
+  const auto quantize = [](const float value, const int binsCount) -> int {
+    const float clamped = std::clamp(value, 0.0F, 1.0F);
+    return std::clamp(
+        static_cast<int>(std::floor(clamped * static_cast<float>(binsCount))),
+        0,
+        std::max(0, binsCount - 1));
+  };
+
+  for (std::uint32_t t = 0; t < static_cast<std::uint32_t>(triCount); ++t) {
+    const std::uint32_t ia = triangleIndices[static_cast<std::size_t>(t) * 3 + 0];
+    const std::uint32_t ib = triangleIndices[static_cast<std::size_t>(t) * 3 + 1];
+    const std::uint32_t ic = triangleIndices[static_cast<std::size_t>(t) * 3 + 2];
+    if (ia >= vertices.size() || ib >= vertices.size() || ic >= vertices.size()) {
+      continue;
+    }
+    const glm::vec3 c = (vertices[ia].position + vertices[ib].position + vertices[ic].position) * (1.0F / 3.0F);
+    const glm::vec3 n = (c - minC) / extent;
+    const int bx = quantize(n.x, binsX);
+    const int by = quantize(n.y, binsY);
+    const int bz = quantize(n.z, binsZ);
+    const int bin = bx + binsX * (by + binsY * bz);
+    bins[static_cast<std::size_t>(std::clamp(bin, 0, totalBins - 1))].push_back(t);
+  }
+
+  std::vector<std::uint32_t> reordered;
+  reordered.reserve(triangleIndices.size());
+  for (const auto& bucket : bins) {
+    for (const std::uint32_t tri : bucket) {
+      const std::size_t base = static_cast<std::size_t>(tri) * 3;
+      if (base + 2 >= triangleIndices.size()) {
+        continue;
+      }
+      reordered.push_back(triangleIndices[base + 0]);
+      reordered.push_back(triangleIndices[base + 1]);
+      reordered.push_back(triangleIndices[base + 2]);
+    }
+  }
+  if (reordered.size() == triangleIndices.size()) {
+    triangleIndices.swap(reordered);
+  }
+}
+
+}  // namespace
+
+void OptimizeIndexOrderForVertexCache(std::vector<std::uint32_t>& triangleIndices, const std::size_t cacheSize) {
+  if (triangleIndices.size() < 6 || cacheSize < 3) {
+    return;
+  }
+  const std::size_t triCount = triangleIndices.size() / 3;
+  if (triCount == 0) {
+    triangleIndices.clear();
+    return;
+  }
+  triangleIndices.resize(triCount * 3);
+
+  std::unordered_map<std::uint32_t, std::uint32_t> globalToLocal;
+  globalToLocal.reserve(triangleIndices.size() / 2);
+  std::vector<std::uint32_t> localToGlobal;
+  localToGlobal.reserve(triangleIndices.size() / 2);
+  std::vector<std::uint32_t> localIndices;
+  localIndices.reserve(triangleIndices.size());
+
+  for (const std::uint32_t globalIndex : triangleIndices) {
+    auto it = globalToLocal.find(globalIndex);
+    std::uint32_t localIndex = 0;
+    if (it == globalToLocal.end()) {
+      localIndex = static_cast<std::uint32_t>(localToGlobal.size());
+      globalToLocal.emplace(globalIndex, localIndex);
+      localToGlobal.push_back(globalIndex);
+    } else {
+      localIndex = it->second;
+    }
+    localIndices.push_back(localIndex);
+  }
+
+  struct VertexState {
+    int activeTriangleCount = 0;
+    int cachePosition = -1;
+    float score = 0.0F;
+    std::vector<std::uint32_t> adjacentTriangles;
+  };
+  struct TriangleState {
+    std::array<std::uint32_t, 3> indices{};
+    float score = 0.0F;
+    bool emitted = false;
+  };
+
+  std::vector<VertexState> vertices(localToGlobal.size());
+  std::vector<TriangleState> triangles(triCount);
+  for (std::size_t t = 0; t < triCount; ++t) {
+    for (std::size_t k = 0; k < 3; ++k) {
+      const std::uint32_t local = localIndices[t * 3 + k];
+      triangles[t].indices[k] = local;
+      vertices[local].activeTriangleCount += 1;
+      vertices[local].adjacentTriangles.push_back(static_cast<std::uint32_t>(t));
+    }
+  }
+  for (auto& vertex : vertices) {
+    vertex.score = VertexCacheScore(vertex.cachePosition, vertex.activeTriangleCount, cacheSize);
+  }
+  for (auto& triangle : triangles) {
+    triangle.score =
+        vertices[triangle.indices[0]].score +
+        vertices[triangle.indices[1]].score +
+        vertices[triangle.indices[2]].score;
+  }
+
+  std::vector<std::uint32_t> cache;
+  cache.reserve(cacheSize + 3);
+  std::vector<std::uint32_t> outputLocal;
+  outputLocal.reserve(localIndices.size());
+  std::vector<std::uint32_t> triStamps(triCount, 0U);
+  std::vector<std::uint32_t> vertexStamps(vertices.size(), 0U);
+  std::vector<std::uint32_t> candidates;
+  std::vector<std::uint32_t> affectedVertices;
+  std::uint32_t stampCounter = 1U;
+  std::size_t fallbackTriangle = 0;
+
+  auto nextStamp = [&]() -> std::uint32_t {
+    ++stampCounter;
+    if (stampCounter == 0U) {
+      std::fill(triStamps.begin(), triStamps.end(), 0U);
+      std::fill(vertexStamps.begin(), vertexStamps.end(), 0U);
+      stampCounter = 1U;
+    }
+    return stampCounter;
+  };
+
+  std::size_t remainingTriangles = triCount;
+  while (remainingTriangles > 0) {
+    const std::uint32_t triStamp = nextStamp();
+    candidates.clear();
+    for (const std::uint32_t vertexId : cache) {
+      for (const std::uint32_t triId : vertices[vertexId].adjacentTriangles) {
+        if (triangles[triId].emitted || triStamps[triId] == triStamp) {
+          continue;
+        }
+        triStamps[triId] = triStamp;
+        candidates.push_back(triId);
+      }
+    }
+
+    std::uint32_t bestTriangle = std::numeric_limits<std::uint32_t>::max();
+    float bestScore = -std::numeric_limits<float>::infinity();
+    for (const std::uint32_t triId : candidates) {
+      if (triangles[triId].score > bestScore) {
+        bestScore = triangles[triId].score;
+        bestTriangle = triId;
+      }
+    }
+    if (bestTriangle == std::numeric_limits<std::uint32_t>::max()) {
+      while (fallbackTriangle < triCount && triangles[fallbackTriangle].emitted) {
+        ++fallbackTriangle;
+      }
+      if (fallbackTriangle >= triCount) {
+        break;
+      }
+      bestTriangle = static_cast<std::uint32_t>(fallbackTriangle);
+    }
+
+    auto& triangle = triangles[bestTriangle];
+    triangle.emitted = true;
+    --remainingTriangles;
+    for (const std::uint32_t local : triangle.indices) {
+      outputLocal.push_back(local);
+    }
+
+    const std::vector<std::uint32_t> oldCache = cache;
+    for (const std::uint32_t local : triangle.indices) {
+      const auto existing = std::find(cache.begin(), cache.end(), local);
+      if (existing != cache.end()) {
+        cache.erase(existing);
+      }
+      cache.insert(cache.begin(), local);
+    }
+    if (cache.size() > cacheSize) {
+      cache.resize(cacheSize);
+    }
+
+    for (const std::uint32_t vertexId : oldCache) {
+      vertices[vertexId].cachePosition = -1;
+    }
+    for (std::size_t i = 0; i < cache.size(); ++i) {
+      vertices[cache[i]].cachePosition = static_cast<int>(i);
+    }
+    for (const std::uint32_t local : triangle.indices) {
+      if (vertices[local].activeTriangleCount > 0) {
+        vertices[local].activeTriangleCount -= 1;
+      }
+    }
+
+    const std::uint32_t vertexStamp = nextStamp();
+    affectedVertices.clear();
+    auto addAffected = [&](const std::uint32_t vertexId) {
+      if (vertexId >= vertexStamps.size() || vertexStamps[vertexId] == vertexStamp) {
+        return;
+      }
+      vertexStamps[vertexId] = vertexStamp;
+      affectedVertices.push_back(vertexId);
+    };
+    for (const std::uint32_t vertexId : oldCache) {
+      addAffected(vertexId);
+    }
+    for (const std::uint32_t vertexId : cache) {
+      addAffected(vertexId);
+    }
+    for (const std::uint32_t vertexId : triangle.indices) {
+      addAffected(vertexId);
+    }
+
+    for (const std::uint32_t vertexId : affectedVertices) {
+      auto& vertex = vertices[vertexId];
+      vertex.score = VertexCacheScore(vertex.cachePosition, vertex.activeTriangleCount, cacheSize);
+      for (const std::uint32_t triId : vertex.adjacentTriangles) {
+        if (triangles[triId].emitted) {
+          continue;
+        }
+        const auto& tri = triangles[triId];
+        triangles[triId].score =
+            vertices[tri.indices[0]].score +
+            vertices[tri.indices[1]].score +
+            vertices[tri.indices[2]].score;
+      }
+    }
+  }
+
+  if (outputLocal.size() != triangleIndices.size()) {
+    return;
+  }
+  for (std::size_t i = 0; i < outputLocal.size(); ++i) {
+    const std::uint32_t local = outputLocal[i];
+    if (local >= localToGlobal.size()) {
+      return;
+    }
+    triangleIndices[i] = localToGlobal[local];
+  }
+}
+
+std::vector<MeshCluster> BuildMeshClusters(
+    std::vector<std::uint32_t>& triangleIndices,
+    const std::vector<PositionNormalMesh::Vertex>& vertices,
+    const std::size_t targetClusterIndices,
+    const std::size_t minClusterIndices,
+    const bool optimizeVertexCache) {
+  std::vector<MeshCluster> out;
+  if (triangleIndices.size() < 3 || vertices.empty()) {
+    return out;
+  }
+
+  const std::size_t triCount = triangleIndices.size() / 3;
+  if (triCount == 0) {
+    triangleIndices.clear();
+    return out;
+  }
+  triangleIndices.resize(triCount * 3);
+
+  const std::size_t targetIndices = std::max<std::size_t>(3 * 128, (targetClusterIndices / 3) * 3);
+  const std::size_t minIndices = std::clamp<std::size_t>(((minClusterIndices / 3) * 3), 3 * 16, targetIndices);
+
+  SpatiallyBucketTriangles(triangleIndices, vertices, targetIndices);
+
+  std::size_t start = 0;
+  while (start < triangleIndices.size()) {
+    std::size_t count = std::min(targetIndices, triangleIndices.size() - start);
+    count = (count / 3) * 3;
+    if (count < 3) {
+      break;
+    }
+    const std::size_t remaining = triangleIndices.size() - (start + count);
+    if (remaining > 0 && remaining < minIndices) {
+      count += remaining;
+      count = (count / 3) * 3;
+    }
+    if (count < 3) {
+      break;
+    }
+
+    if (optimizeVertexCache && count >= 3 * 32) {
+      std::vector<std::uint32_t> clusterSlice(
+          triangleIndices.begin() + static_cast<std::ptrdiff_t>(start),
+          triangleIndices.begin() + static_cast<std::ptrdiff_t>(start + count));
+      OptimizeIndexOrderForVertexCache(clusterSlice, 32);
+      std::copy(
+          clusterSlice.begin(),
+          clusterSlice.end(),
+          triangleIndices.begin() + static_cast<std::ptrdiff_t>(start));
+    }
+
+    glm::vec3 minP{std::numeric_limits<float>::max()};
+    glm::vec3 maxP{std::numeric_limits<float>::lowest()};
+    bool hasVertex = false;
+    for (std::size_t i = start; i < start + count; ++i) {
+      const std::uint32_t index = triangleIndices[i];
+      if (index >= vertices.size()) {
+        continue;
+      }
+      const glm::vec3 p = vertices[index].position;
+      minP = glm::min(minP, p);
+      maxP = glm::max(maxP, p);
+      hasVertex = true;
+    }
+    if (!hasVertex) {
+      start += count;
+      continue;
+    }
+
+    const glm::vec3 center = 0.5F * (minP + maxP);
+    float radiusSq = 0.0F;
+    for (std::size_t i = start; i < start + count; ++i) {
+      const std::uint32_t index = triangleIndices[i];
+      if (index >= vertices.size()) {
+        continue;
+      }
+      const glm::vec3 delta = vertices[index].position - center;
+      radiusSq = std::max(radiusSq, glm::dot(delta, delta));
+    }
+
+    out.push_back(MeshCluster{
+        .firstIndex = static_cast<std::uint32_t>(start),
+        .indexCount = static_cast<std::uint32_t>(count),
+        .boundsCenter = center,
+        .boundsRadius = std::max(std::sqrt(radiusSq), 1e-3F),
+    });
+    start += count;
+  }
+
+  if (out.empty()) {
+    out.push_back(MeshCluster{
+        .firstIndex = 0U,
+        .indexCount = static_cast<std::uint32_t>(triangleIndices.size()),
+        .boundsCenter = glm::vec3{0.0F, 0.0F, 0.0F},
+        .boundsRadius = 1.0F,
+    });
+  }
+  return out;
 }
 
 float ComputeScreenSpaceRadiusPixels(

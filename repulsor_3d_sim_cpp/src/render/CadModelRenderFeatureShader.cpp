@@ -109,6 +109,43 @@ void main() {}
   glDeleteShader(shadowFs);
   uShadowLightMvpLoc_ = backend_->GetUniformLocation(shadowShader_.Get(), "uLightViewProjection");
 
+  constexpr const char* depthPrepassVsSrc = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 3) in vec4 iModelRow0;
+layout(location = 4) in vec4 iModelRow1;
+layout(location = 5) in vec4 iModelRow2;
+layout(location = 6) in vec4 iModelRow3;
+uniform mat4 uViewProjection;
+void main() {
+  mat4 model = mat4(iModelRow0, iModelRow1, iModelRow2, iModelRow3);
+  gl_Position = uViewProjection * model * vec4(aPos, 1.0);
+}
+)";
+  constexpr const char* depthPrepassFsSrc = R"(
+#version 330 core
+void main() {}
+)";
+  const unsigned int depthVs = CompileShader(GL_VERTEX_SHADER, depthPrepassVsSrc);
+  const unsigned int depthFs = CompileShader(GL_FRAGMENT_SHADER, depthPrepassFsSrc);
+  if (depthVs == 0 || depthFs == 0) {
+    if (depthVs != 0) {
+      glDeleteShader(depthVs);
+    }
+    if (depthFs != 0) {
+      glDeleteShader(depthFs);
+    }
+    return false;
+  }
+  if (!LinkShader(depthPrepassShader_, depthVs, depthFs)) {
+    glDeleteShader(depthVs);
+    glDeleteShader(depthFs);
+    return false;
+  }
+  glDeleteShader(depthVs);
+  glDeleteShader(depthFs);
+  uDepthPrepassViewProjectionLoc_ = backend_->GetUniformLocation(depthPrepassShader_.Get(), "uViewProjection");
+
   if (shadowEnabled_) {
     auto createShadowTarget = [&](GlTextureHandle& textureHandle, unsigned int& fbo) -> bool {
       const unsigned int tex = backend_->CreateTexture2D();
@@ -178,7 +215,7 @@ void main() {}
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
          uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
          uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 &&
-         uShadowLightMvpLoc_ >= 0;
+         uShadowLightMvpLoc_ >= 0 && uDepthPrepassViewProjectionLoc_ >= 0;
 }
 
 unsigned int CadModelRenderFeature::CompileShader(const unsigned int type, const char* source) {
