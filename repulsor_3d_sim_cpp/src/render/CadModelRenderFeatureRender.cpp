@@ -252,6 +252,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->UseProgram(shader_.Get());
   const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
   static bool mdiRuntimeDisabled = false;
+  static int mdiRuntimeErrorCount = 0;
   const bool allowMdi = !mdiRuntimeDisabled &&
                         backend_->Capabilities().supportsMultiDrawIndirect &&
                         GetEnvBool("CAD_MULTI_DRAW_INDIRECT", true);
@@ -570,11 +571,17 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   cad::TiledOcclusionBuffer occlusionBuffer;
   if (effectiveEnableOcclusionCulling) {
+    const int dynamicTilesX = std::max(
+        std::max(8, visualPolicy.hzbTilesX),
+        std::max(8, context.viewportWidth / 64));
+    const int dynamicTilesY = std::max(
+        std::max(8, visualPolicy.hzbTilesY),
+        std::max(8, context.viewportHeight / 64));
     occlusionBuffer.Reset(
         context.viewportWidth,
         context.viewportHeight,
-        std::max(8, visualPolicy.hzbTilesX),
-        std::max(8, visualPolicy.hzbTilesY));
+        dynamicTilesX,
+        dynamicTilesY);
   }
 
   struct DrawRange {
@@ -605,6 +612,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   drawCalls.reserve(drawItems.size());
   std::size_t totalClusters = 0;
   std::size_t culledClusters = 0;
+  std::size_t occlusionCulledClusters = 0;
+  std::size_t minRadiusCulledClusters = 0;
   int effectiveFieldIndexBudgetForDiagnostics = std::max(0, visualPolicy.fieldClusterMaxVisibleIndices);
   for (const auto& item : drawItems) {
     if (item.lod == nullptr) {
@@ -677,12 +686,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         }
         const bool occluded = effectiveEnableOcclusionCulling &&
                               candidate.projected.valid &&
+                              candidate.depth01 >= 0.02F &&
                               occlusionBuffer.IsOccluded(
                                   candidate.projected,
                                   visualPolicy.hzbDepthMargin,
-                                  visualPolicy.hzbMaxCullRadiusPx);
+                                  visualPolicy.hzbMaxCullRadiusPx,
+                                  visualPolicy.hzbMinCoverage);
         if (occluded) {
           ++culledClusters;
+          ++occlusionCulledClusters;
           continue;
         }
 
@@ -690,13 +702,14 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             candidate.projected.valid &&
             candidate.projected.radiusPx < visualPolicy.minClusterScreenRadiusPx) {
           ++culledClusters;
+          ++minRadiusCulledClusters;
           continue;
         }
 
         surviving.push_back(candidate);
 
         if (effectiveEnableOcclusionCulling && candidate.projected.valid) {
-          occlusionBuffer.SubmitOccluder(candidate.projected);
+          occlusionBuffer.SubmitOccluder(candidate.projected, visualPolicy.hzbMinOccluderRadiusPx);
         }
       }
 
@@ -793,8 +806,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             context.viewProjection,
             context.viewportWidth,
             context.viewportHeight);
-        if (!occlusionBuffer.IsOccluded(projected, visualPolicy.hzbDepthMargin, visualPolicy.hzbMaxCullRadiusPx)) {
-          occlusionBuffer.SubmitOccluder(projected);
+        if (!occlusionBuffer.IsOccluded(
+                projected,
+                visualPolicy.hzbDepthMargin,
+                visualPolicy.hzbMaxCullRadiusPx,
+                visualPolicy.hzbMinCoverage)) {
+          occlusionBuffer.SubmitOccluder(projected, visualPolicy.hzbMinOccluderRadiusPx);
         }
       }
     }
@@ -880,7 +897,17 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.min_screen_radius_px",
         static_cast<double>(std::max(0.0F, visualPolicy.minClusterScreenRadiusPx)));
+    context.diagnosticsWriter->RecordCounter("cad.cluster.occlusion_culled", static_cast<double>(occlusionCulledClusters));
+    context.diagnosticsWriter->RecordCounter("cad.cluster.min_radius_culled", static_cast<double>(minRadiusCulledClusters));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.hzb.min_coverage",
+        static_cast<double>(std::clamp(visualPolicy.hzbMinCoverage, 0.0F, 1.0F)));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.hzb.min_occluder_radius_px",
+        static_cast<double>(std::max(0.0F, visualPolicy.hzbMinOccluderRadiusPx)));
     context.diagnosticsWriter->RecordCounter("cad.mdi.enabled", allowMdi ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter("cad.mdi.runtime_disabled", mdiRuntimeDisabled ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter("cad.mdi.runtime_error_count", static_cast<double>(mdiRuntimeErrorCount));
   }
 
   glm::vec3 sceneCenter{0.0F, 0.0F, 0.0F};
@@ -1255,9 +1282,14 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         0);
     const GLenum mdiError = glGetError();
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    if (mdiError == GL_INVALID_ENUM || mdiError == GL_INVALID_VALUE || mdiError == GL_INVALID_OPERATION) {
-      mdiRuntimeDisabled = true;
-      for (const auto& range : ranges) {
+    if (mdiError != GL_NO_ERROR) {
+      ++mdiRuntimeErrorCount;
+      if (mdiError == GL_INVALID_ENUM || mdiError == GL_INVALID_VALUE || mdiError == GL_INVALID_OPERATION) {
+        if (mdiRuntimeErrorCount >= 3) {
+          mdiRuntimeDisabled = true;
+        }
+      }
+      for (const auto& range : activeRanges) {
         if (range.indexCount == 0) {
           continue;
         }
@@ -1266,6 +1298,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             1,
             static_cast<std::size_t>(range.firstIndex));
       }
+    } else {
+      mdiRuntimeErrorCount = 0;
     }
   };
 

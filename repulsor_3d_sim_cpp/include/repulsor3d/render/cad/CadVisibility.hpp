@@ -28,8 +28,12 @@ ProjectedSphere ProjectSphereToViewport(
 class TiledOcclusionBuffer {
  public:
   void Reset(int viewportWidth, int viewportHeight, int tilesX, int tilesY);
-  bool IsOccluded(const ProjectedSphere& projected, float depthMargin, float maxCullRadiusPx) const;
-  void SubmitOccluder(const ProjectedSphere& projected);
+  bool IsOccluded(
+      const ProjectedSphere& projected,
+      float depthMargin,
+      float maxCullRadiusPx,
+      float minCoverage) const;
+  void SubmitOccluder(const ProjectedSphere& projected, float minOccluderRadiusPx);
 
  private:
   int tilesX_ = 1;
@@ -38,7 +42,8 @@ class TiledOcclusionBuffer {
   int viewportHeight_ = 1;
   float tileWidth_ = 1.0F;
   float tileHeight_ = 1.0F;
-  std::vector<float> occluderFarDepth01_;
+  std::vector<float> occluderNearestDepth01_;
+  std::vector<float> occluderCoverage_;
 };
 
 }  // namespace repulsor3d::cad

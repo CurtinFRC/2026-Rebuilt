@@ -12,7 +12,10 @@ void OpenGLRenderBackend::ConfigureDefaultState() {
   capabilities_.supportsGpuTimers = true;
   capabilities_.supportsInstancing = true;
   capabilities_.supportsMipmapTextures = true;
-  capabilities_.supportsMultiDrawIndirect = GLEW_ARB_multi_draw_indirect != 0;
+  capabilities_.supportsMultiDrawIndirect =
+      GLEW_ARB_multi_draw_indirect != 0 &&
+      GLEW_ARB_draw_indirect != 0 &&
+      glMultiDrawElementsIndirect != nullptr;
 
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);

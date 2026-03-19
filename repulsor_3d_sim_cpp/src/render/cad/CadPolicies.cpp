@@ -102,6 +102,14 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.hzbTilesY = std::clamp(GetEnvInt("CAD_HIZ_TILES_Y", out.hzbTilesY), 8, 256);
     out.hzbDepthMargin = std::clamp(GetEnvFloat("CAD_HIZ_DEPTH_MARGIN", out.hzbDepthMargin), 0.0F, 0.2F);
     out.hzbMaxCullRadiusPx = std::clamp(GetEnvFloat("CAD_HIZ_MAX_CULL_RADIUS_PX", out.hzbMaxCullRadiusPx), 8.0F, 500.0F);
+    out.hzbMinCoverage = std::clamp(
+        GetEnvFloat("CAD_HIZ_MIN_COVERAGE", out.hzbMinCoverage),
+        0.0F,
+        1.0F);
+    out.hzbMinOccluderRadiusPx = std::clamp(
+        GetEnvFloat("CAD_HIZ_MIN_OCCLUDER_RADIUS_PX", out.hzbMinOccluderRadiusPx),
+        0.0F,
+        500.0F);
     out.maxIndicesPerDrawCall = std::clamp(
         GetEnvInt("CAD_MAX_INDICES_PER_DRAW_CALL", out.maxIndicesPerDrawCall),
         0,

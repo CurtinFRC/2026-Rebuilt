@@ -6,6 +6,28 @@
 #include <glm/common.hpp>
 
 namespace repulsor3d::cad {
+namespace {
+
+float ComputeOverlapArea(
+    const float aMinX,
+    const float aMinY,
+    const float aMaxX,
+    const float aMaxY,
+    const float bMinX,
+    const float bMinY,
+    const float bMaxX,
+    const float bMaxY) {
+  const float overlapMinX = std::max(aMinX, bMinX);
+  const float overlapMinY = std::max(aMinY, bMinY);
+  const float overlapMaxX = std::min(aMaxX, bMaxX);
+  const float overlapMaxY = std::min(aMaxY, bMaxY);
+  if (overlapMaxX <= overlapMinX || overlapMaxY <= overlapMinY) {
+    return 0.0F;
+  }
+  return (overlapMaxX - overlapMinX) * (overlapMaxY - overlapMinY);
+}
+
+}  // namespace
 
 ProjectedSphere ProjectSphereToViewport(
     const glm::vec3& worldCenter,
@@ -75,14 +97,17 @@ void TiledOcclusionBuffer::Reset(const int viewportWidth, const int viewportHeig
   tilesY_ = std::max(tilesY, 1);
   tileWidth_ = static_cast<float>(viewportWidth_) / static_cast<float>(tilesX_);
   tileHeight_ = static_cast<float>(viewportHeight_) / static_cast<float>(tilesY_);
-  occluderFarDepth01_.assign(static_cast<std::size_t>(tilesX_ * tilesY_), 0.0F);
+  const std::size_t tileCount = static_cast<std::size_t>(tilesX_ * tilesY_);
+  occluderNearestDepth01_.assign(tileCount, 1.0F);
+  occluderCoverage_.assign(tileCount, 0.0F);
 }
 
 bool TiledOcclusionBuffer::IsOccluded(
     const ProjectedSphere& projected,
     const float depthMargin,
-    const float maxCullRadiusPx) const {
-  if (!projected.valid || occluderFarDepth01_.empty()) {
+    const float maxCullRadiusPx,
+    const float minCoverage) const {
+  if (!projected.valid || occluderNearestDepth01_.empty() || occluderCoverage_.empty()) {
     return false;
   }
   if (projected.radiusPx > maxCullRadiusPx) {
@@ -94,14 +119,18 @@ bool TiledOcclusionBuffer::IsOccluded(
   const int tileMinY = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.minY) / tileHeight_)), 0, tilesY_ - 1);
   const int tileMaxY = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.maxY) / tileHeight_)), 0, tilesY_ - 1);
   const float requiredDepth = projected.nearDepth01 - std::max(depthMargin, 0.0F);
+  const float requiredCoverage = std::clamp(minCoverage, 0.0F, 1.0F);
 
   for (int y = tileMinY; y <= tileMaxY; ++y) {
     for (int x = tileMinX; x <= tileMaxX; ++x) {
       const std::size_t idx = static_cast<std::size_t>(y * tilesX_ + x);
-      if (idx >= occluderFarDepth01_.size()) {
+      if (idx >= occluderNearestDepth01_.size() || idx >= occluderCoverage_.size()) {
         continue;
       }
-      if (occluderFarDepth01_[idx] < requiredDepth) {
+      if (occluderCoverage_[idx] < requiredCoverage) {
+        return false;
+      }
+      if (occluderNearestDepth01_[idx] > requiredDepth) {
         return false;
       }
     }
@@ -109,22 +138,50 @@ bool TiledOcclusionBuffer::IsOccluded(
   return true;
 }
 
-void TiledOcclusionBuffer::SubmitOccluder(const ProjectedSphere& projected) {
-  if (!projected.valid || occluderFarDepth01_.empty()) {
+void TiledOcclusionBuffer::SubmitOccluder(
+    const ProjectedSphere& projected,
+    const float minOccluderRadiusPx) {
+  if (!projected.valid || occluderNearestDepth01_.empty() || occluderCoverage_.empty()) {
+    return;
+  }
+  if (projected.radiusPx < std::max(0.0F, minOccluderRadiusPx)) {
     return;
   }
   const int tileMinX = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.minX) / tileWidth_)), 0, tilesX_ - 1);
   const int tileMaxX = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.maxX) / tileWidth_)), 0, tilesX_ - 1);
   const int tileMinY = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.minY) / tileHeight_)), 0, tilesY_ - 1);
   const int tileMaxY = std::clamp(static_cast<int>(std::floor(static_cast<float>(projected.maxY) / tileHeight_)), 0, tilesY_ - 1);
+  const float projectedMinX = static_cast<float>(projected.minX);
+  const float projectedMinY = static_cast<float>(projected.minY);
+  const float projectedMaxX = static_cast<float>(projected.maxX + 1);
+  const float projectedMaxY = static_cast<float>(projected.maxY + 1);
 
   for (int y = tileMinY; y <= tileMaxY; ++y) {
     for (int x = tileMinX; x <= tileMaxX; ++x) {
       const std::size_t idx = static_cast<std::size_t>(y * tilesX_ + x);
-      if (idx >= occluderFarDepth01_.size()) {
+      if (idx >= occluderNearestDepth01_.size() || idx >= occluderCoverage_.size()) {
         continue;
       }
-      occluderFarDepth01_[idx] = std::max(occluderFarDepth01_[idx], projected.farDepth01);
+      const float tileMinPxX = static_cast<float>(x) * tileWidth_;
+      const float tileMinPxY = static_cast<float>(y) * tileHeight_;
+      const float tileMaxPxX = tileMinPxX + tileWidth_;
+      const float tileMaxPxY = tileMinPxY + tileHeight_;
+      const float overlapArea = ComputeOverlapArea(
+          projectedMinX,
+          projectedMinY,
+          projectedMaxX,
+          projectedMaxY,
+          tileMinPxX,
+          tileMinPxY,
+          tileMaxPxX,
+          tileMaxPxY);
+      if (overlapArea <= 0.0F) {
+        continue;
+      }
+      const float tileArea = std::max(tileWidth_ * tileHeight_, 1.0F);
+      const float coverage = std::clamp(overlapArea / tileArea, 0.0F, 1.0F);
+      occluderCoverage_[idx] = std::clamp(occluderCoverage_[idx] + coverage, 0.0F, 1.0F);
+      occluderNearestDepth01_[idx] = std::min(occluderNearestDepth01_[idx], projected.nearDepth01);
     }
   }
 }
