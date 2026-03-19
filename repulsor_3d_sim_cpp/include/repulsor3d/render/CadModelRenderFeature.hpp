@@ -198,6 +198,11 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uFogDensityLoc_ = -1;
   int uSaturationLoc_ = -1;
   int uGammaLoc_ = -1;
+  int uWeatheringStrengthLoc_ = -1;
+  int uWeatheringScaleLoc_ = -1;
+  int uDetailRoughnessStrengthLoc_ = -1;
+  int uClearcoatStrengthLoc_ = -1;
+  int uShadowTintStrengthLoc_ = -1;
   int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
   GlProgramHandle shadowShader_;

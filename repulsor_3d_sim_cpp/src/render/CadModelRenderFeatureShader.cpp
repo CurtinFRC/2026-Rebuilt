@@ -54,6 +54,11 @@ bool CadModelRenderFeature::CreateShader() {
   uFogDensityLoc_ = backend_->GetUniformLocation(shader_.Get(), "uFogDensity");
   uSaturationLoc_ = backend_->GetUniformLocation(shader_.Get(), "uSaturation");
   uGammaLoc_ = backend_->GetUniformLocation(shader_.Get(), "uGamma");
+  uWeatheringStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uWeatheringStrength");
+  uWeatheringScaleLoc_ = backend_->GetUniformLocation(shader_.Get(), "uWeatheringScale");
+  uDetailRoughnessStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uDetailRoughnessStrength");
+  uClearcoatStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uClearcoatStrength");
+  uShadowTintStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowTintStrength");
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
   uLightViewProjectionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjection");
   uLightViewProjectionFarLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjectionFar");
@@ -207,7 +212,10 @@ void main() {}
          uDepthCueStrengthLoc_ >= 0 && uSpecularStrengthLoc_ >= 0 &&
          uRimStrengthLoc_ >= 0 && uRoughnessLoc_ >= 0 && uMetallicLoc_ >= 0 &&
          uExposureLoc_ >= 0 && uFogDensityLoc_ >= 0 && uSaturationLoc_ >= 0 &&
-         uGammaLoc_ >= 0 && uUseAssetColorLoc_ >= 0 &&
+         uGammaLoc_ >= 0 && uWeatheringStrengthLoc_ >= 0 &&
+         uWeatheringScaleLoc_ >= 0 && uDetailRoughnessStrengthLoc_ >= 0 &&
+         uClearcoatStrengthLoc_ >= 0 && uShadowTintStrengthLoc_ >= 0 &&
+         uUseAssetColorLoc_ >= 0 &&
          uLightViewProjectionLoc_ >= 0 && uLightViewProjectionFarLoc_ >= 0 &&
          uShadowMapLoc_ >= 0 &&
          uShadowMapFarLoc_ >= 0 &&

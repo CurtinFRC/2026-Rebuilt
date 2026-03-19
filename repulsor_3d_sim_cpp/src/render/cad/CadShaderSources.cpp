@@ -58,6 +58,11 @@ uniform float uExposure;
 uniform float uFogDensity;
 uniform float uSaturation;
 uniform float uGamma;
+uniform float uWeatheringStrength;
+uniform float uWeatheringScale;
+uniform float uDetailRoughnessStrength;
+uniform float uClearcoatStrength;
+uniform float uShadowTintStrength;
 uniform float uUseAssetColor;
 uniform sampler2D uShadowMap;
 uniform sampler2D uShadowMapFar;
@@ -86,6 +91,33 @@ mat2 Rotation2(float a) {
   float s = sin(a);
   float c = cos(a);
   return mat2(c, -s, s, c);
+}
+
+float NoiseHash31(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float ValueNoise3(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n000 = NoiseHash31(i + vec3(0.0, 0.0, 0.0));
+  float n100 = NoiseHash31(i + vec3(1.0, 0.0, 0.0));
+  float n010 = NoiseHash31(i + vec3(0.0, 1.0, 0.0));
+  float n110 = NoiseHash31(i + vec3(1.0, 1.0, 0.0));
+  float n001 = NoiseHash31(i + vec3(0.0, 0.0, 1.0));
+  float n101 = NoiseHash31(i + vec3(1.0, 0.0, 1.0));
+  float n011 = NoiseHash31(i + vec3(0.0, 1.0, 1.0));
+  float n111 = NoiseHash31(i + vec3(1.0, 1.0, 1.0));
+  float nx00 = mix(n000, n100, f.x);
+  float nx10 = mix(n010, n110, f.x);
+  float nx01 = mix(n001, n101, f.x);
+  float nx11 = mix(n011, n111, f.x);
+  float nxy0 = mix(nx00, nx10, f.y);
+  float nxy1 = mix(nx01, nx11, f.y);
+  return mix(nxy0, nxy1, f.z);
 }
 
 const vec2 kPoisson16[16] = vec2[](
@@ -267,7 +299,8 @@ float ComputeShadowFactor(
   }
   return shadowHits / max(taps, 1.0);
 }
-
+)"
+R"(
 vec3 ShadePbrLight(
     vec3 N,
     vec3 V,
@@ -296,6 +329,28 @@ vec3 ShadePbrLight(
   vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
   vec3 radiance = lightColor * lightIntensity;
   return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+vec3 ShadeClearcoatLight(
+    vec3 N,
+    vec3 V,
+    vec3 L,
+    vec3 lightColor,
+    float lightIntensity,
+    float clearcoatStrength) {
+  float NdotL = max(dot(N, L), 0.0);
+  float NdotV = max(dot(N, V), 0.0);
+  if (NdotL <= 1e-5 || NdotV <= 1e-5 || clearcoatStrength <= 1e-5) {
+    return vec3(0.0);
+  }
+  vec3 H = normalize(V + L);
+  float coatRoughness = 0.08;
+  float NDF = DistributionGGX(N, H, coatRoughness);
+  float G = GeometrySmith(N, V, L, coatRoughness);
+  float F = 0.04 + (1.0 - 0.04) * pow(clamp(1.0 - max(dot(H, V), 0.0), 0.0, 1.0), 5.0);
+  float denom = max(4.0 * NdotV * NdotL, 1e-5);
+  float coatSpec = (NDF * G * F) / denom;
+  return lightColor * lightIntensity * coatSpec * NdotL * clearcoatStrength;
 }
 
 void main() {
@@ -331,10 +386,23 @@ void main() {
     alpha *= texColor.a;
   }
 
-  vec3 albedo = pow(clamp(baseColorSrgb, 0.0, 1.0), vec3(2.2));
+  float weatheringStrength = clamp(uWeatheringStrength, 0.0, 1.5);
+  float weatherScale = max(uWeatheringScale, 0.01);
+  float macroNoise = ValueNoise3(vWorldPos * weatherScale * 0.35 + vec3(13.7, 7.1, 2.5));
+  float microNoise = ValueNoise3(vWorldPos * weatherScale * 2.7 + vec3(1.9, 17.3, 9.7));
+  float wearMask = clamp((macroNoise * 0.70 + microNoise * 0.30 - 0.43) * (0.6 + weatheringStrength * 1.15), 0.0, 1.0);
+  float colorVariation = (microNoise - 0.5) * 0.12 * weatheringStrength;
+  vec3 weatheredSrgb = baseColorSrgb * (1.0 + colorVariation);
+  weatheredSrgb = mix(weatheredSrgb, weatheredSrgb * vec3(0.86, 0.84, 0.82), wearMask * 0.35);
+  vec3 albedo = pow(clamp(weatheredSrgb, 0.0, 1.0), vec3(2.2));
 
   float roughness = clamp(uRoughness, 0.03, 1.0);
-  float metallic = clamp(uMetallic, 0.0, 1.0);
+  roughness = clamp(
+      roughness +
+          (wearMask * 0.22 + (microNoise - 0.5) * 0.16) * clamp(uDetailRoughnessStrength, 0.0, 1.0),
+      0.03,
+      1.0);
+  float metallic = clamp(uMetallic * (1.0 - wearMask * 0.30 * weatheringStrength), 0.0, 1.0);
   vec3 F0 = mix(vec3(0.04), albedo, metallic) * max(uSpecularStrength, 0.0);
 
   vec3 keyDir = normalize(-uLightDir);
@@ -348,11 +416,14 @@ void main() {
   vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
   float normalAgreement = clamp(dot(geomN, N), 0.2, 1.0);
   ambient *= mix(0.78, 1.0, normalAgreement);
+  float curvatureAo = clamp(1.0 - length(fwidth(N)) * 0.75, 0.55, 1.0);
+  ambient *= curvatureAo;
   float bounceAmount = (1.0 - up) * (0.35 + 0.65 * max(dot(-keyDir, vec3(0.0, 0.0, 1.0)), 0.0));
   vec3 bounceLight = vec3(0.23, 0.19, 0.14) * albedo * bounceAmount * 0.14;
   float keyShadow = max(dot(N, keyDir), 0.0);
   float shadowContrast = mix(0.70, 1.0, keyShadow);
   bool fastShadow = (uShadingMode != 0);
+  vec3 shadowTint = mix(vec3(1.0), vec3(0.76, 0.82, 0.92), clamp(uShadowTintStrength, 0.0, 1.0));
 
   float shadow = 0.0;
   if (uShadowCascadeCount > 1) {
@@ -395,6 +466,12 @@ void main() {
         N, V, keyDir, vec3(1.00, 0.98, 0.94), max(uKeyLightIntensity, 0.0), albedo, roughness, metallic, F0);
     direct += ShadePbrLight(
         N, V, fillDir, vec3(0.60, 0.70, 0.85), max(uFillLightIntensity, 0.0), albedo, roughness, metallic, F0);
+    float clearcoat = clamp(uClearcoatStrength * (1.0 - 0.45 * roughness), 0.0, 1.0);
+    vec3 clearcoatDirect = vec3(0.0);
+    clearcoatDirect += ShadeClearcoatLight(
+        N, V, keyDir, vec3(1.00, 0.98, 0.94), max(uKeyLightIntensity, 0.0), clearcoat);
+    clearcoatDirect += ShadeClearcoatLight(
+        N, V, fillDir, vec3(0.60, 0.70, 0.85), max(uFillLightIntensity, 0.0), clearcoat * 0.8);
 
     float rim = pow(1.0 - max(dot(N, V), 0.0), 2.6) * max(uRimStrength, 0.0);
     vec3 rimColor = vec3(0.85, 0.92, 1.0) * rim;
@@ -404,11 +481,13 @@ void main() {
     vec3 envColor = mix(vec3(0.10, 0.11, 0.12), vec3(0.30, 0.36, 0.46), envMix);
     vec3 envFresnel = FresnelSchlick(max(dot(N, V), 0.0), F0);
     vec3 envSpec = envColor * envFresnel * (1.0 - roughness * 0.65) * 0.32;
+    vec3 clearcoatEnv = envColor * FresnelSchlick(max(dot(N, V), 0.0), vec3(0.04)) * clearcoat * 0.22;
 
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 120.0, 0.0, 1.0);
-    vec3 directLit = (direct + rimColor) * max(depthCue, 0.45) * shadowContrast;
-    vec3 indirectLit = (ambient + envSpec + bounceLight) * max(depthCue, 0.45);
-    directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    vec3 directLit = (direct + clearcoatDirect + rimColor) * max(depthCue, 0.45) * shadowContrast;
+    vec3 indirectLit = (ambient + envSpec + clearcoatEnv + bounceLight) * max(depthCue, 0.45);
+    vec3 shadowFade = mix(vec3(1.0), shadowTint, shadow * clamp(uShadowStrength, 0.0, 1.0));
+    directLit *= shadowFade;
     linearColor = indirectLit + directLit;
   } else {
     float ndotl = max(dot(N, keyDir), 0.0);
@@ -419,7 +498,8 @@ void main() {
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 140.0, 0.0, 1.0);
     vec3 directLit = (direct + vec3(spec)) * max(depthCue, 0.55) * shadowContrast;
     vec3 indirectLit = (ambient + bounceLight) * max(depthCue, 0.55);
-    directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
+    vec3 shadowFade = mix(vec3(1.0), shadowTint, shadow * clamp(uShadowStrength, 0.0, 1.0));
+    directLit *= shadowFade;
     linearColor = indirectLit + directLit;
   }
 

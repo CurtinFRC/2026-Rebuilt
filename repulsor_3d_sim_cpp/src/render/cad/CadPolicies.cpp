@@ -115,6 +115,26 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.fogDensity = std::clamp(GetEnvFloat("CAD_FOG_DENSITY", out.fogDensity), 0.0F, 0.25F);
     out.saturation = std::clamp(GetEnvFloat("CAD_SATURATION", out.saturation), 0.0F, 2.0F);
     out.gamma = std::clamp(GetEnvFloat("CAD_GAMMA", out.gamma), 1.0F, 3.2F);
+    out.weatheringStrength = std::clamp(
+        GetEnvFloat("CAD_WEATHERING_STRENGTH", out.weatheringStrength),
+        0.0F,
+        1.5F);
+    out.weatheringScale = std::clamp(
+        GetEnvFloat("CAD_WEATHERING_SCALE", out.weatheringScale),
+        0.01F,
+        8.0F);
+    out.detailRoughnessStrength = std::clamp(
+        GetEnvFloat("CAD_DETAIL_ROUGHNESS_STRENGTH", out.detailRoughnessStrength),
+        0.0F,
+        1.0F);
+    out.clearcoatStrength = std::clamp(
+        GetEnvFloat("CAD_CLEARCOAT_STRENGTH", out.clearcoatStrength),
+        0.0F,
+        1.0F);
+    out.shadowTintStrength = std::clamp(
+        GetEnvFloat("CAD_SHADOW_TINT_STRENGTH", out.shadowTintStrength),
+        0.0F,
+        1.0F);
     out.enableInstanceUploadDedup = GetEnvBool("CAD_INSTANCE_UPLOAD_DEDUP", out.enableInstanceUploadDedup);
     out.enableInstanceBufferOrphaning = GetEnvBool("CAD_INSTANCE_BUFFER_ORPHANING", out.enableInstanceBufferOrphaning);
     return out;

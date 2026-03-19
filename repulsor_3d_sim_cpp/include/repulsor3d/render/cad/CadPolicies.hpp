@@ -57,6 +57,11 @@ struct CadVisualPolicy {
   float fogDensity = 0.0018F;
   float saturation = 1.08F;
   float gamma = 2.2F;
+  float weatheringStrength = 0.28F;
+  float weatheringScale = 0.42F;
+  float detailRoughnessStrength = 0.18F;
+  float clearcoatStrength = 0.22F;
+  float shadowTintStrength = 0.35F;
   bool enableInstanceUploadDedup = true;
   bool enableInstanceBufferOrphaning = true;
 };

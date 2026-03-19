@@ -186,6 +186,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uFogDensityLoc_, visualPolicy.fogDensity);
   backend_->SetUniform1f(uSaturationLoc_, visualPolicy.saturation);
   backend_->SetUniform1f(uGammaLoc_, visualPolicy.gamma);
+  backend_->SetUniform1f(uWeatheringStrengthLoc_, visualPolicy.weatheringStrength);
+  backend_->SetUniform1f(uWeatheringScaleLoc_, visualPolicy.weatheringScale);
+  backend_->SetUniform1f(uDetailRoughnessStrengthLoc_, visualPolicy.detailRoughnessStrength);
+  backend_->SetUniform1f(uClearcoatStrengthLoc_, visualPolicy.clearcoatStrength);
+  backend_->SetUniform1f(uShadowTintStrengthLoc_, visualPolicy.shadowTintStrength);
 
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;
