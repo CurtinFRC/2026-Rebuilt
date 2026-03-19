@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -18,6 +19,24 @@
 #include "repulsor3d/render/RenderWorldAdapter.hpp"
 
 namespace repulsor3d {
+namespace {
+
+bool ParseEnvBool(const char* name, const bool fallback) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  const std::string text(value);
+  if (text == "1" || text == "true" || text == "TRUE" || text == "on" || text == "ON") {
+    return true;
+  }
+  if (text == "0" || text == "false" || text == "FALSE" || text == "off" || text == "OFF") {
+    return false;
+  }
+  return fallback;
+}
+
+}  // namespace
 
 ViewerApp::ViewerApp(const ViewerConfig& cfg, std::unique_ptr<ISnapshotSource> source)
     : cfg_(cfg),
@@ -76,6 +95,11 @@ int ViewerApp::Run() {
 
   glfwMakeContextCurrent(window_);
   glfwSwapInterval(cfg_.vsync ? 1 : 0);
+  const bool vsyncAutoDisableEnabled = ParseEnvBool("VSYNC_AUTO_DISABLE", true);
+  bool vsyncAutoDisabled = false;
+  double swapWaitAverageMs = 0.0;
+  bool swapWaitAverageInitialized = false;
+  int highSwapWaitFrames = 0;
 
   glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {
@@ -135,7 +159,39 @@ int ViewerApp::Run() {
       lastTitleUpdate = now;
     }
 
+    const auto swapStart = std::chrono::steady_clock::now();
     glfwSwapBuffers(window_);
+    const auto swapEnd = std::chrono::steady_clock::now();
+    const double swapWaitMs =
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(swapEnd - swapStart).count();
+    if (!swapWaitAverageInitialized) {
+      swapWaitAverageMs = swapWaitMs;
+      swapWaitAverageInitialized = true;
+    } else {
+      constexpr double alpha = 0.10;
+      swapWaitAverageMs = (1.0 - alpha) * swapWaitAverageMs + alpha * swapWaitMs;
+    }
+    renderer_.QueueDiagnosticCounter("app.swap_wait_ms", swapWaitMs);
+    renderer_.QueueDiagnosticCounter("app.swap_wait_avg_ms", swapWaitAverageMs);
+
+    if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled) {
+      const auto& diag = renderer_.LatestDiagnostics();
+      const double frameAvgMs = diag.frameAverageMilliseconds > 0.0 ? diag.frameAverageMilliseconds : diag.frameMilliseconds;
+      const bool highSwapWait = swapWaitAverageMs > 8.0;
+      const bool lowFps = frameAvgMs > 25.0;
+      if (highSwapWait && lowFps) {
+        ++highSwapWaitFrames;
+      } else {
+        highSwapWaitFrames = 0;
+      }
+      if (highSwapWaitFrames >= 45) {
+        glfwSwapInterval(0);
+        cfg_.vsync = false;
+        vsyncAutoDisabled = true;
+        renderer_.QueueDiagnosticMessage(
+            "auto-disabled vsync (swap_wait_avg_ms=" + std::to_string(swapWaitAverageMs) + ")");
+      }
+    }
   }
 
   return 0;

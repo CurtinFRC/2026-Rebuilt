@@ -167,6 +167,19 @@ void Renderer::QueueDiagnosticMessage(std::string message) {
   }
 }
 
+void Renderer::QueueDiagnosticCounter(std::string name, const double value) {
+  if (name.empty()) {
+    return;
+  }
+  queuedDiagnosticCounters_.push_back({std::move(name), value});
+  constexpr std::size_t kMaxQueuedCounters = 64;
+  if (queuedDiagnosticCounters_.size() > kMaxQueuedCounters) {
+    queuedDiagnosticCounters_.erase(
+        queuedDiagnosticCounters_.begin(),
+        queuedDiagnosticCounters_.begin() + static_cast<std::ptrdiff_t>(queuedDiagnosticCounters_.size() - kMaxQueuedCounters));
+  }
+}
+
 IRenderBackend& Renderer::GetRenderBackend() {
   return *backend_;
 }
@@ -322,6 +335,10 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("render_pipeline.reload_failed_count", static_cast<double>(renderFeatureReloadFailedCount_));
   diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
   diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
+  for (const auto& [name, value] : queuedDiagnosticCounters_) {
+    diagnostics_.RecordCounter(name, value);
+  }
+  queuedDiagnosticCounters_.clear();
   for (const auto& message : queuedDiagnosticMessages_) {
     diagnostics_.RecordMessage(message);
   }

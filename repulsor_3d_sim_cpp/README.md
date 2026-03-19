@@ -221,6 +221,7 @@ The C++ app accepts the same key env vars used by the Python sim, including:
 - `TRUTH_SOCKET_ENABLED`, `TRUTH_SOCKET_HOST`, `TRUTH_SOCKET_PORT`
 - `WINDOW_W`, `WINDOW_H`, `FPS`
 - `VSYNC` (default `false`; set `true` to enable swap-interval lock)
+- `VSYNC_AUTO_DISABLE` (default `true`; auto-disables VSYNC when persistent swap wait indicates throttling)
 - `FIELD_IMAGE_PATH`, `SHOW_FIELD_IMAGE`, `FIELD_IMAGE_ALPHA`, `FIELD_IMAGE_FLIP_X`, `FIELD_IMAGE_FLIP_Y`
 - `FOLLOW_ROBOT`, `SHOW_CAMERA_DEBUG`, `SHOW_TRUTH_FUEL`, `SHOW_AGE_FILTERED_FUEL`
 - `SHOW_ROBOT_CAD_MODEL`, `ROBOT_CAD_MODEL_PATH`, `ROBOT_CAD_SCALE_M`, `ROBOT_CAD_Z_OFFSET_M`

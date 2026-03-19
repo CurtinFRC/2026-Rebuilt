@@ -949,6 +949,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         static_cast<GLsizeiptr>(commands.size() * sizeof(DrawElementsIndirectCommand)),
         commands.data(),
         GL_STREAM_DRAW);
+    while (glGetError() != GL_NO_ERROR) {
+    }
     glMultiDrawElementsIndirect(
         GL_TRIANGLES,
         GL_UNSIGNED_INT,
@@ -957,7 +959,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         0);
     const GLenum mdiError = glGetError();
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-    if (mdiError != GL_NO_ERROR) {
+    if (mdiError == GL_INVALID_ENUM || mdiError == GL_INVALID_VALUE || mdiError == GL_INVALID_OPERATION) {
       mdiRuntimeDisabled = true;
       for (const auto& range : ranges) {
         if (range.indexCount == 0) {
