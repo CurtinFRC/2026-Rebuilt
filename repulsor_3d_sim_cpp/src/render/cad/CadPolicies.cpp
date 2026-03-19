@@ -84,6 +84,11 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
         GetEnvInt("CAD_FIELD_CLUSTER_MAX_VISIBLE_INDICES", out.fieldClusterMaxVisibleIndices),
         0,
         50000000);
+    out.fieldClusterAdaptiveBudget = GetEnvBool("CAD_FIELD_CLUSTER_ADAPTIVE_BUDGET", out.fieldClusterAdaptiveBudget);
+    out.fieldClusterAdaptiveMinScale = std::clamp(
+        GetEnvFloat("CAD_FIELD_CLUSTER_ADAPTIVE_MIN_SCALE", out.fieldClusterAdaptiveMinScale),
+        0.20F,
+        1.00F);
     out.minClusterScreenRadiusPx = std::clamp(
         GetEnvFloat("CAD_CLUSTER_MIN_SCREEN_RADIUS_PX", out.minClusterScreenRadiusPx),
         0.0F,

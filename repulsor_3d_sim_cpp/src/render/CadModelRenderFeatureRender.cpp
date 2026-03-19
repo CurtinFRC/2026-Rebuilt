@@ -4,6 +4,7 @@
 #include <GL/glew.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -447,6 +448,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   drawCalls.reserve(drawItems.size());
   std::size_t totalClusters = 0;
   std::size_t culledClusters = 0;
+  int effectiveFieldIndexBudgetForDiagnostics = std::max(0, visualPolicy.fieldClusterMaxVisibleIndices);
   for (const auto& item : drawItems) {
     if (item.lod == nullptr) {
       continue;
@@ -462,9 +464,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       };
       const bool enableFieldIndexBudget =
           item.aggressiveLodCap &&
-          visualPolicy.fieldClusterMaxVisibleIndices > 0 &&
-          autoQualityEnabled_ &&
-          (adaptiveLodBias > 0 || frameAverageMs > static_cast<double>(perfTargetFrameMs_));
+          visualPolicy.fieldClusterMaxVisibleIndices > 0;
       const bool needProjected =
           visualPolicy.enableOcclusionCulling ||
           visualPolicy.minClusterScreenRadiusPx > 0.0F ||
@@ -542,7 +542,21 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           }
           totalVisibleIndices += static_cast<std::uint64_t>(candidate.cluster->indexCount);
         }
-        const std::uint64_t indexBudget = static_cast<std::uint64_t>(visualPolicy.fieldClusterMaxVisibleIndices);
+        std::uint64_t indexBudget = static_cast<std::uint64_t>(visualPolicy.fieldClusterMaxVisibleIndices);
+        if (visualPolicy.fieldClusterAdaptiveBudget &&
+            frameAverageMs > 1e-3 &&
+            perfTargetFrameMs_ > 1e-3F) {
+          const double ratio = static_cast<double>(perfTargetFrameMs_) / frameAverageMs;
+          const double scale = std::clamp(
+              ratio,
+              static_cast<double>(visualPolicy.fieldClusterAdaptiveMinScale),
+              1.0);
+          indexBudget = static_cast<std::uint64_t>(
+              std::max(1.0, std::floor(scale * static_cast<double>(std::max(1, visualPolicy.fieldClusterMaxVisibleIndices)))));
+        }
+        effectiveFieldIndexBudgetForDiagnostics = static_cast<int>(std::min<std::uint64_t>(
+            indexBudget,
+            static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
         if (totalVisibleIndices > indexBudget) {
           for (auto& candidate : surviving) {
             const float radiusScore = candidate.projected.valid
@@ -688,7 +702,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.cluster.merge_gap_indices", static_cast<double>(clusterMergeGap));
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.field_index_budget",
-        autoQualityEnabled_ ? static_cast<double>(std::max(0, visualPolicy.fieldClusterMaxVisibleIndices)) : 0.0);
+        static_cast<double>(std::max(0, visualPolicy.fieldClusterMaxVisibleIndices)));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cluster.field_index_budget_effective",
+        static_cast<double>(std::max(0, effectiveFieldIndexBudgetForDiagnostics)));
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.min_screen_radius_px",
         static_cast<double>(std::max(0.0F, visualPolicy.minClusterScreenRadiusPx)));
@@ -756,6 +773,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   int instanceBufferOrphans = 0;
   int instanceUploadSkipped = 0;
   double instanceUploadCpuMs = 0.0;
+  std::uint64_t submittedDrawIndices = 0ULL;
+  std::uint64_t submittedDrawRanges = 0ULL;
   auto uploadInstances = [this, &visualPolicy, &instanceUploadBytes, &instanceBufferResizes, &instanceBufferOrphans, &instanceUploadSkipped, &instanceUploadCpuMs](
                              GpuMesh::LodGpu& lod,
                              const InstanceGpuData* data,
@@ -980,6 +999,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       }
     }
     const std::vector<DrawRange>& activeRanges = splitRanges.empty() ? ranges : splitRanges;
+    for (const auto& range : activeRanges) {
+      if (range.indexCount == 0) {
+        continue;
+      }
+      submittedDrawIndices += static_cast<std::uint64_t>(range.indexCount);
+      ++submittedDrawRanges;
+    }
     if (!allowMdi || cadIndirectDrawBuffer_.Get() == 0 || activeRanges.size() <= 1) {
       for (const auto& range : activeRanges) {
         if (range.indexCount == 0) {
@@ -1192,6 +1218,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.orphans", static_cast<double>(instanceBufferOrphans));
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.skipped", static_cast<double>(instanceUploadSkipped));
     context.diagnosticsWriter->RecordCounter("cad.instance_upload.cpu_ms", instanceUploadCpuMs);
+    context.diagnosticsWriter->RecordCounter("cad.draw.submit_ranges", static_cast<double>(submittedDrawRanges));
+    context.diagnosticsWriter->RecordCounter("cad.draw.submit_indices", static_cast<double>(submittedDrawIndices));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.draw.max_indices_per_call",
+        static_cast<double>(std::max(0, visualPolicy.maxIndicesPerDrawCall)));
   }
 
   glDepthMask(GL_TRUE);
