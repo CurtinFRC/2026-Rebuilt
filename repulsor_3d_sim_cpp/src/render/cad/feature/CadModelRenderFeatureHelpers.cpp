@@ -797,7 +797,7 @@ std::vector<IndexedMesh> BuildLodChain(const IndexedMesh& baseMesh, const CadLod
     lods.push_back(std::move(next));
   }
 
-  const int targetLastLodIndicesRaw = GetEnvInt("CAD_TARGET_MAX_LAST_LOD_INDICES", 1800000);
+  const int targetLastLodIndicesRaw = GetEnvInt("CAD_TARGET_MAX_LAST_LOD_INDICES", 0);
   const std::size_t targetLastLodIndices = static_cast<std::size_t>(std::max(0, targetLastLodIndicesRaw));
   const std::size_t hardMaxLodCount = std::max<std::size_t>(policy.maxLodCount, 6);
   while (!lods.empty() &&

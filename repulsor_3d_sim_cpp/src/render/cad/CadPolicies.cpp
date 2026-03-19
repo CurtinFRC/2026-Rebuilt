@@ -76,6 +76,9 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.enableBroadphase = GetEnvBool("CAD_BROADPHASE_ENABLED", out.enableBroadphase);
     out.broadphaseCellSizeM = std::clamp(GetEnvFloat("CAD_BROADPHASE_CELL_SIZE_M", out.broadphaseCellSizeM), 0.5F, 20.0F);
     out.enableClusterCulling = GetEnvBool("CAD_CLUSTER_CULLING", out.enableClusterCulling);
+    out.fieldDisableClusterCulling =
+        GetEnvBool("CAD_FIELD_DISABLE_CLUSTER_CULLING", out.fieldDisableClusterCulling);
+    out.fieldForceLod0 = GetEnvBool("CAD_FIELD_FORCE_LOD0", out.fieldForceLod0);
     out.optimizeVertexCache = GetEnvBool("CAD_OPTIMIZE_VERTEX_CACHE", out.optimizeVertexCache);
     out.clusterTargetIndices = std::clamp(GetEnvInt("CAD_CLUSTER_TARGET_INDICES", out.clusterTargetIndices), 3 * 64, 3 * 1024 * 1024);
     out.clusterMinIndices = std::clamp(GetEnvInt("CAD_CLUSTER_MIN_INDICES", out.clusterMinIndices), 3 * 16, out.clusterTargetIndices);

@@ -283,10 +283,14 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             std::size_t drawLodIndex = std::min(
                 lodIndex + static_cast<std::size_t>(std::max(0, adaptiveLodBias)),
                 mesh->lods.size() - 1);
+            if (instance.centerOnMeshBounds && visualPolicy.fieldForceLod0) {
+              drawLodIndex = 0;
+            }
             const int activeRuntimeDrawCap = instance.centerOnMeshBounds
                                                  ? runtimeMaxDrawIndicesField_
                                                  : runtimeMaxDrawIndices_;
-            if (activeRuntimeDrawCap > 0) {
+            if (!(instance.centerOnMeshBounds && visualPolicy.fieldForceLod0) &&
+                activeRuntimeDrawCap > 0) {
               while (drawLodIndex + 1 < mesh->lods.size() &&
                      std::max(mesh->lods[drawLodIndex].indexCount, 0) > activeRuntimeDrawCap) {
                 ++drawLodIndex;
@@ -401,6 +405,14 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
             filtered.push_back(drawItems[index]);
           }
         }
+        if (filtered.empty()) {
+          // Conservative fallback path when broadphase returns no candidates.
+          for (const auto& item : drawItems) {
+            if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius, frustumCullMarginM)) {
+              filtered.push_back(item);
+            }
+          }
+        }
       } else {
         for (const auto& item : drawItems) {
           if (cad::IsSphereVisible(frustumPlanes, item.worldBoundsCenter, item.worldBoundsRadius, frustumCullMarginM)) {
@@ -472,7 +484,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     }
 
     std::vector<DrawRange> ranges;
-    if (visualPolicy.enableClusterCulling && !item.lod->clusters.empty() && item.lod->indexCount > 0) {
+    const bool disableClusterCullingForField =
+        item.aggressiveLodCap && visualPolicy.fieldDisableClusterCulling;
+    if (visualPolicy.enableClusterCulling &&
+        !disableClusterCullingForField &&
+        !item.lod->clusters.empty() &&
+        item.lod->indexCount > 0) {
       struct ClusterCandidate {
         const GpuMesh::ClusterGpu* cluster = nullptr;
         cad::ProjectedSphere projected{};
@@ -495,8 +512,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         }
         const glm::vec3 worldCenter = glm::vec3(item.model * glm::vec4(cluster.boundsCenter, 1.0F));
         const float worldRadius = std::max(cluster.boundsRadius * std::max(item.worldMaxScale, 1e-4F), 1e-4F);
+        const float clusterMargin =
+            std::max(std::max(0.0F, visualPolicy.frustumCullMarginM), worldRadius * 0.08F + 0.03F);
         if (visualPolicy.enableFrustumCulling &&
-            !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius, std::max(0.0F, visualPolicy.frustumCullMarginM))) {
+            !cad::IsSphereVisible(frustumPlanes, worldCenter, worldRadius, clusterMargin)) {
           ++culledClusters;
           continue;
         }

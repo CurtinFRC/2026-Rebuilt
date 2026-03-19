@@ -12,32 +12,34 @@ enum class ShadowQuality {
 };
 
 struct CadLodPolicy {
-  std::size_t maxLodCount = 4;
-  float reductionRatio = 0.55F;
-  std::size_t minVertexCount = 120000;
+  std::size_t maxLodCount = 2;
+  float reductionRatio = 0.70F;
+  std::size_t minVertexCount = 500000;
   std::size_t lod0VertexCap = 4500000;
   bool keepOriginalLod0 = true;
-  std::size_t maxPreferredDrawIndices = 8500000;
+  std::size_t maxPreferredDrawIndices = 50000000;
   int normalBins = 20;
   bool preserveFlatShading = true;
-  float lod0ScreenRadiusPx = 1200.0F;
-  float screenRadiusDecay = 0.5F;
+  float lod0ScreenRadiusPx = 5200.0F;
+  float screenRadiusDecay = 0.70F;
 };
 
 struct CadVisualPolicy {
   bool enableFrustumCulling = true;
-  float frustumCullMarginM = 0.08F;
+  float frustumCullMarginM = 0.30F;
   bool enableBroadphase = true;
   float broadphaseCellSizeM = 3.0F;
   bool enableClusterCulling = true;
+  bool fieldDisableClusterCulling = true;
+  bool fieldForceLod0 = true;
   bool optimizeVertexCache = true;
   int clusterTargetIndices = 32768;
   int clusterMinIndices = 8192;
   int clusterMergeGapIndices = 192;
-  int fieldClusterMaxVisibleIndices = 2200000;
+  int fieldClusterMaxVisibleIndices = 0;
   bool fieldClusterAdaptiveBudget = true;
   float fieldClusterAdaptiveMinScale = 0.55F;
-  float minClusterScreenRadiusPx = 0.75F;
+  float minClusterScreenRadiusPx = 0.0F;
   bool enableDepthPrepass = false;
   bool enableOcclusionCulling = false;
   int hzbTilesX = 64;
