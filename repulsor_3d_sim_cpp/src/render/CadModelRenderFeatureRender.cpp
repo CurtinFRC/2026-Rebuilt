@@ -120,7 +120,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
   backend_->UseProgram(shader_.Get());
   const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
-  const bool allowMdi = backend_->Capabilities().supportsMultiDrawIndirect && GetEnvBool("CAD_MULTI_DRAW_INDIRECT", true);
+  static bool mdiRuntimeDisabled = false;
+  const bool allowMdi = !mdiRuntimeDisabled &&
+                        backend_->Capabilities().supportsMultiDrawIndirect &&
+                        GetEnvBool("CAD_MULTI_DRAW_INDIRECT", true);
   const std::uint32_t clusterMergeGap =
       static_cast<std::uint32_t>(std::max(0, visualPolicy.clusterMergeGapIndices));
   if (allowMdi && cadIndirectDrawBuffer_.Get() == 0) {
@@ -416,7 +419,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         const GpuMesh::ClusterGpu* cluster = nullptr;
         cad::ProjectedSphere projected{};
         float depth01 = 1.0F;
+        float score = 0.0F;
       };
+      const bool needProjected =
+          visualPolicy.enableOcclusionCulling ||
+          visualPolicy.minClusterScreenRadiusPx > 0.0F ||
+          (item.aggressiveLodCap && visualPolicy.fieldClusterMaxVisibleIndices > 0);
       std::vector<ClusterCandidate> candidates;
       candidates.reserve(item.lod->clusters.size());
       for (const auto& cluster : item.lod->clusters) {
@@ -434,7 +442,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         ClusterCandidate candidate;
         candidate.cluster = &cluster;
         candidate.depth01 = ComputeDepth01(context.viewProjection, worldCenter);
-        if (visualPolicy.enableOcclusionCulling) {
+        if (needProjected) {
           candidate.projected = cad::ProjectSphereToViewport(
               worldCenter,
               worldRadius,
@@ -451,6 +459,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         });
       }
 
+      std::vector<ClusterCandidate> surviving;
+      surviving.reserve(candidates.size());
       for (const auto& candidate : candidates) {
         if (candidate.cluster == nullptr) {
           continue;
@@ -466,6 +476,72 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           continue;
         }
 
+        if (visualPolicy.minClusterScreenRadiusPx > 0.0F &&
+            candidate.projected.valid &&
+            candidate.projected.radiusPx < visualPolicy.minClusterScreenRadiusPx) {
+          ++culledClusters;
+          continue;
+        }
+
+        surviving.push_back(candidate);
+
+        if (visualPolicy.enableOcclusionCulling && candidate.projected.valid) {
+          occlusionBuffer.SubmitOccluder(candidate.projected);
+        }
+      }
+
+      if (item.aggressiveLodCap && visualPolicy.fieldClusterMaxVisibleIndices > 0 && surviving.size() > 1) {
+        std::uint64_t totalVisibleIndices = 0ULL;
+        for (const auto& candidate : surviving) {
+          if (candidate.cluster == nullptr) {
+            continue;
+          }
+          totalVisibleIndices += static_cast<std::uint64_t>(candidate.cluster->indexCount);
+        }
+        const std::uint64_t indexBudget = static_cast<std::uint64_t>(visualPolicy.fieldClusterMaxVisibleIndices);
+        if (totalVisibleIndices > indexBudget) {
+          for (auto& candidate : surviving) {
+            const float radiusScore = candidate.projected.valid
+                                          ? candidate.projected.radiusPx
+                                          : (candidate.cluster != nullptr ? candidate.cluster->boundsRadius : 0.0F);
+            const float depthWeight = 1.0F / std::max(0.08F, candidate.depth01);
+            candidate.score = radiusScore * depthWeight;
+          }
+          std::sort(surviving.begin(), surviving.end(), [](const ClusterCandidate& a, const ClusterCandidate& b) {
+            return a.score > b.score;
+          });
+
+          std::vector<ClusterCandidate> budgeted;
+          budgeted.reserve(surviving.size());
+          std::uint64_t usedIndices = 0ULL;
+          for (const auto& candidate : surviving) {
+            if (candidate.cluster == nullptr) {
+              continue;
+            }
+            const std::uint64_t next = usedIndices + static_cast<std::uint64_t>(candidate.cluster->indexCount);
+            if (!budgeted.empty() && next > indexBudget) {
+              continue;
+            }
+            budgeted.push_back(candidate);
+            usedIndices = next;
+          }
+          if (budgeted.empty()) {
+            budgeted.push_back(surviving.front());
+          }
+          culledClusters += surviving.size() - budgeted.size();
+          surviving.swap(budgeted);
+        }
+      }
+
+      std::sort(surviving.begin(), surviving.end(), [](const ClusterCandidate& a, const ClusterCandidate& b) {
+        const std::uint32_t aFirst = (a.cluster != nullptr) ? a.cluster->firstIndex : 0U;
+        const std::uint32_t bFirst = (b.cluster != nullptr) ? b.cluster->firstIndex : 0U;
+        return aFirst < bFirst;
+      });
+      for (const auto& candidate : surviving) {
+        if (candidate.cluster == nullptr) {
+          continue;
+        }
         const std::uint32_t expectedNext = !ranges.empty() ? (ranges.back().firstIndex + ranges.back().indexCount) : 0U;
         if (!ranges.empty() &&
             candidate.cluster->firstIndex >= expectedNext &&
@@ -478,10 +554,6 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
               .indexCount = candidate.cluster->indexCount,
               .depth01 = candidate.depth01,
           });
-        }
-
-        if (visualPolicy.enableOcclusionCulling && candidate.projected.valid) {
-          occlusionBuffer.SubmitOccluder(candidate.projected);
         }
       }
     } else if (item.lod->indexCount > 0) {
@@ -503,6 +575,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       }
     }
 
+    if (ranges.empty() && item.lod->indexCount > 0) {
+      ranges.push_back(DrawRange{
+          .firstIndex = 0U,
+          .indexCount = static_cast<std::uint32_t>(std::max(item.lod->indexCount, 0)),
+          .depth01 = item.depth01,
+      });
+    }
     if (ranges.empty() && item.lod->vertexCount > 0) {
       ranges.push_back(DrawRange{
           .firstIndex = 0U,
@@ -559,6 +638,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.cluster.total", static_cast<double>(totalClusters));
     context.diagnosticsWriter->RecordCounter("cad.cluster.culled", static_cast<double>(culledClusters));
     context.diagnosticsWriter->RecordCounter("cad.cluster.merge_gap_indices", static_cast<double>(clusterMergeGap));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cluster.field_index_budget",
+        static_cast<double>(std::max(0, visualPolicy.fieldClusterMaxVisibleIndices)));
+    context.diagnosticsWriter->RecordCounter(
+        "cad.cluster.min_screen_radius_px",
+        static_cast<double>(std::max(0.0F, visualPolicy.minClusterScreenRadiusPx)));
     context.diagnosticsWriter->RecordCounter("cad.mdi.enabled", allowMdi ? 1.0 : 0.0);
   }
 
@@ -769,7 +854,20 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         nullptr,
         static_cast<GLsizei>(commands.size()),
         0);
+    const GLenum mdiError = glGetError();
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    if (mdiError != GL_NO_ERROR) {
+      mdiRuntimeDisabled = true;
+      for (const auto& range : ranges) {
+        if (range.indexCount == 0) {
+          continue;
+        }
+        backend_->DrawIndexedTrianglesInstancedRange(
+            static_cast<int>(range.indexCount),
+            1,
+            static_cast<std::size_t>(range.firstIndex));
+      }
+    }
   };
 
   if (visualPolicy.enableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) {

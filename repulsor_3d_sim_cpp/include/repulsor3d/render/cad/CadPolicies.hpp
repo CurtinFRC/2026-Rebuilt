@@ -33,8 +33,10 @@ struct CadVisualPolicy {
   int clusterTargetIndices = 131072;
   int clusterMinIndices = 24576;
   int clusterMergeGapIndices = 192;
-  bool enableDepthPrepass = true;
-  bool enableOcclusionCulling = true;
+  int fieldClusterMaxVisibleIndices = 2400000;
+  float minClusterScreenRadiusPx = 0.0F;
+  bool enableDepthPrepass = false;
+  bool enableOcclusionCulling = false;
   int hzbTilesX = 64;
   int hzbTilesY = 36;
   float hzbDepthMargin = 0.01F;

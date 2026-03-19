@@ -79,6 +79,14 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
     out.clusterTargetIndices = std::clamp(GetEnvInt("CAD_CLUSTER_TARGET_INDICES", out.clusterTargetIndices), 3 * 64, 3 * 1024 * 1024);
     out.clusterMinIndices = std::clamp(GetEnvInt("CAD_CLUSTER_MIN_INDICES", out.clusterMinIndices), 3 * 16, out.clusterTargetIndices);
     out.clusterMergeGapIndices = std::clamp(GetEnvInt("CAD_CLUSTER_MERGE_GAP_INDICES", out.clusterMergeGapIndices), 0, 3 * 4096);
+    out.fieldClusterMaxVisibleIndices = std::clamp(
+        GetEnvInt("CAD_FIELD_CLUSTER_MAX_VISIBLE_INDICES", out.fieldClusterMaxVisibleIndices),
+        0,
+        50000000);
+    out.minClusterScreenRadiusPx = std::clamp(
+        GetEnvFloat("CAD_CLUSTER_MIN_SCREEN_RADIUS_PX", out.minClusterScreenRadiusPx),
+        0.0F,
+        100.0F);
     out.enableDepthPrepass = GetEnvBool("CAD_DEPTH_PREPASS", out.enableDepthPrepass);
     out.enableOcclusionCulling = GetEnvBool("CAD_HIZ_OCCLUSION", out.enableOcclusionCulling);
     out.hzbTilesX = std::clamp(GetEnvInt("CAD_HIZ_TILES_X", out.hzbTilesX), 8, 256);
