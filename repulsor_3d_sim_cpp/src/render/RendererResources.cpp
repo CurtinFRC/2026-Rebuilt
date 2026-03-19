@@ -131,6 +131,58 @@ void main() {
 }
 )";
 
+  constexpr const char* skyVs = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+uniform mat4 uMvp;
+out vec3 vDir;
+void main() {
+  vDir = aPos;
+  gl_Position = uMvp * vec4(aPos, 1.0);
+}
+)";
+
+  constexpr const char* skyFs = R"(
+#version 330 core
+in vec3 vDir;
+uniform vec3 uSkyZenith;
+uniform vec3 uSkyHorizon;
+uniform vec3 uSkyGround;
+uniform vec3 uArenaGlow;
+out vec4 FragColor;
+
+float Hash12(vec2 p) {
+  float h = dot(p, vec2(127.1, 311.7));
+  return fract(sin(h) * 43758.5453123);
+}
+
+void main() {
+  vec3 dir = normalize(vDir);
+  float up = clamp(dir.z * 0.5 + 0.5, 0.0, 1.0);
+  float horizon = exp(-abs(dir.z) * 14.0);
+  vec3 col = mix(uSkyGround, uSkyZenith, smoothstep(0.0, 1.0, up));
+  col = mix(col, uSkyHorizon, clamp(horizon * 0.75, 0.0, 1.0));
+
+  // Stylized aurora streaks to add arena atmosphere depth.
+  float swirl = sin((dir.x * 5.2 + dir.y * 7.1) + dir.z * 10.0);
+  float arc = smoothstep(0.35, 0.95, up) * (0.5 + 0.5 * swirl);
+  vec3 auroraA = vec3(0.08, 0.38, 0.62);
+  vec3 auroraB = vec3(0.09, 0.22, 0.44);
+  col += mix(auroraA, auroraB, 0.5 + 0.5 * dir.x) * arc * 0.22;
+
+  // Sparse stars on upper hemisphere so it still reads as an arena night sky.
+  float dirLen = max(length(dir.xy), 1e-4);
+  vec2 starUv = (dir.xy / dirLen) * (1.0 + abs(dir.z)) * 420.0;
+  float starNoise = Hash12(floor(starUv));
+  float starGate = step(0.9965, starNoise) * smoothstep(0.55, 0.92, up);
+  col += vec3(1.0, 0.98, 0.93) * starGate * 0.45;
+
+  // Soft arena glow around horizon.
+  col += uArenaGlow * pow(clamp(1.0 - abs(dir.z), 0.0, 1.0), 5.0) * 0.55;
+  FragColor = vec4(col, 1.0);
+}
+)";
+
   unsigned int vs = CompileShader(GL_VERTEX_SHADER, solidVs);
   unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, solidFs);
   if (vs == 0 || fs == 0 || !LinkShader(solidShader_, vs, fs)) {
@@ -150,6 +202,14 @@ void main() {
   vs = CompileShader(GL_VERTEX_SHADER, texVs);
   fs = CompileShader(GL_FRAGMENT_SHADER, texFs);
   if (vs == 0 || fs == 0 || !LinkShader(texturedShader_, vs, fs)) {
+    return false;
+  }
+  glDeleteShader(vs);
+  glDeleteShader(fs);
+
+  vs = CompileShader(GL_VERTEX_SHADER, skyVs);
+  fs = CompileShader(GL_FRAGMENT_SHADER, skyFs);
+  if (vs == 0 || fs == 0 || !LinkShader(skyShader_, vs, fs)) {
     return false;
   }
   glDeleteShader(vs);

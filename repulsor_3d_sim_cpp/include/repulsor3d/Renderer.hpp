@@ -150,6 +150,7 @@ class Renderer {
   Shader solidShader_;
   Shader lineShader_;
   Shader texturedShader_;
+  Shader skyShader_;
 
   Mesh cubeMesh_;
   Mesh sphereMesh_;

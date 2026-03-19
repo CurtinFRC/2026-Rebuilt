@@ -22,7 +22,6 @@ class WorldRenderFeature final : public IRenderFeature {
   std::string Name() const override { return "world"; }
 
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
-    drawApi.DrawEnvironment(context.viewProjection, context.cameraWorldPosition);
     for (const auto& command : context.commandBuffer) {
       std::visit(
           [&](const auto& typed) {

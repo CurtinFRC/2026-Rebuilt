@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstddef>
 #include <filesystem>
 #include <iomanip>
@@ -45,6 +46,15 @@ glm::vec4 LerpColor(const glm::vec4& a, const glm::vec4& b, const float tRaw) {
   return a * (1.0F - t) + b * t;
 }
 
+float Hash01(std::uint32_t x) {
+  x ^= x >> 16U;
+  x *= 0x7feb352dU;
+  x ^= x >> 15U;
+  x *= 0x846ca68bU;
+  x ^= x >> 16U;
+  return static_cast<float>(x & 0x00FFFFFFU) / static_cast<float>(0x01000000U);
+}
+
 }  // namespace
 
 Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter> worldAdapter)
@@ -83,6 +93,7 @@ Renderer::~Renderer() {
   DestroyShader(solidShader_);
   DestroyShader(lineShader_);
   DestroyShader(texturedShader_);
+  DestroyShader(skyShader_);
 
   DestroyMesh(cubeMesh_);
   DestroyMesh(sphereMesh_);
@@ -281,6 +292,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   const glm::mat4 view = camera.ViewMatrix();
   const glm::mat4 projection = camera.ProjectionMatrix(aspect);
   const glm::mat4 vp = projection * view;
+  DrawEnvironment(vp, camera.Eye());
   const EntityCullingStats cullingStats = ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
   if (!HasMeshInstanceCommands(commandBuffer)) {
@@ -594,32 +606,48 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   const bool depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
   glDisable(GL_CULL_FACE);
 
-  // Sky dome first: depth disabled + no depth writes, so it never occludes gameplay.
+  // Sky shell first: depth disabled + no depth writes, so it never occludes gameplay.
   backend_->SetDepthTestEnabled(false);
   glDepthMask(GL_FALSE);
-  DrawSphere(
-      vp,
-      SpherePrimitive{
-          .center = glm::vec3{cameraWorldPosition.x, cameraWorldPosition.y, fieldZ_ + stadiumHeight * 0.35F},
-          .radius = outerRadius * 4.6F,
-          .color = glm::vec4{0.16F, 0.27F, 0.47F, 1.0F},
-          .pass = RenderPass::Background,
-      });
-  DrawSphere(
-      vp,
-      SpherePrimitive{
-          .center = glm::vec3{cameraWorldPosition.x, cameraWorldPosition.y, fieldZ_ + stadiumHeight * 0.05F},
-          .radius = outerRadius * 3.1F,
-          .color = glm::vec4{0.30F, 0.43F, 0.66F, 1.0F},
-          .pass = RenderPass::Background,
-      });
+  if (skyShader_.program.Get() != 0 && sphereMesh_.vao.Get() != 0) {
+    glm::mat4 skyModel(1.0F);
+    skyModel = glm::translate(skyModel, cameraWorldPosition);
+    skyModel = glm::scale(skyModel, glm::vec3{outerRadius * 5.6F});
+    const glm::mat4 skyMvp = vp * skyModel;
+
+    const unsigned int skyProgram = skyShader_.program.Get();
+    backend_->UseProgram(skyProgram);
+    const int mvpLoc = backend_->GetUniformLocation(skyProgram, "uMvp");
+    const int zenithLoc = backend_->GetUniformLocation(skyProgram, "uSkyZenith");
+    const int horizonLoc = backend_->GetUniformLocation(skyProgram, "uSkyHorizon");
+    const int groundLoc = backend_->GetUniformLocation(skyProgram, "uSkyGround");
+    const int glowLoc = backend_->GetUniformLocation(skyProgram, "uArenaGlow");
+    backend_->SetUniformMat4(mvpLoc, &skyMvp[0][0]);
+    backend_->SetUniformVec3(zenithLoc, 0.06F, 0.11F, 0.22F);
+    backend_->SetUniformVec3(horizonLoc, 0.28F, 0.47F, 0.72F);
+    backend_->SetUniformVec3(groundLoc, 0.03F, 0.03F, 0.05F);
+    backend_->SetUniformVec3(glowLoc, 0.10F, 0.23F, 0.42F);
+    backend_->BindVertexArray(sphereMesh_.vao.Get());
+    backend_->DrawIndexedTriangles(sphereMesh_.indexCount);
+    backend_->BindVertexArray(0);
+  } else {
+    DrawSphere(
+        vp,
+        SpherePrimitive{
+            .center = cameraWorldPosition,
+            .radius = outerRadius * 5.6F,
+            .color = glm::vec4{0.13F, 0.21F, 0.35F, 1.0F},
+            .pass = RenderPass::Background,
+        });
+  }
+
   DrawBox(
       vp,
       BoxPrimitive{
-          .center = glm::vec3{cameraWorldPosition.x, cameraWorldPosition.y, fieldZ_ + stadiumHeight * 0.55F},
-          .size = glm::vec3{outerRadius * 8.0F, outerRadius * 8.0F, 0.7F},
+          .center = glm::vec3{cameraWorldPosition.x, cameraWorldPosition.y, fieldZ_ + stadiumHeight * 0.65F},
+          .size = glm::vec3{outerRadius * 8.0F, outerRadius * 8.0F, 0.8F},
           .yawDeg = 0.0F,
-          .color = glm::vec4{0.12F, 0.20F, 0.34F, 1.0F},
+          .color = glm::vec4{0.09F, 0.14F, 0.24F, 1.0F},
           .pass = RenderPass::Background,
       });
   glDepthMask(GL_TRUE);
@@ -634,6 +662,47 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   };
   DrawBox(vp, groundApron);
 
+  // Neon trim around the playable field footprint.
+  const float trimZ = fieldZ_ + 0.02F;
+  const float trimH = 0.03F;
+  const float trimT = 0.06F;
+  DrawBox(
+      vp,
+      BoxPrimitive{
+          .center = glm::vec3{0.0F, fieldHalfWidth + trimT, trimZ},
+          .size = glm::vec3{fieldLength_ + 0.14F, trimT, trimH},
+          .yawDeg = 0.0F,
+          .color = glm::vec4{0.24F, 0.72F, 1.0F, 1.0F},
+          .pass = RenderPass::Opaque,
+      });
+  DrawBox(
+      vp,
+      BoxPrimitive{
+          .center = glm::vec3{0.0F, -fieldHalfWidth - trimT, trimZ},
+          .size = glm::vec3{fieldLength_ + 0.14F, trimT, trimH},
+          .yawDeg = 0.0F,
+          .color = glm::vec4{0.24F, 0.72F, 1.0F, 1.0F},
+          .pass = RenderPass::Opaque,
+      });
+  DrawBox(
+      vp,
+      BoxPrimitive{
+          .center = glm::vec3{fieldHalfLength + trimT, 0.0F, trimZ},
+          .size = glm::vec3{fieldWidth_ + 0.14F, trimT, trimH},
+          .yawDeg = 90.0F,
+          .color = glm::vec4{0.26F, 0.58F, 0.94F, 1.0F},
+          .pass = RenderPass::Opaque,
+      });
+  DrawBox(
+      vp,
+      BoxPrimitive{
+          .center = glm::vec3{-fieldHalfLength - trimT, 0.0F, trimZ},
+          .size = glm::vec3{fieldWidth_ + 0.14F, trimT, trimH},
+          .yawDeg = 90.0F,
+          .color = glm::vec4{0.26F, 0.58F, 0.94F, 1.0F},
+          .pass = RenderPass::Opaque,
+      });
+
   const glm::vec4 lowerTierA{0.18F, 0.21F, 0.24F, 1.0F};
   const glm::vec4 lowerTierB{0.12F, 0.14F, 0.17F, 1.0F};
   const glm::vec4 upperTierA{0.14F, 0.17F, 0.21F, 1.0F};
@@ -646,8 +715,9 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
       const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
       const float cx = std::cos(angle) * radius;
       const float cy = std::sin(angle) * radius;
-      const float band = 0.5F + 0.5F * std::sin(angle * 2.0F + static_cast<float>(i % 2));
-      const glm::vec4 color = LerpColor(colA, colB, band);
+      const float noise = Hash01(static_cast<std::uint32_t>(i * 92821 + 17));
+      const float wave = 0.5F + 0.5F * std::sin(angle * 2.0F + static_cast<float>(i % 2));
+      const glm::vec4 color = LerpColor(colA, colB, wave * 0.55F + noise * 0.45F);
       DrawBox(
           vp,
           BoxPrimitive{
@@ -662,6 +732,42 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
 
   drawTier(ringBaseRadius, fieldZ_, stadiumHeight * 0.55F, 3.2F, lowerTierA, lowerTierB);
   drawTier(ringBaseRadius + 4.8F, fieldZ_ + stadiumHeight * 0.33F, stadiumHeight * 0.35F, 2.8F, upperTierA, upperTierB);
+  drawTier(
+      ringBaseRadius + 8.2F,
+      fieldZ_ + stadiumHeight * 0.15F,
+      stadiumHeight * 0.92F,
+      1.6F,
+      glm::vec4{0.08F, 0.10F, 0.13F, 1.0F},
+      glm::vec4{0.05F, 0.06F, 0.08F, 1.0F});
+
+  // Crowd light band: tiny emissive-ish seat cells for a fuller arena look.
+  const int crowdSegments = segments * 2;
+  const float crowdRadius = ringBaseRadius + 2.3F;
+  const float crowdArcLength = std::max(0.20F, (2.0F * kPi * crowdRadius / static_cast<float>(crowdSegments)) * 0.78F);
+  for (int row = 0; row < 3; ++row) {
+    const float rowZ = fieldZ_ + stadiumHeight * (0.20F + 0.10F * static_cast<float>(row));
+    const float rowRadius = crowdRadius + static_cast<float>(row) * 0.45F;
+    for (int i = 0; i < crowdSegments; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(crowdSegments);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * rowRadius;
+      const float cy = std::sin(angle) * rowRadius;
+      const float pulse = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
+      const glm::vec4 crowdCol = LerpColor(
+          glm::vec4{0.07F, 0.08F, 0.10F, 1.0F},
+          glm::vec4{0.33F, 0.56F, 0.92F, 1.0F},
+          pulse * 0.7F);
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, rowZ},
+              .size = glm::vec3{crowdArcLength, 0.25F, 0.08F},
+              .yawDeg = angleDeg,
+              .color = crowdCol,
+              .pass = RenderPass::Opaque,
+          });
+    }
+  }
 
   const float fasciaRadius = ringBaseRadius + 1.8F;
   const float fasciaZ = fieldZ_ + stadiumHeight * 0.36F;
@@ -672,10 +778,11 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const float cx = std::cos(angle) * fasciaRadius;
     const float cy = std::sin(angle) * fasciaRadius;
     const float pulse = 0.5F + 0.5F * std::sin(angle * 3.0F);
+    const float sparkle = Hash01(static_cast<std::uint32_t>(i * 11939 + 911));
     const glm::vec4 panelColor = LerpColor(
         glm::vec4{0.11F, 0.34F, 0.62F, 1.0F},
-        glm::vec4{0.08F, 0.18F, 0.30F, 1.0F},
-        pulse);
+        glm::vec4{0.06F, 0.14F, 0.24F, 1.0F},
+        pulse * 0.6F + sparkle * 0.4F);
     DrawBox(
         vp,
         BoxPrimitive{
@@ -695,14 +802,74 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
     const float cx = std::cos(angle) * lightRingRadius;
     const float cy = std::sin(angle) * lightRingRadius;
-    const float glow = 0.7F + 0.3F * std::cos(angle * 4.0F);
+    const float glow = 0.62F + 0.38F * std::cos(angle * 4.0F);
+    const float hueJitter = Hash01(static_cast<std::uint32_t>(i * 4099 + 73));
     DrawBox(
         vp,
         BoxPrimitive{
             .center = glm::vec3{cx, cy, lightRingZ},
             .size = glm::vec3{lightBarLength, 0.42F, 0.30F},
             .yawDeg = angleDeg,
-            .color = glm::vec4{0.82F * glow, 0.89F * glow, 0.99F * glow, 1.0F},
+            .color =
+                glm::vec4{
+                    (0.55F + 0.32F * hueJitter) * glow,
+                    (0.78F + 0.16F * (1.0F - hueJitter)) * glow,
+                    0.98F * glow,
+                    1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
+  const float beaconRadius = ringBaseRadius + 3.4F;
+  for (int i = 0; i < segments; i += 3) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+    const float cx = std::cos(angle) * beaconRadius;
+    const float cy = std::sin(angle) * beaconRadius;
+    const float hue = Hash01(static_cast<std::uint32_t>(i * 731 + 5));
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F},
+            .size = glm::vec3{0.24F, 0.24F, 1.45F},
+            .yawDeg = 0.0F,
+            .color = glm::vec4{0.08F, 0.10F, 0.12F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F + 0.78F},
+            .size = glm::vec3{0.56F, 0.56F, 0.14F},
+            .yawDeg = 0.0F,
+            .color = glm::vec4{0.45F + 0.35F * hue, 0.56F + 0.26F * (1.0F - hue), 0.95F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
+  // Team tunnel portals on the cardinal directions.
+  const float tunnelRadius = ringBaseRadius - 0.9F;
+  const float tunnelZ = fieldZ_ + 0.95F;
+  for (int i = 0; i < 4; ++i) {
+    const float angle = static_cast<float>(i) * (kPi * 0.5F);
+    const float yawDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * tunnelRadius;
+    const float cy = std::sin(angle) * tunnelRadius;
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, tunnelZ},
+            .size = glm::vec3{2.8F, 1.3F, 1.8F},
+            .yawDeg = yawDeg,
+            .color = glm::vec4{0.06F, 0.07F, 0.09F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, tunnelZ + 0.2F},
+            .size = glm::vec3{2.2F, 0.15F, 1.2F},
+            .yawDeg = yawDeg,
+            .color = glm::vec4{0.28F, 0.70F, 0.98F, 1.0F},
             .pass = RenderPass::Opaque,
         });
   }
@@ -749,6 +916,26 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
         });
   }
 
+  // Upper halo ring for stronger silhouette.
+  const float haloRadius = ringBaseRadius + 7.4F;
+  const float haloLength = std::max(1.0F, (2.0F * kPi * haloRadius / static_cast<float>(segments)) * 0.9F);
+  for (int i = 0; i < segments; ++i) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * haloRadius;
+    const float cy = std::sin(angle) * haloRadius;
+    const float hue = Hash01(static_cast<std::uint32_t>(i * 827 + 11));
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, roofZ + 0.95F},
+            .size = glm::vec3{haloLength, 0.22F, 0.18F},
+            .yawDeg = angleDeg,
+            .color = glm::vec4{0.30F + hue * 0.30F, 0.54F + hue * 0.20F, 0.98F, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
   DrawBox(
       vp,
       BoxPrimitive{
@@ -783,7 +970,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .center = glm::vec3{0.0F, 0.12F, fieldZ_ + stadiumHeight * 0.86F},
           .size = glm::vec3{5.0F, 0.18F, 1.5F},
           .yawDeg = 0.0F,
-          .color = glm::vec4{0.18F, 0.46F, 0.72F, 1.0F},
+          .color = glm::vec4{0.22F, 0.64F, 0.97F, 1.0F},
           .pass = RenderPass::Opaque,
       });
 
