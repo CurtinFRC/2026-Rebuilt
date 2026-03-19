@@ -78,6 +78,21 @@ bool ParseEnvBool(const char* name, const bool fallback) {
   return fallback;
 }
 
+int ParseEnvInt(const char* name, const int fallback) {
+  if (name == nullptr || *name == '\0') {
+    return fallback;
+  }
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  try {
+    return std::stoi(value);
+  } catch (...) {
+    return fallback;
+  }
+}
+
 double FindCounterValue(const DiagnosticsSnapshot& snapshot, const char* name, const double fallback = 0.0) {
   if (name == nullptr) {
     return fallback;
@@ -425,6 +440,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("render_pipeline.reload_failed_count", static_cast<double>(renderFeatureReloadFailedCount_));
   diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
   diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("arena.detail_divisor", static_cast<double>(environmentDetailDivisor_));
   for (const auto& [name, value] : queuedDiagnosticCounters_) {
     diagnostics_.RecordCounter(name, value);
   }
@@ -602,6 +618,9 @@ void Renderer::MaybeHotReloadRenderFeatures() {
   if (!renderFeaturesInitialized_) {
     return;
   }
+  if (!cfg_.hotReloadRenderFeatures) {
+    return;
+  }
 
   const auto now = std::chrono::steady_clock::now();
   if (nextRenderFeatureReloadCheck_.time_since_epoch().count() != 0 && now < nextRenderFeatureReloadCheck_) {
@@ -681,7 +700,22 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   }
 
   constexpr float kPi = 3.14159265359F;
-  const int segments = std::max(8, cfg_.environmentSegments);
+  const DiagnosticsSnapshot& latestDiag = diagnostics_.Latest();
+  const double appLoopMs = FindCounterValue(latestDiag, "app.loop_ms", 0.0);
+  const double appSwapWaitMs = FindCounterValue(latestDiag, "app.swap_wait_avg_ms", 0.0);
+  const bool arenaAutoQuality = ParseEnvBool("ARENA_AUTO_QUALITY", true);
+  int detailDivisor = std::clamp(ParseEnvInt("ARENA_DETAIL_DIVISOR", 1), 1, 6);
+  if (arenaAutoQuality) {
+    if (appLoopMs > 80.0 || appSwapWaitMs > 40.0) {
+      detailDivisor = std::max(detailDivisor, 3);
+    } else if (appLoopMs > 35.0 || appSwapWaitMs > 20.0) {
+      detailDivisor = std::max(detailDivisor, 2);
+    }
+  }
+  environmentDetailDivisor_ = detailDivisor;
+  const int segments = std::max(8, cfg_.environmentSegments / detailDivisor);
+  const bool mediumDetail = detailDivisor <= 2;
+  const bool highDetail = detailDivisor <= 1;
   const float ringPadding = std::max(1.0F, cfg_.environmentRadiusM);
   const float stadiumHeight = std::max(3.0F, cfg_.environmentHeightM);
   const float fieldHalfLength = fieldLength_ * 0.5F;
@@ -747,7 +781,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
       });
 
   // Distant skyline silhouettes around the stadium shell.
-  const int skylineSegments = std::max(20, segments * 3);
+  const int skylineSegments = std::max(8, segments * (highDetail ? 3 : (mediumDetail ? 2 : 1)));
   const float skylineRadius = ringBaseRadius + 13.5F;
   for (int i = 0; i < skylineSegments; ++i) {
     const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(skylineSegments);
@@ -767,7 +801,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
             .color = glm::vec4{0.04F, 0.05F, 0.07F, 1.0F},
             .pass = RenderPass::Opaque,
         });
-    if ((i % 3) == 0) {
+    if (highDetail && (i % 3) == 0) {
       const float wndPulse = 0.45F + 0.55F * std::sin(envTimeS * 0.8F + static_cast<float>(i));
       DrawBox(
           vp,
@@ -862,42 +896,48 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   };
 
   drawTier(ringBaseRadius, fieldZ_, stadiumHeight * 0.55F, 3.2F, lowerTierA, lowerTierB);
-  drawTier(ringBaseRadius + 4.8F, fieldZ_ + stadiumHeight * 0.33F, stadiumHeight * 0.35F, 2.8F, upperTierA, upperTierB);
-  drawTier(
-      ringBaseRadius + 8.2F,
-      fieldZ_ + stadiumHeight * 0.15F,
-      stadiumHeight * 0.92F,
-      1.6F,
-      glm::vec4{0.08F, 0.10F, 0.13F, 1.0F},
-      glm::vec4{0.05F, 0.06F, 0.08F, 1.0F});
+  if (mediumDetail) {
+    drawTier(ringBaseRadius + 4.8F, fieldZ_ + stadiumHeight * 0.33F, stadiumHeight * 0.35F, 2.8F, upperTierA, upperTierB);
+  }
+  if (highDetail) {
+    drawTier(
+        ringBaseRadius + 8.2F,
+        fieldZ_ + stadiumHeight * 0.15F,
+        stadiumHeight * 0.92F,
+        1.6F,
+        glm::vec4{0.08F, 0.10F, 0.13F, 1.0F},
+        glm::vec4{0.05F, 0.06F, 0.08F, 1.0F});
+  }
 
   // Crowd light band: tiny emissive-ish seat cells for a fuller arena look.
-  const int crowdSegments = segments * 2;
-  const float crowdRadius = ringBaseRadius + 2.3F;
-  const float crowdArcLength = std::max(0.20F, (2.0F * kPi * crowdRadius / static_cast<float>(crowdSegments)) * 0.78F);
-  for (int row = 0; row < 3; ++row) {
-    const float rowZ = fieldZ_ + stadiumHeight * (0.20F + 0.10F * static_cast<float>(row));
-    const float rowRadius = crowdRadius + static_cast<float>(row) * 0.45F;
-    for (int i = 0; i < crowdSegments; ++i) {
-      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(crowdSegments);
-      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-      const float cx = std::cos(angle) * rowRadius;
-      const float cy = std::sin(angle) * rowRadius;
-      const float seed = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
-      const float pulse = 0.5F + 0.5F * std::sin(envTimeS * 1.4F + seed * 6.2831853F);
-      const glm::vec4 crowdCol = LerpColor(
-          glm::vec4{0.07F, 0.08F, 0.10F, 1.0F},
-          glm::vec4{0.33F, 0.56F, 0.92F, 1.0F},
-          pulse * 0.7F);
-      DrawBox(
-          vp,
-          BoxPrimitive{
-              .center = glm::vec3{cx, cy, rowZ},
-              .size = glm::vec3{crowdArcLength, 0.25F, 0.08F},
-              .yawDeg = angleDeg,
-              .color = crowdCol,
-              .pass = RenderPass::Opaque,
-          });
+  if (highDetail) {
+    const int crowdSegments = segments * 2;
+    const float crowdRadius = ringBaseRadius + 2.3F;
+    const float crowdArcLength = std::max(0.20F, (2.0F * kPi * crowdRadius / static_cast<float>(crowdSegments)) * 0.78F);
+    for (int row = 0; row < 3; ++row) {
+      const float rowZ = fieldZ_ + stadiumHeight * (0.20F + 0.10F * static_cast<float>(row));
+      const float rowRadius = crowdRadius + static_cast<float>(row) * 0.45F;
+      for (int i = 0; i < crowdSegments; ++i) {
+        const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(crowdSegments);
+        const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+        const float cx = std::cos(angle) * rowRadius;
+        const float cy = std::sin(angle) * rowRadius;
+        const float seed = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
+        const float pulse = 0.5F + 0.5F * std::sin(envTimeS * 1.4F + seed * 6.2831853F);
+        const glm::vec4 crowdCol = LerpColor(
+            glm::vec4{0.07F, 0.08F, 0.10F, 1.0F},
+            glm::vec4{0.33F, 0.56F, 0.92F, 1.0F},
+            pulse * 0.7F);
+        DrawBox(
+            vp,
+            BoxPrimitive{
+                .center = glm::vec3{cx, cy, rowZ},
+                .size = glm::vec3{crowdArcLength, 0.25F, 0.08F},
+                .yawDeg = angleDeg,
+                .color = crowdCol,
+                .pass = RenderPass::Opaque,
+            });
+      }
     }
   }
 
@@ -927,83 +967,89 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
         });
   }
 
-  const float lightRingRadius = ringBaseRadius + 2.2F;
-  const float lightRingZ = fieldZ_ + stadiumHeight * 0.80F;
-  const float lightBarLength = std::max(2.0F, (2.0F * kPi * lightRingRadius / static_cast<float>(segments)) * 0.74F);
-  for (int i = 0; i < segments; i += 2) {
-    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
-    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-    const float cx = std::cos(angle) * lightRingRadius;
-    const float cy = std::sin(angle) * lightRingRadius;
-    const float glow = 0.62F + 0.38F * std::cos(angle * 4.0F + envTimeS * 1.25F);
-    const float hueJitter = Hash01(static_cast<std::uint32_t>(i * 4099 + 73));
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, lightRingZ},
-            .size = glm::vec3{lightBarLength, 0.42F, 0.30F},
-            .yawDeg = angleDeg,
-            .color =
-                glm::vec4{
-                    (0.55F + 0.32F * hueJitter) * glow,
-                    (0.78F + 0.16F * (1.0F - hueJitter)) * glow,
-                    0.98F * glow,
-                    1.0F},
-            .pass = RenderPass::Opaque,
-        });
+  if (mediumDetail) {
+    const float lightRingRadius = ringBaseRadius + 2.2F;
+    const float lightRingZ = fieldZ_ + stadiumHeight * 0.80F;
+    const float lightBarLength = std::max(2.0F, (2.0F * kPi * lightRingRadius / static_cast<float>(segments)) * 0.74F);
+    for (int i = 0; i < segments; i += 2) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * lightRingRadius;
+      const float cy = std::sin(angle) * lightRingRadius;
+      const float glow = 0.62F + 0.38F * std::cos(angle * 4.0F + envTimeS * 1.25F);
+      const float hueJitter = Hash01(static_cast<std::uint32_t>(i * 4099 + 73));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, lightRingZ},
+              .size = glm::vec3{lightBarLength, 0.42F, 0.30F},
+              .yawDeg = angleDeg,
+              .color =
+                  glm::vec4{
+                      (0.55F + 0.32F * hueJitter) * glow,
+                      (0.78F + 0.16F * (1.0F - hueJitter)) * glow,
+                      0.98F * glow,
+                      1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
   }
 
   // Secondary ribbon board near upper bowl with faster chase lights.
-  const float ribbonRadius = ringBaseRadius + 4.4F;
-  const float ribbonZ = fieldZ_ + stadiumHeight * 0.72F;
-  const float ribbonLen = std::max(1.4F, (2.0F * kPi * ribbonRadius / static_cast<float>(segments)) * 0.90F);
-  for (int i = 0; i < segments; ++i) {
-    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
-    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-    const float cx = std::cos(angle) * ribbonRadius;
-    const float cy = std::sin(angle) * ribbonRadius;
-    const float chase = 0.5F + 0.5F * std::sin(envTimeS * 5.2F - static_cast<float>(i) * 0.9F);
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, ribbonZ},
-            .size = glm::vec3{ribbonLen, 0.24F, 0.42F},
-            .yawDeg = angleDeg,
-            .color = glm::vec4{0.10F + 0.30F * chase, 0.24F + 0.60F * chase, 0.42F + 0.58F * chase, 1.0F},
-            .pass = RenderPass::Opaque,
-        });
+  if (highDetail) {
+    const float ribbonRadius = ringBaseRadius + 4.4F;
+    const float ribbonZ = fieldZ_ + stadiumHeight * 0.72F;
+    const float ribbonLen = std::max(1.4F, (2.0F * kPi * ribbonRadius / static_cast<float>(segments)) * 0.90F);
+    for (int i = 0; i < segments; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * ribbonRadius;
+      const float cy = std::sin(angle) * ribbonRadius;
+      const float chase = 0.5F + 0.5F * std::sin(envTimeS * 5.2F - static_cast<float>(i) * 0.9F);
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, ribbonZ},
+              .size = glm::vec3{ribbonLen, 0.24F, 0.42F},
+              .yawDeg = angleDeg,
+              .color = glm::vec4{0.10F + 0.30F * chase, 0.24F + 0.60F * chase, 0.42F + 0.58F * chase, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
   }
 
-  const float beaconRadius = ringBaseRadius + 3.4F;
-  for (int i = 0; i < segments; i += 3) {
-    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
-    const float cx = std::cos(angle) * beaconRadius;
-    const float cy = std::sin(angle) * beaconRadius;
-    const float hue = Hash01(static_cast<std::uint32_t>(i * 731 + 5));
-    const float beat = 0.72F + 0.28F * std::sin(envTimeS * 1.7F + static_cast<float>(i));
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F},
-            .size = glm::vec3{0.24F, 0.24F, 1.45F},
-            .yawDeg = 0.0F,
-            .color = glm::vec4{0.08F, 0.10F, 0.12F, 1.0F},
-            .pass = RenderPass::Opaque,
-        });
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F + 0.78F},
-            .size = glm::vec3{0.56F, 0.56F, 0.14F},
-            .yawDeg = 0.0F,
-            .color =
-                glm::vec4{
-                    (0.45F + 0.35F * hue) * beat,
-                    (0.56F + 0.26F * (1.0F - hue)) * beat,
-                    0.95F * beat,
-                    1.0F},
-            .pass = RenderPass::Opaque,
-        });
+  if (mediumDetail) {
+    const float beaconRadius = ringBaseRadius + 3.4F;
+    for (int i = 0; i < segments; i += (highDetail ? 3 : 6)) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+      const float cx = std::cos(angle) * beaconRadius;
+      const float cy = std::sin(angle) * beaconRadius;
+      const float hue = Hash01(static_cast<std::uint32_t>(i * 731 + 5));
+      const float beat = 0.72F + 0.28F * std::sin(envTimeS * 1.7F + static_cast<float>(i));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F},
+              .size = glm::vec3{0.24F, 0.24F, 1.45F},
+              .yawDeg = 0.0F,
+              .color = glm::vec4{0.08F, 0.10F, 0.12F, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + stadiumHeight * 0.63F + 0.78F},
+              .size = glm::vec3{0.56F, 0.56F, 0.14F},
+              .yawDeg = 0.0F,
+              .color =
+                  glm::vec4{
+                      (0.45F + 0.35F * hue) * beat,
+                      (0.56F + 0.26F * (1.0F - hue)) * beat,
+                      0.95F * beat,
+                      1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
   }
 
   // Team tunnel portals on the cardinal directions.
@@ -1082,105 +1128,113 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   }
 
   // Upper halo ring for stronger silhouette.
-  const float haloRadius = ringBaseRadius + 7.4F;
-  const float haloLength = std::max(1.0F, (2.0F * kPi * haloRadius / static_cast<float>(segments)) * 0.9F);
-  for (int i = 0; i < segments; ++i) {
-    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
-    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-    const float cx = std::cos(angle) * haloRadius;
-    const float cy = std::sin(angle) * haloRadius;
-    const float hue = Hash01(static_cast<std::uint32_t>(i * 827 + 11));
-    const float sweep = 0.55F + 0.45F * std::sin(envTimeS * 1.6F + angle * 4.0F);
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, roofZ + 0.95F},
-            .size = glm::vec3{haloLength, 0.22F, 0.18F},
-            .yawDeg = angleDeg,
-            .color =
-                glm::vec4{
-                    (0.24F + hue * 0.36F) * sweep,
-                    (0.50F + hue * 0.24F) * sweep,
-                    0.98F * sweep,
-                    1.0F},
-            .pass = RenderPass::Opaque,
-        });
-  }
-
-  // Light beams from upper rig toward the field center.
-  const float beamRadius = ringBaseRadius + 5.0F;
-  const int beamCount = std::max(12, segments);
-  for (int i = 0; i < beamCount; ++i) {
-    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(beamCount);
-    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-    const float cx = std::cos(angle) * beamRadius;
-    const float cy = std::sin(angle) * beamRadius;
-    const float glow = 0.45F + 0.55F * std::max(0.0F, std::cos(envTimeS * 1.25F + angle * 3.0F));
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx * 0.78F, cy * 0.78F, fieldZ_ + stadiumHeight * 0.56F},
-            .size = glm::vec3{0.16F, beamRadius * 0.20F, stadiumHeight * 0.72F},
-            .yawDeg = angleDeg,
-            .color = glm::vec4{0.35F * glow, 0.62F * glow, 1.0F * glow, 0.30F},
-            .pass = RenderPass::Transparent,
-        });
-  }
-
-  // Suspended camera drones around scoreboard for extra motion cues.
-  const float droneOrbitR = 4.4F;
-  for (int i = 0; i < 6; ++i) {
-    const float phase = envTimeS * 0.55F + static_cast<float>(i) * (2.0F * kPi / 6.0F);
-    const float cx = std::cos(phase) * droneOrbitR;
-    const float cy = std::sin(phase) * droneOrbitR;
-    const float cz = fieldZ_ + stadiumHeight * (0.86F + 0.03F * std::sin(phase * 1.8F));
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, cz},
-            .size = glm::vec3{0.28F, 0.28F, 0.16F},
-            .yawDeg = glm::degrees(phase),
-            .color = glm::vec4{0.10F, 0.12F, 0.16F, 1.0F},
-            .pass = RenderPass::Opaque,
-        });
-    DrawBox(
-        vp,
-        BoxPrimitive{
-            .center = glm::vec3{cx, cy, cz - 0.12F},
-            .size = glm::vec3{0.42F, 0.06F, 0.04F},
-            .yawDeg = glm::degrees(phase + kPi * 0.5F),
-            .color = glm::vec4{0.35F, 0.72F, 1.0F, 1.0F},
-            .pass = RenderPass::Opaque,
-        });
-  }
-
-  // Rotating hologram rings above center for broadcast-style flair.
-  const int holoSegments = std::max(24, segments * 2);
-  for (int layer = 0; layer < 3; ++layer) {
-    const float baseRadius = 1.8F + static_cast<float>(layer) * 0.75F;
-    const float z = fieldZ_ + stadiumHeight * (0.70F + 0.05F * static_cast<float>(layer));
-    const float rot = envTimeS * (0.7F + 0.25F * static_cast<float>(layer));
-    const float len = std::max(0.10F, (2.0F * kPi * baseRadius / static_cast<float>(holoSegments)) * 0.72F);
-    for (int i = 0; i < holoSegments; i += 2) {
-      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(holoSegments) + rot;
+  if (mediumDetail) {
+    const float haloRadius = ringBaseRadius + 7.4F;
+    const float haloLength = std::max(1.0F, (2.0F * kPi * haloRadius / static_cast<float>(segments)) * 0.9F);
+    for (int i = 0; i < segments; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
       const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
-      const float cx = std::cos(angle) * baseRadius;
-      const float cy = std::sin(angle) * baseRadius;
-      const float beat = 0.5F + 0.5F * std::sin(envTimeS * 4.5F + static_cast<float>(i));
+      const float cx = std::cos(angle) * haloRadius;
+      const float cy = std::sin(angle) * haloRadius;
+      const float hue = Hash01(static_cast<std::uint32_t>(i * 827 + 11));
+      const float sweep = 0.55F + 0.45F * std::sin(envTimeS * 1.6F + angle * 4.0F);
       DrawBox(
           vp,
           BoxPrimitive{
-              .center = glm::vec3{cx, cy, z},
-              .size = glm::vec3{len, 0.06F, 0.035F},
+              .center = glm::vec3{cx, cy, roofZ + 0.95F},
+              .size = glm::vec3{haloLength, 0.22F, 0.18F},
               .yawDeg = angleDeg,
               .color =
                   glm::vec4{
-                      (0.18F + 0.18F * static_cast<float>(layer)) * beat,
-                      (0.55F + 0.14F * static_cast<float>(layer)) * beat,
-                      0.98F * beat,
-                      0.70F},
+                      (0.24F + hue * 0.36F) * sweep,
+                      (0.50F + hue * 0.24F) * sweep,
+                      0.98F * sweep,
+                      1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
+  }
+
+  // Light beams from upper rig toward the field center.
+  if (highDetail) {
+    const float beamRadius = ringBaseRadius + 5.0F;
+    const int beamCount = std::max(12, segments);
+    for (int i = 0; i < beamCount; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(beamCount);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * beamRadius;
+      const float cy = std::sin(angle) * beamRadius;
+      const float glow = 0.45F + 0.55F * std::max(0.0F, std::cos(envTimeS * 1.25F + angle * 3.0F));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx * 0.78F, cy * 0.78F, fieldZ_ + stadiumHeight * 0.56F},
+              .size = glm::vec3{0.16F, beamRadius * 0.20F, stadiumHeight * 0.72F},
+              .yawDeg = angleDeg,
+              .color = glm::vec4{0.35F * glow, 0.62F * glow, 1.0F * glow, 0.30F},
               .pass = RenderPass::Transparent,
           });
+    }
+  }
+
+  // Suspended camera drones around scoreboard for extra motion cues.
+  if (highDetail) {
+    const float droneOrbitR = 4.4F;
+    for (int i = 0; i < 6; ++i) {
+      const float phase = envTimeS * 0.55F + static_cast<float>(i) * (2.0F * kPi / 6.0F);
+      const float cx = std::cos(phase) * droneOrbitR;
+      const float cy = std::sin(phase) * droneOrbitR;
+      const float cz = fieldZ_ + stadiumHeight * (0.86F + 0.03F * std::sin(phase * 1.8F));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, cz},
+              .size = glm::vec3{0.28F, 0.28F, 0.16F},
+              .yawDeg = glm::degrees(phase),
+              .color = glm::vec4{0.10F, 0.12F, 0.16F, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, cz - 0.12F},
+              .size = glm::vec3{0.42F, 0.06F, 0.04F},
+              .yawDeg = glm::degrees(phase + kPi * 0.5F),
+              .color = glm::vec4{0.35F, 0.72F, 1.0F, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
+  }
+
+  // Rotating hologram rings above center for broadcast-style flair.
+  if (highDetail) {
+    const int holoSegments = std::max(24, segments * 2);
+    for (int layer = 0; layer < 3; ++layer) {
+      const float baseRadius = 1.8F + static_cast<float>(layer) * 0.75F;
+      const float z = fieldZ_ + stadiumHeight * (0.70F + 0.05F * static_cast<float>(layer));
+      const float rot = envTimeS * (0.7F + 0.25F * static_cast<float>(layer));
+      const float len = std::max(0.10F, (2.0F * kPi * baseRadius / static_cast<float>(holoSegments)) * 0.72F);
+      for (int i = 0; i < holoSegments; i += 2) {
+        const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(holoSegments) + rot;
+        const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+        const float cx = std::cos(angle) * baseRadius;
+        const float cy = std::sin(angle) * baseRadius;
+        const float beat = 0.5F + 0.5F * std::sin(envTimeS * 4.5F + static_cast<float>(i));
+        DrawBox(
+            vp,
+            BoxPrimitive{
+                .center = glm::vec3{cx, cy, z},
+                .size = glm::vec3{len, 0.06F, 0.035F},
+                .yawDeg = angleDeg,
+                .color =
+                    glm::vec4{
+                        (0.18F + 0.18F * static_cast<float>(layer)) * beat,
+                        (0.55F + 0.14F * static_cast<float>(layer)) * beat,
+                        0.98F * beat,
+                        0.70F},
+                .pass = RenderPass::Transparent,
+            });
+      }
     }
   }
 

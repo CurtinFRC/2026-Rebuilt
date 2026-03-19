@@ -71,6 +71,7 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.renderFeaturePluginPath = GetEnvString("RENDER_FEATURE_PLUGIN_PATH", cfg.renderFeaturePluginPath);
   cfg.hotReloadSceneDescriptor = GetEnvBool("HOT_RELOAD_SCENE_DESCRIPTOR", cfg.hotReloadSceneDescriptor);
   cfg.hotReloadSeasonModule = GetEnvBool("HOT_RELOAD_SEASON_MODULE", cfg.hotReloadSeasonModule);
+  cfg.hotReloadRenderFeatures = GetEnvBool("HOT_RELOAD_RENDER_FEATURES", cfg.hotReloadRenderFeatures);
   cfg.runtimeConfigProfilePath = GetEnvString("RUNTIME_CONFIG_PROFILE_PATH", cfg.runtimeConfigProfilePath);
   cfg.hotReloadRuntimeConfigProfile =
       GetEnvBool("HOT_RELOAD_RUNTIME_CONFIG_PROFILE", cfg.hotReloadRuntimeConfigProfile);

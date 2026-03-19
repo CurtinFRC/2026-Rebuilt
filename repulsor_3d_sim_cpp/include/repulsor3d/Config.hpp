@@ -10,10 +10,11 @@ struct ViewerConfig {
   std::string sceneDescriptorPath = "";
   std::string seasonModulePluginPath = "";
   std::string renderFeaturePluginPath = "";
-  bool hotReloadSceneDescriptor = true;
-  bool hotReloadSeasonModule = true;
+  bool hotReloadSceneDescriptor = false;
+  bool hotReloadSeasonModule = false;
+  bool hotReloadRenderFeatures = false;
   std::string runtimeConfigProfilePath = "";
-  bool hotReloadRuntimeConfigProfile = true;
+  bool hotReloadRuntimeConfigProfile = false;
 
   std::string ntServer = "127.0.0.1";
   std::string ntClientName = "repulsor_3d_sim_cpp";
@@ -27,7 +28,7 @@ struct ViewerConfig {
   std::string poseBasePath = "AdvantageKit/RealOutputs/Odometry";
   std::string poseStructKey = "Robot";
   std::string ntSchemaPath = "";
-  bool hotReloadNtSchema = true;
+  bool hotReloadNtSchema = false;
 
   std::string truthSocketHost = "127.0.0.1";
   int truthSocketPort = 5809;

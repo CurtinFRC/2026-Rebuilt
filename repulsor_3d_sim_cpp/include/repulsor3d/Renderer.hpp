@@ -183,6 +183,7 @@ class Renderer {
   std::uint64_t renderFeatureReloadCount_ = 0;
   std::uint64_t renderFeatureReloadFailedCount_ = 0;
   std::string renderFeatureReloadLastError_;
+  int environmentDetailDivisor_ = 1;
   std::vector<std::string> queuedDiagnosticMessages_;
   std::vector<std::pair<std::string, double>> queuedDiagnosticCounters_;
 };

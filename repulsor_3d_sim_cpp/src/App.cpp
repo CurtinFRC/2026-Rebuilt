@@ -49,6 +49,12 @@ int ParseEnvInt(const char* name, const int fallback) {
   }
 }
 
+double ToMilliseconds(
+    const std::chrono::steady_clock::time_point& start,
+    const std::chrono::steady_clock::time_point& end) {
+  return std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
+}
+
 #if defined(_WIN32)
 using WglSwapIntervalExtFn = int(__stdcall*)(int);
 using WglGetSwapIntervalExtFn = int(__stdcall*)(void);
@@ -144,7 +150,7 @@ int ViewerApp::Run() {
   ForceSwapInterval(cfg_.vsync ? 1 : 0);
   const bool vsyncAutoDisableEnabled = ParseEnvBool("VSYNC_AUTO_DISABLE", true);
   const bool useFixedTick = ParseEnvBool("APP_USE_FIXED_TICK", false);
-  const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", true);
+  const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", false);
   const int presentStallEnableThresholdFrames =
       std::max(5, ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_FRAMES", 15));
   const double presentStallEnableThresholdMs =
@@ -156,7 +162,6 @@ int ViewerApp::Run() {
   int highSwapWaitFrames = 0;
   int highCpuGpuMismatchFrames = 0;
   int highPresentStallFrames = 0;
-  std::uint64_t frameCounter = 0;
 
   glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {
@@ -192,12 +197,14 @@ int ViewerApp::Run() {
   while (!glfwWindowShouldClose(window_)) {
     const auto loopStart = std::chrono::steady_clock::now();
     glfwPollEvents();
+    const auto afterPoll = std::chrono::steady_clock::now();
 
     const auto now = timeSource_.Now();
     const double frameDt = std::chrono::duration_cast<std::chrono::duration<double>>(now - last).count();
     last = now;
 
     MaybeReloadRuntimeConfigProfile(now);
+    const auto afterRuntimeReload = std::chrono::steady_clock::now();
 
     int tickSteps = 0;
     if (useFixedTick) {
@@ -209,6 +216,7 @@ int ViewerApp::Run() {
       Tick(std::min(frameDt, 0.100));
       tickSteps = 1;
     }
+    const auto afterTick = std::chrono::steady_clock::now();
     renderer_.QueueDiagnosticCounter("app.tick_mode_fixed", useFixedTick ? 1.0 : 0.0);
     renderer_.QueueDiagnosticCounter("app.tick_steps", static_cast<double>(tickSteps));
 
@@ -216,8 +224,11 @@ int ViewerApp::Run() {
     int height = 0;
     glfwGetFramebufferSize(window_, &width, &height);
     renderer_.Resize(width, height);
+    const auto afterResize = std::chrono::steady_clock::now();
 
+    const auto drawStart = std::chrono::steady_clock::now();
     Draw();
+    const auto drawEnd = std::chrono::steady_clock::now();
 
     if (now - lastTitleUpdate > std::chrono::milliseconds(300)) {
       const auto& ex = latest_.snapshot.extrinsics;
@@ -227,6 +238,7 @@ int ViewerApp::Run() {
       glfwSetWindowTitle(window_, title.c_str());
       lastTitleUpdate = now;
     }
+    const auto afterTitle = std::chrono::steady_clock::now();
 
     const auto swapStart = std::chrono::steady_clock::now();
     glfwSwapBuffers(window_);
@@ -255,8 +267,13 @@ int ViewerApp::Run() {
         "app.loop_fps",
         (loopMs > 1e-4) ? (1000.0 / loopMs) : 0.0);
     renderer_.QueueDiagnosticCounter("app.swap_interval_effective", static_cast<double>(QuerySwapInterval()));
-    ++frameCounter;
-
+    renderer_.QueueDiagnosticCounter("app.stage.poll_ms", ToMilliseconds(loopStart, afterPoll));
+    renderer_.QueueDiagnosticCounter("app.stage.runtime_reload_ms", ToMilliseconds(afterPoll, afterRuntimeReload));
+    renderer_.QueueDiagnosticCounter("app.stage.tick_ms", ToMilliseconds(afterRuntimeReload, afterTick));
+    renderer_.QueueDiagnosticCounter("app.stage.resize_ms", ToMilliseconds(afterTick, afterResize));
+    renderer_.QueueDiagnosticCounter("app.stage.draw_ms", ToMilliseconds(drawStart, drawEnd));
+    renderer_.QueueDiagnosticCounter("app.stage.title_ms", ToMilliseconds(drawEnd, afterTitle));
+    renderer_.QueueDiagnosticCounter("app.stage.pre_swap_ms", ToMilliseconds(loopStart, swapStart));
     if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled && !vsyncAutoEnabledForPresentStall) {
       const auto& diag = renderer_.LatestDiagnostics();
       const double frameAvgMs = diag.frameAverageMilliseconds > 0.0 ? diag.frameAverageMilliseconds : diag.frameMilliseconds;
@@ -267,8 +284,8 @@ int ViewerApp::Run() {
           break;
         }
       }
-      const bool highSwapWait = swapWaitAverageMs > 8.0;
-      const bool lowFps = frameAvgMs > 25.0;
+      const bool highSwapWait = swapWaitAverageMs > 10.0;
+      const bool lowFps = swapWaitAverageMs > 12.0;
       if (highSwapWait && lowFps) {
         ++highSwapWaitFrames;
       } else {
@@ -280,7 +297,7 @@ int ViewerApp::Run() {
       } else {
         highCpuGpuMismatchFrames = 0;
       }
-      if (highSwapWaitFrames >= 45 || highCpuGpuMismatchFrames >= 45) {
+      if (highSwapWaitFrames >= 12 || highCpuGpuMismatchFrames >= 30) {
         glfwSwapInterval(0);
         ForceSwapInterval(0);
         cfg_.vsync = false;
@@ -311,7 +328,7 @@ int ViewerApp::Run() {
     }
 
     // If swap interval gets re-enabled by driver/runtime, keep forcing the requested mode.
-    if (!cfg_.vsync && (frameCounter % 120ULL) == 0ULL) {
+    if (!cfg_.vsync) {
       ForceSwapInterval(0);
     }
   }
