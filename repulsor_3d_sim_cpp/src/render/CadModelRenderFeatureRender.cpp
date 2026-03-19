@@ -736,6 +736,25 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   const bool farShadowReady = nearShadowReady && farCascadeRequested && shadowFboFar_ != 0;
   bool shadowsEnabledForShading = false;
   bool shadowCacheReused = false;
+  std::uint64_t instanceUploadBytes = 0ULL;
+  int instanceBufferResizes = 0;
+  auto uploadInstances = [this, &instanceUploadBytes, &instanceBufferResizes](
+                             GpuMesh::LodGpu& lod,
+                             const InstanceGpuData* data,
+                             const std::size_t instanceCount) {
+    if (backend_ == nullptr || data == nullptr || instanceCount == 0) {
+      return;
+    }
+    const std::size_t requiredBytes = instanceCount * sizeof(InstanceGpuData);
+    instanceUploadBytes += static_cast<std::uint64_t>(requiredBytes);
+    backend_->BindArrayBuffer(lod.instanceVbo.Get());
+    if (requiredBytes > lod.instanceCapacityBytes) {
+      lod.instanceCapacityBytes = requiredBytes;
+      backend_->UploadArrayBufferData(lod.instanceCapacityBytes, nullptr, true);
+      ++instanceBufferResizes;
+    }
+    backend_->UploadArrayBufferSubData(0, requiredBytes, data);
+  };
 
   if (nearShadowReady) {
     struct ShadowBatch {
@@ -799,9 +818,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         if (batch.mirroredWinding) {
           glFrontFace(GL_CW);
         }
-        backend_->BindVertexArray(batch.lod->vao.Get());
-        backend_->BindArrayBuffer(batch.lod->instanceVbo.Get());
-        backend_->UploadArrayBufferData(batch.instances.size() * sizeof(InstanceGpuData), batch.instances.data(), true);
+        auto* lodMutable = const_cast<GpuMesh::LodGpu*>(batch.lod);
+        backend_->BindVertexArray(lodMutable->vao.Get());
+        uploadInstances(*lodMutable, batch.instances.data(), batch.instances.size());
         if (batch.lod->indexCount > 0) {
           backend_->DrawIndexedTrianglesInstanced(batch.lod->indexCount, static_cast<int>(batch.instances.size()));
         } else {
@@ -976,9 +995,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         glFrontFace(GL_CW);
       }
       const InstanceGpuData instanceData = ToInstanceData(call.model);
-      backend_->BindVertexArray(call.lod->vao.Get());
-      backend_->BindArrayBuffer(call.lod->instanceVbo.Get());
-      backend_->UploadArrayBufferData(sizeof(InstanceGpuData), &instanceData, true);
+      auto* lodMutable = const_cast<GpuMesh::LodGpu*>(call.lod);
+      backend_->BindVertexArray(lodMutable->vao.Get());
+      uploadInstances(*lodMutable, &instanceData, 1);
       if (call.lod->indexCount > 0) {
         drawIndexedRangesSingleInstance(call.ranges);
       } else {
@@ -1083,9 +1102,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       glFrontFace(GL_CW);
     }
     const InstanceGpuData instanceData = ToInstanceData(call.model);
-    backend_->BindVertexArray(call.lod->vao.Get());
-    backend_->BindArrayBuffer(call.lod->instanceVbo.Get());
-    backend_->UploadArrayBufferData(sizeof(InstanceGpuData), &instanceData, true);
+    auto* lodMutable = const_cast<GpuMesh::LodGpu*>(call.lod);
+    backend_->BindVertexArray(lodMutable->vao.Get());
+    uploadInstances(*lodMutable, &instanceData, 1);
     if (call.lod->indexCount > 0) {
       drawIndexedRangesSingleInstance(call.ranges);
     } else {
@@ -1095,6 +1114,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     if (call.mirroredWinding) {
       glFrontFace(GL_CCW);
     }
+  }
+
+  if (context.diagnosticsWriter != nullptr) {
+    context.diagnosticsWriter->RecordCounter("cad.instance_upload.bytes", static_cast<double>(instanceUploadBytes));
+    context.diagnosticsWriter->RecordCounter("cad.instance_upload.resizes", static_cast<double>(instanceBufferResizes));
   }
 
   glDepthMask(GL_TRUE);

@@ -117,6 +117,17 @@ void OpenGLRenderBackend::UploadArrayBufferData(const std::size_t sizeBytes, con
   glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeBytes), data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
 }
 
+void OpenGLRenderBackend::UploadArrayBufferSubData(
+    const std::size_t offsetBytes,
+    const std::size_t sizeBytes,
+    const void* data) {
+  glBufferSubData(
+      GL_ARRAY_BUFFER,
+      static_cast<GLintptr>(offsetBytes),
+      static_cast<GLsizeiptr>(sizeBytes),
+      data);
+}
+
 void OpenGLRenderBackend::UploadElementArrayBufferData(const std::size_t sizeBytes, const void* data, const bool dynamic) {
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeBytes), data, dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
 }

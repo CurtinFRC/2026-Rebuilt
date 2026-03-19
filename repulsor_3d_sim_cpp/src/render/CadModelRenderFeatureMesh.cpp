@@ -28,6 +28,12 @@ using cadfeature::PackVerticesForGpu;
 using cadfeature::OptimizeIndexOrderForVertexCache;
 using cadfeature::RemoveDegenerateTriangles;
 
+namespace {
+
+constexpr std::size_t kInitialInstanceCapacity = 256ULL * sizeof(cadfeature::InstanceGpuData);
+
+}  // namespace
+
 CadModelRenderFeature::PreparedCpuMesh CadModelRenderFeature::PrepareCpuMesh(const PositionNormalMesh& cpu) {
   PreparedCpuMesh prepared;
   if (cpu.vertices.empty()) {
@@ -159,7 +165,8 @@ bool CadModelRenderFeature::UploadSingleLod(
   backend.DefineVertexAttribNormalizedU8(2, 4, sizeof(PackedVertex), offsetof(PackedVertex, color));
 
   backend.BindArrayBuffer(gpuLod.instanceVbo.Get());
-  backend.UploadArrayBufferData(sizeof(InstanceGpuData), nullptr, true);
+  gpuLod.instanceCapacityBytes = kInitialInstanceCapacity;
+  backend.UploadArrayBufferData(gpuLod.instanceCapacityBytes, nullptr, true);
   backend.EnableVertexAttrib(3);
   backend.DefineVertexAttribFloat(3, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow0));
   backend.EnableVertexAttrib(4);
@@ -209,6 +216,7 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vao.Reset();
     lod.vertexCount = 0;
     lod.indexCount = 0;
+    lod.instanceCapacityBytes = 0;
     lod.clusters.clear();
   }
   gpu.lods.clear();
@@ -220,6 +228,7 @@ void CadModelRenderFeature::DestroyMesh(GpuMesh& gpu) {
     lod.vao.Reset();
     lod.vertexCount = 0;
     lod.indexCount = 0;
+    lod.instanceCapacityBytes = 0;
     lod.clusters.clear();
     gpu.shadowProxy.reset();
   }

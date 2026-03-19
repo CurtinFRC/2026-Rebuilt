@@ -96,7 +96,7 @@ struct ViewerConfig {
   int maxRenderFuel = 250;
   int maxRenderTruthFuel = 150;
   int maxCameraDebugRaysPerCamera = 200;
-  bool vsync = true;
+  bool vsync = false;
 
   float followSmoothTimeS = 0.18F;
   float followMaxSpeedMps = 12.0F;

@@ -44,6 +44,7 @@ class IRenderBackend {
   virtual void BindArrayBuffer(unsigned int bufferId) = 0;
   virtual void BindElementArrayBuffer(unsigned int bufferId) = 0;
   virtual void UploadArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) = 0;
+  virtual void UploadArrayBufferSubData(std::size_t offsetBytes, std::size_t sizeBytes, const void* data) = 0;
   virtual void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) = 0;
   virtual void EnableVertexAttrib(unsigned int index) = 0;
   virtual void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) = 0;
@@ -97,6 +98,7 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void BindArrayBuffer(unsigned int bufferId) override;
   void BindElementArrayBuffer(unsigned int bufferId) override;
   void UploadArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) override;
+  void UploadArrayBufferSubData(std::size_t offsetBytes, std::size_t sizeBytes, const void* data) override;
   void UploadElementArrayBufferData(std::size_t sizeBytes, const void* data, bool dynamic) override;
   void EnableVertexAttrib(unsigned int index) override;
   void DefineVertexAttribFloat(unsigned int index, int componentCount, int strideBytes, std::size_t offsetBytes) override;
