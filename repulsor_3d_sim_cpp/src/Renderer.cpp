@@ -73,6 +73,8 @@ const char* CadLoadStageLabelFromCode(const int stageCode) {
       return "queued";
     case 2:
       return "cache_lookup";
+    case 12:
+      return "cache_lookup_slow";
     case 3:
       return "cache_hit";
     case 4:
@@ -81,8 +83,12 @@ const char* CadLoadStageLabelFromCode(const int stageCode) {
       return "import_slow";
     case 5:
       return "prepare";
+    case 13:
+      return "prepare_slow";
     case 6:
       return "store_cache";
+    case 14:
+      return "store_cache_slow";
     case 7:
       return "gpu_upload";
     case 8:

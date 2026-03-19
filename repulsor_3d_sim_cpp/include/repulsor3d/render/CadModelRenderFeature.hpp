@@ -266,7 +266,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int fastShadingMinIndices_ = 0;
   int runtimeMaxDrawIndices_ = 3000000;
   int runtimeMaxDrawIndicesField_ = 1800000;
-  std::size_t meshCacheBudgetBytes_ = 512ULL * 1024ULL * 1024ULL;
+  std::size_t meshCacheBudgetBytes_ = 2048ULL * 1024ULL * 1024ULL;
   std::size_t textureCacheBudgetBytes_ = 256ULL * 1024ULL * 1024ULL;
   std::size_t meshCacheBudgetCount_ = 0;
   std::size_t textureCacheBudgetCount_ = 0;

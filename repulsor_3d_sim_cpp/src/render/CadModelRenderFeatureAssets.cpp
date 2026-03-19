@@ -145,6 +145,13 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
       return nullptr;
     }
 
+    if (upload.gpu.lods.empty()) {
+      failedLoads_.insert(assetPath);
+      pendingGpuUploads_.erase(assetPath);
+      std::cerr << "CAD upload produced no LODs: " << assetPath << "\n";
+      return nullptr;
+    }
+
     auto [it, inserted] = meshCache_.emplace(assetPath, std::move(upload.gpu));
     pendingGpuUploads_.erase(assetPath);
     if (!inserted) {
@@ -205,8 +212,45 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
 
             const CadLodPolicy& policy = LoadCadLodPolicy();
             setStage("cache_lookup", 0.10F);
+            std::atomic<bool> cacheLookupDone{false};
+            const double cacheLookupWarnSeconds = std::max(2.0, static_cast<double>(GetEnvFloat("CAD_CACHE_LOOKUP_WARN_S", 8.0F)));
+            const double cacheLookupHalfLifeSeconds =
+                std::max(0.5, static_cast<double>(GetEnvFloat("CAD_CACHE_LOOKUP_PROGRESS_HALFLIFE_S", 2.0F)));
+            std::thread cacheLookupHeartbeat([&]() {
+              bool markedSlow = false;
+              const auto start = std::chrono::steady_clock::now();
+              while (!cacheLookupDone.load()) {
+                if (status != nullptr) {
+                  const auto now = std::chrono::steady_clock::now();
+                  const double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(now - start).count();
+                  const float stageProgress = std::clamp(
+                      static_cast<float>(1.0 - std::exp(-elapsed / cacheLookupHalfLifeSeconds)),
+                      0.0F,
+                      0.98F);
+                  status->stageElapsedSeconds = elapsed;
+                  status->stageProgress = stageProgress;
+                  const float overall = 0.10F + stageProgress * (0.24F - 0.10F);
+                  if (overall > status->progress.load()) {
+                    status->progress = overall;
+                  }
+                  if (!markedSlow && elapsed >= cacheLookupWarnSeconds) {
+                    std::scoped_lock lock(status->stageMutex);
+                    if (status->stage == "cache_lookup") {
+                      status->stage = "cache_lookup_slow";
+                    }
+                    markedSlow = true;
+                  }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+              }
+            });
             PreparedCpuMeshBlob cachedBlob;
-            if (TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob)) {
+            const bool preparedCacheHit = TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob);
+            cacheLookupDone = true;
+            if (cacheLookupHeartbeat.joinable()) {
+              cacheLookupHeartbeat.join();
+            }
+            if (preparedCacheHit) {
               setStage("cache_hit", 0.70F);
               const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
               const bool rebuildClustersOnCacheHit = GetEnvBool("CAD_CACHE_HIT_REBUILD_CLUSTERS", false);
@@ -303,10 +347,78 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             }
 
             setStage("prepare", 0.60F);
+            std::atomic<bool> prepareDone{false};
+            const double prepareWarnSeconds = std::max(3.0, static_cast<double>(GetEnvFloat("CAD_PREPARE_WARN_S", 20.0F)));
+            const double prepareHalfLifeSeconds =
+                std::max(0.5, static_cast<double>(GetEnvFloat("CAD_PREPARE_PROGRESS_HALFLIFE_S", 6.0F)));
+            std::thread prepareHeartbeat([&]() {
+              bool markedSlow = false;
+              const auto start = std::chrono::steady_clock::now();
+              while (!prepareDone.load()) {
+                if (status != nullptr) {
+                  const auto now = std::chrono::steady_clock::now();
+                  const double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(now - start).count();
+                  const float stageProgress = std::clamp(
+                      static_cast<float>(1.0 - std::exp(-elapsed / prepareHalfLifeSeconds)),
+                      0.0F,
+                      0.98F);
+                  status->stageElapsedSeconds = elapsed;
+                  status->stageProgress = stageProgress;
+                  const float overall = 0.60F + stageProgress * (0.84F - 0.60F);
+                  if (overall > status->progress.load()) {
+                    status->progress = overall;
+                  }
+                  if (!markedSlow && elapsed >= prepareWarnSeconds) {
+                    std::scoped_lock lock(status->stageMutex);
+                    if (status->stage == "prepare") {
+                      status->stage = "prepare_slow";
+                    }
+                    markedSlow = true;
+                  }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+              }
+            });
             PreparedCpuMesh prepared = PrepareCpuMesh(cpu);
+            prepareDone = true;
+            if (prepareHeartbeat.joinable()) {
+              prepareHeartbeat.join();
+            }
             prepared.loadedFromPreparedCache = false;
             if (!prepared.lods.empty()) {
               setStage("store_cache", 0.85F);
+              std::atomic<bool> storeDone{false};
+              const double storeWarnSeconds = std::max(2.0, static_cast<double>(GetEnvFloat("CAD_STORE_CACHE_WARN_S", 12.0F)));
+              const double storeHalfLifeSeconds =
+                  std::max(0.5, static_cast<double>(GetEnvFloat("CAD_STORE_CACHE_PROGRESS_HALFLIFE_S", 3.0F)));
+              std::thread storeHeartbeat([&]() {
+                bool markedSlow = false;
+                const auto start = std::chrono::steady_clock::now();
+                while (!storeDone.load()) {
+                  if (status != nullptr) {
+                    const auto now = std::chrono::steady_clock::now();
+                    const double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(now - start).count();
+                    const float stageProgress = std::clamp(
+                        static_cast<float>(1.0 - std::exp(-elapsed / storeHalfLifeSeconds)),
+                        0.0F,
+                        0.98F);
+                    status->stageElapsedSeconds = elapsed;
+                    status->stageProgress = stageProgress;
+                    const float overall = 0.85F + stageProgress * (0.98F - 0.85F);
+                    if (overall > status->progress.load()) {
+                      status->progress = overall;
+                    }
+                    if (!markedSlow && elapsed >= storeWarnSeconds) {
+                      std::scoped_lock lock(status->stageMutex);
+                      if (status->stage == "store_cache") {
+                        status->stage = "store_cache_slow";
+                      }
+                      markedSlow = true;
+                    }
+                  }
+                  std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                }
+              });
               PreparedCpuMeshBlob blob;
               blob.boundsCenter = prepared.boundsCenter;
               blob.boundsRadius = prepared.boundsRadius;
@@ -320,6 +432,10 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 blob.lods.push_back(std::move(cachedLod));
               }
               StorePreparedCpuMeshCache(assetPath, policy, blob);
+              storeDone = true;
+              if (storeHeartbeat.joinable()) {
+                storeHeartbeat.join();
+              }
             }
             if (prepared.lods.empty() && status != nullptr) {
               status->failed = true;

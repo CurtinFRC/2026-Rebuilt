@@ -91,6 +91,9 @@ int CadLoadStageCodeFromText(const std::string_view stage) {
   if (stage == "cache_lookup") {
     return 2;
   }
+  if (stage == "cache_lookup_slow") {
+    return 12;
+  }
   if (stage == "cache_hit") {
     return 3;
   }
@@ -103,8 +106,14 @@ int CadLoadStageCodeFromText(const std::string_view stage) {
   if (stage == "prepare") {
     return 5;
   }
+  if (stage == "prepare_slow") {
+    return 13;
+  }
   if (stage == "store_cache") {
     return 6;
+  }
+  if (stage == "store_cache_slow") {
+    return 14;
   }
   if (stage == "completed") {
     return 8;
