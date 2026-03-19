@@ -91,6 +91,7 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   shadowPcfRadius_ = shadowPolicy.pcfRadius;
   shadowCascadeCount_ = std::clamp(shadowPolicy.cascadeCount, 1, 2);
   shadowCascadeSplitM_ = shadowPolicy.cascadeSplitDistanceM;
+  shadowCascadeBlendRangeM_ = std::max(0.0F, shadowPolicy.cascadeBlendRangeM);
   triplanarScale_ = std::max(1e-4F, GetEnvFloat("CAD_TRIPLANAR_SCALE", triplanarScale_));
   autoQualityEnabled_ = GetEnvBool("CAD_PERF_AUTO_QUALITY", autoQualityEnabled_);
   perfTargetFrameMs_ = std::clamp(GetEnvFloat("CAD_PERF_TARGET_FRAME_MS", perfTargetFrameMs_), 8.0F, 66.0F);

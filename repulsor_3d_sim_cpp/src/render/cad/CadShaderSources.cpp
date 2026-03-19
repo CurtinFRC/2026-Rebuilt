@@ -68,12 +68,43 @@ uniform float uShadowStrength;
 uniform int uShadowPcfRadius;
 uniform int uShadowCascadeCount;
 uniform float uShadowCascadeSplitM;
+uniform float uShadowCascadeBlendRangeM;
 uniform int uHasAlbedoMap;
 uniform int uHasNormalMap;
 uniform int uShadingMode;
 uniform float uNormalStrength;
 uniform float uTriplanarScale;
 out vec4 FragColor;
+
+float Hash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+mat2 Rotation2(float a) {
+  float s = sin(a);
+  float c = cos(a);
+  return mat2(c, -s, s, c);
+}
+
+const vec2 kPoisson16[16] = vec2[](
+    vec2(-0.94201624, -0.39906216),
+    vec2(0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870),
+    vec2(0.34495938, 0.29387760),
+    vec2(-0.91588581, 0.45771432),
+    vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543, 0.27676845),
+    vec2(0.97484398, 0.75648379),
+    vec2(0.44323325, -0.97511554),
+    vec2(0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023),
+    vec2(0.79197514, 0.19090188),
+    vec2(-0.24188840, 0.99706507),
+    vec2(-0.81409955, 0.91437590),
+    vec2(0.19984126, 0.78641367),
+    vec2(0.14383161, -0.14100790));
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
   return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
@@ -181,7 +212,18 @@ vec3 SampleTriplanarNormal(sampler2D tex, vec3 worldPos, vec3 worldNormal, float
   return normalize(nx * weights.x + ny * weights.y + nz * weights.z);
 }
 
-float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir, int radius, bool useFarCascade) {
+float SampleShadowMap(bool useFarCascade, vec2 uv) {
+  return useFarCascade ? texture(uShadowMapFar, uv).r : texture(uShadowMap, uv).r;
+}
+
+float ComputeShadowFactor(
+    vec4 lightClipPos,
+    vec3 normal,
+    vec3 lightDir,
+    int radius,
+    bool useFarCascade,
+    vec3 worldPos,
+    bool fastMode) {
   if (uShadowEnabled == 0) {
     return 0.0;
   }
@@ -192,40 +234,38 @@ float ComputeShadowFactor(vec4 lightClipPos, vec3 normal, vec3 lightDir, int rad
     return 0.0;
   }
 
-  float ndotl = max(dot(normalize(normal), normalize(lightDir)), 0.0);
-  float bias = mix(0.0018, 0.0005, ndotl);
+  vec3 N = normalize(normal);
+  vec3 L = normalize(lightDir);
+  float ndotl = max(dot(N, L), 0.0);
+  float slope = sqrt(max(1.0 - ndotl * ndotl, 0.0));
+  float distanceBias = proj.z * (useFarCascade ? 0.00075 : 0.00045);
+  float bias = mix(0.0022, 0.00045, ndotl) + slope * 0.0012 + distanceBias;
   vec2 texelSize = useFarCascade
                        ? (1.0 / vec2(textureSize(uShadowMapFar, 0)))
                        : (1.0 / vec2(textureSize(uShadowMap, 0)));
 
+  int pcfRadius = clamp(radius, 0, 4);
+  if (fastMode || pcfRadius == 0) {
+    float closest = SampleShadowMap(useFarCascade, proj.xy);
+    return (proj.z - bias > closest) ? 1.0 : 0.0;
+  }
+
   float shadowHits = 0.0;
   float taps = 0.0;
-  int pcfRadius = clamp(radius, 0, 4);
-  for (int x = -pcfRadius; x <= pcfRadius; ++x) {
-    for (int y = -pcfRadius; y <= pcfRadius; ++y) {
-      vec2 uv = proj.xy + vec2(float(x), float(y)) * texelSize;
-      float closest = useFarCascade ? texture(uShadowMapFar, uv).r : texture(uShadowMap, uv).r;
-      shadowHits += (proj.z - bias > closest) ? 1.0 : 0.0;
-      taps += 1.0;
+  float kernelScale = float(max(1, pcfRadius));
+  float jitter = Hash13(worldPos * 0.19 + vec3(proj.xy * 17.0, proj.z * 13.0));
+  mat2 rot = Rotation2(jitter * 6.28318530718);
+  int sampleCount = clamp(8 + pcfRadius * 4, 4, 16);
+  for (int i = 0; i < 16; ++i) {
+    if (i >= sampleCount) {
+      break;
     }
+    vec2 offset = rot * kPoisson16[i] * texelSize * kernelScale * 1.7;
+    float closest = SampleShadowMap(useFarCascade, proj.xy + offset);
+    shadowHits += (proj.z - bias > closest) ? 1.0 : 0.0;
+    taps += 1.0;
   }
   return shadowHits / max(taps, 1.0);
-}
-
-float ComputeShadowFactorSingle(vec4 lightClipPos, vec3 normal, vec3 lightDir, bool useFarCascade) {
-  if (uShadowEnabled == 0) {
-    return 0.0;
-  }
-  vec3 proj = lightClipPos.xyz / max(lightClipPos.w, 1e-6);
-  proj = proj * 0.5 + 0.5;
-  if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0 || proj.z < 0.0 || proj.z > 1.0) {
-    return 0.0;
-  }
-
-  float ndotl = max(dot(normalize(normal), normalize(lightDir)), 0.0);
-  float bias = mix(0.0018, 0.0005, ndotl);
-  float closest = useFarCascade ? texture(uShadowMapFar, proj.xy).r : texture(uShadowMap, proj.xy).r;
-  return (proj.z - bias > closest) ? 1.0 : 0.0;
 }
 
 vec3 ShadePbrLight(
@@ -263,15 +303,16 @@ void main() {
   vec3 baseColorSrgb = mix(uColor.rgb, vColor.rgb * uColor.rgb, useAssetColor);
   float alpha = uColor.a * mix(1.0, vColor.a, useAssetColor);
 
-  vec3 N = normalize(vWorldNormal);
+  vec3 geomN = normalize(vWorldNormal);
+  vec3 N = geomN;
   vec3 V = normalize(uCameraPos - vWorldPos);
   if (uHasNormalMap == 1 && uShadingMode == 0) {
     vec3 mappedNormal = SampleTriplanarNormal(
         uNormalMap,
         vWorldPos,
-        N,
+        geomN,
         max(uTriplanarScale, 1e-4));
-    N = normalize(mix(N, mappedNormal, clamp(uNormalStrength, 0.0, 2.0)));
+    N = normalize(mix(geomN, mappedNormal, clamp(uNormalStrength, 0.0, 2.0)));
   }
 
   if (uHasAlbedoMap == 1) {
@@ -279,12 +320,12 @@ void main() {
                         ? SampleTriplanarColor(
                               uAlbedoMap,
                               vWorldPos,
-                              N,
+                              geomN,
                               max(uTriplanarScale, 1e-4))
                         : SampleDominantProjectionColor(
                               uAlbedoMap,
                               vWorldPos,
-                              N,
+                              geomN,
                               max(uTriplanarScale, 1e-4));
     baseColorSrgb *= texColor.rgb;
     alpha *= texColor.a;
@@ -300,14 +341,52 @@ void main() {
   vec3 fillDir = normalize(vec3(0.40, 0.55, 0.72));
   float viewDistance = length(uCameraPos - vWorldPos);
   float splitDistance = max(uShadowCascadeSplitM, 1.0);
-  bool useFarCascade = (uShadowCascadeCount > 1) && (viewDistance > splitDistance);
 
   float up = clamp(N.z * 0.5 + 0.5, 0.0, 1.0);
   vec3 skyAmbient = vec3(0.44, 0.52, 0.64);
   vec3 groundAmbient = vec3(0.19, 0.18, 0.17);
   vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
+  float normalAgreement = clamp(dot(geomN, N), 0.2, 1.0);
+  ambient *= mix(0.78, 1.0, normalAgreement);
+  float bounceAmount = (1.0 - up) * (0.35 + 0.65 * max(dot(-keyDir, vec3(0.0, 0.0, 1.0)), 0.0));
+  vec3 bounceLight = vec3(0.23, 0.19, 0.14) * albedo * bounceAmount * 0.14;
   float keyShadow = max(dot(N, keyDir), 0.0);
   float shadowContrast = mix(0.70, 1.0, keyShadow);
+  bool fastShadow = (uShadingMode != 0);
+
+  float shadow = 0.0;
+  if (uShadowCascadeCount > 1) {
+    float blendRange = max(uShadowCascadeBlendRangeM, 0.0);
+    float blend = (blendRange > 0.0)
+                      ? smoothstep(splitDistance - blendRange, splitDistance + blendRange, viewDistance)
+                      : (viewDistance > splitDistance ? 1.0 : 0.0);
+    float nearShadow = ComputeShadowFactor(
+        vLightClipPos,
+        N,
+        keyDir,
+        uShadowPcfRadius,
+        false,
+        vWorldPos,
+        fastShadow);
+    float farShadow = ComputeShadowFactor(
+        vLightClipPosFar,
+        N,
+        keyDir,
+        uShadowPcfRadius,
+        true,
+        vWorldPos + vec3(11.7, 23.1, 5.3),
+        fastShadow);
+    shadow = mix(nearShadow, farShadow, blend);
+  } else {
+    shadow = ComputeShadowFactor(
+        vLightClipPos,
+        N,
+        keyDir,
+        uShadowPcfRadius,
+        false,
+        vWorldPos,
+        fastShadow);
+  }
 
   vec3 linearColor = vec3(0.0);
   if (uShadingMode == 0) {
@@ -328,10 +407,7 @@ void main() {
 
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 120.0, 0.0, 1.0);
     vec3 directLit = (direct + rimColor) * max(depthCue, 0.45) * shadowContrast;
-    vec3 indirectLit = (ambient + envSpec) * max(depthCue, 0.45);
-    float shadow = useFarCascade
-                       ? ComputeShadowFactor(vLightClipPosFar, N, keyDir, uShadowPcfRadius, true)
-                       : ComputeShadowFactor(vLightClipPos, N, keyDir, uShadowPcfRadius, false);
+    vec3 indirectLit = (ambient + envSpec + bounceLight) * max(depthCue, 0.45);
     directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
     linearColor = indirectLit + directLit;
   } else {
@@ -342,10 +418,7 @@ void main() {
     float spec = pow(max(dot(N, H), 0.0), mix(24.0, 6.0, roughness)) * max(uSpecularStrength, 0.0) * 0.18;
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 140.0, 0.0, 1.0);
     vec3 directLit = (direct + vec3(spec)) * max(depthCue, 0.55) * shadowContrast;
-    vec3 indirectLit = ambient * max(depthCue, 0.55);
-    float shadow = useFarCascade
-                       ? ComputeShadowFactorSingle(vLightClipPosFar, N, keyDir, true)
-                       : ComputeShadowFactorSingle(vLightClipPos, N, keyDir, false);
+    vec3 indirectLit = (ambient + bounceLight) * max(depthCue, 0.55);
     directLit *= mix(1.0, 1.0 - clamp(uShadowStrength, 0.0, 1.0), shadow);
     linearColor = indirectLit + directLit;
   }

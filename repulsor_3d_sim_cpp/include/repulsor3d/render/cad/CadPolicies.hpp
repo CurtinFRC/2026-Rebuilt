@@ -46,16 +46,16 @@ struct CadVisualPolicy {
   float hzbMaxCullRadiusPx = 120.0F;
   int maxIndicesPerDrawCall = 500000;
   float keyLightIntensity = 1.35F;
-  float fillLightIntensity = 0.20F;
-  float ambientStrength = 0.12F;
+  float fillLightIntensity = 0.32F;
+  float ambientStrength = 0.10F;
   float depthCueStrength = 0.08F;
-  float specularStrength = 0.42F;
+  float specularStrength = 0.50F;
   float rimStrength = 0.03F;
-  float roughness = 0.72F;
+  float roughness = 0.68F;
   float metallic = 0.00F;
-  float exposure = 0.86F;
-  float fogDensity = 0.003F;
-  float saturation = 1.00F;
+  float exposure = 0.78F;
+  float fogDensity = 0.0018F;
+  float saturation = 1.08F;
   float gamma = 2.2F;
   bool enableInstanceUploadDedup = true;
   bool enableInstanceBufferOrphaning = true;
@@ -64,11 +64,12 @@ struct CadVisualPolicy {
 struct CadShadowPolicy {
   bool enabled = true;
   int mapSize = 2048;
-  float strength = 0.55F;
+  float strength = 0.62F;
   ShadowQuality quality = ShadowQuality::High;
   int pcfRadius = 2;
-  int cascadeCount = 1;
-  float cascadeSplitDistanceM = 12.0F;
+  int cascadeCount = 2;
+  float cascadeSplitDistanceM = 11.0F;
+  float cascadeBlendRangeM = 2.5F;
 };
 
 int GetEnvInt(const char* name, int fallback);

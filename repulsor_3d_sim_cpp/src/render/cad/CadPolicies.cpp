@@ -130,6 +130,10 @@ const CadShadowPolicy& LoadCadShadowPolicy() {
     out.strength = std::clamp(GetEnvFloat("CAD_SHADOW_STRENGTH", out.strength), 0.0F, 1.0F);
     out.cascadeCount = std::clamp(GetEnvInt("CAD_SHADOW_CASCADES", out.cascadeCount), 1, 2);
     out.cascadeSplitDistanceM = std::clamp(GetEnvFloat("CAD_SHADOW_CASCADE_SPLIT_M", out.cascadeSplitDistanceM), 2.0F, 100.0F);
+    out.cascadeBlendRangeM = std::clamp(
+        GetEnvFloat("CAD_SHADOW_CASCADE_BLEND_M", out.cascadeBlendRangeM),
+        0.0F,
+        30.0F);
 
     std::string quality = "high";
     if (const char* value = std::getenv("CAD_SHADOW_QUALITY"); value != nullptr && *value != '\0') {

@@ -64,6 +64,7 @@ bool CadModelRenderFeature::CreateShader() {
   uShadowPcfRadiusLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowPcfRadius");
   uShadowCascadeCountLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeCount");
   uShadowCascadeSplitMLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeSplitM");
+  uShadowCascadeBlendRangeMLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowCascadeBlendRangeM");
   uAlbedoMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uAlbedoMap");
   uNormalMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalMap");
   uHasAlbedoMapLoc_ = backend_->GetUniformLocation(shader_.Get(), "uHasAlbedoMap");
@@ -212,6 +213,7 @@ void main() {}
          uShadowMapFarLoc_ >= 0 &&
          uShadowEnabledLoc_ >= 0 && uShadowStrengthLoc_ >= 0 &&
          uShadowPcfRadiusLoc_ >= 0 && uShadowCascadeCountLoc_ >= 0 && uShadowCascadeSplitMLoc_ >= 0 &&
+         uShadowCascadeBlendRangeMLoc_ >= 0 &&
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
          uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
          uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 &&

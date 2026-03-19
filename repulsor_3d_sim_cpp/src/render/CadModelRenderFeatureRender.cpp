@@ -1144,6 +1144,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1i(uShadowPcfRadiusLoc_, reduceShadowQuality ? std::max(1, shadowPcfRadius_ - 1) : shadowPcfRadius_);
   backend_->SetUniform1i(uShadowCascadeCountLoc_, farShadowReady ? 2 : 1);
   backend_->SetUniform1f(uShadowCascadeSplitMLoc_, shadowCascadeSplitM_);
+  backend_->SetUniform1f(uShadowCascadeBlendRangeMLoc_, shadowCascadeBlendRangeM_);
   backend_->SetActiveTextureUnit(3);
   backend_->BindTexture2D(shadowDepthTexture_.Get());
   backend_->SetUniform1i(uShadowMapLoc_, 3);

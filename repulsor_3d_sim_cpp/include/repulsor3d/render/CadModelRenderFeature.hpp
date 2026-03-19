@@ -217,6 +217,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uShadowPcfRadiusLoc_ = -1;
   int uShadowCascadeCountLoc_ = -1;
   int uShadowCascadeSplitMLoc_ = -1;
+  int uShadowCascadeBlendRangeMLoc_ = -1;
   int uAlbedoMapLoc_ = -1;
   int uNormalMapLoc_ = -1;
   int uHasAlbedoMapLoc_ = -1;
@@ -230,6 +231,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int shadowPcfRadius_ = 2;
   int shadowCascadeCount_ = 1;
   float shadowCascadeSplitM_ = 12.0F;
+  float shadowCascadeBlendRangeM_ = 2.5F;
   std::uint64_t shadowCacheFingerprint_ = 0ULL;
   bool shadowCacheValid_ = false;
   bool initialized_ = false;
