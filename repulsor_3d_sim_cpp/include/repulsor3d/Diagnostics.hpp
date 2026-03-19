@@ -36,6 +36,8 @@ class DiagnosticsService {
   void RecordGpuTime(const std::string& passName, double milliseconds);
   void RecordCounter(const std::string& counterName, double value);
   void RecordMessage(const std::string& message);
+  void MarkSceneReady();
+  bool IsSceneReady() const;
   void EndFrame(double frameMilliseconds);
 
   const DiagnosticsSnapshot& Latest() const;
@@ -52,6 +54,7 @@ class DiagnosticsService {
   std::unordered_map<std::string, double> counterAverages_;
   double frameAverageMilliseconds_ = 0.0;
   bool frameAverageInitialized_ = false;
+  bool sceneReady_ = false;
 };
 
 }  // namespace repulsor3d

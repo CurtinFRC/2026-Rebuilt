@@ -21,6 +21,25 @@
 #include "repulsor3d/render/ecs/Systems.hpp"
 
 namespace repulsor3d {
+namespace {
+
+bool HasMeshInstanceCommands(const RenderCommandBuffer& commandBuffer) {
+  for (const auto& command : commandBuffer) {
+    bool hasMesh = false;
+    std::visit(
+        [&](const auto& typed) {
+          using CommandType = std::decay_t<decltype(typed)>;
+          hasMesh = std::is_same_v<CommandType, DrawMeshInstanceCommand>;
+        },
+        command);
+    if (hasMesh) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
 
 Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter> worldAdapter)
     : cfg_(cfg),
@@ -245,6 +264,9 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   const glm::mat4 vp = projection * view;
   const EntityCullingStats cullingStats = ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
+  if (!HasMeshInstanceCommands(commandBuffer)) {
+    diagnostics_.MarkSceneReady();
+  }
 
   const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
   const RenderFeatureContext context{

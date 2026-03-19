@@ -619,6 +619,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     return;
   }
 
+  if (context.diagnosticsWriter != nullptr && pendingLoads_.empty() && pendingGpuUploads_.empty()) {
+    context.diagnosticsWriter->MarkSceneReady();
+  }
+
   if (context.diagnosticsWriter != nullptr) {
     double totalIndices = 0.0;
     std::size_t totalRanges = 0;

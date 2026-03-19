@@ -18,6 +18,7 @@ option(REPULSOR_SIM_FETCH_DEPS "Fetch dependencies with FetchContent" ON)
 option(REPULSOR_SIM_USE_NTCORE "Enable NT4/NTCore datasource when available" ON)
 option(REPULSOR_SIM_BUILD_TESTS "Build seam/unit tests" ON)
 option(REPULSOR_SIM_BUILD_PLUGIN_SDK "Build sample season plugin SDK target + ABI checks" ON)
+option(REPULSOR_SIM_ENABLE_DIAGNOSTICS_FILE_LOG "Write per-frame diagnostics to a log file" ON)
 option(REPULSOR_SIM_ENABLE_CLANG_TIDY "Enable clang-tidy during compilation when available" OFF)
 option(REPULSOR_SIM_ENABLE_SANITIZERS "Enable address/undefined sanitizers for non-MSVC builds" OFF)
 set(REPULSOR_SIM_NTCORE_ROOT "C:/Users/paulh/allwpilib" CACHE PATH "Root directory of a local allwpilib checkout/build for ntcore")
@@ -174,6 +175,11 @@ add_executable(repulsor_3d_sim_cpp ${REPULSOR_SIM_SOURCES})
 if(MSVC)
   target_compile_options(repulsor_3d_sim_cpp PRIVATE /utf-8)
 endif()
+target_compile_definitions(
+  repulsor_3d_sim_cpp
+  PRIVATE
+    REPULSOR_DIAGNOSTICS_FILE_LOGGING=$<IF:$<BOOL:${REPULSOR_SIM_ENABLE_DIAGNOSTICS_FILE_LOG}>,1,0>
+)
 
 if(REPULSOR_SIM_ENABLE_SANITIZERS AND NOT MSVC)
   target_compile_options(repulsor_3d_sim_cpp PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -492,6 +498,11 @@ if(REPULSOR_SIM_BUILD_TESTS)
     src/Diagnostics.cpp
   )
   target_include_directories(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_compile_definitions(
+    repulsor_3d_sim_cpp_abstraction_contract_tests
+    PRIVATE
+      REPULSOR_DIAGNOSTICS_FILE_LOGGING=$<IF:$<BOOL:${REPULSOR_SIM_ENABLE_DIAGNOSTICS_FILE_LOG}>,1,0>
+  )
   target_link_libraries(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE nlohmann_json::nlohmann_json)
   if(REPULSOR_SIM_FETCH_DEPS)
     target_include_directories(repulsor_3d_sim_cpp_abstraction_contract_tests PRIVATE ${glm_SOURCE_DIR})
