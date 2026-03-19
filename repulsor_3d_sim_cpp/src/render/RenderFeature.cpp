@@ -22,6 +22,7 @@ class WorldRenderFeature final : public IRenderFeature {
   std::string Name() const override { return "world"; }
 
   void Render(const RenderFeatureContext& context, const RendererDrawApi& drawApi) override {
+    drawApi.DrawEnvironment(context.viewProjection, context.cameraWorldPosition);
     for (const auto& command : context.commandBuffer) {
       std::visit(
           [&](const auto& typed) {
@@ -179,6 +180,10 @@ void RendererDrawApi::DrawAxes(const glm::mat4& viewProjection) const {
 
 void RendererDrawApi::DrawFieldImage(const glm::mat4& viewProjection) const {
   renderer_.DrawFieldImage(viewProjection);
+}
+
+void RendererDrawApi::DrawEnvironment(const glm::mat4& viewProjection, const glm::vec3& cameraWorldPosition) const {
+  renderer_.DrawEnvironment(viewProjection, cameraWorldPosition);
 }
 
 void RendererDrawApi::DrawSphere(const glm::mat4& viewProjection, const SpherePrimitive& primitive) const {

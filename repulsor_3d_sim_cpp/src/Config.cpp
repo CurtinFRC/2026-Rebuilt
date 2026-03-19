@@ -98,6 +98,10 @@ ViewerConfig LoadConfigFromEnv() {
   cfg.fieldImageAlpha = GetEnvFloat("FIELD_IMAGE_ALPHA", cfg.fieldImageAlpha);
   cfg.fieldImageFlipX = GetEnvBool("FIELD_IMAGE_FLIP_X", cfg.fieldImageFlipX);
   cfg.fieldImageFlipY = GetEnvBool("FIELD_IMAGE_FLIP_Y", cfg.fieldImageFlipY);
+  cfg.showEnvironmentBackdrop = GetEnvBool("SHOW_ENVIRONMENT_BACKDROP", cfg.showEnvironmentBackdrop);
+  cfg.environmentRadiusM = std::max(1.0F, GetEnvFloat("ENVIRONMENT_RADIUS_M", cfg.environmentRadiusM));
+  cfg.environmentHeightM = std::max(2.0F, GetEnvFloat("ENVIRONMENT_HEIGHT_M", cfg.environmentHeightM));
+  cfg.environmentSegments = std::clamp(GetEnvInt("ENVIRONMENT_SEGMENTS", cfg.environmentSegments), 8, 96);
 
   cfg.collectAgeDecay = GetEnvFloat("COLLECT_AGE_DECAY", cfg.collectAgeDecay);
   cfg.resourceHardMaxAgeS = GetEnvFloat("RESOURCE_HARD_MAX_AGE_S", cfg.resourceHardMaxAgeS);

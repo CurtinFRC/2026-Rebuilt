@@ -38,6 +38,10 @@ struct ViewerConfig {
   float fieldImageAlpha = 0.92F;
   bool fieldImageFlipX = true;
   bool fieldImageFlipY = false;
+  bool showEnvironmentBackdrop = true;
+  float environmentRadiusM = 18.0F;
+  float environmentHeightM = 14.0F;
+  int environmentSegments = 24;
 
   float collectAgeDecay = 1.25F;
   float resourceHardMaxAgeS = 0.95F;

@@ -115,6 +115,7 @@ class Renderer {
   void DrawGrid(const glm::mat4& vp);
   void DrawAxes(const glm::mat4& vp);
   void DrawFieldImage(const glm::mat4& vp);
+  void DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorldPosition);
 
   void DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive);
   void DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive);

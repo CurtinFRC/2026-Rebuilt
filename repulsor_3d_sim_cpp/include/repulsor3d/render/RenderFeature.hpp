@@ -38,6 +38,7 @@ struct RendererDrawApi {
   void DrawGrid(const glm::mat4& viewProjection) const;
   void DrawAxes(const glm::mat4& viewProjection) const;
   void DrawFieldImage(const glm::mat4& viewProjection) const;
+  void DrawEnvironment(const glm::mat4& viewProjection, const glm::vec3& cameraWorldPosition) const;
 
   void DrawSphere(const glm::mat4& viewProjection, const SpherePrimitive& primitive) const;
   void DrawBox(const glm::mat4& viewProjection, const BoxPrimitive& primitive) const;

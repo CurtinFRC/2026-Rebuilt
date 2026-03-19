@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <iomanip>
@@ -37,6 +38,11 @@ bool HasMeshInstanceCommands(const RenderCommandBuffer& commandBuffer) {
     }
   }
   return false;
+}
+
+glm::vec4 LerpColor(const glm::vec4& a, const glm::vec4& b, const float tRaw) {
+  const float t = glm::clamp(tRaw, 0.0F, 1.0F);
+  return a * (1.0F - t) + b * t;
 }
 
 }  // namespace
@@ -567,6 +573,100 @@ void Renderer::DrawGrid(const glm::mat4& vp) {
   }
 
   DrawLineList(vp, lines, 1.0F);
+}
+
+void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorldPosition) {
+  if (!cfg_.showEnvironmentBackdrop) {
+    return;
+  }
+
+  constexpr float kPi = 3.14159265359F;
+  const int segments = std::max(8, cfg_.environmentSegments);
+  const float ringPadding = std::max(1.0F, cfg_.environmentRadiusM);
+  const float stadiumHeight = std::max(3.0F, cfg_.environmentHeightM);
+  const float fieldHalfLength = fieldLength_ * 0.5F;
+  const float fieldHalfWidth = fieldWidth_ * 0.5F;
+  const float ringBaseRadius = std::max(fieldHalfLength, fieldHalfWidth) + ringPadding;
+  const float outerRadius = ringBaseRadius + 7.0F;
+  const float floorZ = fieldZ_ - 0.05F;
+
+  const BoxPrimitive groundApron{
+      .center = glm::vec3{0.0F, 0.0F, floorZ - 0.25F},
+      .size = glm::vec3{outerRadius * 2.0F, outerRadius * 2.0F, 0.5F},
+      .yawDeg = 0.0F,
+      .color = glm::vec4{0.06F, 0.07F, 0.08F, 1.0F},
+      .pass = RenderPass::Opaque,
+  };
+  DrawBox(vp, groundApron);
+
+  const glm::vec4 lowerTierA{0.17F, 0.20F, 0.24F, 1.0F};
+  const glm::vec4 lowerTierB{0.12F, 0.14F, 0.18F, 1.0F};
+  const glm::vec4 upperTierA{0.13F, 0.16F, 0.21F, 1.0F};
+  const glm::vec4 upperTierB{0.09F, 0.11F, 0.15F, 1.0F};
+
+  auto drawTier = [&](const float radius, const float height, const float thickness, const glm::vec4& colA, const glm::vec4& colB) {
+    const float arcLength = (2.0F * kPi * radius / static_cast<float>(segments)) * 0.94F;
+    for (int i = 0; i < segments; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * radius;
+      const float cy = std::sin(angle) * radius;
+      const float band = 0.5F + 0.5F * std::sin(angle * 2.0F);
+      const glm::vec4 color = LerpColor(colA, colB, band);
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + (height * 0.5F)},
+              .size = glm::vec3{arcLength, thickness, height},
+              .yawDeg = angleDeg,
+              .color = color,
+              .pass = RenderPass::Opaque,
+          });
+    }
+  };
+
+  drawTier(ringBaseRadius, stadiumHeight * 0.72F, 3.0F, lowerTierA, lowerTierB);
+  drawTier(ringBaseRadius + 5.5F, stadiumHeight * 0.45F, 2.4F, upperTierA, upperTierB);
+
+  const BoxPrimitive skyCeiling{
+      .center = glm::vec3{0.0F, 0.0F, fieldZ_ + stadiumHeight + 3.5F},
+      .size = glm::vec3{outerRadius * 2.1F, outerRadius * 2.1F, 0.8F},
+      .yawDeg = 0.0F,
+      .color = glm::vec4{0.33F, 0.44F, 0.62F, 1.0F},
+      .pass = RenderPass::Opaque,
+  };
+  DrawBox(vp, skyCeiling);
+
+  const float lightRingRadius = ringBaseRadius + 2.0F;
+  const float lightRingZ = fieldZ_ + stadiumHeight * 0.78F;
+  const float lightBarLength = std::max(2.0F, (2.0F * kPi * lightRingRadius / static_cast<float>(segments)) * 0.70F);
+  for (int i = 0; i < segments; i += 2) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(segments);
+    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * lightRingRadius;
+    const float cy = std::sin(angle) * lightRingRadius;
+    const float glow = 0.7F + 0.3F * std::cos(angle * 3.0F);
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, lightRingZ},
+            .size = glm::vec3{lightBarLength, 0.5F, 0.35F},
+            .yawDeg = angleDeg,
+            .color = glm::vec4{0.82F * glow, 0.88F * glow, 0.98F * glow, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
+  const float horizonRadius = outerRadius * 1.2F;
+  DrawBox(
+      vp,
+      BoxPrimitive{
+          .center = glm::vec3{cameraWorldPosition.x, cameraWorldPosition.y, fieldZ_ + stadiumHeight + 12.0F},
+          .size = glm::vec3{horizonRadius * 2.0F, horizonRadius * 2.0F, 0.5F},
+          .yawDeg = 0.0F,
+          .color = glm::vec4{0.18F, 0.26F, 0.40F, 1.0F},
+          .pass = RenderPass::Opaque,
+      });
 }
 
 void Renderer::DrawAxes(const glm::mat4& vp) {
