@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -35,6 +36,39 @@ bool ParseEnvBool(const char* name, const bool fallback) {
   }
   return fallback;
 }
+
+#if defined(_WIN32)
+using WglSwapIntervalExtFn = int(__stdcall*)(int);
+using WglGetSwapIntervalExtFn = int(__stdcall*)(void);
+
+WglSwapIntervalExtFn GetWglSwapIntervalFn() {
+  static WglSwapIntervalExtFn fn =
+      reinterpret_cast<WglSwapIntervalExtFn>(glfwGetProcAddress("wglSwapIntervalEXT"));
+  return fn;
+}
+
+WglGetSwapIntervalExtFn GetWglGetSwapIntervalFn() {
+  static WglGetSwapIntervalExtFn fn =
+      reinterpret_cast<WglGetSwapIntervalExtFn>(glfwGetProcAddress("wglGetSwapIntervalEXT"));
+  return fn;
+}
+
+void ForceSwapInterval(const int interval) {
+  if (auto* fn = GetWglSwapIntervalFn(); fn != nullptr) {
+    (void)fn(interval);
+  }
+}
+
+int QuerySwapInterval() {
+  if (auto* fn = GetWglGetSwapIntervalFn(); fn != nullptr) {
+    return fn();
+  }
+  return -1;
+}
+#else
+void ForceSwapInterval(const int /*interval*/) {}
+int QuerySwapInterval() { return -1; }
+#endif
 
 }  // namespace
 
@@ -95,12 +129,14 @@ int ViewerApp::Run() {
 
   glfwMakeContextCurrent(window_);
   glfwSwapInterval(cfg_.vsync ? 1 : 0);
+  ForceSwapInterval(cfg_.vsync ? 1 : 0);
   const bool vsyncAutoDisableEnabled = ParseEnvBool("VSYNC_AUTO_DISABLE", true);
   bool vsyncAutoDisabled = false;
   double swapWaitAverageMs = 0.0;
   bool swapWaitAverageInitialized = false;
   int highSwapWaitFrames = 0;
   int highCpuGpuMismatchFrames = 0;
+  std::uint64_t frameCounter = 0;
 
   glewExperimental = GL_TRUE;
   if (glewInit() != GLEW_OK) {
@@ -134,6 +170,7 @@ int ViewerApp::Run() {
   auto lastTitleUpdate = timeSource_.Now();
 
   while (!glfwWindowShouldClose(window_)) {
+    const auto loopStart = std::chrono::steady_clock::now();
     glfwPollEvents();
 
     const auto now = timeSource_.Now();
@@ -175,6 +212,21 @@ int ViewerApp::Run() {
     renderer_.QueueDiagnosticCounter("app.swap_wait_ms", swapWaitMs);
     renderer_.QueueDiagnosticCounter("app.swap_wait_avg_ms", swapWaitAverageMs);
     renderer_.QueueDiagnosticCounter("app.vsync_active", cfg_.vsync ? 1.0 : 0.0);
+    renderer_.QueueDiagnosticCounter(
+        "app.present_fps",
+        (swapWaitAverageMs > 1e-4) ? (1000.0 / swapWaitAverageMs) : 0.0);
+    renderer_.QueueDiagnosticCounter("app.present_stall", swapWaitAverageMs > 40.0 ? 1.0 : 0.0);
+    const auto loopEnd = std::chrono::steady_clock::now();
+    const double loopMs =
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(loopEnd - loopStart).count();
+    renderer_.QueueDiagnosticCounter("app.loop_ms", loopMs);
+    renderer_.QueueDiagnosticCounter(
+        "app.loop_fps",
+        (loopMs > 1e-4) ? (1000.0 / loopMs) : 0.0);
+    if ((frameCounter % 120ULL) == 0ULL) {
+      renderer_.QueueDiagnosticCounter("app.swap_interval_effective", static_cast<double>(QuerySwapInterval()));
+    }
+    ++frameCounter;
 
     if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled) {
       const auto& diag = renderer_.LatestDiagnostics();
@@ -201,6 +253,7 @@ int ViewerApp::Run() {
       }
       if (highSwapWaitFrames >= 45 || highCpuGpuMismatchFrames >= 45) {
         glfwSwapInterval(0);
+        ForceSwapInterval(0);
         cfg_.vsync = false;
         vsyncAutoDisabled = true;
         renderer_.QueueDiagnosticMessage(
@@ -208,6 +261,11 @@ int ViewerApp::Run() {
             ", frame_avg_ms=" + std::to_string(frameAvgMs) +
             ", cad_gpu_ms=" + std::to_string(cadGpuMs) + ")");
       }
+    }
+
+    // If swap interval gets re-enabled by driver/runtime, keep forcing the requested mode.
+    if (!cfg_.vsync && (frameCounter % 120ULL) == 0ULL) {
+      ForceSwapInterval(0);
     }
   }
 

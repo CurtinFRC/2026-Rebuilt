@@ -1372,7 +1372,17 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
       static_cast<int>(std::round(FindCounterValue(diagSnapshot, "cad.loads.stage_code", 0.0)));
   const char* stageLabel = CadLoadStageLabelFromCode(stageCode);
 
-  if (smoothedFrameMsInitialized_ && smoothedFrameMs_ > 1e-6) {
+  const double presentFps = FindCounterValue(diagSnapshot, "app.present_fps", 0.0);
+  if (presentFps > 1e-3) {
+    std::ostringstream fpsText;
+    fpsText << std::fixed << std::setprecision(1) << "FPS: " << presentFps;
+    widgets.push_back(
+        {.text = fpsText.str(),
+         .color = glm::vec4{0.92F, 0.92F, 0.92F, 0.90F},
+         .anchor = OverlayAnchor::TopRight,
+         .marginX = 10.0F,
+         .marginY = 12.0F});
+  } else if (smoothedFrameMsInitialized_ && smoothedFrameMs_ > 1e-6) {
     std::ostringstream fpsText;
     fpsText << std::fixed << std::setprecision(1) << "FPS: " << (1000.0 / smoothedFrameMs_);
     widgets.push_back(
