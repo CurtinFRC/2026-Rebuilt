@@ -4,9 +4,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -53,6 +55,27 @@ float Hash01(std::uint32_t x) {
   x *= 0x846ca68bU;
   x ^= x >> 16U;
   return static_cast<float>(x & 0x00FFFFFFU) / static_cast<float>(0x01000000U);
+}
+
+bool ParseEnvBool(const char* name, const bool fallback) {
+  if (name == nullptr || *name == '\0') {
+    return fallback;
+  }
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return fallback;
+  }
+  std::string text(value);
+  std::transform(text.begin(), text.end(), text.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (text == "1" || text == "true" || text == "yes" || text == "on") {
+    return true;
+  }
+  if (text == "0" || text == "false" || text == "no" || text == "off") {
+    return false;
+  }
+  return fallback;
 }
 
 double FindCounterValue(const DiagnosticsSnapshot& snapshot, const char* name, const double fallback = 0.0) {
@@ -371,9 +394,11 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("entities.culled", cullingStats.culled);
   diagnostics_.RecordCounter("commands.total", static_cast<double>(commandBuffer.size()));
   const auto& caps = backend_->Capabilities();
+  const bool gpuTimersEnabled = caps.supportsGpuTimers && ParseEnvBool("RENDER_GPU_TIMERS", false);
   diagnostics_.RecordCounter("backend.max_texture_size", static_cast<double>(caps.maxTextureSize));
   diagnostics_.RecordCounter("backend.max_vertex_attribs", static_cast<double>(caps.maxVertexAttribs));
   diagnostics_.RecordCounter("backend.supports_gpu_timers", caps.supportsGpuTimers ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("backend.gpu_timers_enabled", gpuTimersEnabled ? 1.0 : 0.0);
   diagnostics_.RecordCounter("resources.buffers", static_cast<double>(resourceManager_.Stats(ResourceClass::Buffer).count));
   diagnostics_.RecordCounter("resources.textures", static_cast<double>(resourceManager_.Stats(ResourceClass::Texture).count));
   diagnostics_.RecordCounter("resources.vertex_arrays", static_cast<double>(resourceManager_.Stats(ResourceClass::VertexArray).count));
@@ -411,6 +436,17 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   const auto frameStart = std::chrono::steady_clock::now();
 
   MaybeHotReloadRenderFeatures();
+  if (!gpuTimersEnabled && !gpuPassTimers_.empty()) {
+    for (auto& [_, timer] : gpuPassTimers_) {
+      for (unsigned int& queryId : timer.queryIds) {
+        if (queryId != 0) {
+          backend_->DestroyGpuTimerQuery(queryId);
+          queryId = 0;
+        }
+      }
+    }
+    gpuPassTimers_.clear();
+  }
 
   RenderGraph graph;
   for (const auto& feature : renderFeatures_) {
@@ -425,27 +461,30 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
         .consumesResources = rawFeature->Dependencies(),
         .producesResources = {rawFeature->Name()},
         .execute =
-            [this, rawFeature, &context, &drawApi](RenderGraphContext& graphContext) {
-              auto& gpuTimer = gpuPassTimers_[rawFeature->Name()];
-              if (gpuTimer.queryIds[0] == 0) {
-                gpuTimer.queryIds[0] = backend_->CreateGpuTimerQuery();
-              }
-              if (gpuTimer.queryIds[1] == 0) {
-                gpuTimer.queryIds[1] = backend_->CreateGpuTimerQuery();
-              }
-
-              const unsigned int readQuery = gpuTimer.queryIds[gpuTimer.readIndex];
-              if (readQuery != 0) {
-                double gpuMs = 0.0;
-                if (backend_->TryReadGpuTimerMilliseconds(readQuery, gpuMs)) {
-                  diagnostics_.RecordGpuTime(rawFeature->Name(), gpuMs);
+            [this, rawFeature, &context, &drawApi, gpuTimersEnabled](RenderGraphContext& graphContext) {
+              GpuPassTimerState* gpuTimer = nullptr;
+              bool gpuQueryActive = false;
+              if (gpuTimersEnabled) {
+                auto& timerState = gpuPassTimers_[rawFeature->Name()];
+                if (timerState.queryIds[0] == 0) {
+                  timerState.queryIds[0] = backend_->CreateGpuTimerQuery();
                 }
-              }
-
-              const unsigned int writeQuery = gpuTimer.queryIds[gpuTimer.writeIndex];
-              const bool gpuQueryActive = writeQuery != 0;
-              if (gpuQueryActive) {
-                backend_->BeginGpuTimerQuery(writeQuery);
+                if (timerState.queryIds[1] == 0) {
+                  timerState.queryIds[1] = backend_->CreateGpuTimerQuery();
+                }
+                gpuTimer = &timerState;
+                const unsigned int readQuery = timerState.queryIds[timerState.readIndex];
+                if (readQuery != 0) {
+                  double gpuMs = 0.0;
+                  if (backend_->TryReadGpuTimerMilliseconds(readQuery, gpuMs)) {
+                    diagnostics_.RecordGpuTime(rawFeature->Name(), gpuMs);
+                  }
+                }
+                const unsigned int writeQuery = timerState.queryIds[timerState.writeIndex];
+                gpuQueryActive = writeQuery != 0;
+                if (gpuQueryActive) {
+                  backend_->BeginGpuTimerQuery(writeQuery);
+                }
               }
 
               const auto start = std::chrono::steady_clock::now();
@@ -459,7 +498,9 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
                   std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
               diagnostics_.RecordPassTime(rawFeature->Name(), ms);
 
-              std::swap(gpuTimer.readIndex, gpuTimer.writeIndex);
+              if (gpuTimer != nullptr) {
+                std::swap(gpuTimer->readIndex, gpuTimer->writeIndex);
+              }
               graphContext.MarkResourceAvailable(rawFeature->Name());
             },
     });

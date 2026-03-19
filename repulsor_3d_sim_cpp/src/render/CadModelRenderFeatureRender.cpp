@@ -127,6 +127,35 @@ int CadLoadStageCodeFromText(const std::string_view stage) {
   return 0;
 }
 
+double FindTimingMilliseconds(
+    const DiagnosticsSnapshot* diagnostics,
+    const std::vector<TimingSample>& samples,
+    const std::string_view name) {
+  if (diagnostics == nullptr) {
+    return 0.0;
+  }
+  for (const auto& sample : samples) {
+    if (sample.name == name) {
+      return sample.milliseconds;
+    }
+  }
+  return 0.0;
+}
+
+double FindPassTimingMilliseconds(const DiagnosticsSnapshot* diagnostics, const std::string_view passName) {
+  if (diagnostics == nullptr) {
+    return 0.0;
+  }
+  return FindTimingMilliseconds(diagnostics, diagnostics->passTimings, passName);
+}
+
+double FindGpuTimingMilliseconds(const DiagnosticsSnapshot* diagnostics, const std::string_view passName) {
+  if (diagnostics == nullptr) {
+    return 0.0;
+  }
+  return FindTimingMilliseconds(diagnostics, diagnostics->gpuTimings, passName);
+}
+
 }  // namespace
 
 using cad::CadVisualPolicy;
@@ -263,6 +292,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;
   bool disableShadowsThisFrame = false;
+  bool forceCpuLeanPath = false;
   double frameAverageMs = 0.0;
   if (context.diagnostics != nullptr) {
     frameAverageMs = context.diagnostics->frameAverageMilliseconds > 0.0
@@ -278,11 +308,24 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     reduceShadowQuality = frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.25F);
     disableShadowsThisFrame = frameAverageMs > static_cast<double>(perfTargetFrameMs_ * 1.60F);
   }
+  if (GetEnvBool("CAD_CPU_LEAN_MODE", true) && context.diagnostics != nullptr) {
+    const double lastCadCpuMs = FindPassTimingMilliseconds(context.diagnostics, featureName_);
+    const double lastCadGpuMs = FindGpuTimingMilliseconds(context.diagnostics, featureName_);
+    const double cpuThresholdMs = std::max(static_cast<double>(perfTargetFrameMs_ * 1.15F), 10.0);
+    const bool cpuBound =
+        lastCadCpuMs >= cpuThresholdMs &&
+        lastCadGpuMs > 0.0 &&
+        lastCadCpuMs >= (lastCadGpuMs * 2.5);
+    if (cpuBound) {
+      forceCpuLeanPath = true;
+    }
+  }
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_disabled", disableShadowsThisFrame ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.frame_ms", frameAverageMs);
+    context.diagnosticsWriter->RecordCounter("cad.auto.cpu_lean_mode", forceCpuLeanPath ? 1.0 : 0.0);
   }
 
   struct DrawItem {
@@ -422,12 +465,27 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           std::chrono::steady_clock::now() - commandBuildStart)
           .count();
 
+  bool effectiveEnableFrustumCulling = visualPolicy.enableFrustumCulling;
+  bool effectiveEnableBroadphase = visualPolicy.enableBroadphase;
+  bool effectiveEnableClusterCulling = visualPolicy.enableClusterCulling;
+  bool effectiveEnableOcclusionCulling = visualPolicy.enableOcclusionCulling;
+  bool effectiveEnableDepthPrepass = visualPolicy.enableDepthPrepass;
+  if (forceCpuLeanPath && drawItems.size() <= 4) {
+    effectiveEnableClusterCulling = false;
+    effectiveEnableOcclusionCulling = false;
+    effectiveEnableDepthPrepass = false;
+    // Broadphase only helps when there are many top-level CAD items.
+    if (drawItems.size() <= 2) {
+      effectiveEnableBroadphase = false;
+    }
+  }
+
   const auto cullBuildStart = std::chrono::steady_clock::now();
-  if (visualPolicy.enableFrustumCulling && !drawItems.empty()) {
+  if (effectiveEnableFrustumCulling && !drawItems.empty()) {
     const float frustumCullMarginM = std::max(0.0F, visualPolicy.frustumCullMarginM);
     std::vector<DrawItem> filtered;
     filtered.reserve(drawItems.size());
-    if (visualPolicy.enableBroadphase) {
+    if (effectiveEnableBroadphase) {
       cad::Aabb frustumAabb;
       if (cad::TryExtractFrustumAabb(context.viewProjection, frustumAabb)) {
         const float broadphaseCellSize = std::max(0.1F, visualPolicy.broadphaseCellSizeM);
@@ -511,7 +569,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
 
   cad::TiledOcclusionBuffer occlusionBuffer;
-  if (visualPolicy.enableOcclusionCulling) {
+  if (effectiveEnableOcclusionCulling) {
     occlusionBuffer.Reset(
         context.viewportWidth,
         context.viewportHeight,
@@ -556,7 +614,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     std::vector<DrawRange> ranges;
     const bool disableClusterCullingForField =
         item.aggressiveLodCap && visualPolicy.fieldDisableClusterCulling;
-    if (visualPolicy.enableClusterCulling &&
+    if (effectiveEnableClusterCulling &&
         !disableClusterCullingForField &&
         !item.lod->clusters.empty() &&
         item.lod->indexCount > 0) {
@@ -570,7 +628,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           item.aggressiveLodCap &&
           visualPolicy.fieldClusterMaxVisibleIndices > 0;
       const bool needProjected =
-          visualPolicy.enableOcclusionCulling ||
+          effectiveEnableOcclusionCulling ||
           visualPolicy.minClusterScreenRadiusPx > 0.0F ||
           enableFieldIndexBudget;
       std::vector<ClusterCandidate> candidates;
@@ -603,7 +661,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         candidates.push_back(candidate);
       }
 
-      if (visualPolicy.enableOcclusionCulling) {
+      if (effectiveEnableOcclusionCulling) {
         std::sort(candidates.begin(), candidates.end(), [](const ClusterCandidate& a, const ClusterCandidate& b) {
           return a.depth01 < b.depth01;
         });
@@ -615,7 +673,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         if (candidate.cluster == nullptr) {
           continue;
         }
-        const bool occluded = visualPolicy.enableOcclusionCulling &&
+        const bool occluded = effectiveEnableOcclusionCulling &&
                               candidate.projected.valid &&
                               occlusionBuffer.IsOccluded(
                                   candidate.projected,
@@ -635,7 +693,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
         surviving.push_back(candidate);
 
-        if (visualPolicy.enableOcclusionCulling && candidate.projected.valid) {
+        if (effectiveEnableOcclusionCulling && candidate.projected.valid) {
           occlusionBuffer.SubmitOccluder(candidate.projected);
         }
       }
@@ -726,7 +784,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           .indexCount = static_cast<std::uint32_t>(std::max(item.lod->indexCount, 0)),
           .depth01 = item.depth01,
       });
-      if (visualPolicy.enableOcclusionCulling) {
+      if (effectiveEnableOcclusionCulling) {
         const cad::ProjectedSphere projected = cad::ProjectSphereToViewport(
             item.worldBoundsCenter,
             item.worldBoundsRadius,
@@ -809,6 +867,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.draw.indices", totalIndices);
     context.diagnosticsWriter->RecordCounter("cad.cluster.total", static_cast<double>(totalClusters));
     context.diagnosticsWriter->RecordCounter("cad.cluster.culled", static_cast<double>(culledClusters));
+    context.diagnosticsWriter->RecordCounter("cad.cluster.culling_enabled", effectiveEnableClusterCulling ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.cluster.merge_gap_indices", static_cast<double>(clusterMergeGap));
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.field_index_budget",
@@ -1126,6 +1185,28 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       ++submittedDrawRanges;
     }
     if (!allowMdi || cadIndirectDrawBuffer_.Get() == 0 || activeRanges.size() <= 1) {
+      if (activeRanges.size() > 1) {
+        std::vector<GLsizei> counts;
+        std::vector<const void*> offsets;
+        counts.reserve(activeRanges.size());
+        offsets.reserve(activeRanges.size());
+        for (const auto& range : activeRanges) {
+          if (range.indexCount == 0) {
+            continue;
+          }
+          counts.push_back(static_cast<GLsizei>(range.indexCount));
+          offsets.push_back(reinterpret_cast<const void*>(static_cast<std::uintptr_t>(range.firstIndex) * sizeof(std::uint32_t)));
+        }
+        if (!counts.empty()) {
+          glMultiDrawElements(
+              GL_TRIANGLES,
+              counts.data(),
+              GL_UNSIGNED_INT,
+              offsets.data(),
+              static_cast<GLsizei>(counts.size()));
+          return;
+        }
+      }
       for (const auto& range : activeRanges) {
         if (range.indexCount == 0) {
           continue;
@@ -1186,7 +1267,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     }
   };
 
-  if (visualPolicy.enableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) {
+  if (effectiveEnableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) {
     std::vector<std::size_t> prepassOrder(drawCalls.size());
     for (std::size_t i = 0; i < prepassOrder.size(); ++i) {
       prepassOrder[i] = i;
@@ -1353,6 +1434,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.stage.cull_build_ms", stageCullBuildMs);
     context.diagnosticsWriter->RecordCounter("cad.stage.shadow_ms", stageShadowMs);
     context.diagnosticsWriter->RecordCounter("cad.stage.draw_ms", stageDrawMs);
+    context.diagnosticsWriter->RecordCounter(
+        "cad.stage.depth_prepass_enabled",
+        (effectiveEnableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter(
+        "cad.stage.occlusion_enabled",
+        effectiveEnableOcclusionCulling ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter(
         "cad.stage.total_internal_ms",
         std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
