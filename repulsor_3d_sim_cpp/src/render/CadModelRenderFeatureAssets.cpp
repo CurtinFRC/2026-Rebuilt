@@ -87,7 +87,10 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
       return nullptr;
     }
     auto& upload = uploadIt->second;
-    while (uploadsThisFrame_ < uploadBudgetPerFrame_) {
+    const int activeUploadBudget =
+        upload.prepared.loadedFromPreparedCache ? uploadBudgetPerFrameCacheHit_ : uploadBudgetPerFrame_;
+    int uploadsForThisAsset = 0;
+    while (uploadsThisFrame_ < activeUploadBudget && uploadsForThisAsset < activeUploadBudget) {
       if (upload.nextLod < upload.prepared.lods.size()) {
         const auto& cpuLod = upload.prepared.lods[upload.nextLod];
         if (cpuLod.vertices.empty()) {
@@ -106,7 +109,11 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
         upload.gpu.lods.push_back(std::move(gpuLod));
         ++upload.nextLod;
         ++uploadsThisFrame_;
-        break;  // spread heavy uploads across frames
+        ++uploadsForThisAsset;
+        if (!upload.prepared.loadedFromPreparedCache) {
+          break;  // spread heavy uploads across frames for cold loads
+        }
+        continue;
       }
 
       if (!upload.shadowProxyUploaded && upload.prepared.shadowProxy.has_value()) {
@@ -121,7 +128,11 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
         upload.gpu.shadowProxy = std::move(gpuShadow);
         upload.shadowProxyUploaded = true;
         ++uploadsThisFrame_;
-        break;
+        ++uploadsForThisAsset;
+        if (!upload.prepared.loadedFromPreparedCache) {
+          break;
+        }
+        continue;
       }
       break;
     }
@@ -195,7 +206,9 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
             if (TryLoadPreparedCpuMeshCache(assetPath, policy, cachedBlob)) {
               setStage("cache_hit", 0.70F);
               const CadVisualPolicy& visualPolicy = LoadCadVisualPolicy();
+              const bool rebuildClustersOnCacheHit = GetEnvBool("CAD_CACHE_HIT_REBUILD_CLUSTERS", false);
               PreparedCpuMesh prepared;
+              prepared.loadedFromPreparedCache = true;
               prepared.boundsCenter = cachedBlob.boundsCenter;
               prepared.boundsRadius = cachedBlob.boundsRadius;
               prepared.materialHints.roughness = cachedBlob.roughnessHint;
@@ -205,37 +218,24 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
                 PreparedCpuMesh::LodCpu lod;
                 lod.vertices = std::move(cachedLod.vertices);
                 lod.indices = std::move(cachedLod.indices);
-                std::vector<cadfeature::MeshCluster> clusters = BuildMeshClusters(
-                    lod.indices,
-                    lod.vertices,
-                    static_cast<std::size_t>(std::max(visualPolicy.clusterTargetIndices, 3)),
-                    static_cast<std::size_t>(std::max(visualPolicy.clusterMinIndices, 3)),
-                    visualPolicy.optimizeVertexCache);
-                lod.clusters.reserve(clusters.size());
-                for (const auto& cluster : clusters) {
-                  lod.clusters.push_back(PreparedCpuMesh::ClusterCpu{
-                      .firstIndex = cluster.firstIndex,
-                      .indexCount = cluster.indexCount,
-                      .boundsCenter = cluster.boundsCenter,
-                      .boundsRadius = cluster.boundsRadius,
-                  });
+                if (visualPolicy.enableClusterCulling && rebuildClustersOnCacheHit) {
+                  std::vector<cadfeature::MeshCluster> clusters = BuildMeshClusters(
+                      lod.indices,
+                      lod.vertices,
+                      static_cast<std::size_t>(std::max(visualPolicy.clusterTargetIndices, 3)),
+                      static_cast<std::size_t>(std::max(visualPolicy.clusterMinIndices, 3)),
+                      visualPolicy.optimizeVertexCache);
+                  lod.clusters.reserve(clusters.size());
+                  for (const auto& cluster : clusters) {
+                    lod.clusters.push_back(PreparedCpuMesh::ClusterCpu{
+                        .firstIndex = cluster.firstIndex,
+                        .indexCount = cluster.indexCount,
+                        .boundsCenter = cluster.boundsCenter,
+                        .boundsRadius = cluster.boundsRadius,
+                    });
+                  }
                 }
                 prepared.lods.push_back(std::move(lod));
-              }
-              if (!prepared.lods.empty()) {
-                const CadLodPolicy& lodPolicyLocal = LoadCadLodPolicy();
-                IndexedMesh source;
-                source.vertices = prepared.lods.back().vertices;
-                source.indices = prepared.lods.back().indices;
-                std::vector<IndexedMesh> tempLods;
-                tempLods.push_back(std::move(source));
-                IndexedMesh shadowProxy = BuildShadowProxyMesh(tempLods, lodPolicyLocal);
-                if (!shadowProxy.vertices.empty() && !shadowProxy.indices.empty()) {
-                  PreparedCpuMesh::LodCpu shadowLod;
-                  shadowLod.vertices = std::move(shadowProxy.vertices);
-                  shadowLod.indices = std::move(shadowProxy.indices);
-                  prepared.shadowProxy = std::move(shadowLod);
-                }
               }
               std::cerr << "CAD prepared cache hit: " << assetPath << "\n";
               setStage("completed", 1.00F);
@@ -263,6 +263,7 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
 
             setStage("prepare", 0.60F);
             PreparedCpuMesh prepared = PrepareCpuMesh(cpu);
+            prepared.loadedFromPreparedCache = false;
             if (!prepared.lods.empty()) {
               setStage("store_cache", 0.85F);
               PreparedCpuMeshBlob blob;

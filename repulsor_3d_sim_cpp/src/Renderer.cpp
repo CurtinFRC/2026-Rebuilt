@@ -55,6 +55,45 @@ float Hash01(std::uint32_t x) {
   return static_cast<float>(x & 0x00FFFFFFU) / static_cast<float>(0x01000000U);
 }
 
+double FindCounterValue(const DiagnosticsSnapshot& snapshot, const char* name, const double fallback = 0.0) {
+  if (name == nullptr) {
+    return fallback;
+  }
+  for (const auto& counter : snapshot.counters) {
+    if (counter.name == name) {
+      return counter.value;
+    }
+  }
+  return fallback;
+}
+
+const char* CadLoadStageLabelFromCode(const int stageCode) {
+  switch (stageCode) {
+    case 1:
+      return "queued";
+    case 2:
+      return "cache_lookup";
+    case 3:
+      return "cache_hit";
+    case 4:
+      return "import";
+    case 5:
+      return "prepare";
+    case 6:
+      return "store_cache";
+    case 7:
+      return "gpu_upload";
+    case 8:
+      return "completed";
+    case 9:
+      return "cancelled";
+    case 10:
+      return "failed";
+    default:
+      return "idle";
+  }
+}
+
 }  // namespace
 
 Renderer::Renderer(const ViewerConfig& cfg, std::unique_ptr<IRenderWorldAdapter> worldAdapter)
@@ -1273,6 +1312,17 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
   constexpr float glyphHeight = 7.0F * scale;
   std::vector<OverlayLine> widgets = lines;
 
+  // Always show a CAD loading bar while CAD assets are still being prepared/uploaded.
+  const DiagnosticsSnapshot& diagSnapshot = diagnostics_.Latest();
+  const double cadLoadsActive = FindCounterValue(diagSnapshot, "cad.loads.active", 0.0);
+  const double cadUploadsPending = FindCounterValue(diagSnapshot, "cad.uploads.pending", 0.0);
+  const double cadProgressPctRaw = FindCounterValue(diagSnapshot, "cad.loads.progress_pct", 0.0);
+  const bool showCadLoadingBar = (cadLoadsActive > 0.5) || (cadUploadsPending > 0.5);
+  const double cadProgressPct = std::clamp(cadProgressPctRaw, 0.0, 100.0);
+  const int stageCode =
+      static_cast<int>(std::round(FindCounterValue(diagSnapshot, "cad.loads.stage_code", 0.0)));
+  const char* stageLabel = CadLoadStageLabelFromCode(stageCode);
+
   if (smoothedFrameMsInitialized_ && smoothedFrameMs_ > 1e-6) {
     std::ostringstream fpsText;
     fpsText << std::fixed << std::setprecision(1) << "FPS: " << (1000.0 / smoothedFrameMs_);
@@ -1341,6 +1391,69 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
     }
 
     DrawText2D(std::max(0.0F, x), y, scale, line.text, line.color);
+  }
+
+  if (showCadLoadingBar) {
+    constexpr float barScale = 2.1F;
+    constexpr float stageScale = 1.7F;
+    constexpr float marginX = 10.0F;
+    constexpr float marginY = 8.0F;
+    constexpr float lineGap = 4.0F;
+
+    auto makeLoadingLine = [&](const int barChars) {
+      const int filled = std::clamp(
+          static_cast<int>(std::round((cadProgressPct / 100.0) * static_cast<double>(barChars))),
+          0,
+          barChars);
+      std::string bar(static_cast<std::size_t>(filled), '#');
+      bar.append(static_cast<std::size_t>(barChars - filled), '-');
+
+      std::ostringstream loadingText;
+      loadingText << "CAD LOAD [" << bar << "] " << std::fixed << std::setprecision(0) << cadProgressPct << "%";
+      return loadingText.str();
+    };
+
+    int barChars = 30;
+    std::string loadingLine = makeLoadingLine(barChars);
+    const float availableWidth = std::max(64.0F, static_cast<float>(width) - (2.0F * marginX));
+    while (barChars > 8 && TextWidthPixels(loadingLine, barScale) > availableWidth) {
+      --barChars;
+      loadingLine = makeLoadingLine(barChars);
+    }
+
+    std::ostringstream stageLineStream;
+    stageLineStream << "stage: " << stageLabel
+                    << " | L:" << static_cast<int>(std::round(cadLoadsActive))
+                    << " U:" << static_cast<int>(std::round(cadUploadsPending));
+    const std::string stageLine = stageLineStream.str();
+
+    const float maxTextWidth = std::max(
+        TextWidthPixels(loadingLine, barScale),
+        TextWidthPixels(stageLine, stageScale));
+    const float x = std::max(2.0F, static_cast<float>(width) - marginX - maxTextWidth);
+
+    const float stageGlyphHeight = 7.0F * stageScale;
+    const float barGlyphHeight = 7.0F * barScale;
+    float stageY = marginY + stageGlyphHeight;
+    float barY = stageY + lineGap + barGlyphHeight;
+
+    const float maxY = static_cast<float>(height) - 2.0F;
+    if (barY > maxY) {
+      const float overflow = barY - maxY;
+      stageY -= overflow;
+      barY -= overflow;
+    }
+    const float minStageY = 2.0F + stageGlyphHeight;
+    if (stageY < minStageY) {
+      const float lift = minStageY - stageY;
+      stageY += lift;
+      barY += lift;
+    }
+    stageY = std::clamp(stageY, minStageY, maxY);
+    barY = std::clamp(barY, 2.0F + barGlyphHeight, maxY);
+
+    DrawText2D(x, barY, barScale, loadingLine, glm::vec4{0.30F, 0.84F, 1.00F, 0.98F});
+    DrawText2D(x, stageY, stageScale, stageLine, glm::vec4{0.86F, 0.92F, 1.00F, 0.94F});
   }
 
   backend_->SetDepthTestEnabled(true);

@@ -84,6 +84,8 @@ bool CadModelRenderFeature::Initialize(Renderer& renderer) {
   meshProvider_ = CreateDefaultMeshProvider(*geometryProvider_);
   backend_ = &renderer.GetRenderBackend();
   uploadBudgetPerFrame_ = std::max(1, GetEnvInt("CAD_UPLOADS_PER_FRAME", uploadBudgetPerFrame_));
+  uploadBudgetPerFrameCacheHit_ =
+      std::max(uploadBudgetPerFrame_, GetEnvInt("CAD_UPLOADS_PER_FRAME_CACHE_HIT", uploadBudgetPerFrameCacheHit_));
   const CadShadowPolicy& shadowPolicy = LoadCadShadowPolicy();
   shadowEnabled_ = shadowPolicy.enabled;
   shadowMapSize_ = shadowPolicy.mapSize;

@@ -14,6 +14,7 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
+#include <string_view>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -83,6 +84,37 @@ float ComputeDepth01(const glm::mat4& viewProjection, const glm::vec3& worldPoin
   return std::clamp((clip.z / clip.w) * 0.5F + 0.5F, 0.0F, 1.0F);
 }
 
+int CadLoadStageCodeFromText(const std::string_view stage) {
+  if (stage == "queued") {
+    return 1;
+  }
+  if (stage == "cache_lookup") {
+    return 2;
+  }
+  if (stage == "cache_hit") {
+    return 3;
+  }
+  if (stage == "import") {
+    return 4;
+  }
+  if (stage == "prepare") {
+    return 5;
+  }
+  if (stage == "store_cache") {
+    return 6;
+  }
+  if (stage == "completed") {
+    return 8;
+  }
+  if (stage == "cancelled") {
+    return 9;
+  }
+  if (stage == "failed" || stage == "import_failed") {
+    return 10;
+  }
+  return 0;
+}
+
 }  // namespace
 
 using cad::CadVisualPolicy;
@@ -116,19 +148,33 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     float progressSum = 0.0F;
     int progressCount = 0;
     int failedCount = static_cast<int>(failedLoads_.size());
+    float leadingProgress = -1.0F;
+    std::string leadingStage = "idle";
     for (const auto& [_, pending] : pendingLoads_) {
       if (pending.status != nullptr) {
-        progressSum += pending.status->progress.load();
+        const float progress = pending.status->progress.load();
+        progressSum += progress;
         ++progressCount;
         if (pending.status->failed.load()) {
           ++failedCount;
         }
+        if (progress >= leadingProgress) {
+          leadingProgress = progress;
+          std::scoped_lock lock(pending.status->stageMutex);
+          leadingStage = pending.status->stage;
+        }
       }
     }
     const float avgProgress = progressCount > 0 ? (progressSum / static_cast<float>(progressCount)) : 0.0F;
+    int stageCode = CadLoadStageCodeFromText(leadingStage);
+    if (stageCode == 0 && !pendingGpuUploads_.empty()) {
+      stageCode = 7;  // gpu_upload
+      leadingStage = "gpu_upload";
+    }
     context.diagnosticsWriter->RecordCounter("cad.loads.active", static_cast<double>(pendingLoads_.size()));
     context.diagnosticsWriter->RecordCounter("cad.loads.failed", static_cast<double>(failedCount));
     context.diagnosticsWriter->RecordCounter("cad.loads.progress_pct", static_cast<double>(avgProgress * 100.0F));
+    context.diagnosticsWriter->RecordCounter("cad.loads.stage_code", static_cast<double>(stageCode));
     context.diagnosticsWriter->RecordCounter("cad.uploads.pending", static_cast<double>(pendingGpuUploads_.size()));
     context.diagnosticsWriter->RecordCounter(
         "cad.cache.mesh_count",

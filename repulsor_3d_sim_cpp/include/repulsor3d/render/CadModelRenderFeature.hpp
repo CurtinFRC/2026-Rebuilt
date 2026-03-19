@@ -117,6 +117,7 @@ class CadModelRenderFeature final : public IRenderFeature {
     glm::vec3 boundsCenter{0.0F, 0.0F, 0.0F};
     float boundsRadius = 1.0F;
     PositionNormalMesh::MaterialHints materialHints;
+    bool loadedFromPreparedCache = false;
   };
 
   struct PendingLoad {
@@ -252,6 +253,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   float broadphaseCacheCellSizeM_ = -1.0F;
   std::uint64_t broadphaseCacheFingerprint_ = 0ULL;
   int uploadBudgetPerFrame_ = 1;
+  int uploadBudgetPerFrameCacheHit_ = 8;
   int uploadsThisFrame_ = 0;
   float triplanarScale_ = 1.0F;
   bool autoQualityEnabled_ = false;
