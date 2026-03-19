@@ -97,6 +97,9 @@ int CadLoadStageCodeFromText(const std::string_view stage) {
   if (stage == "import") {
     return 4;
   }
+  if (stage == "import_slow") {
+    return 11;
+  }
   if (stage == "prepare") {
     return 5;
   }
@@ -149,6 +152,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     int progressCount = 0;
     int failedCount = static_cast<int>(failedLoads_.size());
     float leadingProgress = -1.0F;
+    float leadingStageProgress = 0.0F;
+    double leadingStageElapsedSeconds = 0.0;
     std::string leadingStage = "idle";
     for (const auto& [_, pending] : pendingLoads_) {
       if (pending.status != nullptr) {
@@ -160,6 +165,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         }
         if (progress >= leadingProgress) {
           leadingProgress = progress;
+          leadingStageProgress = pending.status->stageProgress.load();
+          leadingStageElapsedSeconds = pending.status->stageElapsedSeconds.load();
           std::scoped_lock lock(pending.status->stageMutex);
           leadingStage = pending.status->stage;
         }
@@ -175,6 +182,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.loads.failed", static_cast<double>(failedCount));
     context.diagnosticsWriter->RecordCounter("cad.loads.progress_pct", static_cast<double>(avgProgress * 100.0F));
     context.diagnosticsWriter->RecordCounter("cad.loads.stage_code", static_cast<double>(stageCode));
+    context.diagnosticsWriter->RecordCounter("cad.loads.stage_progress_pct", static_cast<double>(leadingStageProgress * 100.0F));
+    context.diagnosticsWriter->RecordCounter("cad.loads.stage_elapsed_s", leadingStageElapsedSeconds);
     context.diagnosticsWriter->RecordCounter("cad.uploads.pending", static_cast<double>(pendingGpuUploads_.size()));
     context.diagnosticsWriter->RecordCounter(
         "cad.cache.mesh_count",

@@ -135,14 +135,13 @@ bool GltfCadMeshImporter::Import(const std::string& resolvedAssetPath, PositionN
   if (!cad_import::LoadGltfRoot(resolvedAssetPath, root, embeddedGlbBinChunk)) {
     return false;
   }
+
+  // Populate hints from the same parsed document to avoid reparsing large files twice.
+  cad_import::PopulateGltfMaterialHints(root, std::filesystem::path(resolvedAssetPath), outMesh.materialHints);
+
   const GltfSceneAssembler assembler(std::move(root), std::move(embeddedGlbBinChunk), std::filesystem::path(resolvedAssetPath));
   if (!assembler.Build(outMesh)) {
     return false;
-  }
-  nlohmann::json hintsRoot;
-  std::vector<std::uint8_t> hintsGlb;
-  if (cad_import::LoadGltfRoot(resolvedAssetPath, hintsRoot, hintsGlb)) {
-    cad_import::PopulateGltfMaterialHints(hintsRoot, std::filesystem::path(resolvedAssetPath), outMesh.materialHints);
   }
   return true;
 }

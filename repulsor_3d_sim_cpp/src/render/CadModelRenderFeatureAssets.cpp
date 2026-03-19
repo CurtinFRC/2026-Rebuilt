@@ -3,9 +3,11 @@
 #include <stb_image.h>
 
 #include <chrono>
+#include <cmath>
 #include <future>
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 #include "repulsor3d/Renderer.hpp"
 #include "repulsor3d/render/cad/CadPolicies.hpp"
@@ -16,11 +18,10 @@ namespace repulsor3d {
 using cad::CadLodPolicy;
 using cad::CadVisualPolicy;
 using cad::GetEnvBool;
+using cad::GetEnvFloat;
 using cad::LoadCadLodPolicy;
 using cad::LoadCadVisualPolicy;
-using cadfeature::BuildShadowProxyMesh;
 using cadfeature::BuildMeshClusters;
-using cadfeature::IndexedMesh;
 using cadfeature::PreparedCpuMeshBlob;
 using cadfeature::StorePreparedCpuMeshCache;
 using cadfeature::TryLoadPreparedCpuMeshCache;
@@ -189,9 +190,11 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
   }
   std::packaged_task<PreparedCpuMesh()> loadTask(
       [provider, assetPath, status]() {
-            auto setStage = [&](const char* stage, const float progress) {
+            auto setStage = [&](const char* stage, const float progress, const float stageProgress = 0.0F) {
               if (status != nullptr) {
                 status->progress = progress;
+                status->stageProgress = stageProgress;
+                status->stageElapsedSeconds = 0.0;
                 std::scoped_lock lock(status->stageMutex);
                 status->stage = stage;
               }
@@ -249,7 +252,45 @@ const CadModelRenderFeature::GpuMesh* CadModelRenderFeature::GetOrLoadMesh(const
 
             setStage("import", 0.25F);
             PositionNormalMesh cpu;
-            if (provider == nullptr || !provider->LoadPositionNormalMesh(assetPath, cpu)) {
+            std::atomic<bool> importDone{false};
+            const double importWarnSeconds = std::max(5.0, static_cast<double>(GetEnvFloat("CAD_IMPORT_WARN_S", 30.0F)));
+            const double importProgressHalfLifeSeconds =
+                std::max(1.0, static_cast<double>(GetEnvFloat("CAD_IMPORT_PROGRESS_HALFLIFE_S", 10.0F)));
+            std::thread importHeartbeat([&]() {
+              bool markedSlow = false;
+              const auto start = std::chrono::steady_clock::now();
+              while (!importDone.load()) {
+                if (status != nullptr) {
+                  const auto now = std::chrono::steady_clock::now();
+                  const double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(now - start).count();
+                  const float stageProgress = std::clamp(
+                      static_cast<float>(1.0 - std::exp(-elapsed / importProgressHalfLifeSeconds)),
+                      0.0F,
+                      0.98F);
+                  status->stageElapsedSeconds = elapsed;
+                  status->stageProgress = stageProgress;
+                  const float importOverallProgress = 0.25F + stageProgress * 0.33F;
+                  if (importOverallProgress > status->progress.load()) {
+                    status->progress = importOverallProgress;
+                  }
+                  if (!markedSlow && elapsed >= importWarnSeconds) {
+                    std::scoped_lock lock(status->stageMutex);
+                    if (status->stage == "import") {
+                      status->stage = "import_slow";
+                    }
+                    markedSlow = true;
+                  }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+              }
+            });
+
+            const bool importOk = provider != nullptr && provider->LoadPositionNormalMesh(assetPath, cpu);
+            importDone = true;
+            if (importHeartbeat.joinable()) {
+              importHeartbeat.join();
+            }
+            if (!importOk) {
               setStage("import_failed", 1.0F);
               if (status != nullptr) {
                 status->failed = true;

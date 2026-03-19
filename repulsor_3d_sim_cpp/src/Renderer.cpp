@@ -77,6 +77,8 @@ const char* CadLoadStageLabelFromCode(const int stageCode) {
       return "cache_hit";
     case 4:
       return "import";
+    case 11:
+      return "import_slow";
     case 5:
       return "prepare";
     case 6:
@@ -1421,8 +1423,16 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
       loadingLine = makeLoadingLine(barChars);
     }
 
+    const double stageProgressPct = std::clamp(
+        FindCounterValue(diagSnapshot, "cad.loads.stage_progress_pct", 0.0),
+        0.0,
+        100.0);
+    const double stageElapsedS = std::max(0.0, FindCounterValue(diagSnapshot, "cad.loads.stage_elapsed_s", 0.0));
+
     std::ostringstream stageLineStream;
     stageLineStream << "stage: " << stageLabel
+                    << " " << std::fixed << std::setprecision(1) << stageElapsedS << "s"
+                    << " (" << std::setprecision(0) << stageProgressPct << "%)"
                     << " | L:" << static_cast<int>(std::round(cadLoadsActive))
                     << " U:" << static_cast<int>(std::round(cadUploadsPending));
     const std::string stageLine = stageLineStream.str();

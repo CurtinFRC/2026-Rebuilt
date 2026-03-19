@@ -123,6 +123,8 @@ class CadModelRenderFeature final : public IRenderFeature {
   struct PendingLoad {
     struct Status {
       std::atomic<float> progress{0.0F};
+      std::atomic<float> stageProgress{0.0F};
+      std::atomic<double> stageElapsedSeconds{0.0};
       std::atomic<bool> cancelRequested{false};
       std::atomic<bool> completed{false};
       std::atomic<bool> failed{false};
