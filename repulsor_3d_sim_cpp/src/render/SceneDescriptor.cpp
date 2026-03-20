@@ -9,6 +9,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "repulsor3d/render/MeshCulling.hpp"
+
 namespace repulsor3d {
 namespace {
 
@@ -186,6 +188,16 @@ SceneDescriptor::DynamicEntityBinding ParseDynamicEntityBinding(const nlohmann::
     if (culling.contains("boundsRadius") && culling["boundsRadius"].is_number()) {
       out.culling.boundsRadius = culling["boundsRadius"].get<float>();
     }
+  }
+  std::string entityTypeLower = out.entityType;
+  std::transform(entityTypeLower.begin(), entityTypeLower.end(), entityTypeLower.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  if (entityTypeLower == "mesh") {
+    MeshInstancePrimitive mesh;
+    mesh.scale = out.defaultScale;
+    mesh.assetPath = out.assetPath;
+    out.culling = meshculling::ResolveMeshEntityCulling(mesh, out.culling);
   }
   return out;
 }
@@ -536,6 +548,7 @@ std::optional<SceneDescriptor> LoadSceneDescriptorFromFile(const std::string& pa
           mesh.normalTexturePath = item["normalTexturePath"].get<std::string>();
         }
         mesh.pass = entity.pass;
+        entity.culling = meshculling::ResolveMeshEntityCulling(mesh, entity.culling);
         entity.payload = std::move(mesh);
       } else if (type == "overlay") {
         if (!item.contains("text") || !item["text"].is_string()) {

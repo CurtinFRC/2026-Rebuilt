@@ -3,6 +3,7 @@
 #include <string>
 
 #include "repulsor3d/Config.hpp"
+#include "repulsor3d/render/MeshCulling.hpp"
 #include "repulsor3d/render/SceneModelBuilder.hpp"
 #include "repulsor3d/render/scenegraph/SceneGraphBuilder.hpp"
 
@@ -40,7 +41,10 @@ class GenericSeasonModelBuilderTemplate final : public ISceneModelBuilder {
     //      .position = {0.0F, 0.0F, 0.0F},
     //      .roughnessOverride = 0.55F,
     //      .metallicOverride = 0.10F},
-    //   .parentId = "robot_pose"
+    //   .parentId = "robot_pose",
+    //   .culling = meshculling::ResolveMeshEntityCulling(
+    //       MeshInstancePrimitive{.scale = {1.0F, 1.0F, 1.0F}},
+    //       EntityCulling{.enabled = true, .boundsRadius = 0.5F})
     // });
     // frame.entities.push_back({.id = "fov", .pass = RenderPass::Transparent, .payload = LinePrimitive{...}});
     // frame.spheres.push_back(...);  // legacy path still supported

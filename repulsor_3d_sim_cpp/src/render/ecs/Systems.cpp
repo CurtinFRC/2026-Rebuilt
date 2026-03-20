@@ -19,6 +19,7 @@
 #include <glm/trigonometric.hpp>
 
 #include "repulsor3d/render/ecs/SpatialIndex.hpp"
+#include "repulsor3d/render/MeshCulling.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -189,7 +190,7 @@ std::pair<glm::vec3, float> ComputeEntityBounds(const RenderEntity& entity) {
           radius = std::max(radius, glm::length(typed.b - typed.a) * 0.5F);
         } else if constexpr (std::is_same_v<T, MeshInstancePrimitive>) {
           center = typed.position;
-          radius = std::max(radius, glm::length(typed.scale) * 0.5F);
+          radius = std::max(radius, meshculling::ComputeMeshScaleBoundsRadius(typed.scale, 0.20F, 0.35F));
         } else if constexpr (std::is_same_v<T, OverlayLine>) {
           center = glm::vec3{0.0F, 0.0F, 0.0F};
           radius = 0.0F;
@@ -198,6 +199,10 @@ std::pair<glm::vec3, float> ComputeEntityBounds(const RenderEntity& entity) {
       entity.payload);
 
   return {center, radius};
+}
+
+bool ShouldApplyFrustumCulling(const RenderEntity& entity) {
+  return entity.culling.enabled;
 }
 
 }  // namespace
@@ -271,7 +276,7 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
   for (std::size_t i = 0; i < frame.entities.size(); ++i) {
     const auto& entity = frame.entities[i];
     const bool isOverlay = entity.pass == RenderPass::Overlay || std::holds_alternative<OverlayLine>(entity.payload);
-    if (isOverlay || !entity.culling.enabled) {
+    if (isOverlay || !ShouldApplyFrustumCulling(entity)) {
       continue;
     }
     const auto [center, radius] = ComputeEntityBounds(entity);
@@ -310,7 +315,7 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
   for (std::size_t i = 0; i < frame.entities.size(); ++i) {
     auto& entity = frame.entities[i];
     const bool isOverlay = entity.pass == RenderPass::Overlay || std::holds_alternative<OverlayLine>(entity.payload);
-    if (isOverlay || !entity.culling.enabled) {
+    if (isOverlay || !ShouldApplyFrustumCulling(entity)) {
       visible.push_back(std::move(entity));
       continue;
     }

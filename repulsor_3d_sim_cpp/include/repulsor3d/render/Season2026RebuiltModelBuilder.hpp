@@ -29,6 +29,8 @@ class Season2026RebuiltModelBuilder final : public ISceneModelBuilder {
   ViewerConfig cfg_;
 
   float fieldZ_ = 0.0F;
+  float fieldLength_ = 0.0F;
+  float fieldWidth_ = 0.0F;
   float fuelRadius_ = 0.0F;
   float obsSide_ = 0.0F;
   float robotL_ = 0.0F;

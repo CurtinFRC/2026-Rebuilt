@@ -26,7 +26,7 @@ struct CadLodPolicy {
 
 struct CadVisualPolicy {
   bool enableFrustumCulling = true;
-  float frustumCullMarginM = 0.30F;
+  float frustumCullMarginM = 1.00F;
   bool enableBroadphase = true;
   float broadphaseCellSizeM = 3.0F;
   bool enableClusterCulling = true;
@@ -37,11 +37,11 @@ struct CadVisualPolicy {
   int clusterMinIndices = 8192;
   int clusterMergeGapIndices = 512;
   int fieldClusterMaxVisibleIndices = 0;
-  bool fieldClusterAdaptiveBudget = true;
+  bool fieldClusterAdaptiveBudget = false;
   float fieldClusterAdaptiveMinScale = 0.55F;
   float minClusterScreenRadiusPx = 0.0F;
   bool enableDepthPrepass = true;
-  bool enableOcclusionCulling = true;
+  bool enableOcclusionCulling = false;
   int hzbTilesX = 64;
   int hzbTilesY = 36;
   float hzbDepthMargin = 0.02F;

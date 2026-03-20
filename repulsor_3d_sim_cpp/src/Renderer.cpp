@@ -703,7 +703,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   const DiagnosticsSnapshot& latestDiag = diagnostics_.Latest();
   const double appLoopMs = FindCounterValue(latestDiag, "app.loop_ms", 0.0);
   const double appSwapWaitMs = FindCounterValue(latestDiag, "app.swap_wait_avg_ms", 0.0);
-  const bool arenaAutoQuality = ParseEnvBool("ARENA_AUTO_QUALITY", true);
+  const bool arenaAutoQuality = ParseEnvBool("ARENA_AUTO_QUALITY", false);
   int detailDivisor = std::clamp(ParseEnvInt("ARENA_DETAIL_DIVISOR", 1), 1, 6);
   if (arenaAutoQuality) {
     if (appLoopMs > 80.0 || appSwapWaitMs > 40.0) {

@@ -9,6 +9,7 @@
 #include <glm/trigonometric.hpp>
 
 #include "repulsor3d/render/scenegraph/SceneGraphBuilder.hpp"
+#include "repulsor3d/render/MeshCulling.hpp"
 
 namespace repulsor3d {
 namespace {
@@ -33,6 +34,8 @@ RenderEntity MakeStaticEntity(
 
 Season2026RebuiltModelBuilder::Season2026RebuiltModelBuilder(const ViewerConfig& cfg) : cfg_(cfg) {
   fieldZ_ = cfg.fieldZM;
+  fieldLength_ = cfg.fieldLengthM;
+  fieldWidth_ = cfg.fieldWidthM;
   fuelRadius_ = cfg.ballRadiusM;
   obsSide_ = cfg.obsBoxSideM;
   robotL_ = cfg.robotBoxLM;
@@ -494,6 +497,12 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
         .metallicOverride = 0.03F,
         .pass = RenderPass::Opaque,
     };
+    const float fieldCullingRadius = meshculling::ComputeRectFootprintBoundsRadius(
+        fieldLength_,
+        fieldWidth_,
+        fieldCadScaleM_,
+        3.0F,
+        6.0F);
     sceneGraph.AddNode(
         {.id = "field_cad",
          .pass = RenderPass::Opaque,
@@ -501,7 +510,7 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
          .parentId = "",
          .transform = {},
          .hasTransform = false,
-         .culling = {.enabled = false, .boundsRadius = 1.0F}});
+         .culling = {.enabled = true, .boundsRadius = fieldCullingRadius}});
   }
 
   if (!showRobotCadModel_ || robotCadModelPath_.empty()) {
@@ -546,10 +555,14 @@ void Season2026RebuiltModelBuilder::AppendCadModelPrimitives(
             },
         .hasTransform = worldTransformFromPose,
         .culling =
-            EntityCulling{
+            meshculling::ResolveMeshEntityCulling(
+                mesh,
+                EntityCulling{
                 .enabled = true,
                 .boundsRadius = std::max(robotL_, robotW_),
-            },
+                },
+                0.20F,
+                std::max(0.35F, std::min(robotL_, robotW_) * 0.5F)),
     };
     sceneGraph.AddNode(std::move(entity));
   };

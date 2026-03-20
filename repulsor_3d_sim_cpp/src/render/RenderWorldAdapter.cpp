@@ -7,6 +7,7 @@
 
 #include "repulsor3d/app/composition/SeasonWorldComposition.hpp"
 #include "repulsor3d/modules/SeasonModule.hpp"
+#include "repulsor3d/render/MeshCulling.hpp"
 #include "repulsor3d/render/SceneDescriptor.hpp"
 #include "repulsor3d/render/templates/GenericSeasonModelBuilderTemplate.hpp"
 
@@ -277,6 +278,14 @@ RenderSceneFrame DescriptorDecoratingRenderWorldAdapter::BuildFrame(const ISimWo
           mesh.albedoTexturePath = DynamicStringOr(record, "albedo_texture_path", binding.albedoTexturePath);
           mesh.normalTexturePath = DynamicStringOr(record, "normal_texture_path", binding.normalTexturePath);
           mesh.pass = binding.pass;
+          EntityCulling culling = binding.culling;
+          if (const auto it = record.doubles.find("bounds_radius"); it != record.doubles.end()) {
+            culling.boundsRadius = static_cast<float>(it->second);
+          }
+          if (const auto it = record.doubles.find("culling_enabled"); it != record.doubles.end()) {
+            culling.enabled = it->second > 0.5;
+          }
+          culling = meshculling::ResolveMeshEntityCulling(mesh, culling);
           frame.entities.push_back(
               {.id = id,
                .pass = binding.pass,
@@ -284,7 +293,7 @@ RenderSceneFrame DescriptorDecoratingRenderWorldAdapter::BuildFrame(const ISimWo
                .parentId = "",
                .transform = {},
                .hasTransform = false,
-               .culling = binding.culling});
+               .culling = culling});
         } else if (entityType == "overlay") {
           OverlayLine overlay;
           overlay.text = DynamicStringOr(record, binding.textKey, id);
