@@ -419,11 +419,24 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("entities.stage.visibility_ms", cullingStats.visibilityTestMs);
   diagnostics_.RecordCounter("commands.total", static_cast<double>(commandBuffer.size()));
   const auto& caps = backend_->Capabilities();
-  const bool gpuTimersEnabled = caps.supportsGpuTimers && ParseEnvBool("RENDER_GPU_TIMERS", false);
+  ++gpuTimerFrameCounter_;
+  const bool gpuTimersRequested = caps.supportsGpuTimers && ParseEnvBool("RENDER_GPU_TIMERS", false);
+  const int gpuTimerPollEveryFrames = std::max(1, ParseEnvInt("RENDER_GPU_TIMER_POLL_EVERY_FRAMES", 4));
+  const bool allowGpuTimerReadThisFrame = (gpuTimerFrameCounter_ % static_cast<std::uint64_t>(gpuTimerPollEveryFrames)) == 0ULL;
+  const double gpuTimerReadSlowMsThreshold =
+      std::max(0.1, static_cast<double>(ParseEnvInt("RENDER_GPU_TIMER_READ_SLOW_MS", 3)));
+  const int gpuTimerReadSlowDisableSamples =
+      std::max(2, ParseEnvInt("RENDER_GPU_TIMER_READ_SLOW_DISABLE_SAMPLES", 3));
+  const bool gpuTimersEnabled = gpuTimersRequested && !gpuTimersRuntimeDisabled_;
   diagnostics_.RecordCounter("backend.max_texture_size", static_cast<double>(caps.maxTextureSize));
   diagnostics_.RecordCounter("backend.max_vertex_attribs", static_cast<double>(caps.maxVertexAttribs));
   diagnostics_.RecordCounter("backend.supports_gpu_timers", caps.supportsGpuTimers ? 1.0 : 0.0);
   diagnostics_.RecordCounter("backend.gpu_timers_enabled", gpuTimersEnabled ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("backend.gpu_timers_requested", gpuTimersRequested ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("backend.gpu_timers_runtime_disabled", gpuTimersRuntimeDisabled_ ? 1.0 : 0.0);
+  diagnostics_.RecordCounter(
+      "backend.gpu_timer_poll_every_frames",
+      static_cast<double>(gpuTimerPollEveryFrames));
   diagnostics_.RecordCounter("resources.buffers", static_cast<double>(resourceManager_.Stats(ResourceClass::Buffer).count));
   diagnostics_.RecordCounter("resources.textures", static_cast<double>(resourceManager_.Stats(ResourceClass::Texture).count));
   diagnostics_.RecordCounter("resources.vertex_arrays", static_cast<double>(resourceManager_.Stats(ResourceClass::VertexArray).count));
@@ -511,7 +524,14 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
         .consumesResources = rawFeature->Dependencies(),
         .producesResources = {rawFeature->Name()},
         .execute =
-            [this, rawFeature, &context, &drawApi, gpuTimersEnabled](RenderGraphContext& graphContext) {
+            [this,
+             rawFeature,
+             &context,
+             &drawApi,
+             gpuTimersEnabled,
+             allowGpuTimerReadThisFrame,
+             gpuTimerReadSlowMsThreshold,
+             gpuTimerReadSlowDisableSamples](RenderGraphContext& graphContext) {
               GpuPassTimerState* gpuTimer = nullptr;
               bool gpuQueryActive = false;
               if (gpuTimersEnabled) {
@@ -524,9 +544,26 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
                 }
                 gpuTimer = &timerState;
                 const unsigned int readQuery = timerState.queryIds[timerState.readIndex];
-                if (readQuery != 0) {
+                if (allowGpuTimerReadThisFrame && readQuery != 0) {
+                  const auto readStart = std::chrono::steady_clock::now();
                   double gpuMs = 0.0;
-                  if (backend_->TryReadGpuTimerMilliseconds(readQuery, gpuMs)) {
+                  const bool readOk = backend_->TryReadGpuTimerMilliseconds(readQuery, gpuMs);
+                  const auto readEnd = std::chrono::steady_clock::now();
+                  const double readMs =
+                      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(readEnd - readStart).count();
+                  diagnostics_.RecordCounter("backend.gpu_timer_read_ms", readMs);
+                  if (readMs >= gpuTimerReadSlowMsThreshold) {
+                    ++gpuTimerReadSlowSamples_;
+                  } else {
+                    gpuTimerReadSlowSamples_ = std::max(0, gpuTimerReadSlowSamples_ - 1);
+                  }
+                  if (gpuTimerReadSlowSamples_ >= gpuTimerReadSlowDisableSamples) {
+                    gpuTimersRuntimeDisabled_ = true;
+                    QueueDiagnosticMessage(
+                        "gpu timers auto-disabled due slow readback (read_ms=" + std::to_string(readMs) +
+                        ", threshold_ms=" + std::to_string(gpuTimerReadSlowMsThreshold) + ")");
+                  }
+                  if (readOk) {
                     diagnostics_.RecordGpuTime(rawFeature->Name(), gpuMs);
                   }
                 }

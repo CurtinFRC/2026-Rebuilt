@@ -171,6 +171,9 @@ class Renderer {
   bool smoothedFrameMsInitialized_ = false;
   double smoothedFrameMs_ = 0.0;
   std::unordered_map<std::string, GpuPassTimerState> gpuPassTimers_;
+  bool gpuTimersRuntimeDisabled_ = false;
+  int gpuTimerReadSlowSamples_ = 0;
+  std::uint64_t gpuTimerFrameCounter_ = 0;
 
   bool renderFeaturesInitialized_ = false;
   std::string renderPipelinePath_;
