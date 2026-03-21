@@ -261,7 +261,52 @@ uniform float uOutlineDepthSensitivity;
 uniform float uOutlineNormalSensitivity;
 uniform vec3 uOutlineColor;
 uniform vec3 uTexelSize;
+uniform float uTimeS;
+uniform float uCameraMotion;
+uniform float uImpactFlash;
+uniform int uGradePreset;
+uniform float uLensDirtStrength;
+uniform float uAnamorphicStrength;
 out vec4 FragColor;
+
+float Hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 ApplyGrade(vec3 color, int preset) {
+  if (preset == 2) {
+    // Neon night
+    mat3 m = mat3(
+      1.06, -0.02, 0.00,
+      -0.01, 1.04, 0.00,
+      0.02, 0.06, 1.08);
+    return max(m * color + vec3(0.00, 0.01, 0.02), vec3(0.0));
+  }
+  if (preset == 3) {
+    // Cinematic broadcast
+    mat3 m = mat3(
+      1.02, 0.01, -0.01,
+      0.00, 1.01, 0.00,
+      -0.02, 0.01, 1.04);
+    return max(m * color + vec3(0.01, 0.01, 0.01), vec3(0.0));
+  }
+  if (preset == 4) {
+    // Hyper arcade
+    mat3 m = mat3(
+      1.10, -0.02, -0.01,
+      -0.01, 1.08, 0.02,
+      0.00, 0.05, 1.12);
+    return max(m * color + vec3(0.02, 0.02, 0.03), vec3(0.0));
+  }
+  // Default arcade
+  mat3 m = mat3(
+    1.04, 0.00, -0.01,
+    0.00, 1.03, 0.01,
+    -0.01, 0.03, 1.06);
+  return max(m * color + vec3(0.01, 0.01, 0.02), vec3(0.0));
+}
 
 vec3 ReconstructNormal(vec2 uv, vec2 texelStep) {
   float dL = texture(uSceneDepthTex, uv - vec2(texelStep.x, 0.0)).r;
@@ -278,28 +323,53 @@ vec3 ReconstructNormal(vec2 uv, vec2 texelStep) {
 }
 
 void main() {
-  vec3 scene = texture(uSceneTex, vUv).rgb;
+  vec2 uv = vUv;
+  if (uCameraMotion > 1e-4) {
+    float jitter = (Hash12(vec2(floor(uTimeS * 97.0), floor(uTimeS * 57.0))) - 0.5) * 0.0014 * uCameraMotion;
+    uv += vec2(jitter, -jitter * 0.65);
+  }
+
+  vec3 scene = texture(uSceneTex, uv).rgb;
   vec3 bloom = texture(uBloomTex, vUv).rgb;
   float scenePeak = max(max(scene.r, scene.g), scene.b);
   float room = clamp(1.0 - scenePeak, 0.0, 1.0);
   vec3 color = scene + bloom * uBloomStrength * (0.20 + 0.80 * room);
+  float bloomPeak = max(max(bloom.r, bloom.g), bloom.b);
+
+  // Anamorphic streaks from bright bloom.
+  vec2 streakStep = vec2(uTexelSize.x * 6.0, 0.0);
+  vec3 streak = vec3(0.0);
+  streak += texture(uBloomTex, uv + streakStep * 1.0).rgb * 0.28;
+  streak += texture(uBloomTex, uv - streakStep * 1.0).rgb * 0.28;
+  streak += texture(uBloomTex, uv + streakStep * 2.0).rgb * 0.16;
+  streak += texture(uBloomTex, uv - streakStep * 2.0).rgb * 0.16;
+  streak += texture(uBloomTex, uv + streakStep * 3.0).rgb * 0.08;
+  streak += texture(uBloomTex, uv - streakStep * 3.0).rgb * 0.08;
+  color += streak * uAnamorphicStrength * (0.15 + 0.85 * bloomPeak);
+
+  // Procedural lens dirt reacts to bright emissive/bloom zones.
+  vec2 dirtUv = floor(uv * vec2(360.0, 200.0)) / vec2(360.0, 200.0);
+  float dirtNoise = Hash12(dirtUv + vec2(13.7, 5.9));
+  float dirtBlotch = smoothstep(0.72, 0.98, dirtNoise);
+  color += bloom * dirtBlotch * bloomPeak * uLensDirtStrength * 0.30;
+
   if (uOutlineEnabled != 0) {
-    float dC = texture(uSceneDepthTex, vUv).r;
+    float dC = texture(uSceneDepthTex, uv).r;
     float farFactor = smoothstep(0.35, 0.985, dC);
     float depthScaledThickness =
       max(0.5, uOutlineThicknessPx * mix(0.70, 2.20, farFactor));
     vec2 texelStep = uTexelSize.xy * depthScaledThickness;
-    float dL = texture(uSceneDepthTex, vUv - vec2(texelStep.x, 0.0)).r;
-    float dR = texture(uSceneDepthTex, vUv + vec2(texelStep.x, 0.0)).r;
-    float dD = texture(uSceneDepthTex, vUv - vec2(0.0, texelStep.y)).r;
-    float dU = texture(uSceneDepthTex, vUv + vec2(0.0, texelStep.y)).r;
+    float dL = texture(uSceneDepthTex, uv - vec2(texelStep.x, 0.0)).r;
+    float dR = texture(uSceneDepthTex, uv + vec2(texelStep.x, 0.0)).r;
+    float dD = texture(uSceneDepthTex, uv - vec2(0.0, texelStep.y)).r;
+    float dU = texture(uSceneDepthTex, uv + vec2(0.0, texelStep.y)).r;
     float depthGrad = abs(dL - dR) + abs(dU - dD) + abs(dC - dL) + abs(dC - dR) + abs(dC - dU) + abs(dC - dD);
     float depthEdge = smoothstep(0.0010, 0.0095, depthGrad * uOutlineDepthSensitivity * mix(1.0, 4.0, farFactor));
-    vec3 nC = ReconstructNormal(vUv, texelStep);
-    vec3 nL = ReconstructNormal(vUv - vec2(texelStep.x, 0.0), texelStep);
-    vec3 nR = ReconstructNormal(vUv + vec2(texelStep.x, 0.0), texelStep);
-    vec3 nD = ReconstructNormal(vUv - vec2(0.0, texelStep.y), texelStep);
-    vec3 nU = ReconstructNormal(vUv + vec2(0.0, texelStep.y), texelStep);
+    vec3 nC = ReconstructNormal(uv, texelStep);
+    vec3 nL = ReconstructNormal(uv - vec2(texelStep.x, 0.0), texelStep);
+    vec3 nR = ReconstructNormal(uv + vec2(texelStep.x, 0.0), texelStep);
+    vec3 nD = ReconstructNormal(uv - vec2(0.0, texelStep.y), texelStep);
+    vec3 nU = ReconstructNormal(uv + vec2(0.0, texelStep.y), texelStep);
     float normalEdge =
       max(max(1.0 - dot(nC, nL), 1.0 - dot(nC, nR)),
           max(1.0 - dot(nC, nD), 1.0 - dot(nC, nU)));
@@ -318,6 +388,11 @@ void main() {
   float radial = length(centered);
   float halo = exp(-radial * radial * 2.8);
   color += vec3(0.03, 0.06, 0.11) * halo * 0.35;
+  if (uImpactFlash > 1e-4) {
+    float blast = exp(-radial * radial * 4.2);
+    color += vec3(0.24, 0.36, 0.52) * blast * uImpactFlash;
+  }
+  color = ApplyGrade(color, uGradePreset);
   FragColor = vec4(color, 1.0);
 }
 )";

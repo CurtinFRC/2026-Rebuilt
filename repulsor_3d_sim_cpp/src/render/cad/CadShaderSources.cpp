@@ -517,6 +517,8 @@ void main() {
     vec3 coolShadow = mix(vec3(0.34, 0.46, 0.72), themePrimary * 0.70 + vec3(0.14, 0.20, 0.30), 0.58);
     shadowTint = mix(vec3(1.0), coolShadow, clamp(uShadowTintStrength, 0.0, 1.0));
   }
+)"
+R"(
 
   float shadow = 0.0;
   if (uShadowEnabled != 0 && uShadowStrength > 1e-4 && keyShadow > 1e-4) {
@@ -628,9 +630,29 @@ void main() {
     float floorMask = smoothstep(0.86, 0.98, abs(geomN.z));
     vec3 floorTint = mix(themeSecondary, themePrimary, 0.45) * vec3(0.10, 0.14, 0.20);
     linearColor += floorMask * floorTint * 0.010;
+    // Projected arena gobo/cookie pattern from top rig.
+    vec2 goboUv = vWorldPos.xy * 0.22 + vec2(uTimeS * 0.06, -uTimeS * 0.04);
+    float goboA = 0.5 + 0.5 * sin(goboUv.x * 7.0 + goboUv.y * 3.0);
+    float goboB = 0.5 + 0.5 * sin(goboUv.y * 9.0 - goboUv.x * 4.0);
+    float gobo = smoothstep(0.62, 0.90, goboA * 0.58 + goboB * 0.42);
+    vec3 goboColor = mix(themePrimary, themeSecondary, 0.32) * 0.20 + vec3(0.03, 0.05, 0.08);
+    linearColor += floorMask * gobo * goboColor * 0.22;
+    // Wet-floor style reflection accent (stylized SSR-lite).
+    float floorReflect = floorMask * pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 2.8);
+    vec3 skyReflect = mix(vec3(0.07, 0.11, 0.17), themePrimary * 0.35 + vec3(0.05, 0.08, 0.12), 0.62);
+    linearColor += skyReflect * floorReflect * 0.28;
+    // Material zone ramps across arena sectors for readability.
+    float zoneX = smoothstep(-0.8, 0.8, vWorldPos.x * 0.08);
+    float zoneY = smoothstep(-0.8, 0.8, vWorldPos.y * 0.08);
+    float zoneMix = clamp(zoneX * 0.6 + zoneY * 0.4, 0.0, 1.0);
+    vec3 zoneTint = mix(themeSecondary, themePrimary, zoneMix);
+    linearColor = mix(linearColor, linearColor * (0.88 + 0.32 * zoneTint), 0.08);
     float heroEdge = pow(1.0 - max(dot(N, V), 0.0), 2.1);
     vec3 heroTint = mix(themePrimary, themeSecondary, 0.35);
     linearColor += heroTint * heroEdge * 0.06;
+    // Gameplay readability boost by state.
+    vec3 stateTint = themePrimary * arcadeSelected + themeSecondary * arcadeAlert + vec3(0.60, 0.95, 1.00) * arcadeCharged;
+    linearColor += stateTint * (0.06 + 0.08 * heroEdge) * clamp(arcadeSelected + arcadeAlert + arcadeCharged, 0.0, 1.0);
 
     float outlineBand = smoothstep(0.24, 0.62, 1.0 - max(dot(N, V), 0.0));
     vec3 outlineColor = mix(vec3(0.02, 0.03, 0.05), themePrimary * 0.42 + vec3(0.03, 0.04, 0.06), 0.65);
@@ -649,6 +671,8 @@ void main() {
     directContribution = directLit;
     linearColor = indirectLit + directLit;
   }
+)"
+R"(
 
   // Stylized state-driven emissive accents (kept stable by default, stronger under gameplay state).
   float alertStrobe = arcadeAlert * (0.70 + 0.30 * step(0.60, fract(uTimeS * 1.8)));
@@ -683,6 +707,8 @@ void main() {
     fogColor = mix(fogColor, arcadeFogColor, 0.82);
   }
   linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
+)"
+R"(
 
   float effectiveExposure = max(uExposure, 0.01);
   vec3 mapped = TonemapAces(linearColor * effectiveExposure);

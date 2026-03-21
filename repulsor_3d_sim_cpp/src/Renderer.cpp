@@ -564,6 +564,12 @@ void Renderer::CompositeBloom() {
   int outlineNormalSensitivityLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineNormalSensitivity");
   int outlineColorLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineColor");
   int texelSizeLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uTexelSize");
+  int timeLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uTimeS");
+  int cameraMotionLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uCameraMotion");
+  int impactFlashLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uImpactFlash");
+  int gradePresetLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uGradePreset");
+  int lensDirtLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uLensDirtStrength");
+  int anamorphicLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uAnamorphicStrength");
   backend_->SetUniform1i(sceneLoc, 0);
   backend_->SetUniform1i(bloomLoc, 1);
   backend_->SetUniform1i(depthLoc, 2);
@@ -583,6 +589,16 @@ void Renderer::CompositeBloom() {
       1.0F / static_cast<float>(std::max(1, width_)),
       1.0F / static_cast<float>(std::max(1, height_)),
       0.0F);
+  backend_->SetUniform1f(timeLoc, postTimeS_);
+  backend_->SetUniform1f(cameraMotionLoc, postCameraMotion_);
+  backend_->SetUniform1f(impactFlashLoc, postImpactFlash_);
+  backend_->SetUniform1i(gradePresetLoc, postGradePreset_);
+  backend_->SetUniform1f(
+      lensDirtLoc,
+      std::clamp(ParseEnvFloat("RENDER_LENS_DIRT_STRENGTH", 0.45F), 0.0F, 2.0F));
+  backend_->SetUniform1f(
+      anamorphicLoc,
+      std::clamp(ParseEnvFloat("RENDER_ANAMORPHIC_STREAK_STRENGTH", 0.55F), 0.0F, 2.0F));
   backend_->SetActiveTextureUnit(0);
   backend_->BindTexture2D(sceneColorTexture_.Get());
   backend_->SetActiveTextureUnit(1);
@@ -615,6 +631,33 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   bloomStrength_ = std::clamp(ParseEnvFloat("RENDER_BLOOM_STRENGTH", bloomStrength_), 0.0F, 2.0F);
   bloomThreshold_ = std::clamp(ParseEnvFloat("RENDER_BLOOM_THRESHOLD", bloomThreshold_), 0.0F, 2.0F);
   bloomBlurPasses_ = std::clamp(ParseEnvInt("RENDER_BLOOM_BLUR_PASSES", bloomBlurPasses_), 1, 6);
+  const bool cameraFxEnabled = ParseEnvBool("RENDER_CAMERA_FX", true);
+  {
+    static bool hasPrevCameraSample = false;
+    static glm::vec3 prevCameraPosition{0.0F, 0.0F, 0.0F};
+    static auto prevCameraSampleTime = fullFrameStart;
+    static auto postFxStartTime = fullFrameStart;
+    static float smoothedCameraSpeedMps = 0.0F;
+    postTimeS_ =
+        static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double>>(fullFrameStart - postFxStartTime).count());
+    if (hasPrevCameraSample && cameraFxEnabled) {
+      const float deltaSeconds = std::max(
+          static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double>>(fullFrameStart - prevCameraSampleTime).count()),
+          1e-4F);
+      const float speedMps = glm::length(camera.Eye() - prevCameraPosition) / deltaSeconds;
+      const float blend = std::clamp(deltaSeconds * 5.0F, 0.05F, 1.0F);
+      smoothedCameraSpeedMps += (speedMps - smoothedCameraSpeedMps) * blend;
+      postCameraMotion_ = std::clamp(smoothedCameraSpeedMps / 6.5F, 0.0F, 1.0F);
+    } else {
+      postCameraMotion_ = 0.0F;
+    }
+    prevCameraPosition = camera.Eye();
+    prevCameraSampleTime = fullFrameStart;
+    hasPrevCameraSample = true;
+  }
+  postGradePreset_ = std::clamp(ParseEnvInt("RENDER_GRADE_PRESET", postGradePreset_), 0, 4);
+  const float externalImpactFlash = std::clamp(ParseEnvFloat("RENDER_IMPACT_FLASH", 0.0F), 0.0F, 1.0F);
+  postImpactFlash_ = std::max(externalImpactFlash, postImpactFlash_ * 0.90F);
   screenOutlineStrength_ =
       std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_STRENGTH", screenOutlineStrength_), 0.0F, 2.0F);
   screenOutlineThicknessPx_ =
@@ -896,6 +939,45 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   }
 
   graph.Execute();
+  if (ParseEnvBool("ARENA_CONTACT_SHADOWS", true)) {
+    for (const auto& command : commandBuffer) {
+      std::visit(
+          [&](const auto& typed) {
+            using CommandType = std::decay_t<decltype(typed)>;
+            if constexpr (!std::is_same_v<CommandType, DrawMeshInstanceCommand>) {
+              return;
+            } else {
+              const auto& mesh = typed.primitive;
+              const float heightAboveField = std::max(0.0F, mesh.position.z - fieldZ_);
+              const float shadowAlpha = std::clamp(std::exp(-heightAboveField * 1.9F) * 0.26F, 0.0F, 0.30F);
+              if (shadowAlpha <= 0.01F) {
+                return;
+              }
+              const float sizeBase =
+                  std::max(0.20F, std::max(std::abs(mesh.scale.x), std::abs(mesh.scale.y)));
+              DrawBox(
+                  vp,
+                  BoxPrimitive{
+                      .center = glm::vec3{mesh.position.x, mesh.position.y, fieldZ_ + 0.010F},
+                      .size = glm::vec3{sizeBase * 1.55F, sizeBase * 1.20F, 0.020F},
+                      .yawDeg = mesh.rotationDeg.z,
+                      .color = glm::vec4{0.02F, 0.03F, 0.05F, shadowAlpha},
+                      .pass = RenderPass::Transparent,
+                  });
+              DrawBox(
+                  vp,
+                  BoxPrimitive{
+                      .center = glm::vec3{mesh.position.x, mesh.position.y, fieldZ_ + 0.008F},
+                      .size = glm::vec3{sizeBase * 2.10F, sizeBase * 1.70F, 0.014F},
+                      .yawDeg = mesh.rotationDeg.z,
+                      .color = glm::vec4{0.03F, 0.05F, 0.08F, shadowAlpha * 0.45F},
+                      .pass = RenderPass::Transparent,
+                  });
+            }
+          },
+          command);
+    }
+  }
   DrainAssetTelemetry();
   double bloomStageMs = 0.0;
   if (bloomEnabledThisFrame_ || screenOutlineEnabledThisFrame_) {
@@ -1234,6 +1316,29 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           });
     }
   }
+  // Parallax skyline cards to add depth layers behind the bowl.
+  if (mediumDetail) {
+    const float cardRadius = skylineRadius + 3.8F;
+    const float parallaxX = cameraWorldPosition.x * 0.05F;
+    const float parallaxY = cameraWorldPosition.y * 0.05F;
+    const int cardCount = std::max(12, segments);
+    for (int i = 0; i < cardCount; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(cardCount);
+      const float yawDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * cardRadius + parallaxX;
+      const float cy = std::sin(angle) * cardRadius + parallaxY;
+      const float h = 3.8F + Hash01(static_cast<std::uint32_t>(i * 3571 + 41)) * 3.8F;
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + h * 0.5F + 0.5F},
+              .size = glm::vec3{1.2F, 0.35F, h},
+              .yawDeg = yawDeg,
+              .color = glm::vec4{0.07F, 0.10F, 0.15F, 1.0F},
+              .pass = RenderPass::Opaque,
+          });
+    }
+  }
   glDepthMask(GL_TRUE);
   backend_->SetDepthTestEnabled(depthTestWasEnabled);
 
@@ -1369,6 +1474,34 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .pass = RenderPass::Opaque,
       });
 
+  // Decal-like gameplay markers projected on the field.
+  std::vector<VertexPC> decalLines;
+  decalLines.reserve(512);
+  const float markerZ = fieldZ_ + 0.018F;
+  const int ringSegs = 64;
+  auto pushRing = [&](const glm::vec2 center, const float radius, const glm::vec4 color) {
+    for (int i = 0; i < ringSegs; ++i) {
+      const float a0 = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(ringSegs);
+      const float a1 = (2.0F * kPi * static_cast<float>(i + 1)) / static_cast<float>(ringSegs);
+      decalLines.push_back({glm::vec3{center.x + std::cos(a0) * radius, center.y + std::sin(a0) * radius, markerZ}, color});
+      decalLines.push_back({glm::vec3{center.x + std::cos(a1) * radius, center.y + std::sin(a1) * radius, markerZ}, color});
+    }
+  };
+  pushRing(glm::vec2{0.0F, 0.0F}, std::min(fieldHalfWidth, fieldHalfLength) * 0.34F, glm::vec4{0.18F, 0.70F, 1.0F, 0.90F});
+  pushRing(glm::vec2{0.0F, 0.0F}, std::min(fieldHalfWidth, fieldHalfLength) * 0.22F, glm::vec4{0.98F, 0.42F, 0.20F, 0.90F});
+  // Direction arrows.
+  const glm::vec4 arrowColor{0.30F, 0.82F, 1.0F, 0.85F};
+  const float arrowLen = std::min(fieldHalfLength, fieldHalfWidth) * 0.30F;
+  for (int i = -1; i <= 1; i += 2) {
+    decalLines.push_back({glm::vec3{0.0F, static_cast<float>(i) * arrowLen, markerZ}, arrowColor});
+    decalLines.push_back({glm::vec3{0.0F, static_cast<float>(i) * (arrowLen + 0.9F), markerZ}, arrowColor});
+    decalLines.push_back({glm::vec3{0.0F, static_cast<float>(i) * (arrowLen + 0.9F), markerZ}, arrowColor});
+    decalLines.push_back({glm::vec3{0.36F, static_cast<float>(i) * (arrowLen + 0.56F), markerZ}, arrowColor});
+    decalLines.push_back({glm::vec3{0.0F, static_cast<float>(i) * (arrowLen + 0.9F), markerZ}, arrowColor});
+    decalLines.push_back({glm::vec3{-0.36F, static_cast<float>(i) * (arrowLen + 0.56F), markerZ}, arrowColor});
+  }
+  DrawLineList(vp, decalLines, 2.2F);
+
   const glm::vec4 lowerTierA{0.24F, 0.30F, 0.38F, 1.0F};
   const glm::vec4 lowerTierB{0.18F, 0.22F, 0.30F, 1.0F};
   const glm::vec4 upperTierA{0.20F, 0.26F, 0.34F, 1.0F};
@@ -1410,6 +1543,29 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
         glm::vec4{0.05F, 0.06F, 0.08F, 1.0F});
   }
 
+  // Lower-bowl fog volumes for depth and atmosphere.
+  if (mediumDetail) {
+    const int fogSlices = std::max(12, segments);
+    const float fogRadius = ringBaseRadius + 1.3F;
+    const float fogLen = std::max(0.9F, (2.0F * kPi * fogRadius / static_cast<float>(fogSlices)) * 0.92F);
+    for (int i = 0; i < fogSlices; ++i) {
+      const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(fogSlices);
+      const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+      const float cx = std::cos(angle) * fogRadius;
+      const float cy = std::sin(angle) * fogRadius;
+      const float pulse = 0.5F + 0.5F * std::sin(envTimeS * 0.8F + angle * 3.0F);
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, fieldZ_ + 0.42F},
+              .size = glm::vec3{fogLen, 0.55F, 0.70F},
+              .yawDeg = angleDeg,
+              .color = glm::vec4{0.05F * pulse, 0.08F * pulse, 0.14F * pulse, 0.35F},
+              .pass = RenderPass::Transparent,
+          });
+    }
+  }
+
   // Crowd light band: tiny emissive-ish seat cells for a fuller arena look.
   if (highDetail) {
     const int crowdSegments = segments * 2;
@@ -1424,7 +1580,11 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
         const float cx = std::cos(angle) * rowRadius;
         const float cy = std::sin(angle) * rowRadius;
         const float seed = Hash01(static_cast<std::uint32_t>(row * 1000 + i * 313 + 19));
-        const float pulse = 0.5F + 0.5F * std::sin(envTimeS * 1.4F + seed * 6.2831853F);
+        const float sectionWave =
+            0.5F + 0.5F * std::sin(envTimeS * 1.9F + static_cast<float>(i) * 0.22F + static_cast<float>(row) * 1.4F);
+        const float chase =
+            0.5F + 0.5F * std::sin(envTimeS * 3.3F - static_cast<float>(i) * 0.35F + seed * 6.2831853F);
+        const float pulse = std::clamp(0.30F + 0.45F * sectionWave + 0.25F * chase, 0.0F, 1.0F);
         const glm::vec4 crowdCol = LerpColor(
             glm::vec4{0.07F, 0.08F, 0.10F, 1.0F},
             glm::vec4{0.33F, 0.56F, 0.92F, 1.0F},
@@ -1584,6 +1744,17 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
                     1.0F},
             .pass = RenderPass::Opaque,
         });
+    // Heat-haze/refraction style shimmer volume at tunnel mouth.
+    const float shimmer = 0.45F + 0.55F * std::sin(envTimeS * 3.1F + static_cast<float>(i) * 1.7F);
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx * 0.96F, cy * 0.96F, tunnelZ + 0.55F},
+            .size = glm::vec3{2.0F, 0.24F, 1.3F},
+            .yawDeg = yawDeg,
+            .color = glm::vec4{0.16F * shimmer, 0.36F * shimmer, 0.78F * shimmer, 0.30F},
+            .pass = RenderPass::Transparent,
+        });
   }
 
   const float towerOffset = ringBaseRadius + 6.0F;
@@ -1675,6 +1846,16 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
               .color = glm::vec4{0.35F * glow, 0.62F * glow, 1.0F * glow, 0.30F},
               .pass = RenderPass::Transparent,
           });
+      // Soft outer shaft layer for volumetric depth.
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx * 0.80F, cy * 0.80F, fieldZ_ + stadiumHeight * 0.58F},
+              .size = glm::vec3{0.30F, beamRadius * 0.24F, stadiumHeight * 0.78F},
+              .yawDeg = angleDeg,
+              .color = glm::vec4{0.14F * glow, 0.34F * glow, 0.72F * glow, 0.14F},
+              .pass = RenderPass::Transparent,
+          });
     }
   }
 
@@ -1736,6 +1917,26 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
                 .pass = RenderPass::Transparent,
             });
       }
+    }
+    // Holographic particle swarm around center bowl.
+    const int particleCount = 72;
+    for (int i = 0; i < particleCount; ++i) {
+      const float fi = static_cast<float>(i);
+      const float phase = envTimeS * (0.45F + 0.03F * std::fmod(fi, 7.0F)) + fi * 0.37F;
+      const float radius = 1.0F + 2.8F * (0.5F + 0.5F * std::sin(fi * 1.13F));
+      const float cx = std::cos(phase) * radius;
+      const float cy = std::sin(phase * 1.17F) * radius;
+      const float cz = fieldZ_ + stadiumHeight * 0.72F + 0.85F * std::sin(phase * 0.9F + fi);
+      const float glow = 0.35F + 0.65F * (0.5F + 0.5F * std::sin(envTimeS * 2.6F + fi));
+      DrawBox(
+          vp,
+          BoxPrimitive{
+              .center = glm::vec3{cx, cy, cz},
+              .size = glm::vec3{0.06F, 0.06F, 0.06F},
+              .yawDeg = glm::degrees(phase),
+              .color = glm::vec4{0.22F * glow, 0.72F * glow, 1.0F * glow, 0.80F},
+              .pass = RenderPass::Transparent,
+          });
     }
   }
 

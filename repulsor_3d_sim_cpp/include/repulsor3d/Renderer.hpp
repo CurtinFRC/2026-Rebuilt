@@ -187,6 +187,10 @@ class Renderer {
   float bloomStrength_ = 0.06F;
   float bloomThreshold_ = 0.99F;
   int bloomBlurPasses_ = 2;
+  float postTimeS_ = 0.0F;
+  float postCameraMotion_ = 0.0F;
+  float postImpactFlash_ = 0.0F;
+  int postGradePreset_ = 1;
   float screenOutlineStrength_ = 0.78F;
   float screenOutlineThicknessPx_ = 1.30F;
   float screenOutlineDepthSensitivity_ = 1.15F;
