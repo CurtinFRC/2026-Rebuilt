@@ -360,6 +360,7 @@ void Renderer::Draw(GLFWwindow* window, const OrbitCamera& camera, const Snapsho
 }
 
 void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISimWorld& world) {
+  const auto fullFrameStart = std::chrono::steady_clock::now();
   backend_->ClearFrame(glm::vec4{0.06F, 0.06F, 0.07F, 1.0F});
 
   SceneToggleState toggles;
@@ -441,7 +442,13 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
   diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
   diagnostics_.RecordCounter("arena.detail_divisor", static_cast<double>(environmentDetailDivisor_));
+  double appStageDrawMs = 0.0;
+  bool hasAppStageDrawMs = false;
   for (const auto& [name, value] : queuedDiagnosticCounters_) {
+    if (name == "app.stage.draw_ms") {
+      appStageDrawMs = value;
+      hasAppStageDrawMs = true;
+    }
     diagnostics_.RecordCounter(name, value);
   }
   queuedDiagnosticCounters_.clear();
@@ -526,8 +533,15 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   DrainAssetTelemetry();
 
   const auto frameEnd = std::chrono::steady_clock::now();
+  const double rendererFrameMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - fullFrameStart).count();
   const double frameMs =
-      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count();
+      (hasAppStageDrawMs && appStageDrawMs > 0.0) ? appStageDrawMs : rendererFrameMs;
+  diagnostics_.RecordCounter("renderer.frame_ms", rendererFrameMs);
+  diagnostics_.RecordCounter("renderer.frame_effective_ms", frameMs);
+  diagnostics_.RecordCounter(
+      "renderer.stage.rendergraph_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count());
   if (frameMs > 0.0) {
     constexpr double alpha = 0.10;
     if (!smoothedFrameMsInitialized_) {
@@ -1426,10 +1440,13 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
       static_cast<int>(std::round(FindCounterValue(diagSnapshot, "cad.loads.stage_code", 0.0)));
   const char* stageLabel = CadLoadStageLabelFromCode(stageCode);
 
+  const double drawFps = FindCounterValue(diagSnapshot, "app.draw_fps", 0.0);
+  const double loopFps = FindCounterValue(diagSnapshot, "app.loop_fps", 0.0);
   const double presentFps = FindCounterValue(diagSnapshot, "app.present_fps", 0.0);
-  if (presentFps > 1e-3) {
+  const double displayedFps = (drawFps > 1e-3) ? drawFps : ((loopFps > 1e-3) ? loopFps : presentFps);
+  if (displayedFps > 1e-3) {
     std::ostringstream fpsText;
-    fpsText << std::fixed << std::setprecision(1) << "FPS: " << presentFps;
+    fpsText << std::fixed << std::setprecision(1) << "FPS: " << displayedFps;
     widgets.push_back(
         {.text = fpsText.str(),
          .color = glm::vec4{0.92F, 0.92F, 0.92F, 0.90F},

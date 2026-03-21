@@ -159,6 +159,10 @@ int ViewerApp::Run() {
   bool vsyncAutoEnabledForPresentStall = false;
   double swapWaitAverageMs = 0.0;
   bool swapWaitAverageInitialized = false;
+  double drawAverageMs = 0.0;
+  bool drawAverageInitialized = false;
+  double presentAverageMs = 0.0;
+  bool presentAverageInitialized = false;
   int highSwapWaitFrames = 0;
   int highCpuGpuMismatchFrames = 0;
   int highPresentStallFrames = 0;
@@ -229,6 +233,8 @@ int ViewerApp::Run() {
     const auto drawStart = std::chrono::steady_clock::now();
     Draw();
     const auto drawEnd = std::chrono::steady_clock::now();
+    const double drawMs =
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(drawEnd - drawStart).count();
 
     if (now - lastTitleUpdate > std::chrono::milliseconds(300)) {
       const auto& ex = latest_.snapshot.extrinsics;
@@ -245,6 +251,8 @@ int ViewerApp::Run() {
     const auto swapEnd = std::chrono::steady_clock::now();
     const double swapWaitMs =
         std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(swapEnd - swapStart).count();
+    const double presentMs =
+        std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(swapEnd - drawStart).count();
     if (!swapWaitAverageInitialized) {
       swapWaitAverageMs = swapWaitMs;
       swapWaitAverageInitialized = true;
@@ -252,13 +260,36 @@ int ViewerApp::Run() {
       constexpr double alpha = 0.10;
       swapWaitAverageMs = (1.0 - alpha) * swapWaitAverageMs + alpha * swapWaitMs;
     }
+    if (!presentAverageInitialized) {
+      presentAverageMs = presentMs;
+      presentAverageInitialized = true;
+    } else {
+      constexpr double alpha = 0.10;
+      presentAverageMs = (1.0 - alpha) * presentAverageMs + alpha * presentMs;
+    }
+    if (!drawAverageInitialized) {
+      drawAverageMs = drawMs;
+      drawAverageInitialized = true;
+    } else {
+      constexpr double alpha = 0.10;
+      drawAverageMs = (1.0 - alpha) * drawAverageMs + alpha * drawMs;
+    }
     renderer_.QueueDiagnosticCounter("app.swap_wait_ms", swapWaitMs);
     renderer_.QueueDiagnosticCounter("app.swap_wait_avg_ms", swapWaitAverageMs);
+    renderer_.QueueDiagnosticCounter("app.draw_ms", drawMs);
+    renderer_.QueueDiagnosticCounter("app.draw_avg_ms", drawAverageMs);
+    renderer_.QueueDiagnosticCounter("app.present_ms", presentMs);
+    renderer_.QueueDiagnosticCounter("app.present_avg_ms", presentAverageMs);
     renderer_.QueueDiagnosticCounter("app.vsync_active", cfg_.vsync ? 1.0 : 0.0);
+    const double drawFps = (drawAverageMs > 1e-4) ? (1000.0 / drawAverageMs) : 0.0;
+    renderer_.QueueDiagnosticCounter("app.draw_fps", drawFps);
     renderer_.QueueDiagnosticCounter(
         "app.present_fps",
+        drawFps);
+    renderer_.QueueDiagnosticCounter(
+        "app.swap_fps",
         (swapWaitAverageMs > 1e-4) ? (1000.0 / swapWaitAverageMs) : 0.0);
-    renderer_.QueueDiagnosticCounter("app.present_stall", swapWaitAverageMs > 40.0 ? 1.0 : 0.0);
+    renderer_.QueueDiagnosticCounter("app.present_stall", presentAverageMs > 40.0 ? 1.0 : 0.0);
     const auto loopEnd = std::chrono::steady_clock::now();
     const double loopMs =
         std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(loopEnd - loopStart).count();
@@ -271,7 +302,7 @@ int ViewerApp::Run() {
     renderer_.QueueDiagnosticCounter("app.stage.runtime_reload_ms", ToMilliseconds(afterPoll, afterRuntimeReload));
     renderer_.QueueDiagnosticCounter("app.stage.tick_ms", ToMilliseconds(afterRuntimeReload, afterTick));
     renderer_.QueueDiagnosticCounter("app.stage.resize_ms", ToMilliseconds(afterTick, afterResize));
-    renderer_.QueueDiagnosticCounter("app.stage.draw_ms", ToMilliseconds(drawStart, drawEnd));
+    renderer_.QueueDiagnosticCounter("app.stage.draw_ms", drawMs);
     renderer_.QueueDiagnosticCounter("app.stage.title_ms", ToMilliseconds(drawEnd, afterTitle));
     renderer_.QueueDiagnosticCounter("app.stage.pre_swap_ms", ToMilliseconds(loopStart, swapStart));
     if (cfg_.vsync && vsyncAutoDisableEnabled && !vsyncAutoDisabled && !vsyncAutoEnabledForPresentStall) {
