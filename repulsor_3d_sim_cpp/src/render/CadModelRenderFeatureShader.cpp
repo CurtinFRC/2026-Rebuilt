@@ -59,6 +59,17 @@ bool CadModelRenderFeature::CreateShader() {
   uDetailRoughnessStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uDetailRoughnessStrength");
   uClearcoatStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uClearcoatStrength");
   uShadowTintStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadowTintStrength");
+  uThemePrimaryLoc_ = backend_->GetUniformLocation(shader_.Get(), "uThemePrimary");
+  uThemeSecondaryLoc_ = backend_->GetUniformLocation(shader_.Get(), "uThemeSecondary");
+  uThemeMixLoc_ = backend_->GetUniformLocation(shader_.Get(), "uThemeMix");
+  uThemeEmissiveStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uThemeEmissiveStrength");
+  uNightModeLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNightMode");
+  uNightIntensityLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNightIntensity");
+  uPostFxStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uPostFxStrength");
+  uFilmGrainStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uFilmGrainStrength");
+  uVignetteStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uVignetteStrength");
+  uChromaticStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uChromaticStrength");
+  uViewportInfoLoc_ = backend_->GetUniformLocation(shader_.Get(), "uViewportInfo");
   uUseAssetColorLoc_ = backend_->GetUniformLocation(shader_.Get(), "uUseAssetColor");
   uLightViewProjectionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjection");
   uLightViewProjectionFarLoc_ = backend_->GetUniformLocation(shader_.Get(), "uLightViewProjectionFar");
@@ -78,6 +89,10 @@ bool CadModelRenderFeature::CreateShader() {
   uNormalStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalStrength");
   uTriplanarScaleLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTriplanarScale");
   uTimeSLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTimeS");
+  uArcadeStyle0Loc_ = backend_->GetUniformLocation(shader_.Get(), "uArcadeStyle0");
+  uArcadeStyle1Loc_ = backend_->GetUniformLocation(shader_.Get(), "uArcadeStyle1");
+  uArcadeStateLoc_ = backend_->GetUniformLocation(shader_.Get(), "uArcadeState");
+  uArcadeMotionLoc_ = backend_->GetUniformLocation(shader_.Get(), "uArcadeMotion");
 
   constexpr const char* shadowVsSrc = R"(
 #version 330 core
@@ -216,6 +231,12 @@ void main() {}
          uGammaLoc_ >= 0 && uWeatheringStrengthLoc_ >= 0 &&
          uWeatheringScaleLoc_ >= 0 && uDetailRoughnessStrengthLoc_ >= 0 &&
          uClearcoatStrengthLoc_ >= 0 && uShadowTintStrengthLoc_ >= 0 &&
+         uThemePrimaryLoc_ >= 0 && uThemeSecondaryLoc_ >= 0 &&
+         uThemeMixLoc_ >= 0 && uThemeEmissiveStrengthLoc_ >= 0 &&
+         uNightModeLoc_ >= 0 && uNightIntensityLoc_ >= 0 &&
+         uPostFxStrengthLoc_ >= 0 && uFilmGrainStrengthLoc_ >= 0 &&
+         uVignetteStrengthLoc_ >= 0 && uChromaticStrengthLoc_ >= 0 &&
+         uViewportInfoLoc_ >= 0 &&
          uUseAssetColorLoc_ >= 0 &&
          uLightViewProjectionLoc_ >= 0 && uLightViewProjectionFarLoc_ >= 0 &&
          uShadowMapLoc_ >= 0 &&
@@ -226,6 +247,8 @@ void main() {}
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
          uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
          uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 && uTimeSLoc_ >= 0 &&
+         uArcadeStyle0Loc_ >= 0 && uArcadeStyle1Loc_ >= 0 &&
+         uArcadeStateLoc_ >= 0 && uArcadeMotionLoc_ >= 0 &&
          uShadowLightMvpLoc_ >= 0 && uDepthPrepassViewProjectionLoc_ >= 0;
 }
 

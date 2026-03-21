@@ -305,11 +305,66 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uDetailRoughnessStrengthLoc_, visualPolicy.detailRoughnessStrength);
   backend_->SetUniform1f(uClearcoatStrengthLoc_, visualPolicy.clearcoatStrength);
   backend_->SetUniform1f(uShadowTintStrengthLoc_, visualPolicy.shadowTintStrength);
+  backend_->SetUniformVec3(uThemePrimaryLoc_, visualPolicy.themePrimaryR, visualPolicy.themePrimaryG, visualPolicy.themePrimaryB);
+  backend_->SetUniformVec3(
+      uThemeSecondaryLoc_,
+      visualPolicy.themeSecondaryR,
+      visualPolicy.themeSecondaryG,
+      visualPolicy.themeSecondaryB);
+  backend_->SetUniform1f(uThemeMixLoc_, visualPolicy.themeMix);
+  backend_->SetUniform1f(uThemeEmissiveStrengthLoc_, visualPolicy.themeEmissiveStrength);
+  backend_->SetUniform1f(uNightModeLoc_, visualPolicy.nightMode ? 1.0F : 0.0F);
+  backend_->SetUniform1f(uNightIntensityLoc_, visualPolicy.nightIntensity);
+  backend_->SetUniform1f(uPostFxStrengthLoc_, visualPolicy.postFxStrength);
+  backend_->SetUniform1f(uFilmGrainStrengthLoc_, visualPolicy.filmGrainStrength);
+  backend_->SetUniform1f(uVignetteStrengthLoc_, visualPolicy.vignetteStrength);
+  backend_->SetUniform1f(uChromaticStrengthLoc_, visualPolicy.chromaticStrength);
+  backend_->SetUniformVec3(
+      uViewportInfoLoc_,
+      static_cast<float>(std::max(1, context.viewportWidth)),
+      static_cast<float>(std::max(1, context.viewportHeight)),
+      0.0F);
   static const auto kCadTimeOrigin = std::chrono::steady_clock::now();
   const auto nowSteady = std::chrono::steady_clock::now();
   const double elapsedSeconds =
       std::chrono::duration_cast<std::chrono::duration<double>>(nowSteady - kCadTimeOrigin).count();
   backend_->SetUniform1f(uTimeSLoc_, static_cast<float>(elapsedSeconds));
+  static bool hasPreviousCameraSample = false;
+  static glm::vec3 previousCameraPosition{0.0F, 0.0F, 0.0F};
+  static auto previousCameraSampleTime = nowSteady;
+  static float smoothedCameraSpeedMps = 0.0F;
+  float cameraMotion01 = 0.0F;
+  if (hasPreviousCameraSample) {
+    const float deltaSeconds = std::max(
+        static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double>>(nowSteady - previousCameraSampleTime).count()),
+        1e-4F);
+    const float speedMps = glm::length(context.cameraWorldPosition - previousCameraPosition) / deltaSeconds;
+    const float blend = std::clamp(deltaSeconds * 4.5F, 0.02F, 1.0F);
+    smoothedCameraSpeedMps += (speedMps - smoothedCameraSpeedMps) * blend;
+    cameraMotion01 = std::clamp(smoothedCameraSpeedMps / 4.0F, 0.0F, 1.0F);
+  }
+  previousCameraPosition = context.cameraWorldPosition;
+  previousCameraSampleTime = nowSteady;
+  hasPreviousCameraSample = true;
+  backend_->SetUniformVec4(
+      uArcadeStyle0Loc_,
+      visualPolicy.arcadeToonBandCount,
+      visualPolicy.arcadeRimBoost,
+      visualPolicy.arcadeOutlineStrength,
+      visualPolicy.arcadeThemeTintStrength);
+  backend_->SetUniformVec4(
+      uArcadeStyle1Loc_,
+      visualPolicy.arcadeEmissiveBoost,
+      visualPolicy.arcadeShadowLift,
+      visualPolicy.arcadeFogScale,
+      visualPolicy.arcadeBloomStrength);
+  backend_->SetUniformVec4(
+      uArcadeStateLoc_,
+      visualPolicy.arcadeStatePulseRate,
+      visualPolicy.arcadeAlert,
+      visualPolicy.arcadeSelected,
+      visualPolicy.arcadeCharged);
+  backend_->SetUniform1f(uArcadeMotionLoc_, cameraMotion01);
 
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;
@@ -354,6 +409,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         (swapWaitAvgMs >= presentLeanSwapMs || presentAvgMs >= presentLeanPresentMs);
   }
   if (context.diagnosticsWriter != nullptr) {
+    context.diagnosticsWriter->RecordCounter("cad.style.shading_mode", static_cast<double>(visualPolicy.shadingMode));
+    context.diagnosticsWriter->RecordCounter("cad.style.arcade_motion", static_cast<double>(cameraMotion01));
     context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_disabled", disableShadowsThisFrame ? 1.0 : 0.0);
@@ -1463,8 +1520,12 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     backend_->SetUniform1f(uNormalStrengthLoc_, call.normalStrength);
     backend_->SetUniform1f(uTriplanarScaleLoc_, triplanarScale_);
     backend_->SetUniform1f(uUseAssetColorLoc_, call.useAssetColor ? 1.0F : 0.0F);
-    backend_->SetUniform1i(uShadingModeLoc_, call.fastShading ? 1 : 0);
-    const bool useNormalMap = (call.normalTexture != nullptr) && !call.fastShading;
+    int shadingMode = std::clamp(visualPolicy.shadingMode, 0, 2);
+    if (shadingMode == 0 && call.fastShading) {
+      shadingMode = 2;
+    }
+    backend_->SetUniform1i(uShadingModeLoc_, shadingMode);
+    const bool useNormalMap = (call.normalTexture != nullptr) && (shadingMode == 0);
     backend_->SetUniform1i(uHasAlbedoMapLoc_, call.albedoTexture != nullptr ? 1 : 0);
     backend_->SetUniform1i(uHasNormalMapLoc_, useNormalMap ? 1 : 0);
     backend_->SetActiveTextureUnit(5);

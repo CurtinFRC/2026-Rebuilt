@@ -49,6 +49,17 @@ bool GetEnvBool(const char* name, const bool fallback) {
   return fallback;
 }
 
+std::string GetEnvStringLower(const char* name, std::string fallback) {
+  const char* value = std::getenv(name);
+  if (value != nullptr && *value != '\0') {
+    fallback = value;
+  }
+  std::transform(fallback.begin(), fallback.end(), fallback.begin(), [](const unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return fallback;
+}
+
 const CadLodPolicy& LoadCadLodPolicy() {
   static const CadLodPolicy policy = []() {
     CadLodPolicy out;
@@ -114,6 +125,15 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
         GetEnvInt("CAD_MAX_INDICES_PER_DRAW_CALL", out.maxIndicesPerDrawCall),
         0,
         50000000);
+    const std::string styleMode = GetEnvStringLower("CAD_STYLE_MODE", "arcade");
+    if (styleMode == "realistic" || styleMode == "cad") {
+      out.shadingMode = 0;
+    } else if (styleMode == "fast" || styleMode == "flat") {
+      out.shadingMode = 2;
+    } else {
+      out.shadingMode = 1;
+    }
+    out.shadingMode = std::clamp(GetEnvInt("CAD_SHADING_MODE", out.shadingMode), 0, 2);
     out.keyLightIntensity = std::clamp(GetEnvFloat("CAD_KEY_LIGHT_INTENSITY", out.keyLightIntensity), 0.0F, 8.0F);
     out.fillLightIntensity = std::clamp(GetEnvFloat("CAD_FILL_LIGHT_INTENSITY", out.fillLightIntensity), 0.0F, 6.0F);
     out.ambientStrength = std::clamp(GetEnvFloat("CAD_AMBIENT_STRENGTH", out.ambientStrength), 0.0F, 2.0F);
@@ -146,6 +166,160 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
         GetEnvFloat("CAD_SHADOW_TINT_STRENGTH", out.shadowTintStrength),
         0.0F,
         1.0F);
+    const std::string themePreset = GetEnvStringLower("CAD_THEME_PRESET", "arena_blue");
+    if (themePreset == "red" || themePreset == "red_alliance") {
+      out.themePrimaryR = 0.98F;
+      out.themePrimaryG = 0.16F;
+      out.themePrimaryB = 0.14F;
+      out.themeSecondaryR = 1.00F;
+      out.themeSecondaryG = 0.54F;
+      out.themeSecondaryB = 0.16F;
+      out.themeMix = 0.60F;
+    } else if (themePreset == "emerald" || themePreset == "green") {
+      out.themePrimaryR = 0.06F;
+      out.themePrimaryG = 0.96F;
+      out.themePrimaryB = 0.62F;
+      out.themeSecondaryR = 0.22F;
+      out.themeSecondaryG = 0.66F;
+      out.themeSecondaryB = 1.00F;
+      out.themeMix = 0.56F;
+    } else if (themePreset == "amber" || themePreset == "gold") {
+      out.themePrimaryR = 1.00F;
+      out.themePrimaryG = 0.62F;
+      out.themePrimaryB = 0.06F;
+      out.themeSecondaryR = 1.00F;
+      out.themeSecondaryG = 0.28F;
+      out.themeSecondaryB = 0.08F;
+      out.themeMix = 0.58F;
+    } else if (themePreset == "neutral") {
+      out.themePrimaryR = 0.75F;
+      out.themePrimaryG = 0.82F;
+      out.themePrimaryB = 0.92F;
+      out.themeSecondaryR = 0.56F;
+      out.themeSecondaryG = 0.64F;
+      out.themeSecondaryB = 0.78F;
+      out.themeMix = 0.40F;
+    } else {
+      // arena_blue default
+      out.themePrimaryR = 0.08F;
+      out.themePrimaryG = 0.66F;
+      out.themePrimaryB = 1.00F;
+      out.themeSecondaryR = 1.00F;
+      out.themeSecondaryG = 0.34F;
+      out.themeSecondaryB = 0.20F;
+      out.themeMix = 0.52F;
+    }
+    out.themePrimaryR = std::clamp(GetEnvFloat("CAD_THEME_PRIMARY_R", out.themePrimaryR), 0.0F, 2.0F);
+    out.themePrimaryG = std::clamp(GetEnvFloat("CAD_THEME_PRIMARY_G", out.themePrimaryG), 0.0F, 2.0F);
+    out.themePrimaryB = std::clamp(GetEnvFloat("CAD_THEME_PRIMARY_B", out.themePrimaryB), 0.0F, 2.0F);
+    out.themeSecondaryR = std::clamp(GetEnvFloat("CAD_THEME_SECONDARY_R", out.themeSecondaryR), 0.0F, 2.0F);
+    out.themeSecondaryG = std::clamp(GetEnvFloat("CAD_THEME_SECONDARY_G", out.themeSecondaryG), 0.0F, 2.0F);
+    out.themeSecondaryB = std::clamp(GetEnvFloat("CAD_THEME_SECONDARY_B", out.themeSecondaryB), 0.0F, 2.0F);
+    out.themeMix = std::clamp(GetEnvFloat("CAD_THEME_MIX", out.themeMix), 0.0F, 1.0F);
+    out.themeEmissiveStrength = std::clamp(
+        GetEnvFloat("CAD_THEME_EMISSIVE_STRENGTH", out.themeEmissiveStrength),
+        0.0F,
+        3.0F);
+    out.nightMode = GetEnvBool("CAD_NIGHT_MODE", out.nightMode);
+    out.nightIntensity = std::clamp(GetEnvFloat("CAD_NIGHT_INTENSITY", out.nightIntensity), 0.0F, 1.5F);
+    out.postFxStrength = std::clamp(GetEnvFloat("CAD_POSTFX_STRENGTH", out.postFxStrength), 0.0F, 2.0F);
+    out.filmGrainStrength = std::clamp(
+        GetEnvFloat("CAD_FILM_GRAIN_STRENGTH", out.filmGrainStrength),
+        0.0F,
+        0.25F);
+    out.vignetteStrength = std::clamp(
+        GetEnvFloat("CAD_VIGNETTE_STRENGTH", out.vignetteStrength),
+        0.0F,
+        1.5F);
+    out.chromaticStrength = std::clamp(
+        GetEnvFloat("CAD_CHROMATIC_STRENGTH", out.chromaticStrength),
+        0.0F,
+        0.25F);
+    out.arcadeToonBandCount = std::clamp(
+        GetEnvFloat("CAD_ARCADE_TOON_BANDS", out.arcadeToonBandCount),
+        2.0F,
+        6.0F);
+    out.arcadeRimBoost = std::clamp(
+        GetEnvFloat("CAD_ARCADE_RIM_BOOST", out.arcadeRimBoost),
+        0.0F,
+        4.0F);
+    out.arcadeOutlineStrength = std::clamp(
+        GetEnvFloat("CAD_ARCADE_OUTLINE_STRENGTH", out.arcadeOutlineStrength),
+        0.0F,
+        1.0F);
+    out.arcadeThemeTintStrength = std::clamp(
+        GetEnvFloat("CAD_ARCADE_THEME_TINT_STRENGTH", out.arcadeThemeTintStrength),
+        0.0F,
+        1.0F);
+    out.arcadeEmissiveBoost = std::clamp(
+        GetEnvFloat("CAD_ARCADE_EMISSIVE_BOOST", out.arcadeEmissiveBoost),
+        0.0F,
+        6.0F);
+    out.arcadeShadowLift = std::clamp(
+        GetEnvFloat("CAD_ARCADE_SHADOW_LIFT", out.arcadeShadowLift),
+        0.0F,
+        1.0F);
+    out.arcadeFogScale = std::clamp(
+        GetEnvFloat("CAD_ARCADE_FOG_SCALE", out.arcadeFogScale),
+        0.0F,
+        2.0F);
+    out.arcadeBloomStrength = std::clamp(
+        GetEnvFloat("CAD_ARCADE_BLOOM_STRENGTH", out.arcadeBloomStrength),
+        0.0F,
+        2.0F);
+    out.arcadeStatePulseRate = std::clamp(
+        GetEnvFloat("CAD_ARCADE_STATE_PULSE_RATE", out.arcadeStatePulseRate),
+        0.0F,
+        4.0F);
+    out.arcadeAlert = std::clamp(
+        GetEnvFloat("CAD_ARCADE_ALERT", out.arcadeAlert),
+        0.0F,
+        1.0F);
+    out.arcadeSelected = std::clamp(
+        GetEnvFloat("CAD_ARCADE_SELECTED", out.arcadeSelected),
+        0.0F,
+        1.0F);
+    out.arcadeCharged = std::clamp(
+        GetEnvFloat("CAD_ARCADE_CHARGED", out.arcadeCharged),
+        0.0F,
+        1.0F);
+    out.arcadeDisableWeathering = GetEnvBool("CAD_ARCADE_DISABLE_WEATHERING", out.arcadeDisableWeathering);
+    out.arcadeHardSpecular = GetEnvBool("CAD_ARCADE_HARD_SPECULAR", out.arcadeHardSpecular);
+
+    const std::string postPreset = GetEnvStringLower("CAD_POSTFX_PRESET", "arcade");
+    if (postPreset == "broadcast") {
+      out.postFxStrength = 1.15F;
+      out.vignetteStrength = 0.34F;
+      out.filmGrainStrength = 0.022F;
+      out.chromaticStrength = 0.018F;
+      out.saturation = 1.12F;
+    } else if (postPreset == "neon_night") {
+      out.postFxStrength = 1.35F;
+      out.vignetteStrength = 0.42F;
+      out.filmGrainStrength = 0.018F;
+      out.chromaticStrength = 0.040F;
+      out.saturation = 1.18F;
+      out.nightMode = true;
+      out.nightIntensity = std::max(out.nightIntensity, 0.85F);
+    } else if (postPreset == "retro_arena") {
+      out.postFxStrength = 1.22F;
+      out.vignetteStrength = 0.46F;
+      out.filmGrainStrength = 0.040F;
+      out.chromaticStrength = 0.030F;
+      out.saturation = 1.10F;
+    } else if (postPreset == "none" || postPreset == "off") {
+      out.postFxStrength = 0.0F;
+      out.vignetteStrength = 0.0F;
+      out.filmGrainStrength = 0.0F;
+      out.chromaticStrength = 0.0F;
+    } else {
+      // arcade default
+      out.postFxStrength = 1.05F;
+      out.vignetteStrength = 0.30F;
+      out.filmGrainStrength = 0.016F;
+      out.chromaticStrength = 0.020F;
+      out.saturation = std::max(out.saturation, 1.10F);
+    }
     out.enableInstanceUploadDedup = GetEnvBool("CAD_INSTANCE_UPLOAD_DEDUP", out.enableInstanceUploadDedup);
     out.enableInstanceBufferOrphaning = GetEnvBool("CAD_INSTANCE_BUFFER_ORPHANING", out.enableInstanceBufferOrphaning);
     return out;

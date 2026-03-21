@@ -206,6 +206,17 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uDetailRoughnessStrengthLoc_ = -1;
   int uClearcoatStrengthLoc_ = -1;
   int uShadowTintStrengthLoc_ = -1;
+  int uThemePrimaryLoc_ = -1;
+  int uThemeSecondaryLoc_ = -1;
+  int uThemeMixLoc_ = -1;
+  int uThemeEmissiveStrengthLoc_ = -1;
+  int uNightModeLoc_ = -1;
+  int uNightIntensityLoc_ = -1;
+  int uPostFxStrengthLoc_ = -1;
+  int uFilmGrainStrengthLoc_ = -1;
+  int uVignetteStrengthLoc_ = -1;
+  int uChromaticStrengthLoc_ = -1;
+  int uViewportInfoLoc_ = -1;
   int uUseAssetColorLoc_ = -1;
   MaterialPipeline materialPipeline_;
   GlProgramHandle shadowShader_;
@@ -234,6 +245,10 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uNormalStrengthLoc_ = -1;
   int uTriplanarScaleLoc_ = -1;
   int uTimeSLoc_ = -1;
+  int uArcadeStyle0Loc_ = -1;
+  int uArcadeStyle1Loc_ = -1;
+  int uArcadeStateLoc_ = -1;
+  int uArcadeMotionLoc_ = -1;
   int shadowMapSize_ = 2048;
   bool shadowEnabled_ = true;
   float shadowStrength_ = 0.55F;
