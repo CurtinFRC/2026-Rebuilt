@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstddef>
+#include <array>
 #include <string>
+#include <unordered_map>
 
 #include <glm/vec4.hpp>
 
@@ -125,10 +127,19 @@ class OpenGLRenderBackend final : public IRenderBackend {
   void DestroyGpuTimerQuery(unsigned int queryId) override;
   void BeginGpuTimerQuery(unsigned int queryId) override;
   void EndGpuTimerQuery() override;
-  bool TryReadGpuTimerMilliseconds(unsigned int queryId, double& outMilliseconds) override;
+ bool TryReadGpuTimerMilliseconds(unsigned int queryId, double& outMilliseconds) override;
 
  private:
+  void ResetStateCache();
+
   RenderBackendCapabilities capabilities_;
+  unsigned int currentProgram_ = 0;
+  unsigned int currentVertexArray_ = 0;
+  unsigned int currentArrayBuffer_ = 0;
+  unsigned int currentElementArrayBuffer_ = 0;
+  int currentActiveTextureUnit_ = 0;
+  std::array<unsigned int, 32> boundTexture2dByUnit_{};
+  std::unordered_map<unsigned int, std::unordered_map<std::string, int>> uniformLocationCache_;
 };
 
 }  // namespace repulsor3d

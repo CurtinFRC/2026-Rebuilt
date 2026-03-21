@@ -1,11 +1,23 @@
 #include "repulsor3d/render/backend/RenderBackend.hpp"
 
 #include <GL/glew.h>
+#include <algorithm>
 #include <cstdint>
 
 namespace repulsor3d {
 
+void OpenGLRenderBackend::ResetStateCache() {
+  currentProgram_ = 0;
+  currentVertexArray_ = 0;
+  currentArrayBuffer_ = 0;
+  currentElementArrayBuffer_ = 0;
+  currentActiveTextureUnit_ = 0;
+  boundTexture2dByUnit_.fill(0);
+  uniformLocationCache_.clear();
+}
+
 void OpenGLRenderBackend::ConfigureDefaultState() {
+  ResetStateCache();
   capabilities_.backendName = "OpenGL";
   glGetIntegerv(GL_MAX_TEXTURE_SIZE, &capabilities_.maxTextureSize);
   glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &capabilities_.maxVertexAttribs);
@@ -55,11 +67,25 @@ void OpenGLRenderBackend::SetWireframeMode(const bool enabled) {
 }
 
 void OpenGLRenderBackend::UseProgram(const unsigned int programId) {
+  if (currentProgram_ == programId) {
+    return;
+  }
   glUseProgram(programId);
+  currentProgram_ = programId;
 }
 
 int OpenGLRenderBackend::GetUniformLocation(const unsigned int programId, const char* uniformName) {
-  return glGetUniformLocation(programId, uniformName);
+  if (uniformName == nullptr) {
+    return -1;
+  }
+  auto& perProgramCache = uniformLocationCache_[programId];
+  const auto it = perProgramCache.find(uniformName);
+  if (it != perProgramCache.end()) {
+    return it->second;
+  }
+  const int location = glGetUniformLocation(programId, uniformName);
+  perProgramCache.emplace(uniformName, location);
+  return location;
 }
 
 void OpenGLRenderBackend::SetUniformMat4(const int location, const float* matrix4x4) {
@@ -105,15 +131,27 @@ unsigned int OpenGLRenderBackend::CreateTexture2D() {
 }
 
 void OpenGLRenderBackend::BindVertexArray(const unsigned int vaoId) {
+  if (currentVertexArray_ == vaoId) {
+    return;
+  }
   glBindVertexArray(vaoId);
+  currentVertexArray_ = vaoId;
 }
 
 void OpenGLRenderBackend::BindArrayBuffer(const unsigned int bufferId) {
+  if (currentArrayBuffer_ == bufferId) {
+    return;
+  }
   glBindBuffer(GL_ARRAY_BUFFER, bufferId);
+  currentArrayBuffer_ = bufferId;
 }
 
 void OpenGLRenderBackend::BindElementArrayBuffer(const unsigned int bufferId) {
+  if (currentElementArrayBuffer_ == bufferId) {
+    return;
+  }
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferId);
+  currentElementArrayBuffer_ = bufferId;
 }
 
 void OpenGLRenderBackend::UploadArrayBufferData(const std::size_t sizeBytes, const void* data, const bool dynamic) {
@@ -172,7 +210,12 @@ void OpenGLRenderBackend::SetVertexAttribDivisor(const unsigned int index, const
 }
 
 void OpenGLRenderBackend::BindTexture2D(const unsigned int textureId) {
+  const std::size_t unit = static_cast<std::size_t>(std::clamp(currentActiveTextureUnit_, 0, 31));
+  if (boundTexture2dByUnit_[unit] == textureId) {
+    return;
+  }
   glBindTexture(GL_TEXTURE_2D, textureId);
+  boundTexture2dByUnit_[unit] = textureId;
 }
 
 void OpenGLRenderBackend::SetTexture2DLinearMipmapClamp() {
@@ -191,7 +234,11 @@ void OpenGLRenderBackend::GenerateTexture2DMipmaps() {
 }
 
 void OpenGLRenderBackend::SetActiveTextureUnit(const int unit) {
+  if (currentActiveTextureUnit_ == unit) {
+    return;
+  }
   glActiveTexture(GL_TEXTURE0 + unit);
+  currentActiveTextureUnit_ = unit;
 }
 
 void OpenGLRenderBackend::DrawTriangles(const int vertexCount) {

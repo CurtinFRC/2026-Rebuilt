@@ -1084,7 +1084,6 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         } else {
           backend_->DrawTrianglesInstanced(batch.lod->vertexCount, static_cast<int>(batch.instances.size()));
         }
-        backend_->BindVertexArray(0);
         if (batch.mirroredWinding) {
           glFrontFace(GL_CCW);
         }
@@ -1335,7 +1334,6 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       } else {
         backend_->DrawTrianglesInstanced(call.lod->vertexCount, 1);
       }
-      backend_->BindVertexArray(0);
       if (call.mirroredWinding) {
         glFrontFace(GL_CCW);
       }
@@ -1445,7 +1443,6 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     } else {
       backend_->DrawTrianglesInstanced(call.lod->vertexCount, 1);
     }
-    backend_->BindVertexArray(0);
     if (call.mirroredWinding) {
       glFrontFace(GL_CCW);
     }

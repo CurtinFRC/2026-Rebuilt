@@ -362,6 +362,7 @@ void Renderer::Draw(GLFWwindow* window, const OrbitCamera& camera, const Snapsho
 void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISimWorld& world) {
   const auto fullFrameStart = std::chrono::steady_clock::now();
   backend_->ClearFrame(glm::vec4{0.06F, 0.06F, 0.07F, 1.0F});
+  const auto afterClear = std::chrono::steady_clock::now();
 
   SceneToggleState toggles;
   toggles.showCameraDebug = showCameraDebug;
@@ -373,14 +374,18 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   if (worldAdapter_ != nullptr) {
     sceneFrame = worldAdapter_->BuildFrame(world, toggles);
   }
+  const auto afterWorldBuild = std::chrono::steady_clock::now();
 
   const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
   const glm::mat4 view = camera.ViewMatrix();
   const glm::mat4 projection = camera.ProjectionMatrix(aspect);
   const glm::mat4 vp = projection * view;
   DrawEnvironment(vp, camera.Eye());
+  const auto afterEnvironment = std::chrono::steady_clock::now();
   const EntityCullingStats cullingStats = ApplyRenderEntityHierarchyAndCulling(sceneFrame, vp);
+  const auto afterCulling = std::chrono::steady_clock::now();
   RenderCommandBuffer commandBuffer = BuildRenderCommandBuffer(sceneFrame);
+  const auto afterCommandBuild = std::chrono::steady_clock::now();
   if (!HasMeshInstanceCommands(commandBuffer)) {
     diagnostics_.MarkSceneReady();
   }
@@ -442,6 +447,24 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("render_pipeline.reload_has_error", renderFeatureReloadLastError_.empty() ? 0.0 : 1.0);
   diagnostics_.RecordCounter("render_pipeline.last_reload_ok", renderFeatureReloadLastError_.empty() ? 1.0 : 0.0);
   diagnostics_.RecordCounter("arena.detail_divisor", static_cast<double>(environmentDetailDivisor_));
+  diagnostics_.RecordCounter(
+      "renderer.stage.clear_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterClear - fullFrameStart).count());
+  diagnostics_.RecordCounter(
+      "renderer.stage.world_build_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterWorldBuild - afterClear).count());
+  diagnostics_.RecordCounter(
+      "renderer.stage.environment_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterEnvironment - afterWorldBuild).count());
+  diagnostics_.RecordCounter(
+      "renderer.stage.entity_cull_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterCulling - afterEnvironment).count());
+  diagnostics_.RecordCounter(
+      "renderer.stage.command_build_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterCommandBuild - afterCulling).count());
+  diagnostics_.RecordCounter(
+      "renderer.stage.pregraph_ms",
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterCommandBuild - fullFrameStart).count());
   double appStageDrawMs = 0.0;
   bool hasAppStageDrawMs = false;
   for (const auto& [name, value] : queuedDiagnosticCounters_) {
@@ -1343,8 +1366,6 @@ void Renderer::DrawFieldImage(const glm::mat4& vp) {
 
   backend_->BindVertexArray(quadMesh_.vao.Get());
   backend_->DrawIndexedTriangles(quadMesh_.indexCount);
-  backend_->BindVertexArray(0);
-  backend_->BindTexture2D(0);
 }
 
 void Renderer::DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive) {
@@ -1364,7 +1385,6 @@ void Renderer::DrawBox(const glm::mat4& vp, const BoxPrimitive& primitive) {
 
   backend_->BindVertexArray(cubeMesh_.vao.Get());
   backend_->DrawIndexedTriangles(cubeMesh_.indexCount);
-  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive) {
@@ -1383,7 +1403,6 @@ void Renderer::DrawSphere(const glm::mat4& vp, const SpherePrimitive& primitive)
 
   backend_->BindVertexArray(sphereMesh_.vao.Get());
   backend_->DrawIndexedTriangles(sphereMesh_.indexCount);
-  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawLinePrimitives(const glm::mat4& vp, const std::vector<LinePrimitive>& lines) {
@@ -1418,7 +1437,6 @@ void Renderer::DrawLineList(const glm::mat4& vp, const std::vector<VertexPC>& ve
   backend_->UploadArrayBufferData(vertices.size() * sizeof(VertexPC), vertices.data(), true);
 
   backend_->DrawLines(static_cast<int>(vertices.size()), width);
-  backend_->BindVertexArray(0);
 }
 
 void Renderer::DrawOverlay(const int width, const int height, const std::vector<OverlayLine>& lines) {
