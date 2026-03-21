@@ -222,8 +222,9 @@ uniform float uThreshold;
 out vec4 FragColor;
 void main() {
   vec3 scene = texture(uSceneTex, vUv).rgb;
-  float luma = dot(scene, vec3(0.2126, 0.7152, 0.0722));
-  float bright = smoothstep(uThreshold - 0.10, uThreshold + 0.15, luma);
+  float peak = max(max(scene.r, scene.g), scene.b);
+  float t = clamp((peak - uThreshold) / max(1e-3, 1.2 - uThreshold), 0.0, 1.0);
+  float bright = t * t * (3.0 - 2.0 * t);
   FragColor = vec4(scene * bright, 1.0);
 }
 )";
@@ -256,7 +257,9 @@ out vec4 FragColor;
 void main() {
   vec3 scene = texture(uSceneTex, vUv).rgb;
   vec3 bloom = texture(uBloomTex, vUv).rgb;
-  vec3 color = scene + bloom * uBloomStrength;
+  float scenePeak = max(max(scene.r, scene.g), scene.b);
+  float room = clamp(1.0 - scenePeak, 0.0, 1.0);
+  vec3 color = scene + bloom * uBloomStrength * (0.20 + 0.80 * room);
   FragColor = vec4(color, 1.0);
 }
 )";

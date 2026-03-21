@@ -85,7 +85,7 @@ struct CadVisualPolicy {
   float arcadeToonBandCount = 4.0F;
   float arcadeRimBoost = 1.35F;
   float arcadeOutlineStrength = 0.45F;
-  float arcadeThemeTintStrength = 0.62F;
+  float arcadeThemeTintStrength = 0.78F;
   float arcadeEmissiveBoost = 1.35F;
   float arcadeShadowLift = 0.35F;
   float arcadeFogScale = 0.35F;

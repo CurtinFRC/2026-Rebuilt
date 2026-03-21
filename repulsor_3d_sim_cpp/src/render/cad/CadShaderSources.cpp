@@ -573,18 +573,20 @@ void main() {
     vec3 themeLit = mix(themeSecondary, themePrimary, toonKey);
     vec3 arcadeAlbedo = mix(albedo, albedo * (0.70 + 0.68 * themeLit), arcadeThemeTintStrength);
 
-    vec3 direct = arcadeAlbedo * (toonKey * max(uKeyLightIntensity, 0.0) + toonFill * max(uFillLightIntensity, 0.0) * 0.45);
+    vec3 direct = arcadeAlbedo *
+                  (toonKey * max(uKeyLightIntensity, 0.0) * 0.72 +
+                   toonFill * max(uFillLightIntensity, 0.0) * 0.30);
     vec3 H = normalize(V + keyDir);
     float hardSpec = smoothstep(0.84, 0.95, max(dot(N, H), 0.0));
     hardSpec = max(hardSpec, step(0.975, max(dot(N, H), 0.0)));
-    hardSpec *= max(uSpecularStrength, 0.0) * (0.55 + 0.45 * toonKey);
-    vec3 specColor = mix(vec3(0.70, 0.93, 1.00), vec3(0.95, 1.0, 1.0), 0.55);
+    hardSpec *= max(uSpecularStrength, 0.0) * (0.30 + 0.30 * toonKey);
+    vec3 specColor = mix(vec3(0.22, 0.58, 0.84), vec3(0.55, 0.86, 0.98), 0.50);
     vec3 specularArc = specColor * hardSpec;
 
     float rimWide = pow(1.0 - max(dot(N, V), 0.0), 1.25);
     float rimPulse = 0.90 + 0.10 * sin(uTimeS * (0.80 + arcadeStatePulseRate * 0.5) + vWorldPos.x * 0.45);
     vec3 rimColor = mix(themePrimary, vec3(0.64, 0.95, 1.0), 0.45);
-    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (1.2 + arcadeRimBoost * 1.8) * rimPulse;
+    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (0.70 + arcadeRimBoost * 0.90) * rimPulse;
 
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 150.0, 0.0, 1.0);
     float shadowAmount = shadow * clamp(uShadowStrength, 0.0, 1.0);
@@ -668,6 +670,9 @@ void main() {
   }
   linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
 
+  if (arcadeMode) {
+    linearColor = min(linearColor, vec3(1.45, 1.40, 1.35));
+  }
   vec3 mapped = TonemapAces(linearColor * max(uExposure, 0.01));
   float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
   mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));

@@ -183,8 +183,8 @@ class Renderer {
   int bloomDownsample_ = 2;
   bool bloomResourcesReady_ = false;
   bool bloomEnabledThisFrame_ = false;
-  float bloomStrength_ = 0.26F;
-  float bloomThreshold_ = 0.78F;
+  float bloomStrength_ = 0.14F;
+  float bloomThreshold_ = 0.96F;
   int bloomBlurPasses_ = 2;
 
   float fieldLength_ = 0.0F;
