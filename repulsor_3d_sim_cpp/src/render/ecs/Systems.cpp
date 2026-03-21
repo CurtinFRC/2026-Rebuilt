@@ -2,12 +2,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstddef>
 #include <functional>
-#include <limits>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -18,7 +18,6 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/trigonometric.hpp>
 
-#include "repulsor3d/render/ecs/SpatialIndex.hpp"
 #include "repulsor3d/render/MeshCulling.hpp"
 
 namespace repulsor3d {
@@ -94,55 +93,6 @@ bool IsSphereVisible(const std::array<Plane, 6>& planes, const glm::vec3& center
   return true;
 }
 
-bool IsFiniteVec3(const glm::vec3& v) {
-  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-}
-
-bool IsFiniteVec4(const glm::vec4& v) {
-  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && std::isfinite(v.w);
-}
-
-bool TryExtractFrustumAabb(const glm::mat4& viewProjection, SpatialAabb& out) {
-  const glm::mat4 inverseVp = glm::inverse(viewProjection);
-  if (!IsFiniteVec4(inverseVp[0]) ||
-      !IsFiniteVec4(inverseVp[1]) ||
-      !IsFiniteVec4(inverseVp[2]) ||
-      !IsFiniteVec4(inverseVp[3])) {
-    return false;
-  }
-
-  constexpr std::array<glm::vec3, 8> clipCorners{
-      glm::vec3{-1.0F, -1.0F, -1.0F},
-      glm::vec3{1.0F, -1.0F, -1.0F},
-      glm::vec3{-1.0F, 1.0F, -1.0F},
-      glm::vec3{1.0F, 1.0F, -1.0F},
-      glm::vec3{-1.0F, -1.0F, 1.0F},
-      glm::vec3{1.0F, -1.0F, 1.0F},
-      glm::vec3{-1.0F, 1.0F, 1.0F},
-      glm::vec3{1.0F, 1.0F, 1.0F},
-  };
-
-  glm::vec3 minP{std::numeric_limits<float>::max()};
-  glm::vec3 maxP{std::numeric_limits<float>::lowest()};
-  for (const glm::vec3& clip : clipCorners) {
-    const glm::vec4 worldH = inverseVp * glm::vec4{clip, 1.0F};
-    if (std::abs(worldH.w) <= 1e-6F) {
-      continue;
-    }
-    const glm::vec3 world = glm::vec3{worldH} / worldH.w;
-    minP = glm::min(minP, world);
-    maxP = glm::max(maxP, world);
-  }
-
-  if (!IsFiniteVec3(minP) || !IsFiniteVec3(maxP)) {
-    return false;
-  }
-
-  out.min = minP;
-  out.max = maxP;
-  return true;
-}
-
 void ApplyWorldTransformToPayload(const glm::mat4& world, RenderEntityPayload& payload) {
   const glm::vec3 worldScale = ExtractScale(world);
   const float maxScale = std::max(worldScale.x, std::max(worldScale.y, worldScale.z));
@@ -210,16 +160,25 @@ bool ShouldApplyFrustumCulling(const RenderEntity& entity) {
 EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame, const glm::mat4& viewProjection) {
   EntityCullingStats stats;
   stats.totalEntities = static_cast<int>(frame.entities.size());
+  const auto statsStart = std::chrono::steady_clock::now();
 
   if (frame.entities.empty()) {
     return stats;
   }
 
-  std::unordered_map<std::string, size_t> entityIndexById;
-  entityIndexById.reserve(frame.entities.size());
+  std::vector<int> parentIndices(frame.entities.size(), -1);
   for (size_t i = 0; i < frame.entities.size(); ++i) {
-    if (!frame.entities[i].id.empty()) {
-      entityIndexById[frame.entities[i].id] = i;
+    if (frame.entities[i].parentId.empty()) {
+      continue;
+    }
+    for (size_t j = 0; j < frame.entities.size(); ++j) {
+      if (i == j) {
+        continue;
+      }
+      if (frame.entities[j].id == frame.entities[i].parentId) {
+        parentIndices[i] = static_cast<int>(j);
+        break;
+      }
     }
   }
 
@@ -244,13 +203,11 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
                           ? ComposeTransform(frame.entities[index].transform)
                           : glm::mat4(1.0F);
 
-    const std::string& parentId = frame.entities[index].parentId;
-    if (!parentId.empty()) {
-      const auto parentIt = entityIndexById.find(parentId);
-      if (parentIt != entityIndexById.end() && parentIt->second != index) {
-        resolveTransform(parentIt->second);
-        local = worldTransforms[parentIt->second] * local;
-      }
+    const int parentIndex = parentIndices[index];
+    if (parentIndex >= 0 && static_cast<size_t>(parentIndex) != index) {
+      const size_t parent = static_cast<size_t>(parentIndex);
+      resolveTransform(parent);
+      local = worldTransforms[parent] * local;
     }
 
     worldTransforms[index] = local;
@@ -260,19 +217,19 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
   for (size_t i = 0; i < frame.entities.size(); ++i) {
     resolveTransform(i);
   }
+  const auto afterHierarchy = std::chrono::steady_clock::now();
 
   for (size_t i = 0; i < frame.entities.size(); ++i) {
     if (frame.entities[i].hasTransform || !frame.entities[i].parentId.empty()) {
       ApplyWorldTransformToPayload(worldTransforms[i], frame.entities[i].payload);
     }
   }
+  const auto afterTransformApply = std::chrono::steady_clock::now();
 
   const auto frustumPlanes = ExtractFrustumPlanes(viewProjection);
-  SpatialAabb frustumAabb;
-  const bool hasFrustumAabb = TryExtractFrustumAabb(viewProjection, frustumAabb);
-  UniformGridSpatialIndex spatialIndex(2.5F);
-  std::vector<SpatialSphere> cullableSpheres;
-  cullableSpheres.reserve(frame.entities.size());
+  std::vector<std::uint8_t> candidateMask(frame.entities.size(), 0U);
+  std::vector<glm::vec3> boundsCenters(frame.entities.size(), glm::vec3{0.0F, 0.0F, 0.0F});
+  std::vector<float> boundsRadii(frame.entities.size(), 0.0F);
   for (std::size_t i = 0; i < frame.entities.size(); ++i) {
     const auto& entity = frame.entities[i];
     const bool isOverlay = entity.pass == RenderPass::Overlay || std::holds_alternative<OverlayLine>(entity.payload);
@@ -280,35 +237,12 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
       continue;
     }
     const auto [center, radius] = ComputeEntityBounds(entity);
-    SpatialSphere sphere{
-        .center = center,
-        .radius = radius,
-        .entityIndex = i,
-    };
-    cullableSpheres.push_back(sphere);
-    spatialIndex.Insert(sphere);
+    boundsCenters[i] = center;
+    boundsRadii[i] = radius;
+    candidateMask[i] = 1U;
+    ++stats.candidates;
   }
-
-  std::vector<std::size_t> broadPhaseCandidates;
-  if (hasFrustumAabb) {
-    spatialIndex.QueryAabb(frustumAabb, broadPhaseCandidates);
-  }
-  if (broadPhaseCandidates.empty()) {
-    broadPhaseCandidates.reserve(cullableSpheres.size());
-    for (const auto& sphere : cullableSpheres) {
-      broadPhaseCandidates.push_back(sphere.entityIndex);
-    }
-  }
-  stats.candidates = static_cast<int>(broadPhaseCandidates.size());
-
-  std::unordered_map<std::size_t, std::pair<glm::vec3, float>> candidateBounds;
-  candidateBounds.reserve(broadPhaseCandidates.size());
-  for (const std::size_t index : broadPhaseCandidates) {
-    if (index >= frame.entities.size()) {
-      continue;
-    }
-    candidateBounds.emplace(index, ComputeEntityBounds(frame.entities[index]));
-  }
+  const auto afterBoundsBuild = std::chrono::steady_clock::now();
 
   std::vector<RenderEntity> visible;
   visible.reserve(frame.entities.size());
@@ -320,11 +254,11 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
       continue;
     }
 
-    const auto boundsIt = candidateBounds.find(i);
-    if (boundsIt == candidateBounds.end()) {
+    if (candidateMask[i] == 0U) {
       continue;
     }
-    const auto [center, radius] = boundsIt->second;
+    const glm::vec3& center = boundsCenters[i];
+    const float radius = boundsRadii[i];
     if (IsSphereVisible(frustumPlanes, center, radius)) {
       visible.push_back(std::move(entity));
     }
@@ -333,6 +267,15 @@ EntityCullingStats ApplyRenderEntityHierarchyAndCulling(RenderSceneFrame& frame,
   frame.entities = std::move(visible);
   stats.visible = static_cast<int>(frame.entities.size());
   stats.culled = std::max(0, stats.totalEntities - stats.visible);
+  const auto statsEnd = std::chrono::steady_clock::now();
+  stats.hierarchyMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterHierarchy - statsStart).count();
+  stats.transformApplyMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterTransformApply - afterHierarchy).count();
+  stats.boundsBuildMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(afterBoundsBuild - afterTransformApply).count();
+  stats.visibilityTestMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(statsEnd - afterBoundsBuild).count();
   return stats;
 }
 

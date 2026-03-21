@@ -413,6 +413,10 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("entities.candidates", cullingStats.candidates);
   diagnostics_.RecordCounter("entities.visible", cullingStats.visible);
   diagnostics_.RecordCounter("entities.culled", cullingStats.culled);
+  diagnostics_.RecordCounter("entities.stage.hierarchy_ms", cullingStats.hierarchyMs);
+  diagnostics_.RecordCounter("entities.stage.transform_apply_ms", cullingStats.transformApplyMs);
+  diagnostics_.RecordCounter("entities.stage.bounds_ms", cullingStats.boundsBuildMs);
+  diagnostics_.RecordCounter("entities.stage.visibility_ms", cullingStats.visibilityTestMs);
   diagnostics_.RecordCounter("commands.total", static_cast<double>(commandBuffer.size()));
   const auto& caps = backend_->Capabilities();
   const bool gpuTimersEnabled = caps.supportsGpuTimers && ParseEnvBool("RENDER_GPU_TIMERS", false);

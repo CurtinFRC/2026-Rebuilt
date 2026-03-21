@@ -1,6 +1,7 @@
 #include "repulsor3d/render/ecs/SpatialIndex.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <unordered_set>
 
@@ -33,6 +34,9 @@ void UniformGridSpatialIndex::Insert(const SpatialSphere& sphere) {
 
 void UniformGridSpatialIndex::QueryAabb(const SpatialAabb& bounds, std::vector<std::size_t>& outEntityIndices) const {
   outEntityIndices.clear();
+  if (cells_.empty()) {
+    return;
+  }
 
   const int minX = CellCoord(bounds.min.x);
   const int maxX = CellCoord(bounds.max.x);
@@ -41,7 +45,30 @@ void UniformGridSpatialIndex::QueryAabb(const SpatialAabb& bounds, std::vector<s
   const int minZ = CellCoord(bounds.min.z);
   const int maxZ = CellCoord(bounds.max.z);
 
+  const std::int64_t spanX = static_cast<std::int64_t>(maxX) - static_cast<std::int64_t>(minX) + 1LL;
+  const std::int64_t spanY = static_cast<std::int64_t>(maxY) - static_cast<std::int64_t>(minY) + 1LL;
+  const std::int64_t spanZ = static_cast<std::int64_t>(maxZ) - static_cast<std::int64_t>(minZ) + 1LL;
+  constexpr std::int64_t kMaxAxisSpan = 384;
+  constexpr std::int64_t kMaxQueryVolume = 4'000'000;
+  const bool pathologicalRange =
+      spanX <= 0 || spanY <= 0 || spanZ <= 0 ||
+      spanX > kMaxAxisSpan || spanY > kMaxAxisSpan || spanZ > kMaxAxisSpan ||
+      (spanX * spanY * spanZ) > kMaxQueryVolume;
+
   std::unordered_set<std::size_t> dedup;
+  dedup.reserve(cells_.size() * 2U);
+  if (pathologicalRange) {
+    for (const auto& [key, entityIndices] : cells_) {
+      (void)key;
+      for (const std::size_t idx : entityIndices) {
+        if (dedup.insert(idx).second) {
+          outEntityIndices.push_back(idx);
+        }
+      }
+    }
+    return;
+  }
+
   for (int x = minX; x <= maxX; ++x) {
     for (int y = minY; y <= maxY; ++y) {
       for (int z = minZ; z <= maxZ; ++z) {
