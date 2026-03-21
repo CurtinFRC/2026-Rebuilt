@@ -390,7 +390,9 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
     diagnostics_.MarkSceneReady();
   }
 
-  const DiagnosticsSnapshot* diag = cfg_.showDiagnostics ? &diagnostics_.Latest() : nullptr;
+  // Keep diagnostics data available to render features for internal adaptive policies
+  // even when debug UI is disabled.
+  const DiagnosticsSnapshot* diag = &diagnostics_.Latest();
   const RenderFeatureContext context{
       .viewProjection = vp,
       .cameraWorldPosition = camera.Eye(),
