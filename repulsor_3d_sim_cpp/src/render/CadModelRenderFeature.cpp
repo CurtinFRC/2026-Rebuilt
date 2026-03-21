@@ -74,6 +74,7 @@ CadModelRenderFeature::~CadModelRenderFeature() {
     shadowFboFar_ = 0;
   }
   depthPrepassShader_.Reset();
+  outlineShader_.Reset();
   shadowShader_.Reset();
   shader_.Reset();
 }

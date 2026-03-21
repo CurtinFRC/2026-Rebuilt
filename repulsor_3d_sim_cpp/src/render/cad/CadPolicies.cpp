@@ -283,6 +283,24 @@ const CadVisualPolicy& LoadCadVisualPolicy() {
         GetEnvFloat("CAD_ARCADE_CHARGED", out.arcadeCharged),
         0.0F,
         1.0F);
+    out.arcadeHighlightBoost = std::clamp(
+        GetEnvFloat("CAD_ARCADE_HIGHLIGHT_BOOST", out.arcadeHighlightBoost),
+        0.5F,
+        4.0F);
+    out.arcadeMotionBoost = std::clamp(
+        GetEnvFloat("CAD_ARCADE_MOTION_BOOST", out.arcadeMotionBoost),
+        0.0F,
+        2.0F);
+    out.arcadeEnableOutlinePass =
+        GetEnvBool("CAD_ARCADE_OUTLINE_PASS", out.arcadeEnableOutlinePass);
+    out.arcadeOutlineWidthM = std::clamp(
+        GetEnvFloat("CAD_ARCADE_OUTLINE_WIDTH_M", out.arcadeOutlineWidthM),
+        0.0F,
+        0.25F);
+    out.arcadeOutlineOpacity = std::clamp(
+        GetEnvFloat("CAD_ARCADE_OUTLINE_OPACITY", out.arcadeOutlineOpacity),
+        0.0F,
+        1.0F);
     out.arcadeDisableWeathering = GetEnvBool("CAD_ARCADE_DISABLE_WEATHERING", out.arcadeDisableWeathering);
     out.arcadeHardSpecular = GetEnvBool("CAD_ARCADE_HARD_SPECULAR", out.arcadeHardSpecular);
 

@@ -221,12 +221,16 @@ class CadModelRenderFeature final : public IRenderFeature {
   MaterialPipeline materialPipeline_;
   GlProgramHandle shadowShader_;
   GlProgramHandle depthPrepassShader_;
+  GlProgramHandle outlineShader_;
   unsigned int shadowFbo_ = 0;
   unsigned int shadowFboFar_ = 0;
   GlTextureHandle shadowDepthTexture_;
   GlTextureHandle shadowDepthTextureFar_;
   int uShadowLightMvpLoc_ = -1;
   int uDepthPrepassViewProjectionLoc_ = -1;
+  int uOutlineViewProjectionLoc_ = -1;
+  int uOutlineColorLoc_ = -1;
+  int uOutlineWidthLoc_ = -1;
   int uLightViewProjectionLoc_ = -1;
   int uLightViewProjectionFarLoc_ = -1;
   int uShadowMapLoc_ = -1;

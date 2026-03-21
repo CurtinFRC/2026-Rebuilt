@@ -360,11 +360,13 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       visualPolicy.arcadeBloomStrength);
   backend_->SetUniformVec4(
       uArcadeStateLoc_,
-      visualPolicy.arcadeStatePulseRate,
+      visualPolicy.arcadeHighlightBoost,
       visualPolicy.arcadeAlert,
       visualPolicy.arcadeSelected,
       visualPolicy.arcadeCharged);
-  backend_->SetUniform1f(uArcadeMotionLoc_, cameraMotion01);
+  const float arcadeMotionScaled =
+      std::clamp(cameraMotion01 * std::max(0.0F, visualPolicy.arcadeMotionBoost), 0.0F, 1.0F);
+  backend_->SetUniform1f(uArcadeMotionLoc_, arcadeMotionScaled);
 
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;
@@ -410,7 +412,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   }
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.style.shading_mode", static_cast<double>(visualPolicy.shadingMode));
-    context.diagnosticsWriter->RecordCounter("cad.style.arcade_motion", static_cast<double>(cameraMotion01));
+    context.diagnosticsWriter->RecordCounter("cad.style.arcade_motion", static_cast<double>(arcadeMotionScaled));
     context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_disabled", disableShadowsThisFrame ? 1.0 : 0.0);
@@ -703,6 +705,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     float depth01 = 1.0F;
     bool useAssetColor = false;
     bool fastShading = false;
+    bool aggressiveLodCap = false;
     bool wireframe = false;
     bool mirroredWinding = false;
     std::vector<DrawRange> ranges;
@@ -948,6 +951,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         .depth01 = item.depth01,
         .useAssetColor = item.useAssetColor,
         .fastShading = item.fastShading,
+        .aggressiveLodCap = item.aggressiveLodCap,
         .wireframe = item.wireframe,
         .mirroredWinding = item.mirroredWinding,
         .ranges = std::move(ranges),
@@ -1555,6 +1559,61 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       glFrontFace(GL_CCW);
     }
   }
+
+  const bool drawArcadeOutlines =
+      renderPass_ == RenderPass::Opaque &&
+      visualPolicy.arcadeEnableOutlinePass &&
+      std::clamp(visualPolicy.shadingMode, 0, 2) == 1 &&
+      outlineShader_.Get() != 0 &&
+      visualPolicy.arcadeOutlineWidthM > 1e-5F;
+  if (drawArcadeOutlines) {
+    const float outlineWidth =
+        std::max(0.0F, visualPolicy.arcadeOutlineWidthM) *
+        (1.0F + 0.45F * std::clamp(visualPolicy.arcadeSelected, 0.0F, 1.0F) +
+         0.35F * std::clamp(visualPolicy.arcadeAlert, 0.0F, 1.0F));
+    const float outlineAlpha =
+        std::clamp(visualPolicy.arcadeOutlineOpacity * visualPolicy.arcadeOutlineStrength, 0.0F, 1.0F);
+    const glm::vec3 outlineRgb{
+        std::clamp(visualPolicy.themePrimaryR * 0.35F + 0.02F, 0.0F, 1.0F),
+        std::clamp(visualPolicy.themePrimaryG * 0.35F + 0.02F, 0.0F, 1.0F),
+        std::clamp(visualPolicy.themePrimaryB * 0.35F + 0.02F, 0.0F, 1.0F)};
+
+    backend_->UseProgram(outlineShader_.Get());
+    backend_->SetUniformMat4(uOutlineViewProjectionLoc_, &context.viewProjection[0][0]);
+    backend_->SetUniform1f(uOutlineWidthLoc_, outlineWidth);
+    backend_->SetUniformVec4(uOutlineColorLoc_, outlineRgb.r, outlineRgb.g, outlineRgb.b, outlineAlpha);
+    glDepthMask(GL_FALSE);
+    glCullFace(GL_FRONT);
+    backend_->SetBlendEnabled(outlineAlpha < 0.999F);
+
+    for (const std::size_t callIndex : drawOrder) {
+      const auto& call = drawCalls[callIndex];
+      if (call.lod == nullptr || call.ranges.empty()) {
+        continue;
+      }
+      if (call.aggressiveLodCap) {
+        continue;
+      }
+      if (call.mirroredWinding) {
+        glFrontFace(GL_CW);
+      }
+      const InstanceGpuData instanceData = ToInstanceData(call.model);
+      auto* lodMutable = const_cast<GpuMesh::LodGpu*>(call.lod);
+      backend_->BindVertexArray(lodMutable->vao.Get());
+      uploadInstances(*lodMutable, &instanceData, 1);
+      if (call.lod->indexCount > 0) {
+        drawIndexedRangesSingleInstance(call.ranges);
+      } else {
+        backend_->DrawTrianglesInstanced(call.lod->vertexCount, 1);
+      }
+      if (call.mirroredWinding) {
+        glFrontFace(GL_CCW);
+      }
+    }
+    glCullFace(GL_BACK);
+    backend_->SetBlendEnabled(renderPass_ != RenderPass::Opaque);
+  }
+
   stageDrawMs =
       std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
           std::chrono::steady_clock::now() - drawStart)
@@ -1575,6 +1634,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter("cad.stage.cull_build_ms", stageCullBuildMs);
     context.diagnosticsWriter->RecordCounter("cad.stage.shadow_ms", stageShadowMs);
     context.diagnosticsWriter->RecordCounter("cad.stage.draw_ms", stageDrawMs);
+    context.diagnosticsWriter->RecordCounter("cad.outline.enabled", drawArcadeOutlines ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter(
         "cad.stage.depth_prepass_enabled",
         (effectiveEnableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) ? 1.0 : 0.0);

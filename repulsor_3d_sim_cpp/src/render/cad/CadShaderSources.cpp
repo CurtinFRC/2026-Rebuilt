@@ -195,11 +195,11 @@ vec3 TonemapAces(vec3 x) {
 }
 
 float ToonRamp3(float n) {
-  if (n < 0.25) {
-    return 0.18;
+  if (n < 0.22) {
+    return 0.12;
   }
-  if (n < 0.65) {
-    return 0.56;
+  if (n < 0.62) {
+    return 0.45;
   }
   return 1.0;
 }
@@ -435,7 +435,7 @@ void main() {
   float arcadeShadowLift = clamp(uArcadeStyle1.y, 0.0, 1.0);
   float arcadeFogScale = clamp(uArcadeStyle1.z, 0.0, 2.0);
   float arcadeBloomStrength = clamp(uArcadeStyle1.w, 0.0, 2.0);
-  float arcadeStatePulseRate = max(uArcadeState.x, 0.0);
+  float arcadeHighlightBoost = max(uArcadeState.x, 0.5);
   float arcadeAlert = clamp(uArcadeState.y, 0.0, 1.0);
   float arcadeSelected = clamp(uArcadeState.z, 0.0, 1.0);
   float arcadeCharged = clamp(uArcadeState.w, 0.0, 1.0);
@@ -444,7 +444,7 @@ void main() {
 
   float weatheringStrength = clamp(uWeatheringStrength, 0.0, 1.5);
   if (arcadeMode) {
-    weatheringStrength *= 0.08;
+    weatheringStrength = 0.0;
   }
   float weatherScale = max(uWeatheringScale, 0.01);
   float macroNoise = ValueNoise3(vWorldPos * weatherScale * 0.35 + vec3(13.7, 7.1, 2.5));
@@ -458,7 +458,7 @@ void main() {
   float roughness = clamp(uRoughness, 0.03, 1.0);
   float detailRoughnessStrength = clamp(uDetailRoughnessStrength, 0.0, 1.0);
   if (arcadeMode) {
-    detailRoughnessStrength *= 0.10;
+    detailRoughnessStrength = 0.0;
   }
   roughness = clamp(
       roughness +
@@ -478,16 +478,21 @@ void main() {
   vec3 groundAmbient = vec3(0.19, 0.18, 0.17);
   vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
   if (arcadeMode) {
-    vec3 coolTop = mix(vec3(0.08, 0.14, 0.28), themePrimary * 0.45 + vec3(0.05, 0.09, 0.16), 0.65);
-    vec3 warmBottom = mix(vec3(0.30, 0.14, 0.10), themeSecondary * 0.40 + vec3(0.16, 0.09, 0.07), 0.55);
-    ambient = mix(warmBottom, coolTop, up) * albedo * (0.58 + 0.55 * max(uAmbientStrength, 0.0));
+    vec3 coolTop = mix(vec3(0.06, 0.12, 0.24), themePrimary * 0.52 + vec3(0.04, 0.07, 0.12), 0.72);
+    vec3 warmBottom = mix(vec3(0.26, 0.11, 0.07), themeSecondary * 0.40 + vec3(0.12, 0.06, 0.04), 0.58);
+    ambient = mix(warmBottom, coolTop, up) * albedo * (0.34 + 0.45 * max(uAmbientStrength, 0.0));
   }
   float normalAgreement = clamp(dot(geomN, N), 0.2, 1.0);
   ambient *= mix(0.78, 1.0, normalAgreement);
-  float curvatureAo = clamp(1.0 - length(fwidth(N)) * 0.75, 0.55, 1.0);
-  ambient *= curvatureAo;
+  if (!arcadeMode) {
+    float curvatureAo = clamp(1.0 - length(fwidth(N)) * 0.75, 0.55, 1.0);
+    ambient *= curvatureAo;
+  }
   float bounceAmount = (1.0 - up) * (0.35 + 0.65 * max(dot(-keyDir, vec3(0.0, 0.0, 1.0)), 0.0));
   vec3 bounceLight = vec3(0.23, 0.19, 0.14) * albedo * bounceAmount * 0.14;
+  if (arcadeMode) {
+    bounceLight *= 0.25;
+  }
   float keyShadow = max(dot(N, keyDir), 0.0);
   float shadowContrast = mix(0.70, 1.0, keyShadow);
   bool fastShadow = (uShadingMode != 0);
@@ -568,44 +573,43 @@ void main() {
   } else if (uShadingMode == 1) {
     float ndotl = max(dot(N, keyDir), 0.0);
     float ndotf = max(dot(N, fillDir), 0.0);
-    float toonKey = mix(ToonRamp3(ndotl), ToonRampN(ndotl, arcadeBands), step(3.5, arcadeBands));
-    float toonFill = ToonRampN(ndotf, max(arcadeBands - 1.0, 2.0));
+    float toonKey = ToonRampN(ndotl, clamp(arcadeBands, 2.0, 4.0));
+    float toonFill = ToonRampN(ndotf, 2.0);
+    float motionBoost = 1.0 + uArcadeMotion * 0.75;
     vec3 themeLit = mix(themeSecondary, themePrimary, toonKey);
-    vec3 arcadeTint = (0.30 + 0.48 * themeLit);
-    vec3 arcadeAlbedo = mix(albedo, albedo * arcadeTint, clamp(arcadeThemeTintStrength * 1.20, 0.0, 1.0));
-
-    vec3 direct = arcadeAlbedo *
-                  (toonKey * max(uKeyLightIntensity, 0.0) * 0.50 +
-                   toonFill * max(uFillLightIntensity, 0.0) * 0.20);
+    vec3 arcadeTint = (0.26 + 0.56 * themeLit);
+    vec3 arcadeAlbedo = mix(albedo, albedo * arcadeTint, clamp(arcadeThemeTintStrength * 1.25, 0.0, 1.0));
+    vec3 warmHighlight = mix(vec3(0.90, 0.50, 0.24), themeSecondary * 0.95 + vec3(0.16, 0.07, 0.03), 0.60);
+    vec3 direct = arcadeAlbedo * warmHighlight *
+                  (0.15 + toonKey * max(uKeyLightIntensity, 0.0) * 0.82 +
+                   toonFill * max(uFillLightIntensity, 0.0) * 0.22);
     vec3 H = normalize(V + keyDir);
-    float hardSpec = smoothstep(0.84, 0.95, max(dot(N, H), 0.0));
-    hardSpec = max(hardSpec, step(0.975, max(dot(N, H), 0.0)));
-    hardSpec *= max(uSpecularStrength, 0.0) * (0.30 + 0.30 * toonKey);
-    vec3 specColor = mix(vec3(0.22, 0.58, 0.84), vec3(0.55, 0.86, 0.98), 0.50);
+    float specRaw = max(dot(N, H), 0.0);
+    float hardSpec = step(0.925, specRaw) * 0.55 + step(0.975, specRaw) * 0.45;
+    hardSpec *= max(uSpecularStrength, 0.0) * (0.35 + 0.95 * toonKey) * arcadeHighlightBoost * motionBoost;
+    vec3 specColor = mix(themePrimary * 0.85 + vec3(0.04, 0.14, 0.24), vec3(0.82, 0.95, 1.00), 0.35);
     vec3 specularArc = specColor * hardSpec;
 
-    float rimWide = pow(1.0 - max(dot(N, V), 0.0), 1.25);
-    float rimPulse = 1.0;
-    vec3 rimColor = mix(themePrimary, vec3(0.64, 0.95, 1.0), 0.45);
-    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (0.70 + arcadeRimBoost * 0.90) * rimPulse;
+    float rimWide = pow(1.0 - max(dot(N, V), 0.0), 0.95);
+    vec3 rimColor = mix(themePrimary * 1.15 + vec3(0.04, 0.06, 0.10), vec3(0.44, 0.82, 1.0), 0.45);
+    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (1.85 + arcadeRimBoost * 2.6) * motionBoost;
 
-    float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 150.0, 0.0, 1.0);
+    float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 170.0, 0.0, 1.0);
     float shadowAmount = shadow * clamp(uShadowStrength, 0.0, 1.0);
-    vec3 stylizedShadow = mix(vec3(1.0), shadowTint, shadowAmount * (0.78 - 0.45 * arcadeShadowLift));
-    vec3 directLit = (direct + specularArc + rimLight) * max(depthCue, 0.70) * stylizedShadow;
-    directLit = mix(directLit, direct * 0.68 + specularArc + rimLight, shadowAmount * arcadeShadowLift * 0.72);
-    vec3 indirectLit = ambient * max(depthCue, 0.72) * 0.85;
+    float shadowBand = (shadowAmount > 0.55) ? 1.0 : ((shadowAmount > 0.22) ? 0.64 : 0.22);
+    vec3 shadowGrade = mix(vec3(1.0), shadowTint * 0.70 + vec3(0.03, 0.05, 0.10), shadowBand * (0.88 - 0.52 * arcadeShadowLift));
+    vec3 directLit = (direct + specularArc + rimLight) * max(depthCue, 0.74) * shadowGrade;
+    vec3 indirectLit = ambient * max(depthCue, 0.78) * 0.50;
     directContribution = directLit;
     linearColor = indirectLit + directLit;
 
-    float floorMask = smoothstep(0.72, 0.98, abs(geomN.z));
-    float sectorSplit = smoothstep(-0.2, 0.2, vWorldPos.x + vWorldPos.y * 0.08);
-    vec3 sectorTint = mix(themeSecondary, themePrimary, sectorSplit);
-    linearColor += floorMask * sectorTint * 0.015;
+    float floorMask = smoothstep(0.86, 0.98, abs(geomN.z));
+    vec3 floorTint = mix(themeSecondary, themePrimary, 0.45) * vec3(0.10, 0.14, 0.20);
+    linearColor += floorMask * floorTint * 0.010;
 
     float outlineBand = smoothstep(0.24, 0.62, 1.0 - max(dot(N, V), 0.0));
     vec3 outlineColor = mix(vec3(0.02, 0.03, 0.05), themePrimary * 0.42 + vec3(0.03, 0.04, 0.06), 0.65);
-    linearColor = mix(linearColor, outlineColor, outlineBand * arcadeOutlineStrength);
+    linearColor = mix(linearColor, outlineColor, outlineBand * arcadeOutlineStrength * 0.12);
   } else {
     float ndotl = max(dot(N, keyDir), 0.0);
     float ndotf = max(dot(N, fillDir), 0.0);
@@ -621,20 +625,19 @@ void main() {
     linearColor = indirectLit + directLit;
   }
 
-  // Stylized "arena broadcast" emissive accents for a more game-like field vibe.
-  float laneMask = smoothstep(1.60, 0.0, abs(vWorldPos.y));
-  float alertStrobe = arcadeAlert;
+  // Stylized state-driven emissive accents (kept stable by default, stronger under gameplay state).
+  float alertStrobe = arcadeAlert * (0.70 + 0.30 * step(0.60, fract(uTimeS * 1.8)));
   float selectedEdge = arcadeSelected * smoothstep(0.28, 0.74, 1.0 - max(dot(N, V), 0.0));
-  float chargedWave = arcadeCharged;
-  float edgeGlow = pow(1.0 - max(dot(N, V), 0.0), 3.8);
-  float overheadSweep = smoothstep(0.60, 1.0, max(dot(N, normalize(vec3(0.22, 0.08, 0.97))), 0.0));
+  float chargedWave = arcadeCharged * (0.78 + 0.22 * sin(uTimeS * 3.2));
+  float motionEdge = uArcadeMotion * smoothstep(0.36, 0.84, 1.0 - max(dot(N, V), 0.0));
   vec3 neonBlue = mix(vec3(0.08, 0.66, 1.00), themePrimary, themeMix);
   vec3 neonWarm = mix(vec3(1.00, 0.34, 0.20), themeSecondary, themeMix);
+  float motionBoost = 1.0 + uArcadeMotion * 0.45;
   vec3 emissive =
-      neonBlue * (0.020 * laneMask + 0.015 * chargedWave) +
-      neonWarm * (0.012 * edgeGlow * overheadSweep) +
-      mix(neonBlue, neonWarm, 0.35) * (0.030 * alertStrobe + 0.035 * selectedEdge);
-  emissive *= themeEmissiveStrength * mix(1.0, arcadeEmissiveBoost, arcadeModeF);
+      neonBlue * (0.100 * selectedEdge + 0.075 * chargedWave + 0.040 * motionEdge) +
+      neonWarm * (0.150 * alertStrobe + 0.050 * chargedWave) +
+      mix(neonBlue, neonWarm, 0.35) * (0.060 * selectedEdge * arcadeHighlightBoost);
+  emissive *= themeEmissiveStrength * mix(1.0, arcadeEmissiveBoost * motionBoost, arcadeModeF);
   if (uShadingMode == 2) {
     emissive *= 0.60;
   }
@@ -650,28 +653,31 @@ void main() {
   float fog = 1.0 - exp(-fogDensity * viewDistance);
   vec3 fogColor = mix(vec3(0.49, 0.56, 0.68), vec3(0.11, 0.15, 0.22), nightBlend);
   if (arcadeMode) {
-    vec3 arcadeFogColor = mix(vec3(0.13, 0.18, 0.28), mix(themeSecondary, themePrimary, 0.66) * 0.52 + vec3(0.06, 0.08, 0.12), 0.70);
-    fogColor = mix(fogColor, arcadeFogColor, 0.72);
+    vec3 arcadeFogColor =
+        mix(vec3(0.06, 0.10, 0.17), mix(themePrimary, themeSecondary, 0.38) * 0.46 + vec3(0.03, 0.05, 0.08), 0.72);
+    fogColor = mix(fogColor, arcadeFogColor, 0.82);
   }
   linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
 
   float effectiveExposure = max(uExposure, 0.01);
-  if (arcadeMode) {
-    effectiveExposure *= 0.82;
-    linearColor = min(linearColor, vec3(1.10, 1.06, 1.02));
-  }
   vec3 mapped = TonemapAces(linearColor * effectiveExposure);
   if (arcadeMode) {
+    effectiveExposure *= 0.80;
+    vec3 arcadeMapped = (linearColor * effectiveExposure) / (linearColor * effectiveExposure + vec3(0.85));
+    mapped = pow(clamp(arcadeMapped, 0.0, 1.0), vec3(0.95));
+    mapped = min(mapped, vec3(0.92, 0.94, 0.96));
+  }
+  if (arcadeMode) {
     float peak = max(max(mapped.r, mapped.g), mapped.b);
-    float over = max(0.0, peak - 0.62);
-    mapped *= (1.0 / (1.0 + over * 1.8));
+    float over = max(0.0, peak - 0.58);
+    mapped *= (1.0 / (1.0 + over * 2.2));
   }
   float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
   mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));
   if (arcadeMode) {
     float bloomMask = max(max(emissive.r, emissive.g), emissive.b);
-    vec3 bloomTint = mix(themePrimary, themeSecondary, 0.35) * 0.30 + vec3(0.08, 0.10, 0.14);
-    mapped += bloomTint * bloomMask * arcadeBloomStrength * 0.35;
+    vec3 bloomTint = mix(themePrimary, themeSecondary, 0.40) * 0.18 + vec3(0.02, 0.03, 0.05);
+    mapped += bloomTint * bloomMask * arcadeBloomStrength * 0.22;
   }
   float postFx = clamp(uPostFxStrength, 0.0, 2.0);
   if (postFx > 1e-4) {
@@ -686,6 +692,9 @@ void main() {
     vec3 chromaTint = vec3(1.0 + chromaEdge, 1.0, 1.0 - chromaEdge);
     mapped = mapped * mix(vec3(1.0), chromaTint, postFx * 0.7);
     mapped = mapped * mix(1.0, vignette, postFx);
+    if (arcadeMode) {
+      mapped = mix(mapped, smoothstep(vec3(0.0), vec3(1.0), mapped), postFx * 0.18);
+    }
     mapped += vec3(grain);
   }
   mapped = pow(max(mapped, vec3(0.0)), vec3(1.0 / max(uGamma, 1e-3)));

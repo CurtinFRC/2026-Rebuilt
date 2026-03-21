@@ -168,6 +168,59 @@ void main() {}
   glDeleteShader(depthFs);
   uDepthPrepassViewProjectionLoc_ = backend_->GetUniformLocation(depthPrepassShader_.Get(), "uViewProjection");
 
+  constexpr const char* outlineVsSrc = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 3) in vec4 iModelRow0;
+layout(location = 4) in vec4 iModelRow1;
+layout(location = 5) in vec4 iModelRow2;
+layout(location = 6) in vec4 iModelRow3;
+layout(location = 7) in vec3 iNormalRow0;
+layout(location = 8) in vec3 iNormalRow1;
+layout(location = 9) in vec3 iNormalRow2;
+uniform mat4 uViewProjection;
+uniform float uOutlineWidth;
+void main() {
+  mat4 model = mat4(iModelRow0, iModelRow1, iModelRow2, iModelRow3);
+  vec4 worldPos = model * vec4(aPos, 1.0);
+  mat3 normalMatrix = mat3(iNormalRow0, iNormalRow1, iNormalRow2);
+  vec3 worldNormal = normalize(normalMatrix * aNormal);
+  worldPos.xyz += worldNormal * max(uOutlineWidth, 0.0);
+  gl_Position = uViewProjection * worldPos;
+}
+)";
+  constexpr const char* outlineFsSrc = R"(
+#version 330 core
+uniform vec4 uOutlineColor;
+out vec4 FragColor;
+void main() {
+  FragColor = uOutlineColor;
+}
+)";
+  const unsigned int outlineVs = CompileShader(GL_VERTEX_SHADER, outlineVsSrc);
+  const unsigned int outlineFs = CompileShader(GL_FRAGMENT_SHADER, outlineFsSrc);
+  bool outlineReady = false;
+  if (outlineVs != 0 && outlineFs != 0 && LinkShader(outlineShader_, outlineVs, outlineFs)) {
+    uOutlineViewProjectionLoc_ = backend_->GetUniformLocation(outlineShader_.Get(), "uViewProjection");
+    uOutlineColorLoc_ = backend_->GetUniformLocation(outlineShader_.Get(), "uOutlineColor");
+    uOutlineWidthLoc_ = backend_->GetUniformLocation(outlineShader_.Get(), "uOutlineWidth");
+    outlineReady = uOutlineViewProjectionLoc_ >= 0 && uOutlineColorLoc_ >= 0 && uOutlineWidthLoc_ >= 0;
+  }
+  if (outlineVs != 0) {
+    glDeleteShader(outlineVs);
+  }
+  if (outlineFs != 0) {
+    glDeleteShader(outlineFs);
+  }
+  if (!outlineReady) {
+    outlineShader_.Reset();
+    uOutlineViewProjectionLoc_ = -1;
+    uOutlineColorLoc_ = -1;
+    uOutlineWidthLoc_ = -1;
+    std::cerr << "CAD outline pass unavailable; continuing without explicit outline shader\n";
+  }
+
   if (shadowEnabled_) {
     auto createShadowTarget = [&](GlTextureHandle& textureHandle, unsigned int& fbo) -> bool {
       const unsigned int tex = backend_->CreateTexture2D();
