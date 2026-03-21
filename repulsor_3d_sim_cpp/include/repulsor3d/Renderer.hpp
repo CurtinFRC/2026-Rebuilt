@@ -187,8 +187,8 @@ class Renderer {
   float bloomStrength_ = 0.06F;
   float bloomThreshold_ = 0.99F;
   int bloomBlurPasses_ = 2;
-  float screenOutlineStrength_ = 0.65F;
-  float screenOutlineThicknessPx_ = 1.15F;
+  float screenOutlineStrength_ = 0.78F;
+  float screenOutlineThicknessPx_ = 1.30F;
   float screenOutlineDepthSensitivity_ = 1.15F;
   float screenOutlineNormalSensitivity_ = 1.00F;
   glm::vec3 screenOutlineColor_{0.025F, 0.035F, 0.055F};

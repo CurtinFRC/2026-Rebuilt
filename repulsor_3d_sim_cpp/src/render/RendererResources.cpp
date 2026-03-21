@@ -285,15 +285,16 @@ void main() {
   vec3 color = scene + bloom * uBloomStrength * (0.20 + 0.80 * room);
   if (uOutlineEnabled != 0) {
     float dC = texture(uSceneDepthTex, vUv).r;
+    float farFactor = smoothstep(0.35, 0.985, dC);
     float depthScaledThickness =
-      max(0.5, uOutlineThicknessPx * mix(0.55, 1.0, smoothstep(0.10, 0.85, dC)));
+      max(0.5, uOutlineThicknessPx * mix(0.70, 2.20, farFactor));
     vec2 texelStep = uTexelSize.xy * depthScaledThickness;
     float dL = texture(uSceneDepthTex, vUv - vec2(texelStep.x, 0.0)).r;
     float dR = texture(uSceneDepthTex, vUv + vec2(texelStep.x, 0.0)).r;
     float dD = texture(uSceneDepthTex, vUv - vec2(0.0, texelStep.y)).r;
     float dU = texture(uSceneDepthTex, vUv + vec2(0.0, texelStep.y)).r;
     float depthGrad = abs(dL - dR) + abs(dU - dD) + abs(dC - dL) + abs(dC - dR) + abs(dC - dU) + abs(dC - dD);
-    float depthEdge = smoothstep(0.0015, 0.0120, depthGrad * uOutlineDepthSensitivity);
+    float depthEdge = smoothstep(0.0010, 0.0095, depthGrad * uOutlineDepthSensitivity * mix(1.0, 4.0, farFactor));
     vec3 nC = ReconstructNormal(vUv, texelStep);
     vec3 nL = ReconstructNormal(vUv - vec2(texelStep.x, 0.0), texelStep);
     vec3 nR = ReconstructNormal(vUv + vec2(texelStep.x, 0.0), texelStep);
@@ -302,10 +303,12 @@ void main() {
     float normalEdge =
       max(max(1.0 - dot(nC, nL), 1.0 - dot(nC, nR)),
           max(1.0 - dot(nC, nD), 1.0 - dot(nC, nU)));
-    normalEdge = smoothstep(0.03, 0.35, normalEdge * uOutlineNormalSensitivity);
+    normalEdge = smoothstep(0.025, 0.32, normalEdge * uOutlineNormalSensitivity * mix(1.0, 1.8, farFactor));
     float edge = clamp(max(depthEdge, normalEdge), 0.0, 1.0);
-    edge *= smoothstep(0.999, 0.97, dC);
-    color = mix(color, uOutlineColor, edge * uOutlineStrength);
+    // Do not outline untouched far plane background.
+    edge *= (1.0 - smoothstep(0.995, 1.0, dC));
+    float outlineStrength = uOutlineStrength * mix(1.0, 1.75, farFactor);
+    color = mix(color, uOutlineColor, edge * outlineStrength);
   }
   FragColor = vec4(color, 1.0);
 }

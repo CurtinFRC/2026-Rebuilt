@@ -1134,7 +1134,9 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   const int segments = std::max(8, cfg_.environmentSegments / detailDivisor);
   const bool mediumDetail = detailDivisor <= 2;
   const bool highDetail = detailDivisor <= 1;
-  const float ringPadding = std::clamp(std::max(1.0F, cfg_.environmentRadiusM), 1.0F, 3.2F);
+  const float extraArenaGap = std::clamp(ParseEnvFloat("ARENA_FIELD_WALL_EXTRA_GAP_M", 1.6F), 0.0F, 8.0F);
+  const float ringPadding =
+      std::clamp(std::max(1.0F, cfg_.environmentRadiusM) + extraArenaGap, 2.2F, 9.5F);
   const float stadiumHeight = std::max(3.0F, cfg_.environmentHeightM);
   const float fieldHalfLength = fieldLength_ * 0.5F;
   const float fieldHalfWidth = fieldWidth_ * 0.5F;
