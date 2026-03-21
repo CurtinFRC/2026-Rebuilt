@@ -282,7 +282,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     cadIndirectDrawBuffer_.Set(backend_->CreateBuffer());
   }
   const auto frustumPlanes = cad::ExtractFrustumPlanes(context.viewProjection);
-  backend_->SetUniformVec3(uLightDirLoc_, -0.3F, -0.5F, -1.0F);
+  // Single arena key light from overhead center.
+  backend_->SetUniformVec3(uLightDirLoc_, 0.0F, 0.0F, -1.0F);
   backend_->SetUniformVec3(
       uCameraPosLoc_,
       context.cameraWorldPosition.x,
@@ -292,7 +293,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uSpecularStrengthLoc_, visualPolicy.specularStrength);
   backend_->SetUniform1f(uRimStrengthLoc_, visualPolicy.rimStrength);
   backend_->SetUniform1f(uKeyLightIntensityLoc_, visualPolicy.keyLightIntensity);
-  backend_->SetUniform1f(uFillLightIntensityLoc_, visualPolicy.fillLightIntensity);
+  // Keep lighting model intentionally single-source for consistent arena look.
+  backend_->SetUniform1f(uFillLightIntensityLoc_, 0.0F);
   backend_->SetUniform1f(uAmbientStrengthLoc_, visualPolicy.ambientStrength);
   backend_->SetUniform1f(uRoughnessLoc_, visualPolicy.roughness);
   backend_->SetUniform1f(uMetallicLoc_, visualPolicy.metallic);

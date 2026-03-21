@@ -51,7 +51,7 @@ struct CadVisualPolicy {
   int maxIndicesPerDrawCall = 0;
   float keyLightIntensity = 1.10F;
   float fillLightIntensity = 0.24F;
-  float ambientStrength = 0.08F;
+  float ambientStrength = 0.10F;
   float depthCueStrength = 0.08F;
   float specularStrength = 0.50F;
   float rimStrength = 0.03F;
@@ -59,7 +59,7 @@ struct CadVisualPolicy {
   float metallic = 0.00F;
   float exposure = 0.72F;
   float fogDensity = 0.0018F;
-  float saturation = 1.14F;
+  float saturation = 1.24F;
   float gamma = 2.2F;
   float weatheringStrength = 0.28F;
   float weatheringScale = 0.42F;
@@ -73,10 +73,10 @@ struct CadVisualPolicy {
   float themeSecondaryG = 0.34F;
   float themeSecondaryB = 0.20F;
   float themeMix = 0.52F;
-  float themeEmissiveStrength = 1.00F;
+  float themeEmissiveStrength = 1.20F;
   bool nightMode = false;
   float nightIntensity = 0.68F;
-  float postFxStrength = 1.00F;
+  float postFxStrength = 1.12F;
   float filmGrainStrength = 0.030F;
   float vignetteStrength = 0.28F;
   float chromaticStrength = 0.025F;

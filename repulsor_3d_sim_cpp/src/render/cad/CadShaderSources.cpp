@@ -485,7 +485,7 @@ void main() {
   vec3 F0 = mix(vec3(0.04), albedo, metallic) * max(uSpecularStrength, 0.0);
 
   vec3 keyDir = normalize(-uLightDir);
-  vec3 fillDir = normalize(vec3(0.40, 0.55, 0.72));
+  vec3 fillDir = keyDir;
   float viewDistance = length(uCameraPos - vWorldPos);
   float splitDistance = max(uShadowCascadeSplitM, 1.0);
 
@@ -494,9 +494,9 @@ void main() {
   vec3 groundAmbient = vec3(0.19, 0.18, 0.17);
   vec3 ambient = mix(groundAmbient, skyAmbient, up) * albedo * max(uAmbientStrength, 0.0);
   if (arcadeMode) {
-    vec3 coolTop = mix(vec3(0.06, 0.12, 0.24), themePrimary * 0.52 + vec3(0.04, 0.07, 0.12), 0.72);
-    vec3 warmBottom = mix(vec3(0.26, 0.11, 0.07), themeSecondary * 0.40 + vec3(0.12, 0.06, 0.04), 0.58);
-    ambient = mix(warmBottom, coolTop, up) * albedo * (0.34 + 0.45 * max(uAmbientStrength, 0.0));
+    vec3 coolTop = mix(vec3(0.08, 0.14, 0.28), themePrimary * 0.60 + vec3(0.04, 0.08, 0.13), 0.72);
+    vec3 coolBottom = mix(vec3(0.04, 0.06, 0.10), themePrimary * 0.28 + vec3(0.02, 0.03, 0.06), 0.55);
+    ambient = mix(coolBottom, coolTop, up) * albedo * (0.30 + 0.42 * max(uAmbientStrength, 0.0));
   }
   float normalAgreement = clamp(dot(geomN, N), 0.2, 1.0);
   ambient *= mix(0.78, 1.0, normalAgreement);
@@ -507,7 +507,7 @@ void main() {
   float bounceAmount = (1.0 - up) * (0.35 + 0.65 * max(dot(-keyDir, vec3(0.0, 0.0, 1.0)), 0.0));
   vec3 bounceLight = vec3(0.23, 0.19, 0.14) * albedo * bounceAmount * 0.14;
   if (arcadeMode) {
-    bounceLight *= 0.25;
+    bounceLight = vec3(0.0);
   }
   float keyShadow = max(dot(N, keyDir), 0.0);
   float shadowContrast = mix(0.70, 1.0, keyShadow);
@@ -697,6 +697,10 @@ void main() {
   }
   float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
   mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));
+  if (arcadeMode) {
+    mapped = pow(clamp(mapped, 0.0, 1.0), vec3(0.92));
+    mapped *= vec3(1.08, 1.07, 1.06);
+  }
   if (arcadeMode) {
     float bloomMask = max(max(emissive.r, emissive.g), emissive.b);
     vec3 bloomTint = mix(themePrimary, themeSecondary, 0.40) * 0.18 + vec3(0.02, 0.03, 0.05);

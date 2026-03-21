@@ -1134,7 +1134,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
   const int segments = std::max(8, cfg_.environmentSegments / detailDivisor);
   const bool mediumDetail = detailDivisor <= 2;
   const bool highDetail = detailDivisor <= 1;
-  const float ringPadding = std::max(1.0F, cfg_.environmentRadiusM);
+  const float ringPadding = std::clamp(std::max(1.0F, cfg_.environmentRadiusM), 1.0F, 3.2F);
   const float stadiumHeight = std::max(3.0F, cfg_.environmentHeightM);
   const float fieldHalfLength = fieldLength_ * 0.5F;
   const float fieldHalfWidth = fieldWidth_ * 0.5F;
@@ -1239,10 +1239,69 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
       .center = glm::vec3{0.0F, 0.0F, floorZ - 0.25F},
       .size = glm::vec3{outerRadius * 2.3F, outerRadius * 2.3F, 0.5F},
       .yawDeg = 0.0F,
-      .color = glm::vec4{0.05F, 0.06F, 0.07F, 1.0F},
+      .color = glm::vec4{0.10F, 0.12F, 0.16F, 1.0F},
       .pass = RenderPass::Opaque,
   };
   DrawBox(vp, groundApron);
+
+  // Fill the field-to-wall void with stepped concourse bands.
+  auto drawConcourseBand = [&](const float innerL, const float innerW, const float outerL, const float outerW, const float z, const float h, const glm::vec4& color) {
+    const float stripX = std::max(0.06F, outerL - innerL);
+    const float stripY = std::max(0.06F, outerW - innerW);
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{0.0F, (innerW + outerW) * 0.5F, z},
+            .size = glm::vec3{outerL * 2.0F, stripY, h},
+            .yawDeg = 0.0F,
+            .color = color,
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{0.0F, -(innerW + outerW) * 0.5F, z},
+            .size = glm::vec3{outerL * 2.0F, stripY, h},
+            .yawDeg = 0.0F,
+            .color = color,
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{(innerL + outerL) * 0.5F, 0.0F, z},
+            .size = glm::vec3{stripX, innerW * 2.0F, h},
+            .yawDeg = 0.0F,
+            .color = color,
+            .pass = RenderPass::Opaque,
+        });
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{-(innerL + outerL) * 0.5F, 0.0F, z},
+            .size = glm::vec3{stripX, innerW * 2.0F, h},
+            .yawDeg = 0.0F,
+            .color = color,
+            .pass = RenderPass::Opaque,
+        });
+  };
+
+  const float gapL = std::max(0.8F, ringBaseRadius - fieldHalfLength);
+  const float gapW = std::max(0.8F, ringBaseRadius - fieldHalfWidth);
+  for (int step = 0; step < 3; ++step) {
+    const float t0 = static_cast<float>(step) / 3.0F;
+    const float t1 = static_cast<float>(step + 1) / 3.0F;
+    const float innerL = fieldHalfLength + gapL * t0;
+    const float innerW = fieldHalfWidth + gapW * t0;
+    const float outerL = fieldHalfLength + gapL * t1;
+    const float outerW = fieldHalfWidth + gapW * t1;
+    const float z = floorZ + 0.06F + static_cast<float>(step) * 0.09F;
+    const glm::vec4 concourseColor = LerpColor(
+        glm::vec4{0.08F, 0.12F, 0.18F, 1.0F},
+        glm::vec4{0.14F, 0.22F, 0.34F, 1.0F},
+        static_cast<float>(step) / 2.0F);
+    drawConcourseBand(innerL, innerW, outerL, outerW, z, 0.10F, concourseColor);
+  }
 
   // Neon trim around the playable field footprint.
   const float trimPulse = 0.72F + 0.28F * std::sin(envTimeS * 1.9F);
