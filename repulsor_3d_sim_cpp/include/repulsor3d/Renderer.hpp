@@ -105,6 +105,9 @@ class Renderer {
   bool CreateShaders();
   bool CreateMeshes();
   bool CreateFieldTexture();
+  bool EnsureBloomResources(int width, int height);
+  void DestroyBloomResources();
+  void CompositeBloom();
 
   void DestroyShader(Shader& shader) const;
   void DestroyMesh(Mesh& mesh);
@@ -151,6 +154,9 @@ class Renderer {
   Shader lineShader_;
   Shader texturedShader_;
   Shader skyShader_;
+  Shader bloomExtractShader_;
+  Shader bloomBlurShader_;
+  Shader bloomCompositeShader_;
 
   Mesh cubeMesh_;
   Mesh sphereMesh_;
@@ -163,6 +169,23 @@ class Renderer {
   GlBufferHandle textVbo_;
 
   GlTextureHandle fieldTexture_;
+  GlTextureHandle sceneColorTexture_;
+  GlTextureHandle bloomPingTexture_;
+  GlTextureHandle bloomPongTexture_;
+  unsigned int sceneFramebuffer_ = 0;
+  unsigned int sceneDepthStencilRbo_ = 0;
+  unsigned int bloomPingFramebuffer_ = 0;
+  unsigned int bloomPongFramebuffer_ = 0;
+  int bloomSourceWidth_ = 0;
+  int bloomSourceHeight_ = 0;
+  int bloomWidth_ = 0;
+  int bloomHeight_ = 0;
+  int bloomDownsample_ = 2;
+  bool bloomResourcesReady_ = false;
+  bool bloomEnabledThisFrame_ = false;
+  float bloomStrength_ = 0.26F;
+  float bloomThreshold_ = 0.78F;
+  int bloomBlurPasses_ = 2;
 
   float fieldLength_ = 0.0F;
   float fieldWidth_ = 0.0F;

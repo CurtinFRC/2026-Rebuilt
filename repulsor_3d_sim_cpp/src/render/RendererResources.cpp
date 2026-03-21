@@ -202,6 +202,65 @@ void main() {
 }
 )";
 
+  constexpr const char* postVs = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec2 aUv;
+out vec2 vUv;
+void main() {
+  vUv = aUv;
+  vec2 ndc = aPos.xy * 2.0 - 1.0;
+  gl_Position = vec4(ndc, 0.0, 1.0);
+}
+)";
+
+  constexpr const char* bloomExtractFs = R"(
+#version 330 core
+in vec2 vUv;
+uniform sampler2D uSceneTex;
+uniform float uThreshold;
+out vec4 FragColor;
+void main() {
+  vec3 scene = texture(uSceneTex, vUv).rgb;
+  float luma = dot(scene, vec3(0.2126, 0.7152, 0.0722));
+  float bright = smoothstep(uThreshold - 0.10, uThreshold + 0.15, luma);
+  FragColor = vec4(scene * bright, 1.0);
+}
+)";
+
+  constexpr const char* bloomBlurFs = R"(
+#version 330 core
+in vec2 vUv;
+uniform sampler2D uSourceTex;
+uniform vec3 uDirection;
+uniform vec3 uTexelSize;
+out vec4 FragColor;
+void main() {
+  vec2 stepUv = uDirection.xy * uTexelSize.xy;
+  vec3 color = texture(uSourceTex, vUv).rgb * 0.227027;
+  color += texture(uSourceTex, vUv + stepUv * 1.384615).rgb * 0.316216;
+  color += texture(uSourceTex, vUv - stepUv * 1.384615).rgb * 0.316216;
+  color += texture(uSourceTex, vUv + stepUv * 3.230769).rgb * 0.070270;
+  color += texture(uSourceTex, vUv - stepUv * 3.230769).rgb * 0.070270;
+  FragColor = vec4(color, 1.0);
+}
+)";
+
+  constexpr const char* bloomCompositeFs = R"(
+#version 330 core
+in vec2 vUv;
+uniform sampler2D uSceneTex;
+uniform sampler2D uBloomTex;
+uniform float uBloomStrength;
+out vec4 FragColor;
+void main() {
+  vec3 scene = texture(uSceneTex, vUv).rgb;
+  vec3 bloom = texture(uBloomTex, vUv).rgb;
+  vec3 color = scene + bloom * uBloomStrength;
+  FragColor = vec4(color, 1.0);
+}
+)";
+
   unsigned int vs = CompileShader(GL_VERTEX_SHADER, solidVs);
   unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, solidFs);
   if (vs == 0 || fs == 0 || !LinkShader(solidShader_, vs, fs)) {
@@ -229,6 +288,30 @@ void main() {
   vs = CompileShader(GL_VERTEX_SHADER, skyVs);
   fs = CompileShader(GL_FRAGMENT_SHADER, skyFs);
   if (vs == 0 || fs == 0 || !LinkShader(skyShader_, vs, fs)) {
+    return false;
+  }
+  glDeleteShader(vs);
+  glDeleteShader(fs);
+
+  vs = CompileShader(GL_VERTEX_SHADER, postVs);
+  fs = CompileShader(GL_FRAGMENT_SHADER, bloomExtractFs);
+  if (vs == 0 || fs == 0 || !LinkShader(bloomExtractShader_, vs, fs)) {
+    return false;
+  }
+  glDeleteShader(vs);
+  glDeleteShader(fs);
+
+  vs = CompileShader(GL_VERTEX_SHADER, postVs);
+  fs = CompileShader(GL_FRAGMENT_SHADER, bloomBlurFs);
+  if (vs == 0 || fs == 0 || !LinkShader(bloomBlurShader_, vs, fs)) {
+    return false;
+  }
+  glDeleteShader(vs);
+  glDeleteShader(fs);
+
+  vs = CompileShader(GL_VERTEX_SHADER, postVs);
+  fs = CompileShader(GL_FRAGMENT_SHADER, bloomCompositeFs);
+  if (vs == 0 || fs == 0 || !LinkShader(bloomCompositeShader_, vs, fs)) {
     return false;
   }
   glDeleteShader(vs);

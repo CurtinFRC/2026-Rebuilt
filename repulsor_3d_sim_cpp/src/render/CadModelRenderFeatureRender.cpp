@@ -1114,6 +1114,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   };
 
   const auto shadowStart = std::chrono::steady_clock::now();
+  GLint restoreFramebuffer = 0;
+  GLint restoreViewport[4] = {0, 0, context.viewportWidth, context.viewportHeight};
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &restoreFramebuffer);
+  glGetIntegerv(GL_VIEWPORT, restoreViewport);
   if (nearShadowReady) {
     struct ShadowBatch {
       const GpuMesh::LodGpu* lod = nullptr;
@@ -1258,8 +1262,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
 
     glCullFace(GL_BACK);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, context.viewportWidth, context.viewportHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<unsigned int>(std::max(0, restoreFramebuffer)));
+    glViewport(restoreViewport[0], restoreViewport[1], restoreViewport[2], restoreViewport[3]);
   } else {
     shadowCacheValid_ = false;
     shadowCacheFingerprint_ = 0ULL;
