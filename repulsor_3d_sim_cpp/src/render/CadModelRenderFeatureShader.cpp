@@ -247,8 +247,6 @@ void main() {}
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
          uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
          uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 && uTimeSLoc_ >= 0 &&
-         uArcadeStyle0Loc_ >= 0 && uArcadeStyle1Loc_ >= 0 &&
-         uArcadeStateLoc_ >= 0 && uArcadeMotionLoc_ >= 0 &&
          uShadowLightMvpLoc_ >= 0 && uDepthPrepassViewProjectionLoc_ >= 0;
 }
 
