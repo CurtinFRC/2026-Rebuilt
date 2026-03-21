@@ -1218,7 +1218,7 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
             .center = glm::vec3{cx, cy, fieldZ_ + height * 0.5F - 0.2F},
             .size = glm::vec3{width, 1.0F, height},
             .yawDeg = yawDeg,
-            .color = glm::vec4{0.04F, 0.05F, 0.07F, 1.0F},
+            .color = glm::vec4{0.08F, 0.10F, 0.14F, 1.0F},
             .pass = RenderPass::Opaque,
         });
     if (highDetail && (i % 3) == 0) {
@@ -1305,6 +1305,28 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
     drawConcourseBand(innerL, innerW, outerL, outerW, z, 0.10F, concourseColor);
   }
 
+  // Inner neon wall wash to make the arena feel more alive.
+  const float innerGlowRadius = ringBaseRadius - 0.55F;
+  const int innerGlowSegments = std::max(24, segments * 2);
+  const float innerGlowLength =
+      std::max(0.45F, (2.0F * kPi * innerGlowRadius / static_cast<float>(innerGlowSegments)) * 0.86F);
+  for (int i = 0; i < innerGlowSegments; ++i) {
+    const float angle = (2.0F * kPi * static_cast<float>(i)) / static_cast<float>(innerGlowSegments);
+    const float angleDeg = glm::degrees(angle + (kPi * 0.5F));
+    const float cx = std::cos(angle) * innerGlowRadius;
+    const float cy = std::sin(angle) * innerGlowRadius;
+    const float beat = 0.58F + 0.42F * std::sin(envTimeS * 2.1F + angle * 5.0F);
+    DrawBox(
+        vp,
+        BoxPrimitive{
+            .center = glm::vec3{cx, cy, fieldZ_ + 0.42F},
+            .size = glm::vec3{innerGlowLength, 0.16F, 0.26F},
+            .yawDeg = angleDeg,
+            .color = glm::vec4{0.18F * beat, 0.54F * beat, 0.98F * beat, 1.0F},
+            .pass = RenderPass::Opaque,
+        });
+  }
+
   // Neon trim around the playable field footprint.
   const float trimPulse = 0.72F + 0.28F * std::sin(envTimeS * 1.9F);
   const float trimZ = fieldZ_ + 0.02F;
@@ -1347,10 +1369,10 @@ void Renderer::DrawEnvironment(const glm::mat4& vp, const glm::vec3& cameraWorld
           .pass = RenderPass::Opaque,
       });
 
-  const glm::vec4 lowerTierA{0.18F, 0.21F, 0.24F, 1.0F};
-  const glm::vec4 lowerTierB{0.12F, 0.14F, 0.17F, 1.0F};
-  const glm::vec4 upperTierA{0.14F, 0.17F, 0.21F, 1.0F};
-  const glm::vec4 upperTierB{0.10F, 0.12F, 0.16F, 1.0F};
+  const glm::vec4 lowerTierA{0.24F, 0.30F, 0.38F, 1.0F};
+  const glm::vec4 lowerTierB{0.18F, 0.22F, 0.30F, 1.0F};
+  const glm::vec4 upperTierA{0.20F, 0.26F, 0.34F, 1.0F};
+  const glm::vec4 upperTierB{0.14F, 0.19F, 0.27F, 1.0F};
 
   auto drawTier = [&](const float radius, const float zBase, const float height, const float thickness, const glm::vec4& colA, const glm::vec4& colB) {
     const float arcLength = (2.0F * kPi * radius / static_cast<float>(segments)) * 0.95F;

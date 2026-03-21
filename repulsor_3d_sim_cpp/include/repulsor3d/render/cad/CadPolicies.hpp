@@ -59,7 +59,7 @@ struct CadVisualPolicy {
   float metallic = 0.00F;
   float exposure = 0.72F;
   float fogDensity = 0.0018F;
-  float saturation = 1.24F;
+  float saturation = 1.28F;
   float gamma = 2.2F;
   float weatheringStrength = 0.28F;
   float weatheringScale = 0.42F;
@@ -86,10 +86,10 @@ struct CadVisualPolicy {
   float arcadeRimBoost = 1.95F;
   float arcadeOutlineStrength = 0.62F;
   float arcadeThemeTintStrength = 0.88F;
-  float arcadeEmissiveBoost = 1.75F;
+  float arcadeEmissiveBoost = 2.10F;
   float arcadeShadowLift = 0.48F;
   float arcadeFogScale = 0.45F;
-  float arcadeBloomStrength = 0.45F;
+  float arcadeBloomStrength = 0.60F;
   float arcadeStatePulseRate = 1.0F;
   float arcadeAlert = 0.0F;
   float arcadeSelected = 0.0F;

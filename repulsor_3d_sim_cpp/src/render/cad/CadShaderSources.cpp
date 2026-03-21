@@ -628,6 +628,9 @@ void main() {
     float floorMask = smoothstep(0.86, 0.98, abs(geomN.z));
     vec3 floorTint = mix(themeSecondary, themePrimary, 0.45) * vec3(0.10, 0.14, 0.20);
     linearColor += floorMask * floorTint * 0.010;
+    float heroEdge = pow(1.0 - max(dot(N, V), 0.0), 2.1);
+    vec3 heroTint = mix(themePrimary, themeSecondary, 0.35);
+    linearColor += heroTint * heroEdge * 0.06;
 
     float outlineBand = smoothstep(0.24, 0.62, 1.0 - max(dot(N, V), 0.0));
     vec3 outlineColor = mix(vec3(0.02, 0.03, 0.05), themePrimary * 0.42 + vec3(0.03, 0.04, 0.06), 0.65);
@@ -698,6 +701,12 @@ void main() {
   float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
   mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));
   if (arcadeMode) {
+    float mappedMax = max(max(mapped.r, mapped.g), mapped.b);
+    float mappedMin = min(min(mapped.r, mapped.g), mapped.b);
+    float mappedSat = mappedMax - mappedMin;
+    float vibrance = 0.22;
+    vec3 avg = vec3((mapped.r + mapped.g + mapped.b) / 3.0);
+    mapped = mix(avg, mapped, 1.0 + vibrance * (1.0 - mappedSat));
     mapped = pow(clamp(mapped, 0.0, 1.0), vec3(0.92));
     mapped *= vec3(1.08, 1.07, 1.06);
   }

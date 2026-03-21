@@ -310,6 +310,14 @@ void main() {
     float outlineStrength = uOutlineStrength * mix(1.0, 1.75, farFactor);
     color = mix(color, uOutlineColor, edge * outlineStrength);
   }
+  // Global arcade grade: punchier contrast/saturation and soft arena halo.
+  float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  color = mix(vec3(luma), color, 1.10);
+  color = pow(max(color, vec3(0.0)), vec3(0.96));
+  vec2 centered = vUv * 2.0 - 1.0;
+  float radial = length(centered);
+  float halo = exp(-radial * radial * 2.8);
+  color += vec3(0.03, 0.06, 0.11) * halo * 0.35;
   FragColor = vec4(color, 1.0);
 }
 )";
