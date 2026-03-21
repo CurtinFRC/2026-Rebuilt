@@ -173,6 +173,7 @@ class Renderer {
   std::unordered_map<std::string, GpuPassTimerState> gpuPassTimers_;
   bool gpuTimersRuntimeDisabled_ = false;
   int gpuTimerReadSlowSamples_ = 0;
+  int gpuTimerOverheadSlowSamples_ = 0;
   std::uint64_t gpuTimerFrameCounter_ = 0;
 
   bool renderFeaturesInitialized_ = false;

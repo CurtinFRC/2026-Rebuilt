@@ -427,6 +427,11 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
       std::max(0.1, static_cast<double>(ParseEnvInt("RENDER_GPU_TIMER_READ_SLOW_MS", 3)));
   const int gpuTimerReadSlowDisableSamples =
       std::max(2, ParseEnvInt("RENDER_GPU_TIMER_READ_SLOW_DISABLE_SAMPLES", 3));
+  const bool gpuTimersSparseSampling = ParseEnvBool("RENDER_GPU_TIMERS_SPARSE", true);
+  const int gpuTimerOverheadDisableSamples =
+      std::max(2, ParseEnvInt("RENDER_GPU_TIMER_OVERHEAD_DISABLE_SAMPLES", 4));
+  const double gpuTimerOverheadDisableMs =
+      std::max(1.0, static_cast<double>(ParseEnvInt("RENDER_GPU_TIMER_OVERHEAD_DISABLE_MS", 8)));
   const bool gpuTimersEnabled = gpuTimersRequested && !gpuTimersRuntimeDisabled_;
   diagnostics_.RecordCounter("backend.max_texture_size", static_cast<double>(caps.maxTextureSize));
   diagnostics_.RecordCounter("backend.max_vertex_attribs", static_cast<double>(caps.maxVertexAttribs));
@@ -437,6 +442,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter(
       "backend.gpu_timer_poll_every_frames",
       static_cast<double>(gpuTimerPollEveryFrames));
+  diagnostics_.RecordCounter("backend.gpu_timers_sparse", gpuTimersSparseSampling ? 1.0 : 0.0);
   diagnostics_.RecordCounter("resources.buffers", static_cast<double>(resourceManager_.Stats(ResourceClass::Buffer).count));
   diagnostics_.RecordCounter("resources.textures", static_cast<double>(resourceManager_.Stats(ResourceClass::Texture).count));
   diagnostics_.RecordCounter("resources.vertex_arrays", static_cast<double>(resourceManager_.Stats(ResourceClass::VertexArray).count));
@@ -510,13 +516,23 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
     }
     gpuPassTimers_.clear();
   }
+  if (!gpuTimersEnabled) {
+    gpuTimerOverheadSlowSamples_ = 0;
+  }
 
   RenderGraph graph;
-  for (const auto& feature : renderFeatures_) {
+  const std::size_t passCount = renderFeatures_.size();
+  const std::size_t sampledPassIndex =
+      (passCount > 0) ? (gpuTimerFrameCounter_ % static_cast<std::uint64_t>(passCount)) : 0U;
+  double cpuPassAccumMs = 0.0;
+  for (std::size_t passIndex = 0; passIndex < renderFeatures_.size(); ++passIndex) {
+    const auto& feature = renderFeatures_[passIndex];
     if (feature == nullptr) {
       continue;
     }
 
+    const bool passGpuTimerEnabled = gpuTimersEnabled &&
+                                     (!gpuTimersSparseSampling || passIndex == sampledPassIndex);
     IRenderFeature* rawFeature = feature.get();
     graph.AddPass({
         .name = rawFeature->Name(),
@@ -528,13 +544,14 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
              rawFeature,
              &context,
              &drawApi,
-             gpuTimersEnabled,
+             &cpuPassAccumMs,
+             passGpuTimerEnabled,
              allowGpuTimerReadThisFrame,
              gpuTimerReadSlowMsThreshold,
              gpuTimerReadSlowDisableSamples](RenderGraphContext& graphContext) {
               GpuPassTimerState* gpuTimer = nullptr;
               bool gpuQueryActive = false;
-              if (gpuTimersEnabled) {
+              if (passGpuTimerEnabled) {
                 auto& timerState = gpuPassTimers_[rawFeature->Name()];
                 if (timerState.queryIds[0] == 0) {
                   timerState.queryIds[0] = backend_->CreateGpuTimerQuery();
@@ -583,6 +600,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
 
               const double ms =
                   std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count();
+              cpuPassAccumMs += ms;
               diagnostics_.RecordPassTime(rawFeature->Name(), ms);
 
               if (gpuTimer != nullptr) {
@@ -597,6 +615,25 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   DrainAssetTelemetry();
 
   const auto frameEnd = std::chrono::steady_clock::now();
+  const double rendergraphMs =
+      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count();
+  const double nonPassOverheadMs = std::max(0.0, rendergraphMs - cpuPassAccumMs);
+  diagnostics_.RecordCounter("backend.gpu_timer_non_pass_overhead_ms", nonPassOverheadMs);
+  if (gpuTimersEnabled) {
+    if (nonPassOverheadMs >= gpuTimerOverheadDisableMs) {
+      ++gpuTimerOverheadSlowSamples_;
+    } else {
+      gpuTimerOverheadSlowSamples_ = std::max(0, gpuTimerOverheadSlowSamples_ - 1);
+    }
+    if (gpuTimerOverheadSlowSamples_ >= gpuTimerOverheadDisableSamples) {
+      gpuTimersRuntimeDisabled_ = true;
+      gpuTimerOverheadSlowSamples_ = 0;
+      QueueDiagnosticMessage(
+          "gpu timers auto-disabled due high non-pass overhead (overhead_ms=" +
+          std::to_string(nonPassOverheadMs) + ", threshold_ms=" +
+          std::to_string(gpuTimerOverheadDisableMs) + ")");
+    }
+  }
   const double rendererFrameMs =
       std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - fullFrameStart).count();
   const double frameMs =
@@ -605,7 +642,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   diagnostics_.RecordCounter("renderer.frame_effective_ms", frameMs);
   diagnostics_.RecordCounter(
       "renderer.stage.rendergraph_ms",
-      std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(frameEnd - frameStart).count());
+      rendergraphMs);
   if (frameMs > 0.0) {
     constexpr double alpha = 0.10;
     if (!smoothedFrameMsInitialized_) {
