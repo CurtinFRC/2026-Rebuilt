@@ -175,10 +175,19 @@ bool CadModelRenderFeature::UploadSingleLod(
   backend.DefineVertexAttribFloat(5, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow2));
   backend.EnableVertexAttrib(6);
   backend.DefineVertexAttribFloat(6, 4, sizeof(InstanceGpuData), offsetof(InstanceGpuData, modelRow3));
+  backend.EnableVertexAttrib(7);
+  backend.DefineVertexAttribFloat(7, 3, sizeof(InstanceGpuData), offsetof(InstanceGpuData, normalRow0));
+  backend.EnableVertexAttrib(8);
+  backend.DefineVertexAttribFloat(8, 3, sizeof(InstanceGpuData), offsetof(InstanceGpuData, normalRow1));
+  backend.EnableVertexAttrib(9);
+  backend.DefineVertexAttribFloat(9, 3, sizeof(InstanceGpuData), offsetof(InstanceGpuData, normalRow2));
   backend.SetVertexAttribDivisor(3, 1);
   backend.SetVertexAttribDivisor(4, 1);
   backend.SetVertexAttribDivisor(5, 1);
   backend.SetVertexAttribDivisor(6, 1);
+  backend.SetVertexAttribDivisor(7, 1);
+  backend.SetVertexAttribDivisor(8, 1);
+  backend.SetVertexAttribDivisor(9, 1);
 
   backend.BindVertexArray(0);
 

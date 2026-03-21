@@ -12,6 +12,9 @@ layout(location = 3) in vec4 iModelRow0;
 layout(location = 4) in vec4 iModelRow1;
 layout(location = 5) in vec4 iModelRow2;
 layout(location = 6) in vec4 iModelRow3;
+layout(location = 7) in vec3 iNormalRow0;
+layout(location = 8) in vec3 iNormalRow1;
+layout(location = 9) in vec3 iNormalRow2;
 uniform mat4 uViewProjection;
 uniform mat4 uLightViewProjection;
 uniform mat4 uLightViewProjectionFar;
@@ -24,7 +27,7 @@ void main() {
   mat4 model = mat4(iModelRow0, iModelRow1, iModelRow2, iModelRow3);
   vec4 worldPos = model * vec4(aPos, 1.0);
   vWorldPos = worldPos.xyz;
-  mat3 normalMatrix = transpose(inverse(mat3(model)));
+  mat3 normalMatrix = mat3(iNormalRow0, iNormalRow1, iNormalRow2);
   vWorldNormal = normalize(normalMatrix * aNormal);
   vColor = aColor;
   vLightClipPos = uLightViewProjection * worldPos;
@@ -426,37 +429,39 @@ void main() {
   vec3 shadowTint = mix(vec3(1.0), vec3(0.76, 0.82, 0.92), clamp(uShadowTintStrength, 0.0, 1.0));
 
   float shadow = 0.0;
-  if (uShadowCascadeCount > 1) {
-    float blendRange = max(uShadowCascadeBlendRangeM, 0.0);
-    float blend = (blendRange > 0.0)
-                      ? smoothstep(splitDistance - blendRange, splitDistance + blendRange, viewDistance)
-                      : (viewDistance > splitDistance ? 1.0 : 0.0);
-    float nearShadow = ComputeShadowFactor(
-        vLightClipPos,
-        N,
-        keyDir,
-        uShadowPcfRadius,
-        false,
-        vWorldPos,
-        fastShadow);
-    float farShadow = ComputeShadowFactor(
-        vLightClipPosFar,
-        N,
-        keyDir,
-        uShadowPcfRadius,
-        true,
-        vWorldPos + vec3(11.7, 23.1, 5.3),
-        fastShadow);
-    shadow = mix(nearShadow, farShadow, blend);
-  } else {
-    shadow = ComputeShadowFactor(
-        vLightClipPos,
-        N,
-        keyDir,
-        uShadowPcfRadius,
-        false,
-        vWorldPos,
-        fastShadow);
+  if (uShadowEnabled != 0 && uShadowStrength > 1e-4 && keyShadow > 1e-4) {
+    if (uShadowCascadeCount > 1) {
+      float blendRange = max(uShadowCascadeBlendRangeM, 0.0);
+      float blend = (blendRange > 0.0)
+                        ? smoothstep(splitDistance - blendRange, splitDistance + blendRange, viewDistance)
+                        : (viewDistance > splitDistance ? 1.0 : 0.0);
+      float nearShadow = ComputeShadowFactor(
+          vLightClipPos,
+          N,
+          keyDir,
+          uShadowPcfRadius,
+          false,
+          vWorldPos,
+          fastShadow);
+      float farShadow = ComputeShadowFactor(
+          vLightClipPosFar,
+          N,
+          keyDir,
+          uShadowPcfRadius,
+          true,
+          vWorldPos + vec3(11.7, 23.1, 5.3),
+          fastShadow);
+      shadow = mix(nearShadow, farShadow, blend);
+    } else {
+      shadow = ComputeShadowFactor(
+          vLightClipPos,
+          N,
+          keyDir,
+          uShadowPcfRadius,
+          false,
+          vWorldPos,
+          fastShadow);
+    }
   }
 
   vec3 linearColor = vec3(0.0);

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/vec2.hpp>
 
 namespace repulsor3d::cadfeature {
@@ -1283,6 +1284,10 @@ InstanceGpuData ToInstanceData(const glm::mat4& model) {
   data.modelRow1 = model[1];
   data.modelRow2 = model[2];
   data.modelRow3 = model[3];
+  const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
+  data.normalRow0 = normalMatrix[0];
+  data.normalRow1 = normalMatrix[1];
+  data.normalRow2 = normalMatrix[2];
   return data;
 }
 

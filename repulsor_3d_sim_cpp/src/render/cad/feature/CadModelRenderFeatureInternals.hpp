@@ -49,6 +49,9 @@ struct InstanceGpuData {
   glm::vec4 modelRow1{0.0F, 1.0F, 0.0F, 0.0F};
   glm::vec4 modelRow2{0.0F, 0.0F, 1.0F, 0.0F};
   glm::vec4 modelRow3{0.0F, 0.0F, 0.0F, 1.0F};
+  glm::vec3 normalRow0{1.0F, 0.0F, 0.0F};
+  glm::vec3 normalRow1{0.0F, 1.0F, 0.0F};
+  glm::vec3 normalRow2{0.0F, 0.0F, 1.0F};
 };
 
 std::uint64_t BuildBroadphaseFingerprint(
