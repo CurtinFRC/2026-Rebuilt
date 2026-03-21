@@ -77,6 +77,7 @@ bool CadModelRenderFeature::CreateShader() {
   uShadingModeLoc_ = backend_->GetUniformLocation(shader_.Get(), "uShadingMode");
   uNormalStrengthLoc_ = backend_->GetUniformLocation(shader_.Get(), "uNormalStrength");
   uTriplanarScaleLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTriplanarScale");
+  uTimeSLoc_ = backend_->GetUniformLocation(shader_.Get(), "uTimeS");
 
   constexpr const char* shadowVsSrc = R"(
 #version 330 core
@@ -224,7 +225,7 @@ void main() {}
          uShadowCascadeBlendRangeMLoc_ >= 0 &&
          uAlbedoMapLoc_ >= 0 && uNormalMapLoc_ >= 0 &&
          uHasAlbedoMapLoc_ >= 0 && uHasNormalMapLoc_ >= 0 && uShadingModeLoc_ >= 0 &&
-         uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 &&
+         uNormalStrengthLoc_ >= 0 && uTriplanarScaleLoc_ >= 0 && uTimeSLoc_ >= 0 &&
          uShadowLightMvpLoc_ >= 0 && uDepthPrepassViewProjectionLoc_ >= 0;
 }
 

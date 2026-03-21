@@ -233,6 +233,7 @@ class CadModelRenderFeature final : public IRenderFeature {
   int uShadingModeLoc_ = -1;
   int uNormalStrengthLoc_ = -1;
   int uTriplanarScaleLoc_ = -1;
+  int uTimeSLoc_ = -1;
   int shadowMapSize_ = 2048;
   bool shadowEnabled_ = true;
   float shadowStrength_ = 0.55F;

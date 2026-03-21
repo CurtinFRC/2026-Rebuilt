@@ -305,6 +305,11 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   backend_->SetUniform1f(uDetailRoughnessStrengthLoc_, visualPolicy.detailRoughnessStrength);
   backend_->SetUniform1f(uClearcoatStrengthLoc_, visualPolicy.clearcoatStrength);
   backend_->SetUniform1f(uShadowTintStrengthLoc_, visualPolicy.shadowTintStrength);
+  static const auto kCadTimeOrigin = std::chrono::steady_clock::now();
+  const auto nowSteady = std::chrono::steady_clock::now();
+  const double elapsedSeconds =
+      std::chrono::duration_cast<std::chrono::duration<double>>(nowSteady - kCadTimeOrigin).count();
+  backend_->SetUniform1f(uTimeSLoc_, static_cast<float>(elapsedSeconds));
 
   int adaptiveLodBias = 0;
   bool reduceShadowQuality = false;

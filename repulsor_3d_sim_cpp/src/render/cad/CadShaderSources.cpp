@@ -82,6 +82,7 @@ uniform int uHasNormalMap;
 uniform int uShadingMode;
 uniform float uNormalStrength;
 uniform float uTriplanarScale;
+uniform float uTimeS;
 out vec4 FragColor;
 
 float Hash13(vec3 p) {
@@ -508,8 +509,28 @@ void main() {
     linearColor = indirectLit + directLit;
   }
 
+  // Stylized "arena broadcast" emissive accents for a more game-like field vibe.
+  float radial = length(vWorldPos.xy);
+  float laneMask = smoothstep(0.85, 0.0, abs(vWorldPos.y));
+  float pulse = 0.5 + 0.5 * sin(uTimeS * 1.35 - radial * 2.4);
+  float ringBand = smoothstep(0.22, 0.0, abs(fract(radial * 0.72 - uTimeS * 0.18) - 0.5));
+  float panelGrid =
+      smoothstep(0.84, 1.0, abs(sin(vWorldPos.x * 5.8))) *
+      smoothstep(0.84, 1.0, abs(sin(vWorldPos.y * 5.8)));
+  float edgeGlow = pow(1.0 - max(dot(N, V), 0.0), 3.8);
+  float overheadSweep = smoothstep(0.60, 1.0, max(dot(N, normalize(vec3(0.22, 0.08, 0.97))), 0.0));
+  vec3 neonBlue = vec3(0.08, 0.66, 1.00);
+  vec3 neonWarm = vec3(1.00, 0.34, 0.20);
+  vec3 emissive =
+      neonBlue * (0.12 * laneMask * (0.35 + 0.65 * pulse) + 0.06 * ringBand) +
+      neonWarm * (0.05 * panelGrid * edgeGlow + 0.04 * overheadSweep * pulse);
+  if (uShadingMode != 0) {
+    emissive *= 0.60;
+  }
+  linearColor += emissive;
+
   float fog = 1.0 - exp(-max(uFogDensity, 0.0) * viewDistance);
-  vec3 fogColor = vec3(0.57, 0.62, 0.70);
+  vec3 fogColor = vec3(0.49, 0.56, 0.68);
   linearColor = mix(linearColor, fogColor, clamp(fog, 0.0, 1.0));
 
   vec3 mapped = TonemapAces(linearColor * max(uExposure, 0.01));
