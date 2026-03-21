@@ -342,12 +342,10 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   if (GetEnvBool("CAD_PRESENT_LEAN_MODE", true) && context.diagnostics != nullptr) {
     const double swapWaitAvgMs = FindCounterValue(context.diagnostics, "app.swap_wait_avg_ms", 0.0);
     const double presentAvgMs = FindCounterValue(context.diagnostics, "app.present_avg_ms", 0.0);
-    const bool appVsyncActive = FindCounterValue(context.diagnostics, "app.vsync_active", 0.0) > 0.5;
     const double presentLeanSwapMs = static_cast<double>(std::max(4.0F, GetEnvFloat("CAD_PRESENT_LEAN_SWAP_MS", 22.0F)));
     const double presentLeanPresentMs =
         static_cast<double>(std::max(8.0F, GetEnvFloat("CAD_PRESENT_LEAN_PRESENT_MS", 26.0F)));
     presentBoundStall =
-        !appVsyncActive &&
         (swapWaitAvgMs >= presentLeanSwapMs || presentAvgMs >= presentLeanPresentMs);
   }
   if (context.diagnosticsWriter != nullptr) {
