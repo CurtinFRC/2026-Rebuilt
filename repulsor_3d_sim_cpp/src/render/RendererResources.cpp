@@ -252,14 +252,61 @@ void main() {
 in vec2 vUv;
 uniform sampler2D uSceneTex;
 uniform sampler2D uBloomTex;
+uniform sampler2D uSceneDepthTex;
 uniform float uBloomStrength;
+uniform int uOutlineEnabled;
+uniform float uOutlineStrength;
+uniform float uOutlineThicknessPx;
+uniform float uOutlineDepthSensitivity;
+uniform float uOutlineNormalSensitivity;
+uniform vec3 uOutlineColor;
+uniform vec3 uTexelSize;
 out vec4 FragColor;
+
+vec3 ReconstructNormal(vec2 uv, vec2 texelStep) {
+  float dL = texture(uSceneDepthTex, uv - vec2(texelStep.x, 0.0)).r;
+  float dR = texture(uSceneDepthTex, uv + vec2(texelStep.x, 0.0)).r;
+  float dD = texture(uSceneDepthTex, uv - vec2(0.0, texelStep.y)).r;
+  float dU = texture(uSceneDepthTex, uv + vec2(0.0, texelStep.y)).r;
+  vec3 dx = vec3(2.0 * texelStep.x, 0.0, dR - dL);
+  vec3 dy = vec3(0.0, 2.0 * texelStep.y, dU - dD);
+  vec3 n = normalize(cross(dx, dy));
+  if (length(n) < 1e-5) {
+    n = vec3(0.0, 0.0, 1.0);
+  }
+  return n;
+}
+
 void main() {
   vec3 scene = texture(uSceneTex, vUv).rgb;
   vec3 bloom = texture(uBloomTex, vUv).rgb;
   float scenePeak = max(max(scene.r, scene.g), scene.b);
   float room = clamp(1.0 - scenePeak, 0.0, 1.0);
   vec3 color = scene + bloom * uBloomStrength * (0.20 + 0.80 * room);
+  if (uOutlineEnabled != 0) {
+    float dC = texture(uSceneDepthTex, vUv).r;
+    float depthScaledThickness =
+      max(0.5, uOutlineThicknessPx * mix(0.55, 1.0, smoothstep(0.10, 0.85, dC)));
+    vec2 texelStep = uTexelSize.xy * depthScaledThickness;
+    float dL = texture(uSceneDepthTex, vUv - vec2(texelStep.x, 0.0)).r;
+    float dR = texture(uSceneDepthTex, vUv + vec2(texelStep.x, 0.0)).r;
+    float dD = texture(uSceneDepthTex, vUv - vec2(0.0, texelStep.y)).r;
+    float dU = texture(uSceneDepthTex, vUv + vec2(0.0, texelStep.y)).r;
+    float depthGrad = abs(dL - dR) + abs(dU - dD) + abs(dC - dL) + abs(dC - dR) + abs(dC - dU) + abs(dC - dD);
+    float depthEdge = smoothstep(0.0015, 0.0120, depthGrad * uOutlineDepthSensitivity);
+    vec3 nC = ReconstructNormal(vUv, texelStep);
+    vec3 nL = ReconstructNormal(vUv - vec2(texelStep.x, 0.0), texelStep);
+    vec3 nR = ReconstructNormal(vUv + vec2(texelStep.x, 0.0), texelStep);
+    vec3 nD = ReconstructNormal(vUv - vec2(0.0, texelStep.y), texelStep);
+    vec3 nU = ReconstructNormal(vUv + vec2(0.0, texelStep.y), texelStep);
+    float normalEdge =
+      max(max(1.0 - dot(nC, nL), 1.0 - dot(nC, nR)),
+          max(1.0 - dot(nC, nD), 1.0 - dot(nC, nU)));
+    normalEdge = smoothstep(0.03, 0.35, normalEdge * uOutlineNormalSensitivity);
+    float edge = clamp(max(depthEdge, normalEdge), 0.0, 1.0);
+    edge *= smoothstep(0.999, 0.97, dC);
+    color = mix(color, uOutlineColor, edge * uOutlineStrength);
+  }
   FragColor = vec4(color, 1.0);
 }
 )";

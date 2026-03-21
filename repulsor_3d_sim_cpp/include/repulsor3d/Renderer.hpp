@@ -170,10 +170,10 @@ class Renderer {
 
   GlTextureHandle fieldTexture_;
   GlTextureHandle sceneColorTexture_;
+  GlTextureHandle sceneDepthTexture_;
   GlTextureHandle bloomPingTexture_;
   GlTextureHandle bloomPongTexture_;
   unsigned int sceneFramebuffer_ = 0;
-  unsigned int sceneDepthStencilRbo_ = 0;
   unsigned int bloomPingFramebuffer_ = 0;
   unsigned int bloomPongFramebuffer_ = 0;
   int bloomSourceWidth_ = 0;
@@ -183,9 +183,15 @@ class Renderer {
   int bloomDownsample_ = 2;
   bool bloomResourcesReady_ = false;
   bool bloomEnabledThisFrame_ = false;
+  bool screenOutlineEnabledThisFrame_ = false;
   float bloomStrength_ = 0.06F;
   float bloomThreshold_ = 0.99F;
   int bloomBlurPasses_ = 2;
+  float screenOutlineStrength_ = 0.65F;
+  float screenOutlineThicknessPx_ = 1.15F;
+  float screenOutlineDepthSensitivity_ = 1.15F;
+  float screenOutlineNormalSensitivity_ = 1.00F;
+  glm::vec3 screenOutlineColor_{0.025F, 0.035F, 0.055F};
 
   float fieldLength_ = 0.0F;
   float fieldWidth_ = 0.0F;

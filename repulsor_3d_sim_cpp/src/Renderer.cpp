@@ -390,11 +390,8 @@ void Renderer::DestroyBloomResources() {
     glDeleteFramebuffers(1, &bloomPongFramebuffer_);
     bloomPongFramebuffer_ = 0;
   }
-  if (sceneDepthStencilRbo_ != 0) {
-    glDeleteRenderbuffers(1, &sceneDepthStencilRbo_);
-    sceneDepthStencilRbo_ = 0;
-  }
   sceneColorTexture_.Reset();
+  sceneDepthTexture_.Reset();
   bloomPingTexture_.Reset();
   bloomPongTexture_.Reset();
   bloomSourceWidth_ = 0;
@@ -452,13 +449,23 @@ bool Renderer::EnsureBloomResources(const int width, const int height) {
   glGenFramebuffers(1, &sceneFramebuffer_);
   glBindFramebuffer(GL_FRAMEBUFFER, sceneFramebuffer_);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColorTexture_.Get(), 0);
-  glGenRenderbuffers(1, &sceneDepthStencilRbo_);
-  glBindRenderbuffer(GL_RENDERBUFFER, sceneDepthStencilRbo_);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, sceneDepthStencilRbo_);
+  const unsigned int depthTextureId = backend_->CreateTexture2D();
+  if (depthTextureId == 0) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    DestroyBloomResources();
+    return false;
+  }
+  sceneDepthTexture_.Set(depthTextureId);
+  glBindTexture(GL_TEXTURE_2D, sceneDepthTexture_.Get());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture_.Get(), 0);
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     DestroyBloomResources();
     return false;
   }
@@ -482,7 +489,7 @@ bool Renderer::EnsureBloomResources(const int width, const int height) {
   }
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
   bloomSourceWidth_ = width;
   bloomSourceHeight_ = height;
   bloomWidth_ = bloomW;
@@ -492,7 +499,7 @@ bool Renderer::EnsureBloomResources(const int width, const int height) {
 }
 
 void Renderer::CompositeBloom() {
-  if (!bloomEnabledThisFrame_ || !bloomResourcesReady_ || quadMesh_.vao.Get() == 0) {
+  if ((!bloomEnabledThisFrame_ && !screenOutlineEnabledThisFrame_) || !bloomResourcesReady_ || quadMesh_.vao.Get() == 0) {
     return;
   }
 
@@ -501,58 +508,94 @@ void Renderer::CompositeBloom() {
   glDepthMask(GL_FALSE);
   backend_->SetBlendEnabled(false);
 
-  // Bright pass extract.
-  glBindFramebuffer(GL_FRAMEBUFFER, bloomPingFramebuffer_);
-  backend_->ResizeViewport(bloomWidth_, bloomHeight_);
-  backend_->ClearFrame(glm::vec4{0.0F, 0.0F, 0.0F, 1.0F});
-  backend_->UseProgram(bloomExtractShader_.program.Get());
-  int loc = backend_->GetUniformLocation(bloomExtractShader_.program.Get(), "uThreshold");
-  backend_->SetUniform1f(loc, bloomThreshold_);
-  loc = backend_->GetUniformLocation(bloomExtractShader_.program.Get(), "uSceneTex");
-  backend_->SetUniform1i(loc, 0);
-  backend_->SetActiveTextureUnit(0);
-  backend_->BindTexture2D(sceneColorTexture_.Get());
-  backend_->BindVertexArray(quadMesh_.vao.Get());
-  backend_->DrawIndexedTriangles(quadMesh_.indexCount);
-
-  // Separable gaussian blur ping-pong.
   unsigned int sourceTexture = bloomPingTexture_.Get();
-  const int totalBlurPasses = std::max(1, bloomBlurPasses_ * 2);
-  for (int pass = 0; pass < totalBlurPasses; ++pass) {
-    const bool horizontal = (pass % 2) == 0;
-    glBindFramebuffer(GL_FRAMEBUFFER, horizontal ? bloomPongFramebuffer_ : bloomPingFramebuffer_);
-    backend_->UseProgram(bloomBlurShader_.program.Get());
-    int dirLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uDirection");
-    backend_->SetUniformVec3(dirLoc, horizontal ? 1.0F : 0.0F, horizontal ? 0.0F : 1.0F, 0.0F);
-    int texelLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uTexelSize");
-    backend_->SetUniformVec3(texelLoc, 1.0F / std::max(1, bloomWidth_), 1.0F / std::max(1, bloomHeight_), 0.0F);
-    int srcLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uSourceTex");
-    backend_->SetUniform1i(srcLoc, 0);
+  int loc = -1;
+  if (bloomEnabledThisFrame_) {
+    // Bright pass extract.
+    glBindFramebuffer(GL_FRAMEBUFFER, bloomPingFramebuffer_);
+    backend_->ResizeViewport(bloomWidth_, bloomHeight_);
+    backend_->ClearFrame(glm::vec4{0.0F, 0.0F, 0.0F, 1.0F});
+    backend_->UseProgram(bloomExtractShader_.program.Get());
+    loc = backend_->GetUniformLocation(bloomExtractShader_.program.Get(), "uThreshold");
+    backend_->SetUniform1f(loc, bloomThreshold_);
+    loc = backend_->GetUniformLocation(bloomExtractShader_.program.Get(), "uSceneTex");
+    backend_->SetUniform1i(loc, 0);
     backend_->SetActiveTextureUnit(0);
-    backend_->BindTexture2D(sourceTexture);
+    backend_->BindTexture2D(sceneColorTexture_.Get());
+    backend_->BindVertexArray(quadMesh_.vao.Get());
     backend_->DrawIndexedTriangles(quadMesh_.indexCount);
-    sourceTexture = horizontal ? bloomPongTexture_.Get() : bloomPingTexture_.Get();
+    // Separable gaussian blur ping-pong.
+    sourceTexture = bloomPingTexture_.Get();
+    const int totalBlurPasses = std::max(1, bloomBlurPasses_ * 2);
+    for (int pass = 0; pass < totalBlurPasses; ++pass) {
+      const bool horizontal = (pass % 2) == 0;
+      glBindFramebuffer(GL_FRAMEBUFFER, horizontal ? bloomPongFramebuffer_ : bloomPingFramebuffer_);
+      backend_->UseProgram(bloomBlurShader_.program.Get());
+      int dirLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uDirection");
+      backend_->SetUniformVec3(dirLoc, horizontal ? 1.0F : 0.0F, horizontal ? 0.0F : 1.0F, 0.0F);
+      int texelLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uTexelSize");
+      backend_->SetUniformVec3(texelLoc, 1.0F / std::max(1, bloomWidth_), 1.0F / std::max(1, bloomHeight_), 0.0F);
+      int srcLoc = backend_->GetUniformLocation(bloomBlurShader_.program.Get(), "uSourceTex");
+      backend_->SetUniform1i(srcLoc, 0);
+      backend_->SetActiveTextureUnit(0);
+      backend_->BindTexture2D(sourceTexture);
+      backend_->DrawIndexedTriangles(quadMesh_.indexCount);
+      sourceTexture = horizontal ? bloomPongTexture_.Get() : bloomPingTexture_.Get();
+    }
+  } else {
+    glBindFramebuffer(GL_FRAMEBUFFER, bloomPingFramebuffer_);
+    backend_->ResizeViewport(bloomWidth_, bloomHeight_);
+    backend_->ClearFrame(glm::vec4{0.0F, 0.0F, 0.0F, 1.0F});
+    sourceTexture = bloomPingTexture_.Get();
   }
 
-  // Composite to default framebuffer.
+  // Composite to default framebuffer with optional screen-space outline.
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   backend_->ResizeViewport(width_, height_);
   backend_->UseProgram(bloomCompositeShader_.program.Get());
   int sceneLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uSceneTex");
   int bloomLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uBloomTex");
+  int depthLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uSceneDepthTex");
   int strengthLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uBloomStrength");
+  int outlineEnabledLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineEnabled");
+  int outlineStrengthLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineStrength");
+  int outlineThicknessLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineThicknessPx");
+  int outlineDepthSensitivityLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineDepthSensitivity");
+  int outlineNormalSensitivityLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineNormalSensitivity");
+  int outlineColorLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uOutlineColor");
+  int texelSizeLoc = backend_->GetUniformLocation(bloomCompositeShader_.program.Get(), "uTexelSize");
   backend_->SetUniform1i(sceneLoc, 0);
   backend_->SetUniform1i(bloomLoc, 1);
-  backend_->SetUniform1f(strengthLoc, bloomStrength_);
+  backend_->SetUniform1i(depthLoc, 2);
+  backend_->SetUniform1f(strengthLoc, bloomEnabledThisFrame_ ? bloomStrength_ : 0.0F);
+  backend_->SetUniform1i(outlineEnabledLoc, screenOutlineEnabledThisFrame_ ? 1 : 0);
+  backend_->SetUniform1f(outlineStrengthLoc, screenOutlineStrength_);
+  backend_->SetUniform1f(outlineThicknessLoc, screenOutlineThicknessPx_);
+  backend_->SetUniform1f(outlineDepthSensitivityLoc, screenOutlineDepthSensitivity_);
+  backend_->SetUniform1f(outlineNormalSensitivityLoc, screenOutlineNormalSensitivity_);
+  backend_->SetUniformVec3(
+      outlineColorLoc,
+      screenOutlineColor_.r,
+      screenOutlineColor_.g,
+      screenOutlineColor_.b);
+  backend_->SetUniformVec3(
+      texelSizeLoc,
+      1.0F / static_cast<float>(std::max(1, width_)),
+      1.0F / static_cast<float>(std::max(1, height_)),
+      0.0F);
   backend_->SetActiveTextureUnit(0);
   backend_->BindTexture2D(sceneColorTexture_.Get());
   backend_->SetActiveTextureUnit(1);
   backend_->BindTexture2D(sourceTexture);
+  backend_->SetActiveTextureUnit(2);
+  backend_->BindTexture2D(sceneDepthTexture_.Get());
   backend_->DrawIndexedTriangles(quadMesh_.indexCount);
   backend_->BindVertexArray(0);
   backend_->SetActiveTextureUnit(0);
   backend_->BindTexture2D(0);
   backend_->SetActiveTextureUnit(1);
+  backend_->BindTexture2D(0);
+  backend_->SetActiveTextureUnit(2);
   backend_->BindTexture2D(0);
   backend_->SetActiveTextureUnit(0);
 
@@ -568,15 +611,36 @@ void Renderer::Draw(GLFWwindow* window, const OrbitCamera& camera, const Snapsho
 void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISimWorld& world) {
   const auto fullFrameStart = std::chrono::steady_clock::now();
   const bool bloomRequested = ParseEnvBool("RENDER_BLOOM_ENABLED", true);
+  const bool screenOutlineRequested = ParseEnvBool("RENDER_SCREEN_OUTLINE_ENABLED", true);
   bloomStrength_ = std::clamp(ParseEnvFloat("RENDER_BLOOM_STRENGTH", bloomStrength_), 0.0F, 2.0F);
   bloomThreshold_ = std::clamp(ParseEnvFloat("RENDER_BLOOM_THRESHOLD", bloomThreshold_), 0.0F, 2.0F);
   bloomBlurPasses_ = std::clamp(ParseEnvInt("RENDER_BLOOM_BLUR_PASSES", bloomBlurPasses_), 1, 6);
+  screenOutlineStrength_ =
+      std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_STRENGTH", screenOutlineStrength_), 0.0F, 2.0F);
+  screenOutlineThicknessPx_ =
+      std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_THICKNESS_PX", screenOutlineThicknessPx_), 0.5F, 4.0F);
+  screenOutlineDepthSensitivity_ = std::clamp(
+      ParseEnvFloat("RENDER_SCREEN_OUTLINE_DEPTH_SENSITIVITY", screenOutlineDepthSensitivity_),
+      0.2F,
+      4.0F);
+  screenOutlineNormalSensitivity_ = std::clamp(
+      ParseEnvFloat("RENDER_SCREEN_OUTLINE_NORMAL_SENSITIVITY", screenOutlineNormalSensitivity_),
+      0.0F,
+      4.0F);
+  screenOutlineColor_.r = std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_COLOR_R", screenOutlineColor_.r), 0.0F, 1.0F);
+  screenOutlineColor_.g = std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_COLOR_G", screenOutlineColor_.g), 0.0F, 1.0F);
+  screenOutlineColor_.b = std::clamp(ParseEnvFloat("RENDER_SCREEN_OUTLINE_COLOR_B", screenOutlineColor_.b), 0.0F, 1.0F);
   bloomEnabledThisFrame_ = false;
-  if (bloomRequested && EnsureBloomResources(width_, height_)) {
+  screenOutlineEnabledThisFrame_ = false;
+  const bool postRequested = bloomRequested || screenOutlineRequested;
+  if (postRequested && EnsureBloomResources(width_, height_)) {
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFramebuffer_);
-    bloomEnabledThisFrame_ = true;
+    bloomEnabledThisFrame_ = bloomRequested;
+    screenOutlineEnabledThisFrame_ = screenOutlineRequested;
   } else {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    bloomEnabledThisFrame_ = false;
+    screenOutlineEnabledThisFrame_ = false;
   }
   backend_->ResizeViewport(width_, height_);
   backend_->ClearFrame(glm::vec4{0.06F, 0.06F, 0.07F, 1.0F});
@@ -834,7 +898,7 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
   graph.Execute();
   DrainAssetTelemetry();
   double bloomStageMs = 0.0;
-  if (bloomEnabledThisFrame_) {
+  if (bloomEnabledThisFrame_ || screenOutlineEnabledThisFrame_) {
     const auto bloomStart = std::chrono::steady_clock::now();
     CompositeBloom();
     const auto bloomEnd = std::chrono::steady_clock::now();
@@ -876,6 +940,9 @@ void Renderer::Draw(GLFWwindow* /*window*/, const OrbitCamera& camera, const ISi
       rendergraphMs);
   diagnostics_.RecordCounter("renderer.stage.bloom_ms", bloomStageMs);
   diagnostics_.RecordCounter("renderer.bloom.enabled", bloomEnabledThisFrame_ ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("renderer.post.screen_outline_enabled", screenOutlineEnabledThisFrame_ ? 1.0 : 0.0);
+  diagnostics_.RecordCounter("renderer.post.screen_outline_strength", static_cast<double>(screenOutlineStrength_));
+  diagnostics_.RecordCounter("renderer.post.screen_outline_thickness_px", static_cast<double>(screenOutlineThicknessPx_));
   diagnostics_.RecordCounter("renderer.bloom.strength", static_cast<double>(bloomStrength_));
   diagnostics_.RecordCounter("renderer.bloom.threshold", static_cast<double>(bloomThreshold_));
   diagnostics_.RecordCounter("renderer.bloom.blur_passes", static_cast<double>(bloomBlurPasses_));

@@ -210,6 +210,22 @@ float ToonRampN(float n, float bands) {
   return q / max(b - 1.0, 1.0);
 }
 
+float ToonRampSmooth(float n, float bands, float softness) {
+  float b = max(bands, 2.0);
+  float scaled = clamp(n, 0.0, 0.9999) * b;
+  float band = floor(scaled);
+  float fracPart = fract(scaled);
+  float maxBand = max(b - 1.0, 1.0);
+  float a = band / maxBand;
+  float nextBand = min(band + 1.0, b - 1.0);
+  float c = nextBand / maxBand;
+  float soft = clamp(softness, 0.0, 0.95);
+  float t0 = 0.5 - soft * 0.5;
+  float t1 = 0.5 + soft * 0.5;
+  float t = smoothstep(t0, t1, fracPart);
+  return mix(a, c, t);
+}
+
 vec3 TriplanarWeights(vec3 n) {
   vec3 an = abs(normalize(n));
   an = pow(an, vec3(4.0));
@@ -571,11 +587,15 @@ void main() {
     directContribution = directLit;
     linearColor = indirectLit + directLit;
   } else if (uShadingMode == 1) {
+    float nearView = 1.0 - smoothstep(4.0, 14.0, viewDistance);
+    float farView = 1.0 - nearView;
     float ndotl = max(dot(N, keyDir), 0.0);
     float ndotf = max(dot(N, fillDir), 0.0);
-    float toonKey = ToonRampN(ndotl, clamp(arcadeBands, 2.0, 4.0));
-    float toonFill = ToonRampN(ndotf, 2.0);
-    float motionBoost = 1.0 + uArcadeMotion * 0.75;
+    float toonBandCount = mix(clamp(arcadeBands + 1.0, 2.0, 5.0), clamp(arcadeBands, 2.0, 4.0), farView);
+    float toonSoftness = mix(0.68, 0.42, farView);
+    float toonKey = ToonRampSmooth(ndotl, toonBandCount, toonSoftness);
+    float toonFill = ToonRampSmooth(ndotf, 2.0, mix(0.72, 0.50, farView));
+    float motionBoost = 1.0 + uArcadeMotion * mix(0.35, 0.75, farView);
     vec3 themeLit = mix(themeSecondary, themePrimary, toonKey);
     vec3 arcadeTint = (0.26 + 0.56 * themeLit);
     vec3 arcadeAlbedo = mix(albedo, albedo * arcadeTint, clamp(arcadeThemeTintStrength * 1.25, 0.0, 1.0));
@@ -586,17 +606,19 @@ void main() {
     vec3 H = normalize(V + keyDir);
     float specRaw = max(dot(N, H), 0.0);
     float hardSpec = step(0.925, specRaw) * 0.55 + step(0.975, specRaw) * 0.45;
-    hardSpec *= max(uSpecularStrength, 0.0) * (0.35 + 0.95 * toonKey) * arcadeHighlightBoost * motionBoost;
+    float specDistanceScale = mix(0.45, 1.00, farView);
+    hardSpec *= max(uSpecularStrength, 0.0) * (0.35 + 0.95 * toonKey) * arcadeHighlightBoost * motionBoost * specDistanceScale;
     vec3 specColor = mix(themePrimary * 0.85 + vec3(0.04, 0.14, 0.24), vec3(0.82, 0.95, 1.00), 0.35);
     vec3 specularArc = specColor * hardSpec;
 
     float rimWide = pow(1.0 - max(dot(N, V), 0.0), 0.95);
     vec3 rimColor = mix(themePrimary * 1.15 + vec3(0.04, 0.06, 0.10), vec3(0.44, 0.82, 1.0), 0.45);
-    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (1.85 + arcadeRimBoost * 2.6) * motionBoost;
+    float rimDistanceScale = mix(0.55, 1.00, farView);
+    vec3 rimLight = rimColor * rimWide * max(uRimStrength, 0.0) * (1.85 + arcadeRimBoost * 2.6) * motionBoost * rimDistanceScale;
 
     float depthCue = 1.0 - clamp(uDepthCueStrength, 0.0, 2.0) * clamp(viewDistance / 170.0, 0.0, 1.0);
     float shadowAmount = shadow * clamp(uShadowStrength, 0.0, 1.0);
-    float shadowBand = (shadowAmount > 0.55) ? 1.0 : ((shadowAmount > 0.22) ? 0.64 : 0.22);
+    float shadowBand = ToonRampSmooth(shadowAmount, 3.0, mix(0.74, 0.55, farView));
     vec3 shadowGrade = mix(vec3(1.0), shadowTint * 0.70 + vec3(0.03, 0.05, 0.10), shadowBand * (0.88 - 0.52 * arcadeShadowLift));
     vec3 directLit = (direct + specularArc + rimLight) * max(depthCue, 0.74) * shadowGrade;
     vec3 indirectLit = ambient * max(depthCue, 0.78) * 0.50;
@@ -668,9 +690,10 @@ void main() {
     mapped = min(mapped, vec3(0.92, 0.94, 0.96));
   }
   if (arcadeMode) {
+    float nearTone = 1.0 - smoothstep(4.0, 14.0, viewDistance);
     float peak = max(max(mapped.r, mapped.g), mapped.b);
     float over = max(0.0, peak - 0.58);
-    mapped *= (1.0 / (1.0 + over * 2.2));
+    mapped *= (1.0 / (1.0 + over * mix(2.8, 2.2, 1.0 - nearTone)));
   }
   float luma = dot(mapped, vec3(0.2126, 0.7152, 0.0722));
   mapped = mix(vec3(luma), mapped, clamp(uSaturation, 0.0, 2.0));

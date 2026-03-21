@@ -96,7 +96,7 @@ struct CadVisualPolicy {
   float arcadeCharged = 0.0F;
   float arcadeHighlightBoost = 1.95F;
   float arcadeMotionBoost = 0.45F;
-  bool arcadeEnableOutlinePass = true;
+  bool arcadeEnableOutlinePass = false;
   float arcadeOutlineWidthM = 0.012F;
   float arcadeOutlineOpacity = 0.78F;
   bool arcadeDisableWeathering = true;
