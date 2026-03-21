@@ -156,10 +156,26 @@ double FindGpuTimingMilliseconds(const DiagnosticsSnapshot* diagnostics, const s
   return FindTimingMilliseconds(diagnostics, diagnostics->gpuTimings, passName);
 }
 
+double FindCounterValue(
+    const DiagnosticsSnapshot* diagnostics,
+    const std::string_view counterName,
+    const double fallback = 0.0) {
+  if (diagnostics == nullptr) {
+    return fallback;
+  }
+  for (const auto& counter : diagnostics->counters) {
+    if (counter.name == counterName) {
+      return counter.value;
+    }
+  }
+  return fallback;
+}
+
 }  // namespace
 
 using cad::CadVisualPolicy;
 using cad::GetEnvBool;
+using cad::GetEnvFloat;
 using cad::LoadCadVisualPolicy;
 using cadfeature::BuildBroadphaseFingerprint;
 using cadfeature::InstanceGpuData;
@@ -294,6 +310,8 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   bool reduceShadowQuality = false;
   bool disableShadowsThisFrame = false;
   bool forceCpuLeanPath = false;
+  bool presentBoundStall = false;
+  bool depthPrepassForcedOffForPresent = false;
   double frameAverageMs = 0.0;
   if (context.diagnostics != nullptr) {
     frameAverageMs = context.diagnostics->frameAverageMilliseconds > 0.0
@@ -321,12 +339,24 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
       forceCpuLeanPath = true;
     }
   }
+  if (GetEnvBool("CAD_PRESENT_LEAN_MODE", true) && context.diagnostics != nullptr) {
+    const double swapWaitAvgMs = FindCounterValue(context.diagnostics, "app.swap_wait_avg_ms", 0.0);
+    const double presentAvgMs = FindCounterValue(context.diagnostics, "app.present_avg_ms", 0.0);
+    const bool appVsyncActive = FindCounterValue(context.diagnostics, "app.vsync_active", 0.0) > 0.5;
+    const double presentLeanSwapMs = static_cast<double>(std::max(4.0F, GetEnvFloat("CAD_PRESENT_LEAN_SWAP_MS", 22.0F)));
+    const double presentLeanPresentMs =
+        static_cast<double>(std::max(8.0F, GetEnvFloat("CAD_PRESENT_LEAN_PRESENT_MS", 26.0F)));
+    presentBoundStall =
+        !appVsyncActive &&
+        (swapWaitAvgMs >= presentLeanSwapMs || presentAvgMs >= presentLeanPresentMs);
+  }
   if (context.diagnosticsWriter != nullptr) {
     context.diagnosticsWriter->RecordCounter("cad.auto.lod_bias", static_cast<double>(adaptiveLodBias));
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_reduced", reduceShadowQuality ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.shadow_disabled", disableShadowsThisFrame ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter("cad.auto.frame_ms", frameAverageMs);
     context.diagnosticsWriter->RecordCounter("cad.auto.cpu_lean_mode", forceCpuLeanPath ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter("cad.auto.present_bound", presentBoundStall ? 1.0 : 0.0);
   }
 
   struct DrawItem {
@@ -471,6 +501,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
   bool effectiveEnableClusterCulling = visualPolicy.enableClusterCulling;
   bool effectiveEnableOcclusionCulling = visualPolicy.enableOcclusionCulling;
   bool effectiveEnableDepthPrepass = visualPolicy.enableDepthPrepass;
+  float effectiveMinClusterScreenRadiusPx = std::max(0.0F, visualPolicy.minClusterScreenRadiusPx);
   if (forceCpuLeanPath && drawItems.size() <= 4) {
     effectiveEnableClusterCulling = false;
     effectiveEnableOcclusionCulling = false;
@@ -479,6 +510,15 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     if (drawItems.size() <= 2) {
       effectiveEnableBroadphase = false;
     }
+  }
+  if (presentBoundStall && drawItems.size() <= 4 && renderPass_ == RenderPass::Opaque) {
+    if (effectiveEnableDepthPrepass) {
+      depthPrepassForcedOffForPresent = true;
+    }
+    effectiveEnableDepthPrepass = false;
+    const float presentLeanMinRadiusPx =
+        std::max(0.0F, GetEnvFloat("CAD_PRESENT_LEAN_MIN_CLUSTER_RADIUS_PX", 0.35F));
+    effectiveMinClusterScreenRadiusPx = std::max(effectiveMinClusterScreenRadiusPx, presentLeanMinRadiusPx);
   }
 
   const auto cullBuildStart = std::chrono::steady_clock::now();
@@ -638,7 +678,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           visualPolicy.fieldClusterMaxVisibleIndices > 0;
       const bool needProjected =
           effectiveEnableOcclusionCulling ||
-          visualPolicy.minClusterScreenRadiusPx > 0.0F ||
+          effectiveMinClusterScreenRadiusPx > 0.0F ||
           enableFieldIndexBudget;
       std::vector<ClusterCandidate> candidates;
       candidates.reserve(item.lod->clusters.size());
@@ -698,9 +738,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
           continue;
         }
 
-        if (visualPolicy.minClusterScreenRadiusPx > 0.0F &&
+        if (effectiveMinClusterScreenRadiusPx > 0.0F &&
             candidate.projected.valid &&
-            candidate.projected.radiusPx < visualPolicy.minClusterScreenRadiusPx) {
+            candidate.projected.radiusPx < effectiveMinClusterScreenRadiusPx) {
           ++culledClusters;
           ++minRadiusCulledClusters;
           continue;
@@ -896,7 +936,7 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
         static_cast<double>(std::max(0, effectiveFieldIndexBudgetForDiagnostics)));
     context.diagnosticsWriter->RecordCounter(
         "cad.cluster.min_screen_radius_px",
-        static_cast<double>(std::max(0.0F, visualPolicy.minClusterScreenRadiusPx)));
+        static_cast<double>(std::max(0.0F, effectiveMinClusterScreenRadiusPx)));
     context.diagnosticsWriter->RecordCounter("cad.cluster.occlusion_culled", static_cast<double>(occlusionCulledClusters));
     context.diagnosticsWriter->RecordCounter("cad.cluster.min_radius_culled", static_cast<double>(minRadiusCulledClusters));
     context.diagnosticsWriter->RecordCounter(
@@ -1470,6 +1510,9 @@ void CadModelRenderFeature::Render(const RenderFeatureContext& context, const Re
     context.diagnosticsWriter->RecordCounter(
         "cad.stage.depth_prepass_enabled",
         (effectiveEnableDepthPrepass && depthPrepassShader_.Get() != 0 && renderPass_ == RenderPass::Opaque) ? 1.0 : 0.0);
+    context.diagnosticsWriter->RecordCounter(
+        "cad.auto.depth_prepass_forced_off_present",
+        depthPrepassForcedOffForPresent ? 1.0 : 0.0);
     context.diagnosticsWriter->RecordCounter(
         "cad.stage.occlusion_enabled",
         effectiveEnableOcclusionCulling ? 1.0 : 0.0);

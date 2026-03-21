@@ -1465,7 +1465,13 @@ void Renderer::DrawOverlay(const int width, const int height, const std::vector<
   const double drawFps = FindCounterValue(diagSnapshot, "app.draw_fps", 0.0);
   const double loopFps = FindCounterValue(diagSnapshot, "app.loop_fps", 0.0);
   const double presentFps = FindCounterValue(diagSnapshot, "app.present_fps", 0.0);
-  const double displayedFps = (drawFps > 1e-3) ? drawFps : ((loopFps > 1e-3) ? loopFps : presentFps);
+  const double presentStall = FindCounterValue(diagSnapshot, "app.present_stall", 0.0);
+  double displayedFps = 0.0;
+  if (presentStall > 0.5) {
+    displayedFps = (loopFps > 1e-3) ? loopFps : ((presentFps > 1e-3) ? presentFps : drawFps);
+  } else {
+    displayedFps = (drawFps > 1e-3) ? drawFps : ((loopFps > 1e-3) ? loopFps : presentFps);
+  }
   if (displayedFps > 1e-3) {
     std::ostringstream fpsText;
     fpsText << std::fixed << std::setprecision(1) << "FPS: " << displayedFps;

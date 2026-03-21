@@ -150,7 +150,7 @@ int ViewerApp::Run() {
   ForceSwapInterval(cfg_.vsync ? 1 : 0);
   const bool vsyncAutoDisableEnabled = ParseEnvBool("VSYNC_AUTO_DISABLE", true);
   const bool useFixedTick = ParseEnvBool("APP_USE_FIXED_TICK", false);
-  const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", false);
+  const bool autoEnableVsyncOnPresentStall = ParseEnvBool("VSYNC_AUTO_ENABLE_ON_PRESENT_STALL", true);
   const int presentStallEnableThresholdFrames =
       std::max(5, ParseEnvInt("VSYNC_AUTO_ENABLE_STALL_FRAMES", 15));
   const double presentStallEnableThresholdMs =
@@ -163,6 +163,10 @@ int ViewerApp::Run() {
   bool drawAverageInitialized = false;
   double presentAverageMs = 0.0;
   bool presentAverageInitialized = false;
+  int effectiveSwapIntervalCached = QuerySwapInterval();
+  bool effectiveSwapIntervalInitialized = effectiveSwapIntervalCached >= 0;
+  auto nextSwapIntervalQuery = std::chrono::steady_clock::now();
+  auto nextSwapIntervalEnforceCheck = std::chrono::steady_clock::now();
   int highSwapWaitFrames = 0;
   int highCpuGpuMismatchFrames = 0;
   int highPresentStallFrames = 0;
@@ -202,6 +206,15 @@ int ViewerApp::Run() {
     const auto loopStart = std::chrono::steady_clock::now();
     glfwPollEvents();
     const auto afterPoll = std::chrono::steady_clock::now();
+    renderer_.QueueDiagnosticCounter(
+        "app.window_focused",
+        glfwGetWindowAttrib(window_, GLFW_FOCUSED) ? 1.0 : 0.0);
+    renderer_.QueueDiagnosticCounter(
+        "app.window_iconified",
+        glfwGetWindowAttrib(window_, GLFW_ICONIFIED) ? 1.0 : 0.0);
+    renderer_.QueueDiagnosticCounter(
+        "app.window_visible",
+        glfwGetWindowAttrib(window_, GLFW_VISIBLE) ? 1.0 : 0.0);
 
     const auto now = timeSource_.Now();
     const double frameDt = std::chrono::duration_cast<std::chrono::duration<double>>(now - last).count();
@@ -282,10 +295,9 @@ int ViewerApp::Run() {
     renderer_.QueueDiagnosticCounter("app.present_avg_ms", presentAverageMs);
     renderer_.QueueDiagnosticCounter("app.vsync_active", cfg_.vsync ? 1.0 : 0.0);
     const double drawFps = (drawAverageMs > 1e-4) ? (1000.0 / drawAverageMs) : 0.0;
+    const double presentFps = (presentAverageMs > 1e-4) ? (1000.0 / presentAverageMs) : 0.0;
     renderer_.QueueDiagnosticCounter("app.draw_fps", drawFps);
-    renderer_.QueueDiagnosticCounter(
-        "app.present_fps",
-        drawFps);
+    renderer_.QueueDiagnosticCounter("app.present_fps", presentFps);
     renderer_.QueueDiagnosticCounter(
         "app.swap_fps",
         (swapWaitAverageMs > 1e-4) ? (1000.0 / swapWaitAverageMs) : 0.0);
@@ -297,7 +309,15 @@ int ViewerApp::Run() {
     renderer_.QueueDiagnosticCounter(
         "app.loop_fps",
         (loopMs > 1e-4) ? (1000.0 / loopMs) : 0.0);
-    renderer_.QueueDiagnosticCounter("app.swap_interval_effective", static_cast<double>(QuerySwapInterval()));
+    const auto nowSteady = std::chrono::steady_clock::now();
+    if (!effectiveSwapIntervalInitialized || nowSteady >= nextSwapIntervalQuery) {
+      effectiveSwapIntervalCached = QuerySwapInterval();
+      effectiveSwapIntervalInitialized = effectiveSwapIntervalCached >= 0;
+      nextSwapIntervalQuery = nowSteady + std::chrono::milliseconds(350);
+    }
+    renderer_.QueueDiagnosticCounter(
+        "app.swap_interval_effective",
+        effectiveSwapIntervalInitialized ? static_cast<double>(effectiveSwapIntervalCached) : -1.0);
     renderer_.QueueDiagnosticCounter("app.stage.poll_ms", ToMilliseconds(loopStart, afterPoll));
     renderer_.QueueDiagnosticCounter("app.stage.runtime_reload_ms", ToMilliseconds(afterPoll, afterRuntimeReload));
     renderer_.QueueDiagnosticCounter("app.stage.tick_ms", ToMilliseconds(afterRuntimeReload, afterTick));
@@ -358,9 +378,23 @@ int ViewerApp::Run() {
       }
     }
 
-    // If swap interval gets re-enabled by driver/runtime, keep forcing the requested mode.
-    if (!cfg_.vsync) {
-      ForceSwapInterval(0);
+    // Avoid forcing swap interval every frame; that can itself introduce present stalls on some drivers.
+    if (nowSteady >= nextSwapIntervalEnforceCheck) {
+      nextSwapIntervalEnforceCheck = nowSteady + std::chrono::seconds(2);
+      const int effectiveInterval = QuerySwapInterval();
+      if (effectiveInterval >= 0) {
+        effectiveSwapIntervalCached = effectiveInterval;
+        effectiveSwapIntervalInitialized = true;
+      }
+      const int desiredInterval = cfg_.vsync ? 1 : 0;
+      if (effectiveInterval >= 0 && effectiveInterval != desiredInterval) {
+        glfwSwapInterval(desiredInterval);
+        ForceSwapInterval(desiredInterval);
+        renderer_.QueueDiagnosticMessage(
+            "re-applied swap interval=" + std::to_string(desiredInterval) +
+            " (effective was " + std::to_string(effectiveInterval) + ")");
+        effectiveSwapIntervalCached = desiredInterval;
+      }
     }
   }
 
