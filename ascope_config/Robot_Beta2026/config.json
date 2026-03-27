@@ -1,0 +1,24 @@
+{
+  "name": "Robot_Beta2026",
+  "isFTC": false,
+  "disableSimplification": false,
+  "rotations": [
+    {
+      "axis": "x",
+      "degrees": 90
+    },
+    {
+      "axis": "z",
+      "degrees": 90
+    }
+  ],
+  "position": [
+    0,
+    0,
+    0
+  ],
+  "cameras": [],
+  "components": [
+    {}
+  ]
+}
