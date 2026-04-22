@@ -221,3 +221,4 @@ repulsor_3d_sim_cpp/build-clangd
 repulsor_3d_sim_cpp/.repulsor_cache
 repulsor_3d_sim_cpp/build-preset
 repulsor_3d_sim_cpp/assets/*.gltf
+repulsor_3d_sim_cpp/.repulsor_cache
